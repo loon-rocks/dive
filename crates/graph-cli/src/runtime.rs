@@ -174,32 +174,46 @@ impl Runtime {
         plan_docs: &[graph_core::pipeline::doc::PlanDoc],
     ) -> Result<ToolCatalog> {
         let docs = self.tool_docs()?;
-        let builtin_tools = docs
-            .builtins
-            .into_iter()
-            .map(|doc| {
-                format!(
-                    "{}{}",
-                    graph_core::user_tools::BUILTIN_TOOL_PREFIX,
-                    doc.name
-                )
-            })
-            .collect();
-        let user_tools = docs
-            .user
-            .into_iter()
-            .map(|doc| format!("{}{}", graph_core::user_tools::USER_TOOL_PREFIX, doc.name))
-            .collect();
+        let agent_set = self.agent_set();
+        let mut input_schemas = std::collections::BTreeMap::new();
+        let mut named = |prefix: &str, docs: Vec<graph_core::user_tools::UserToolDoc>| {
+            docs.into_iter()
+                .map(|doc| {
+                    let name = format!("{prefix}{}", doc.name);
+                    if let Some(schema) = doc.input_schema {
+                        input_schemas.insert(name.clone(), schema);
+                    }
+                    name
+                })
+                .collect()
+        };
+        let builtin_tools = named(graph_core::user_tools::BUILTIN_TOOL_PREFIX, docs.builtins);
+        let user_tools = named(graph_core::user_tools::USER_TOOL_PREFIX, docs.user);
+        for doc in plan_docs {
+            if let Some(schema) = &doc.input_schema {
+                input_schemas.insert(
+                    format!(
+                        "{}{}",
+                        graph_core::toolbox::PLAN_TOOL_PREFIX,
+                        doc.identifier
+                    ),
+                    schema.clone(),
+                );
+            }
+        }
+        for doc in agent_set.iter() {
+            input_schemas.insert(
+                format!("{}{}", graph_core::pipeline::AGENT_TOOL_PREFIX, doc.name),
+                doc.subagent_input_schema(),
+            );
+        }
         Ok(ToolCatalog {
             builtin_tools,
             user_tools,
             plans: plan_docs.iter().map(|d| d.identifier.clone()).collect(),
             mcp_servers: self.config.mcp.keys().cloned().collect(),
-            agents: self
-                .agent_set()
-                .iter()
-                .map(|doc| doc.name.clone())
-                .collect(),
+            agents: agent_set.iter().map(|doc| doc.name.clone()).collect(),
+            input_schemas,
         })
     }
 
