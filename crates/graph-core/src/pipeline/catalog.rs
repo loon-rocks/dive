@@ -22,7 +22,8 @@ use super::body::{control_bodies, parse_branch, Branch};
 use super::doc::PlanDoc;
 use super::plan::Plan;
 use super::{AGENT_TOOL, ASK_TOOL, EXIT_TOOL, FILTER_TOOL, MAP_TOOL, REDUCE_TOOL, ROUTE_TOOL};
-use std::collections::BTreeSet;
+use serde_json::{Map, Value};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Glob matching over tool names, with `*` as "any run of characters",
 /// supported anywhere in the pattern and any number of times
@@ -71,6 +72,7 @@ pub struct ToolCatalog {
     /// MCP server names configured under `[mcp.*]`.
     pub mcp_servers: BTreeSet<String>,
     pub agents: BTreeSet<String>,
+    pub input_schemas: BTreeMap<String, Value>,
 }
 
 /// The outcome of resolving a plan's tool names against a catalog.
@@ -98,6 +100,9 @@ pub fn resolve_plan_tools(doc: &PlanDoc, catalog: &ToolCatalog) -> CatalogCheck 
     let mut check = CatalogCheck::default();
     for (step_id, tool) in step_tools(&doc.steps) {
         check_tool(&step_id, &tool, &doc.requires_servers, catalog, &mut check);
+    }
+    for (step_id, tool, input) in step_calls(&doc.steps) {
+        check_input(&step_id, &tool, input, catalog, &mut check);
     }
     for (step_id, pattern) in agent_tool_patterns(&doc.steps) {
         check_pattern(
@@ -149,6 +154,9 @@ pub fn resolve_step_tools(plan: &Plan, catalog: &ToolCatalog) -> Vec<String> {
     let mut check = CatalogCheck::default();
     for (step_id, tool) in step_tools(plan) {
         check_tool(&step_id, &tool, &[], catalog, &mut check);
+    }
+    for (step_id, tool, input) in step_calls(plan) {
+        check_input(&step_id, &tool, input, catalog, &mut check);
     }
     for (step_id, pattern) in agent_tool_patterns(plan) {
         check_pattern(&step_id, &pattern, &[], catalog, &mut check);
@@ -354,23 +362,82 @@ fn check_tool(
 /// included. Bodies that fail to parse are skipped — the static layer
 /// reports those.
 fn step_tools(plan: &Plan) -> Vec<(String, String)> {
-    let mut tools = Vec::new();
+    step_calls(plan)
+        .into_iter()
+        .map(|(id, tool, _)| (id, tool))
+        .collect()
+}
+
+fn step_calls(plan: &Plan) -> Vec<(String, String, Map<String, Value>)> {
+    let mut calls = Vec::new();
     for step in plan {
-        tools.push((step.id.clone(), step.tool_name.clone()));
+        calls.push((step.id.clone(), step.tool_name.clone(), step.input.clone()));
         for (key, raw) in control_bodies(&step.tool_name, &step.input) {
             let key = key.as_str();
             match parse_branch(key, raw) {
-                Ok(Branch::Call(call)) => tools.push((step.id.clone(), call.tool_name)),
+                Ok(Branch::Call(call)) => calls.push((step.id.clone(), call.tool_name, call.input)),
                 Ok(Branch::Steps(steps)) => {
                     for body_step in steps {
-                        tools.push((format!("{}/{}", step.id, body_step.id), body_step.tool_name));
+                        calls.push((
+                            format!("{}/{}", step.id, body_step.id),
+                            body_step.tool_name,
+                            body_step.input,
+                        ));
                     }
                 }
                 Err(_) => {}
             }
         }
     }
-    tools
+    calls
+}
+
+fn check_input(
+    step_id: &str,
+    tool: &str,
+    input: Map<String, Value>,
+    catalog: &ToolCatalog,
+    check: &mut CatalogCheck,
+) {
+    let Some(schema) = catalog.input_schemas.get(tool) else {
+        return;
+    };
+    let Ok(validator) = jsonschema::validator_for(schema) else {
+        return;
+    };
+    let mut input = Value::Object(input);
+    super::doc::apply_schema_defaults(schema, &mut input);
+    for error in validator.iter_errors(&input) {
+        let path = error.instance_path.to_string();
+        if templated_along(&input, &path) {
+            continue;
+        }
+        let at = if path.is_empty() {
+            String::new()
+        } else {
+            format!(" at {path}")
+        };
+        check
+            .errors
+            .push(format!("step {step_id}: input for {tool}{at}: {error}"));
+    }
+}
+
+fn templated_along(input: &Value, path: &str) -> bool {
+    let is_templated = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_str)
+            .is_some_and(|text| text.contains("{{"))
+    };
+    let mut prefix = String::new();
+    for segment in path.split('/').skip(1) {
+        prefix.push('/');
+        prefix.push_str(segment);
+        if is_templated(input.pointer(&prefix)) {
+            return true;
+        }
+    }
+    false
 }
 
 /// The distinct `plan__*` identifiers a plan's steps (bodies included)
@@ -438,6 +505,7 @@ mod tests {
             plans: BTreeSet::from(["urgent_issues".to_string()]),
             mcp_servers: BTreeSet::from(["linear".to_string()]),
             agents: BTreeSet::from(["outliner".to_string()]),
+            ..Default::default()
         }
     }
 
@@ -734,5 +802,127 @@ steps:
         let problems = resolve_step_tools(&doc(&declared).steps, &catalog());
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].contains("MCP server 'github'"));
+    }
+
+    fn schema_catalog() -> ToolCatalog {
+        let mut catalog = catalog();
+        catalog.input_schemas.insert(
+            "user__git_log".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "required": ["repo"],
+                "properties": {
+                    "repo": { "type": "string" },
+                    "count": { "type": "integer", "default": 10 },
+                    "filter": {
+                        "type": "object",
+                        "properties": { "author": { "type": "string" } }
+                    }
+                }
+            }),
+        );
+        catalog
+    }
+
+    fn input_doc(input: &str) -> PlanDoc {
+        doc(&format!(
+            r#"
+identifier: demo
+name: Demo
+description: demo
+steps:
+  - id: E0
+    tool_name: user__git_log
+    input: {input}
+"#
+        ))
+    }
+
+    #[test]
+    fn a_missing_required_input_is_reported_with_step_and_tool() {
+        let check = resolve_plan_tools(&input_doc("{ count: 3 }"), &schema_catalog());
+        assert_eq!(check.errors.len(), 1, "{:?}", check.errors);
+        assert!(check.errors[0].starts_with("step E0: input for user__git_log"));
+        assert!(check.errors[0].contains("\"repo\" is a required property"));
+    }
+
+    #[test]
+    fn a_literal_of_the_wrong_type_is_reported_at_its_path() {
+        let check = resolve_plan_tools(
+            &input_doc("{ repo: ., count: three, filter: { author: 4 } }"),
+            &schema_catalog(),
+        );
+        assert_eq!(check.errors.len(), 2, "{:?}", check.errors);
+        assert!(check.errors.iter().any(|e| e.contains(" at /count:")));
+        assert!(check
+            .errors
+            .iter()
+            .any(|e| e.contains(" at /filter/author:")));
+    }
+
+    #[test]
+    fn templated_values_count_as_present_and_are_never_type_checked() {
+        let check = resolve_plan_tools(
+            &input_doc(
+                r#"{ repo: "{{input.repo}}", count: "{{input.count}}", filter: "{{E9.filter}}" }"#,
+            ),
+            &schema_catalog(),
+        );
+        assert!(check.is_ok(), "{:?}", check.errors);
+    }
+
+    #[test]
+    fn schema_defaults_fill_required_inputs_before_checking() {
+        let mut catalog = schema_catalog();
+        let schema = catalog.input_schemas.get_mut("user__git_log").unwrap();
+        schema["properties"]["repo"]["default"] = serde_json::json!(".");
+        let check = resolve_plan_tools(&input_doc("{}"), &catalog);
+        assert!(check.is_ok(), "{:?}", check.errors);
+    }
+
+    #[test]
+    fn undeclared_keys_pass_unless_the_schema_forbids_them() {
+        let open = resolve_plan_tools(&input_doc("{ repo: ., extra: 1 }"), &schema_catalog());
+        assert!(open.is_ok(), "{:?}", open.errors);
+
+        let mut catalog = schema_catalog();
+        let schema = catalog.input_schemas.get_mut("user__git_log").unwrap();
+        schema["additionalProperties"] = serde_json::json!(false);
+        let closed = resolve_plan_tools(&input_doc("{ repo: ., extra: 1 }"), &catalog);
+        assert_eq!(closed.errors.len(), 1, "{:?}", closed.errors);
+    }
+
+    #[test]
+    fn body_step_inputs_are_checked_with_their_body_path() {
+        let plan = doc(r#"
+identifier: demo
+name: Demo
+description: demo
+steps:
+  - id: E0
+    tool_name: map
+    input:
+      over: "{{input.repos}}"
+      do:
+        - id: log
+          tool_name: user__git_log
+          input: { count: 2 }
+"#);
+        let check = resolve_plan_tools(&plan, &schema_catalog());
+        assert_eq!(check.errors.len(), 1, "{:?}", check.errors);
+        assert!(check.errors[0].starts_with("step E0/log: input for user__git_log"));
+    }
+
+    #[test]
+    fn tools_without_a_known_schema_are_not_input_checked() {
+        let check = resolve_plan_tools(&doc(OK_DOC), &schema_catalog());
+        assert_eq!(check.errors.len(), 1, "{:?}", check.errors);
+        assert!(check.errors[0].contains("user__git_log"));
+    }
+
+    #[test]
+    fn step_resolution_reports_input_problems_before_a_run() {
+        let problems = resolve_step_tools(&input_doc("{ count: 3 }").steps, &schema_catalog());
+        assert_eq!(problems.len(), 1, "{problems:?}");
     }
 }
