@@ -1,6 +1,10 @@
+use crate::format::{declared_version, window_problem, Migration, FORMAT_KEY};
+use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Path, PathBuf};
+use toml_edit::DocumentMut;
 
 pub const PACK_FORMAT: u32 = 1;
 pub const PACK_FORMAT_OLDEST: u32 = 1;
@@ -94,7 +98,7 @@ pub struct McpRequirement {
 #[serde(deny_unknown_fields)]
 pub struct PackLock {
     pub version: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub packs: BTreeMap<String, LockEntry>,
 }
 
@@ -117,17 +121,273 @@ pub struct LockEntry {
     pub hash: String,
 }
 
+pub const PACK_KIND: &str = "pack";
+pub const LOCK_KIND: &str = "lock";
+pub const SUPPORTED_OS: &[&str] = &["macos", "linux"];
+pub const HASH_PREFIX: &str = "sha256:";
+
+const PACK_MIGRATIONS: &[Migration] = &[];
+const LOCK_MIGRATIONS: &[Migration] = &[];
+
+pub fn pack_migration_count() -> usize {
+    PACK_MIGRATIONS.len()
+}
+
+pub fn lock_migration_count() -> usize {
+    LOCK_MIGRATIONS.len()
+}
+
+enum Shape {
+    Leaf,
+    Table(&'static [(&'static str, Shape)]),
+    Map(&'static Shape),
+}
+
+const MCP_REQUIREMENT_SHAPE: Shape = Shape::Table(&[
+    ("server", Shape::Leaf),
+    ("version", Shape::Leaf),
+    ("url", Shape::Leaf),
+]);
+
+const MANIFEST_SHAPE: Shape = Shape::Table(&[
+    (FORMAT_KEY, Shape::Leaf),
+    ("name", Shape::Leaf),
+    ("description", Shape::Leaf),
+    ("license", Shape::Leaf),
+    ("homepage", Shape::Leaf),
+    (
+        "requires",
+        Shape::Table(&[
+            ("graph", Shape::Leaf),
+            ("os", Shape::Leaf),
+            ("binaries", Shape::Leaf),
+            ("env", Shape::Leaf),
+            ("mcp", Shape::Map(&MCP_REQUIREMENT_SHAPE)),
+        ]),
+    ),
+]);
+
+const LOCK_ENTRY_SHAPE: Shape = Shape::Table(&[
+    ("git", Shape::Leaf),
+    ("tag", Shape::Leaf),
+    ("sha", Shape::Leaf),
+    ("hash", Shape::Leaf),
+]);
+
+const LOCK_SHAPE: Shape = Shape::Table(&[
+    (FORMAT_KEY, Shape::Leaf),
+    ("packs", Shape::Map(&LOCK_ENTRY_SHAPE)),
+]);
+
+fn unknown_keys(value: &toml::Value, shape: &Shape, path: &str, out: &mut Vec<String>) {
+    let toml::Value::Table(table) = value else {
+        return;
+    };
+    let child = |key: &str| {
+        if path.is_empty() {
+            key.to_string()
+        } else {
+            format!("{path}.{key}")
+        }
+    };
+    match shape {
+        Shape::Leaf => {}
+        Shape::Table(fields) => {
+            for (key, value) in table {
+                match fields.iter().find(|(name, _)| name == key) {
+                    Some((_, inner)) => unknown_keys(value, inner, &child(key), out),
+                    None => out.push(child(key)),
+                }
+            }
+        }
+        Shape::Map(inner) => {
+            for (key, value) in table {
+                unknown_keys(value, inner, &child(key), out);
+            }
+        }
+    }
+}
+
+struct Contract {
+    kind: &'static str,
+    oldest: u32,
+    current: u32,
+    migrations: &'static [Migration],
+    shape: &'static Shape,
+}
+
+const MANIFEST_CONTRACT: Contract = Contract {
+    kind: PACK_KIND,
+    oldest: PACK_FORMAT_OLDEST,
+    current: PACK_FORMAT,
+    migrations: PACK_MIGRATIONS,
+    shape: &MANIFEST_SHAPE,
+};
+
+const LOCK_CONTRACT: Contract = Contract {
+    kind: LOCK_KIND,
+    oldest: LOCK_FORMAT_OLDEST,
+    current: LOCK_FORMAT,
+    migrations: LOCK_MIGRATIONS,
+    shape: &LOCK_SHAPE,
+};
+
+fn read_versioned<T: serde::de::DeserializeOwned>(
+    text: &str,
+    what: &dyn fmt::Display,
+    contract: &Contract,
+) -> Result<T, String> {
+    let mut doc: DocumentMut = text.parse().map_err(|e| format!("{what}: {e}"))?;
+    let declared = declared_version(&doc)
+        .map_err(|e| format!("{what}: {e}"))?
+        .ok_or_else(|| {
+            format!(
+                "{what}: {FORMAT_KEY} is required; this graph writes {} version {}",
+                contract.kind, contract.current
+            )
+        })?;
+    if let Some(problem) = window_problem(
+        contract.kind,
+        what,
+        declared,
+        contract.oldest,
+        contract.current,
+    ) {
+        return Err(problem);
+    }
+    for migration in &contract.migrations[(declared - contract.oldest) as usize..] {
+        migration(&mut doc).map_err(|e| format!("{what}: {e}"))?;
+    }
+    doc[FORMAT_KEY] = toml_edit::value(i64::from(contract.current));
+    let text = doc.to_string();
+    let value = toml::Value::Table(
+        text.parse::<toml::Table>()
+            .map_err(|e| format!("{what}: {e}"))?,
+    );
+    let mut unknown = Vec::new();
+    unknown_keys(&value, contract.shape, "", &mut unknown);
+    if !unknown.is_empty() {
+        let names: Vec<String> = unknown.iter().map(|key| format!("`{key}`")).collect();
+        return Err(format!(
+            "{what}: unknown key{} {}",
+            if names.len() == 1 { "" } else { "s" },
+            names.join(", ")
+        ));
+    }
+    toml::from_str(&text).map_err(|e| format!("{what}: {e}"))
+}
+
+fn semver_problem(field: &str, requirement: &str) -> Option<String> {
+    VersionReq::parse(requirement)
+        .err()
+        .map(|e| format!("{field}: '{requirement}' is not a semver requirement ({e})"))
+}
+
+impl PackManifest {
+    pub fn problems(&self) -> Vec<String> {
+        let mut problems = Vec::new();
+        if let Err(e) = check_pack_name(&self.name) {
+            problems.push(format!("name: {e}"));
+        }
+        if self.description.trim().is_empty() {
+            problems.push("description: must not be empty".to_string());
+        }
+        if let Some(graph) = &self.requires.graph {
+            problems.extend(semver_problem("requires.graph", graph));
+        }
+        for os in &self.requires.os {
+            if !SUPPORTED_OS.contains(&os.as_str()) {
+                problems.push(format!(
+                    "requires.os: '{os}' is not a supported OS; use {}",
+                    SUPPORTED_OS.join(" or ")
+                ));
+            }
+        }
+        for (prefix, requirement) in &self.requires.mcp {
+            if let Some(version) = &requirement.version {
+                problems.extend(semver_problem(
+                    &format!("requires.mcp.{prefix}.version"),
+                    version,
+                ));
+            }
+        }
+        problems
+    }
+}
+
+impl LockEntry {
+    pub fn problems(&self, name: &str) -> Vec<String> {
+        let mut problems = Vec::new();
+        let field = |key: &str| format!("packs.{name}.{key}");
+        if self.git.trim().is_empty() {
+            problems.push(format!("{}: must not be empty", field("git")));
+        }
+        let sha_ok =
+            matches!(self.sha.len(), 40 | 64) && self.sha.chars().all(|c| c.is_ascii_hexdigit());
+        if !sha_ok {
+            problems.push(format!(
+                "{}: '{}' is not a 40 or 64 character hex commit id",
+                field("sha"),
+                self.sha
+            ));
+        }
+        let hash_ok = self.hash.strip_prefix(HASH_PREFIX).is_some_and(|hex| {
+            hex.len() == 64 && hex.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))
+        });
+        if !hash_ok {
+            problems.push(format!(
+                "{}: '{}' must be {HASH_PREFIX} followed by 64 lowercase hex digits",
+                field("hash"),
+                self.hash
+            ));
+        }
+        problems
+    }
+}
+
+impl PackLock {
+    pub fn problems(&self) -> Vec<String> {
+        let mut problems = Vec::new();
+        for (name, entry) in &self.packs {
+            if let Err(e) = check_pack_name(name) {
+                problems.push(format!("packs.{name}: {e}"));
+            }
+            problems.extend(entry.problems(name));
+        }
+        problems
+    }
+}
+
+fn refuse_problems(what: &dyn fmt::Display, problems: Vec<String>) -> Result<(), String> {
+    if problems.is_empty() {
+        return Ok(());
+    }
+    Err(format!("{what}: {}", problems.join("; ")))
+}
+
+fn read_manifest(text: &str, what: &dyn fmt::Display) -> Result<PackManifest, String> {
+    let manifest: PackManifest = read_versioned(text, what, &MANIFEST_CONTRACT)?;
+    refuse_problems(what, manifest.problems())?;
+    Ok(manifest)
+}
+
+fn read_lock(text: &str, what: &dyn fmt::Display) -> Result<PackLock, String> {
+    let lock: PackLock = read_versioned(text, what, &LOCK_CONTRACT)?;
+    refuse_problems(what, lock.problems())?;
+    Ok(lock)
+}
+
 pub fn parse_manifest(text: &str) -> Result<PackManifest, String> {
-    toml::from_str(text).map_err(|e| e.to_string())
+    read_manifest(text, &MANIFEST_FILE)
 }
 
 pub fn load_manifest(path: &Path) -> Result<PackManifest, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    parse_manifest(&text).map_err(|e| format!("{}: {e}", path.display()))
+    read_manifest(&text, &path.display())
 }
 
 pub fn parse_lock(text: &str) -> Result<PackLock, String> {
-    toml::from_str(text).map_err(|e| e.to_string())
+    read_lock(text, &LOCK_FILE)
 }
 
 pub fn load_lock(path: &Path) -> Result<PackLock, String> {
@@ -135,7 +395,25 @@ pub fn load_lock(path: &Path) -> Result<PackLock, String> {
         return Ok(PackLock::default());
     }
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    parse_lock(&text).map_err(|e| format!("{}: {e}", path.display()))
+    read_lock(&text, &path.display())
+}
+
+pub fn lock_to_string(lock: &PackLock) -> String {
+    let stamped = PackLock {
+        version: LOCK_FORMAT,
+        packs: lock.packs.clone(),
+    };
+    toml::to_string(&stamped).expect("a pack lock always serializes")
+}
+
+pub fn write_lock(path: &Path, lock: &PackLock) -> Result<(), String> {
+    let staged = path.with_file_name(format!("{LOCK_FILE}.{}.tmp", std::process::id()));
+    std::fs::write(&staged, lock_to_string(lock))
+        .map_err(|e| format!("writing {}: {e}", staged.display()))?;
+    std::fs::rename(&staged, path).map_err(|e| {
+        let _ = std::fs::remove_file(&staged);
+        format!("writing {}: {e}", path.display())
+    })
 }
 
 pub fn check_pack_name(name: &str) -> Result<(), String> {

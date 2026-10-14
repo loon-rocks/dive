@@ -1,0 +1,19 @@
+version = 1
+name = "example"
+description = "Every key a version 1 manifest accepts."
+license = "MIT"
+homepage = "https://github.com/acme/graph-pack-example"
+
+[requires]
+graph = ">=0.17"
+os = ["macos", "linux"]
+binaries = ["gh", "jq"]
+env = ["GH_TOKEN"]
+
+[requires.mcp.linear]
+server = "linear-mcp-server"
+version = ">=1.0"
+url = "https://mcp.linear.app/mcp"
+
+[requires.mcp.github]
+version = "^0.4.2"

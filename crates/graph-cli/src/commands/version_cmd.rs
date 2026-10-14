@@ -11,7 +11,7 @@ pub struct Format {
     pub oldest: u32,
 }
 
-pub fn formats() -> [Format; 5] {
+pub fn formats() -> [Format; 7] {
     [
         Format {
             name: "config",
@@ -37,6 +37,16 @@ pub fn formats() -> [Format; 5] {
             name: "store",
             current: graph_store::STORE_FORMAT,
             oldest: graph_store::STORE_FORMAT_OLDEST,
+        },
+        Format {
+            name: "pack",
+            current: graph_config::pack::PACK_FORMAT,
+            oldest: graph_config::pack::PACK_FORMAT_OLDEST,
+        },
+        Format {
+            name: "lock",
+            current: graph_config::pack::LOCK_FORMAT,
+            oldest: graph_config::pack::LOCK_FORMAT_OLDEST,
         },
     ]
 }
@@ -85,7 +95,7 @@ mod tests {
     fn the_envelope_names_every_format_with_its_range() {
         let body = outcome().body;
         assert_eq!(body["version"], json!(VERSION));
-        for name in ["config", "plan", "tool", "agent", "store"] {
+        for name in ["config", "plan", "tool", "agent", "store", "pack", "lock"] {
             let entry = &body["fileVersions"][name];
             assert!(entry["current"].as_u64().unwrap() >= entry["oldest"].as_u64().unwrap());
             assert!(entry["oldest"].as_u64().unwrap() >= 1);
@@ -100,5 +110,9 @@ mod tests {
             "{text}"
         );
         assert!(LONG_VERSION.starts_with(VERSION));
+        assert!(
+            text.contains(", pack ") && text.contains(", lock "),
+            "{text}"
+        );
     }
 }
