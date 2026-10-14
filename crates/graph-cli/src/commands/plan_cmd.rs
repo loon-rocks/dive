@@ -105,7 +105,10 @@ fn list() -> Result<Outcome> {
     let text = loaded
         .docs
         .iter()
-        .map(|doc| format!("{}\t{}\n", doc.identifier, doc.name))
+        .map(|doc| match &doc.pack {
+            Some(source) => format!("{}\t{}\t{}\n", doc.identifier, doc.name, source.describe()),
+            None => format!("{}\t{}\n", doc.identifier, doc.name),
+        })
         .collect::<String>();
     Ok(Outcome::raw(text, body))
 }
@@ -116,10 +119,7 @@ fn show(name: &str) -> Result<Outcome> {
     // Lenient like `validate`: reading a plan the catalog rejects is
     // exactly how you find out why it was rejected.
     let (doc, _loaded) = resolve_target(&runtime, name)?;
-    let source = doc
-        .path
-        .as_ref()
-        .map_or("built-in".to_string(), |path| path.display().to_string());
+    let source = doc.source_label();
     let mut body = plan_edit::doc_as_json(&doc)?;
     body["source"] = serde_json::json!(source);
     Ok(Outcome::raw(authoring::to_yaml(&doc)?, body).with_note(format!("source: {source}")))
@@ -356,7 +356,13 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
     let result = pipeline
-        .run_explicit(&query, doc.steps.clone(), finish, Some(input))
+        .run_explicit_in(
+            &query,
+            doc.steps.clone(),
+            finish,
+            Some(input),
+            doc.pack.as_ref(),
+        )
         .await;
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);

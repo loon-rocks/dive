@@ -334,7 +334,8 @@ pub fn existing(
                         .map_err(|e| format!("can't read {}: {e}", path.display()))?,
                     Some(path.clone()),
                 ),
-                graph_core::agent::doc::AgentSource::Builtin => {
+                graph_core::agent::doc::AgentSource::Builtin
+                | graph_core::agent::doc::AgentSource::Pack { .. } => {
                     let mut value = serde_yaml::to_value(&doc).map_err(|e| e.to_string())?;
                     graph_core::format::stamp(graph_core::format::Kind::Agent, &mut value);
                     (

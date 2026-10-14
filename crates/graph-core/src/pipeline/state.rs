@@ -71,7 +71,14 @@ impl RunState {
     /// Number of executed steps (excludes the `input` root), including
     /// steps run inside `route` branches and `map`/`reduce` bodies.
     pub fn steps_executed(&self) -> usize {
-        self.results.keys().filter(|k| *k != "input").count() + self.branch_steps_executed
+        self.results
+            .keys()
+            .filter(|k| *k != "input")
+            .filter(|k| {
+                *k != crate::packs::PACK_ROOT || self.plan.iter().any(|step| &step.id == *k)
+            })
+            .count()
+            + self.branch_steps_executed
     }
 
     pub fn last_error(&self) -> Option<&BusEntry> {

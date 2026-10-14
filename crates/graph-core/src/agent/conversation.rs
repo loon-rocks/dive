@@ -644,8 +644,9 @@ impl ToolRegistry for ConversationTools {
                 });
             }
         }
-        if let Some(agent) = name.strip_prefix(AGENT_TOOL_PREFIX) {
-            if self.subagents.iter().any(|def| def.name == name) {
+        if self.subagents.iter().any(|def| def.name == name) {
+            let agent = name.strip_prefix(AGENT_TOOL_PREFIX).unwrap_or(name);
+            {
                 let (outcome, entry) = Box::pin(self.conversation.run_subagent(
                     &self.caller,
                     agent,

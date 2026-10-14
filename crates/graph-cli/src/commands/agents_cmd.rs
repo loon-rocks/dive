@@ -8,11 +8,18 @@ use std::path::{Path, PathBuf};
 
 pub fn run(command: AgentsCommand) -> Result<()> {
     let dirs = agent_dirs();
+    if let AgentsCommand::Migrate { path, json } = command {
+        return report(migrate(&path)?, json);
+    }
+    let installed = crate::runtime::load_packs(&crate::runtime::load_config()?)?;
+    let packs: Vec<AgentDoc> = installed.agents().cloned().collect();
     match command {
-        AgentsCommand::List { json } => report(list(&dirs), json),
-        AgentsCommand::Show { name, json } => report(show(&dirs, &name)?, json),
-        AgentsCommand::Validate { path, json } => report(validate(&dirs, path.as_deref())?, json),
-        AgentsCommand::Migrate { path, json } => report(migrate(&path)?, json),
+        AgentsCommand::List { json } => report(list(&dirs, &packs), json),
+        AgentsCommand::Show { name, json } => report(show(&dirs, &packs, &name)?, json),
+        AgentsCommand::Validate { path, json } => {
+            report(validate(&dirs, &packs, path.as_deref())?, json)
+        }
+        AgentsCommand::Migrate { .. } => unreachable!("handled before packs load"),
     }
 }
 
@@ -33,8 +40,12 @@ fn source(doc: &AgentDoc, workbench: bool) -> String {
     }
 }
 
-fn runnable_and_workbench(dirs: &[PathBuf]) -> (Vec<(AgentDoc, bool)>, Vec<String>) {
+fn runnable_and_workbench(
+    dirs: &[PathBuf],
+    packs: &[AgentDoc],
+) -> (Vec<(AgentDoc, bool)>, Vec<String>) {
     let (set, errors) = AgentSet::load(graph_core::agent::doc::BUILTINS, dirs);
+    let set = set.with_packs(packs.iter().cloned());
     let mut agents: Vec<(AgentDoc, bool)> = set.iter().map(|doc| (doc, false)).collect();
     for doc in crate::workbench::agents::workbench_only() {
         if !agents.iter().any(|(known, _)| known.name == doc.name) {
@@ -58,8 +69,8 @@ fn summary(doc: &AgentDoc, workbench: bool) -> Value {
     })
 }
 
-pub(crate) fn list(dirs: &[PathBuf]) -> Outcome {
-    let (listed, errors) = runnable_and_workbench(dirs);
+pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
+    let (listed, errors) = runnable_and_workbench(dirs, packs);
     let agents: Vec<Value> = listed
         .iter()
         .map(|(doc, workbench)| summary(doc, *workbench))
@@ -89,8 +100,8 @@ pub(crate) fn list(dirs: &[PathBuf]) -> Outcome {
     }
 }
 
-pub(crate) fn show(dirs: &[PathBuf], name: &str) -> Result<Outcome> {
-    let (listed, _) = runnable_and_workbench(dirs);
+pub(crate) fn show(dirs: &[PathBuf], packs: &[AgentDoc], name: &str) -> Result<Outcome> {
+    let (listed, _) = runnable_and_workbench(dirs, packs);
     let Some((doc, workbench)) = listed.iter().find(|(doc, _)| doc.name == name).cloned() else {
         let known: Vec<String> = listed.iter().map(|(d, _)| d.name.clone()).collect();
         bail!("unknown agent '{name}' (defined: {})", known.join(", "));
@@ -106,9 +117,13 @@ pub(crate) fn show(dirs: &[PathBuf], name: &str) -> Result<Outcome> {
     Ok(Outcome::raw(yaml, body).with_note(format!("source: {}", source(&doc, workbench))))
 }
 
-pub(crate) fn validate(dirs: &[PathBuf], path: Option<&Path>) -> Result<Outcome> {
-    let (mut set, mut problems) =
-        AgentSet::load(&crate::workbench::agents::builtin_sources(), dirs);
+pub(crate) fn validate(
+    dirs: &[PathBuf],
+    packs: &[AgentDoc],
+    path: Option<&Path>,
+) -> Result<Outcome> {
+    let (set, mut problems) = AgentSet::load(&crate::workbench::agents::builtin_sources(), dirs);
+    let mut set = set.with_packs(packs.iter().cloned());
     let mut checked = "all agents".to_string();
     if let Some(path) = path {
         if !path.exists() {
@@ -174,7 +189,7 @@ mod tests {
             "search_bot.yaml",
             "name: search_bot\ndescription: searches\nmodel: chat\ntools: []\ninput_schema: {type: object, required: [query], properties: {query: {type: string, description: what to find}}}\noutput_schema: {type: object, properties: {hits: {type: array}}}\nsystem_prompt: hi\n",
         );
-        let outcome = list(&[dir.path().to_path_buf()]);
+        let outcome = list(&[dir.path().to_path_buf()], &[]);
         let names: Vec<&str> = outcome.body["agents"]
             .as_array()
             .unwrap()
@@ -225,7 +240,7 @@ mod tests {
             "chat.yaml",
             "name: chat\ndescription: mine\nmodel: chat\ntools: []\nsystem_prompt: hi\n",
         );
-        let outcome = show(&[dir.path().to_path_buf()], "chat").unwrap();
+        let outcome = show(&[dir.path().to_path_buf()], &[], "chat").unwrap();
         let yaml = outcome.raw.unwrap();
         assert!(yaml.starts_with("version: 1\n"), "{yaml}");
         assert!(yaml.contains("description: mine"));
@@ -233,7 +248,7 @@ mod tests {
             .as_str()
             .unwrap()
             .ends_with("chat.yaml"));
-        assert!(show(&[], "nope").is_err());
+        assert!(show(&[], &[], "nope").is_err());
     }
 
     #[test]
@@ -244,12 +259,12 @@ mod tests {
             "bad.yaml",
             "name: bad\ndescription: d\nmodel: chat\ntools: [map]\nsubagents: [ghost]\nsystem_prompt: hi\n",
         );
-        let outcome = validate(&[], Some(&path)).unwrap();
+        let outcome = validate(&[], &[], Some(&path)).unwrap();
         assert!(outcome.rejected);
         let problems = outcome.body["problems"].to_string();
         assert!(problems.contains("'map' is a plan step"), "{problems}");
         assert!(problems.contains("subagent 'ghost'"), "{problems}");
-        let clean = validate(&[], None).unwrap();
+        let clean = validate(&[], &[], None).unwrap();
         assert!(!clean.rejected, "{}", clean.body);
     }
 

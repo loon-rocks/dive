@@ -44,13 +44,17 @@ use std::path::{Path, PathBuf};
 /// The body of [`super::Pipeline::validate_plan`], lifted out so authoring
 /// does not need a pipeline to validate an edit.
 pub fn validate_steps(plan: &Plan) -> Vec<String> {
+    validate_steps_in(plan, &["input"])
+}
+
+pub fn validate_steps_in(plan: &Plan, roots: &[&str]) -> Vec<String> {
     let mut problems = Vec::new();
     if plan.is_empty() {
         problems.push("plan has no steps".to_string());
     }
     // Tool existence is checked at execution against the live registry.
     let all_ids: Vec<&str> = plan.iter().map(|s| s.id.as_str()).collect();
-    let mut seen: Vec<&str> = vec!["input"];
+    let mut seen: Vec<&str> = roots.to_vec();
     for step in plan {
         if let Err(problem) = plan::check_step_id(&step.id) {
             problems.push(problem);
@@ -192,7 +196,7 @@ fn collect_model_kind_problems(
 }
 
 pub fn static_problems(doc: &PlanDoc) -> Vec<String> {
-    let mut problems = validate_steps(&doc.steps);
+    let mut problems = validate_steps_in(&doc.steps, &doc.template_roots());
     if let Err(problem) = validate_doc(doc) {
         if !problems.contains(&problem) {
             problems.push(problem);
@@ -614,6 +618,7 @@ pub fn merge_planner_output(
             steps: output.plan,
             finish: output.solver_data.map(Finish::Solver).unwrap_or_default(),
             path: None,
+            pack: None,
         },
     }
 }

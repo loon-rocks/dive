@@ -1,0 +1,200 @@
+use super::{apply_interface, catalog_name, ItemKind, PackItem, PackSource};
+use crate::agent::doc::{global_fragments, load_agent_file, AgentDoc, AgentSource};
+use crate::pipeline::doc::{parse_plan_doc, validate_doc, PlanDoc};
+use crate::user_tools::{load_user_tool, UserToolDoc};
+use graph_config::pack::{
+    check_pack_name, load_manifest, PackManifest, MANIFEST_FILE, MAX_CATALOG_NAME,
+};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone)]
+pub struct LoadedPack {
+    pub source: PackSource,
+    pub manifest: PackManifest,
+    pub tools: Vec<UserToolDoc>,
+    pub plans: Vec<PlanDoc>,
+    pub agents: Vec<AgentDoc>,
+    pub items: Vec<PackItem>,
+}
+
+pub fn check_installed_name(name: &str, mcp_servers: &BTreeSet<String>) -> Result<(), String> {
+    check_pack_name(name)?;
+    if mcp_servers.contains(name) {
+        return Err(format!(
+            "pack name '{name}' is also a configured MCP server ([mcp.{name}]); install the pack under another name with --as"
+        ));
+    }
+    Ok(())
+}
+
+pub fn load_pack(
+    source: PackSource,
+    include: &[String],
+    exclude: &[String],
+) -> Result<LoadedPack, Vec<String>> {
+    let pack = source.name.clone();
+    let mut problems = Vec::new();
+    if let Err(problem) = check_pack_name(&pack) {
+        problems.push(problem);
+    }
+    let manifest = match load_manifest(&source.dir.join(MANIFEST_FILE)) {
+        Ok(manifest) => Some(manifest),
+        Err(problem) => {
+            problems.push(problem);
+            None
+        }
+    };
+
+    let mut tools: Vec<UserToolDoc> = Vec::new();
+    for path in yaml_files(&source.dir.join("tools")) {
+        match load_user_tool(&path) {
+            Ok(doc) if tools.iter().any(|known| known.name == doc.name) => problems.push(format!(
+                "{}: duplicate tool name '{}'",
+                path.display(),
+                doc.name
+            )),
+            Ok(doc) => tools.push(doc),
+            Err(problem) => problems.push(problem),
+        }
+    }
+
+    let mut plans: Vec<PlanDoc> = Vec::new();
+    for path in yaml_files(&source.dir.join("plans")) {
+        match load_plan(&path, &source) {
+            Ok(doc) if plans.iter().any(|known| known.identifier == doc.identifier) => problems
+                .push(format!(
+                    "{}: duplicate plan identifier '{}'",
+                    path.display(),
+                    doc.identifier
+                )),
+            Ok(doc) => plans.push(doc),
+            Err(problem) => problems.push(problem),
+        }
+    }
+
+    let mut agents: Vec<AgentDoc> = Vec::new();
+    for path in yaml_files(&source.dir.join("agents")) {
+        match load_agent(&path, &source) {
+            Ok(doc) if agents.iter().any(|known| known.name == doc.name) => problems.push(format!(
+                "{}: duplicate agent name '{}'",
+                path.display(),
+                doc.name
+            )),
+            Ok(doc) => agents.push(doc),
+            Err(problem) => problems.push(problem),
+        }
+    }
+
+    let prefix = |kind: ItemKind| catalog_name(&pack, kind, "");
+    let mut items: Vec<PackItem> = tools
+        .iter()
+        .map(|doc| item(&pack, ItemKind::Tool, &doc.name))
+        .chain(plans.iter().map(|doc| {
+            let bare = doc
+                .identifier
+                .strip_prefix(&prefix(ItemKind::Plan))
+                .unwrap_or(&doc.identifier);
+            item(&pack, ItemKind::Plan, bare)
+        }))
+        .chain(agents.iter().map(|doc| {
+            let bare = doc
+                .name
+                .strip_prefix(&prefix(ItemKind::Agent))
+                .unwrap_or(&doc.name);
+            item(&pack, ItemKind::Agent, bare)
+        }))
+        .collect();
+    let long: Vec<String> = items
+        .iter()
+        .map(PackItem::catalog_name)
+        .filter(|name| name.len() > MAX_CATALOG_NAME)
+        .collect();
+    if !long.is_empty() {
+        problems.push(format!(
+            "{} longer than {MAX_CATALOG_NAME} characters: {}; install the pack under a shorter name with --as, or shorten the item names",
+            if long.len() == 1 { "a catalog name is" } else { "catalog names are" },
+            long.iter()
+                .map(|name| format!("{name} ({})", name.len()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let manifest = match manifest {
+        Some(manifest) if problems.is_empty() => manifest,
+        _ => {
+            return Err(problems
+                .into_iter()
+                .map(|problem| format!("pack '{pack}': {problem}"))
+                .collect())
+        }
+    };
+    apply_interface(&mut items, include, exclude);
+    Ok(LoadedPack {
+        source,
+        manifest,
+        tools,
+        plans,
+        agents,
+        items,
+    })
+}
+
+fn item(pack: &str, kind: ItemKind, name: &str) -> PackItem {
+    PackItem {
+        pack: pack.to_string(),
+        kind,
+        name: name.to_string(),
+        public: true,
+    }
+}
+
+fn load_plan(path: &Path, source: &PackSource) -> Result<PlanDoc, String> {
+    let mut doc = parse_plan_doc(path).map_err(|e| e.to_string())?;
+    let problems = super::resolve_plan_steps(&mut doc.steps, &source.name);
+    if !problems.is_empty() {
+        return Err(format!("{}: {}", path.display(), problems.join("; ")));
+    }
+    doc.identifier = catalog_name(&source.name, ItemKind::Plan, &doc.identifier);
+    doc.pack = Some(source.clone());
+    validate_doc(&doc).map_err(|message| format!("{}: {message}", path.display()))?;
+    Ok(doc)
+}
+
+fn load_agent(path: &Path, source: &PackSource) -> Result<AgentDoc, String> {
+    let mut doc = load_agent_file(path)?;
+    let mut problems = super::resolve_agent(&mut doc, &source.name);
+    doc.name = catalog_name(&source.name, ItemKind::Agent, &doc.name);
+    doc.source = AgentSource::Pack {
+        source: source.clone(),
+        path: path.to_path_buf(),
+    };
+    if problems.is_empty() {
+        let fragments: Vec<&str> = global_fragments().into_keys().collect();
+        problems = crate::agent::doc::validate_doc(&doc, &fragments);
+    }
+    if problems.is_empty() {
+        Ok(doc)
+    } else {
+        Err(format!("{}: {}", path.display(), problems.join("; ")))
+    }
+}
+
+fn yaml_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            matches!(
+                path.extension().and_then(|e| e.to_str()),
+                Some("yaml") | Some("yml")
+            )
+        })
+        .collect();
+    paths.sort();
+    paths
+}

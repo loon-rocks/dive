@@ -20,7 +20,7 @@ pub const MAX_SUBAGENT_DEPTH: usize = 3;
 
 pub fn named_agent_tool_def(doc: &AgentDoc) -> ToolDef {
     ToolDef {
-        name: format!("{AGENT_TOOL_PREFIX}{}", doc.name),
+        name: doc.tool_name(),
         description: doc.description.clone(),
         input_schema: doc.subagent_input_schema(),
         output_schema: Some(doc.subagent_output_schema()),
@@ -93,7 +93,7 @@ impl Pipeline {
         };
         let mut child = self.clone();
         child.agent_depth += 1;
-        let agent_path = path.nested(&format!("{AGENT_TOOL_PREFIX}{name}"), None);
+        let agent_path = path.nested(&doc.tool_name(), None);
         let empty = Map::new();
         let tools = AgentTools {
             pipeline: &child,

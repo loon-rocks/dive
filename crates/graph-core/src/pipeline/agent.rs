@@ -165,7 +165,7 @@ pub async fn resolve_tools(
     // routes `plan__*` to `call_plan`.
     for doc in plans {
         all_tools.push(ToolDef {
-            name: format!("{}{}", crate::toolbox::PLAN_TOOL_PREFIX, doc.identifier),
+            name: doc.tool_name(),
             description: doc.tool_description(),
             input_schema: doc.tool_input_schema(),
             output_schema: Some(doc.result_schema()),

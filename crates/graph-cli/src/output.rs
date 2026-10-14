@@ -64,6 +64,7 @@ impl TtySink {
 fn is_plan_tool(name: &str) -> bool {
     name.starts_with(graph_core::toolbox::PLAN_TOOL_PREFIX)
         || name == graph_core::toolbox::PLAN_AND_EXECUTE
+        || graph_core::packs::is_plan_name(name)
 }
 
 impl EventSink for TtySink {

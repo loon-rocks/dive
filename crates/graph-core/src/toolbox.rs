@@ -63,7 +63,7 @@ impl ToolRegistry for AgentToolbox {
         let mut defs = self.base.tools().await?;
         for doc in &self.plans {
             defs.push(ToolDef {
-                name: format!("{PLAN_TOOL_PREFIX}{}", doc.identifier),
+                name: doc.tool_name(),
                 description: doc.tool_description(),
                 input_schema: doc.tool_input_schema(),
                 output_schema: Some(doc.result_schema()),
@@ -87,7 +87,7 @@ impl ToolRegistry for AgentToolbox {
                 is_error: call.is_error,
             });
         }
-        if let Some(identifier) = name.strip_prefix(PLAN_TOOL_PREFIX) {
+        if let Some(identifier) = self.pipeline.plan_target(name) {
             if self.plans.iter().any(|d| d.identifier == identifier) {
                 let call = self.pipeline.call_plan(identifier, input).await;
                 return Ok(ToolOutcome {
