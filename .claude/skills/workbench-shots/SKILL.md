@@ -26,9 +26,12 @@ demo plans that exist only for screenshots live in `docs/shots/plans/`.
 2. **Write the scenario** (`docs/shots/<name>.yaml`) — spec below. Output lands at
    `docs/images/workbench/<name>.svg`.
 3. **Generate:** `mise run shots` (equivalently
-   `cargo test -p graph-cli shots -- --nocapture`). It regenerates every scenario;
+   `GRAPH_UPDATE_SHOTS=1 cargo test -p graph-cli shots -- --nocapture`). It regenerates every scenario;
    regeneration is byte-identical, so a diff in an SVG you didn't touch means
-   rendering behavior changed — review that like code.
+   rendering behavior changed — review that like code. Without
+   `GRAPH_UPDATE_SHOTS=1`, the test compares every scenario with its committed
+   SVG and fails on any that are out of date, so `mise run test` and CI catch a
+   change that forgot to regenerate.
 4. **Inspect the SVG as text** (don't guess from the browser alone) and iterate on
    `capture.keys` until the right row/pane is showing:
 
