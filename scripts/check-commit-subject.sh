@@ -22,7 +22,7 @@ if [[ $subject =~ ^(Merge\ |Revert\ \"|fixup!|squash!|amend!|Updated\ mintlify\ 
   exit 0
 fi
 
-# The scopes config, plan, tool, agent, and store are reserved: they mean "this
+# The scopes config, plan, tool, agent, store, pack, and lock are reserved: they mean "this
 # commit bumps that file kind's version" (RELEASING.md > "Version bumps"),
 # and the changelog files the commit under that kind's own section. Every
 # such bump is breaking for older binaries, so the `!` marker is mandatory —

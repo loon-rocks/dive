@@ -137,83 +137,11 @@ pub fn lock_migration_count() -> usize {
     LOCK_MIGRATIONS.len()
 }
 
-enum Shape {
-    Leaf,
-    Table(&'static [(&'static str, Shape)]),
-    Map(&'static Shape),
-}
-
-const MCP_REQUIREMENT_SHAPE: Shape = Shape::Table(&[
-    ("server", Shape::Leaf),
-    ("version", Shape::Leaf),
-    ("url", Shape::Leaf),
-]);
-
-const MANIFEST_SHAPE: Shape = Shape::Table(&[
-    (FORMAT_KEY, Shape::Leaf),
-    ("name", Shape::Leaf),
-    ("description", Shape::Leaf),
-    ("license", Shape::Leaf),
-    ("homepage", Shape::Leaf),
-    (
-        "requires",
-        Shape::Table(&[
-            ("graph", Shape::Leaf),
-            ("os", Shape::Leaf),
-            ("binaries", Shape::Leaf),
-            ("env", Shape::Leaf),
-            ("mcp", Shape::Map(&MCP_REQUIREMENT_SHAPE)),
-        ]),
-    ),
-]);
-
-const LOCK_ENTRY_SHAPE: Shape = Shape::Table(&[
-    ("git", Shape::Leaf),
-    ("tag", Shape::Leaf),
-    ("sha", Shape::Leaf),
-    ("hash", Shape::Leaf),
-]);
-
-const LOCK_SHAPE: Shape = Shape::Table(&[
-    (FORMAT_KEY, Shape::Leaf),
-    ("packs", Shape::Map(&LOCK_ENTRY_SHAPE)),
-]);
-
-fn unknown_keys(value: &toml::Value, shape: &Shape, path: &str, out: &mut Vec<String>) {
-    let toml::Value::Table(table) = value else {
-        return;
-    };
-    let child = |key: &str| {
-        if path.is_empty() {
-            key.to_string()
-        } else {
-            format!("{path}.{key}")
-        }
-    };
-    match shape {
-        Shape::Leaf => {}
-        Shape::Table(fields) => {
-            for (key, value) in table {
-                match fields.iter().find(|(name, _)| name == key) {
-                    Some((_, inner)) => unknown_keys(value, inner, &child(key), out),
-                    None => out.push(child(key)),
-                }
-            }
-        }
-        Shape::Map(inner) => {
-            for (key, value) in table {
-                unknown_keys(value, inner, &child(key), out);
-            }
-        }
-    }
-}
-
 struct Contract {
     kind: &'static str,
     oldest: u32,
     current: u32,
     migrations: &'static [Migration],
-    shape: &'static Shape,
 }
 
 const MANIFEST_CONTRACT: Contract = Contract {
@@ -221,7 +149,6 @@ const MANIFEST_CONTRACT: Contract = Contract {
     oldest: PACK_FORMAT_OLDEST,
     current: PACK_FORMAT,
     migrations: PACK_MIGRATIONS,
-    shape: &MANIFEST_SHAPE,
 };
 
 const LOCK_CONTRACT: Contract = Contract {
@@ -229,7 +156,6 @@ const LOCK_CONTRACT: Contract = Contract {
     oldest: LOCK_FORMAT_OLDEST,
     current: LOCK_FORMAT,
     migrations: LOCK_MIGRATIONS,
-    shape: &LOCK_SHAPE,
 };
 
 fn read_versioned<T: serde::de::DeserializeOwned>(
@@ -259,22 +185,7 @@ fn read_versioned<T: serde::de::DeserializeOwned>(
         migration(&mut doc).map_err(|e| format!("{what}: {e}"))?;
     }
     doc[FORMAT_KEY] = toml_edit::value(i64::from(contract.current));
-    let text = doc.to_string();
-    let value = toml::Value::Table(
-        text.parse::<toml::Table>()
-            .map_err(|e| format!("{what}: {e}"))?,
-    );
-    let mut unknown = Vec::new();
-    unknown_keys(&value, contract.shape, "", &mut unknown);
-    if !unknown.is_empty() {
-        let names: Vec<String> = unknown.iter().map(|key| format!("`{key}`")).collect();
-        return Err(format!(
-            "{what}: unknown key{} {}",
-            if names.len() == 1 { "" } else { "s" },
-            names.join(", ")
-        ));
-    }
-    toml::from_str(&text).map_err(|e| format!("{what}: {e}"))
+    toml::from_str(&doc.to_string()).map_err(|e| format!("{what}: {e}"))
 }
 
 fn semver_problem(field: &str, requirement: &str) -> Option<String> {

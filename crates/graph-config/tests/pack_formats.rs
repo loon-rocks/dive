@@ -159,18 +159,18 @@ fn name_and_description_are_required() {
 }
 
 #[test]
-fn unknown_manifest_keys_are_refused_at_every_depth_by_their_path() {
+fn unknown_manifest_keys_are_refused_at_every_depth_by_name() {
     let base = "version = 1\nname = \"x\"\ndescription = \"d\"\n";
     for (extra, key) in [
         ("authors = []\n", "`authors`"),
-        ("[requires]\npython = \">=3\"\n", "`requires.python`"),
+        ("[requires]\npython = \">=3\"\n", "`python`"),
         (
             "[requires.mcp.linear]\nserver = \"s\"\ntransport = \"http\"\n",
-            "`requires.mcp.linear.transport`",
+            "`transport`",
         ),
     ] {
         let err = manifest_error(&format!("{base}{extra}"));
-        assert!(err.contains("unknown key"), "{err}");
+        assert!(err.contains("unknown field"), "{err}");
         assert!(err.contains(key), "{key}: {err}");
     }
 }
@@ -212,7 +212,7 @@ fn lock_entries_are_validated_naming_the_field() {
     let err = lock_error(&format!(
         "version = 1\n[packs.example]\ngit = \"g\"\nsha = \"{SHA}\"\nhash = \"{HASH}\"\nref = \"v1\"\n"
     ));
-    assert!(err.contains("`packs.example.ref`"), "{err}");
+    assert!(err.contains("unknown field `ref`"), "{err}");
     let err = lock_error(&format!(
         "version = 1\n[packs.Example]\ngit = \"g\"\nsha = \"{SHA}\"\nhash = \"{HASH}\"\n"
     ));
