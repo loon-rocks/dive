@@ -146,7 +146,7 @@ pub struct AddRequest {
 }
 
 struct Install {
-    name: String,
+    name: Option<String>,
     source: String,
     reference: Option<String>,
     entry: Option<PackEntry>,
@@ -176,33 +176,30 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
             }
             if let Some(wanted) = &request.reference {
                 if Some(wanted) != entry.reference.as_ref() {
-                    return Ok(refused(
-                        format!(
+                    return Ok(refused(format!(
                             "pack '{name}' is configured in {} with ref {}; edit [packs.{name}] there to change it, then run `{}`",
                             layer.config_path().display(),
                             entry.reference.as_deref().unwrap_or("(none)"),
                             layer.command("add", &name)
-                        ),
-                        Vec::new(),
-                    ));
+                        ), Vec::new()));
                 }
             }
             Install {
-                name,
+                name: Some(name),
                 source: entry.git.clone(),
                 reference: entry.reference.clone(),
                 entry: Some(entry.clone()),
             }
         }
         None => Install {
-            name: request.as_name.clone().unwrap_or_default(),
+            name: request.as_name.clone(),
             source: source_of(&request.source),
             reference: request.reference.clone(),
             entry: None,
         },
     };
-    if install.entry.is_none() && !install.name.is_empty() {
-        if let Some(refusal) = name_refusal(layer, &state, &install.name) {
+    if let (None, Some(name)) = (&install.entry, &install.name) {
+        if let Some(refusal) = name_refusal(layer, &state, name) {
             return Ok(refusal);
         }
     }
@@ -210,46 +207,16 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     let url = remote_url(&install.source);
     let remote = git::ls_remote(&url).map_err(anyhow::Error::msg)?;
     let mut warnings = Vec::new();
-    let (target, reference) = match &install.reference {
-        Some(text) => match refs::resolve(&remote, &PackRef::parse(text), &url) {
-            Ok(target) => {
-                if target.tag.is_none() {
-                    warnings.push(branch_warning(text));
-                }
-                (target, text.clone())
-            }
+    let (target, reference) =
+        match add_target(&remote, install.reference.as_deref(), &url, &mut warnings) {
+            Ok(resolved) => resolved,
             Err(problem) => return Ok(refused(problem, Vec::new())),
-        },
-        None => match refs::newest(&refs::releases(&remote)) {
-            Some(release) => (
-                Target {
-                    reference: release.tag.clone(),
-                    tag: Some(release.tag.clone()),
-                    sha: release.sha.clone(),
-                },
-                format!("v{}", release.version.major),
-            ),
-            None => {
-                let Some(branch) = remote.default_branch.clone() else {
-                    return Ok(refused(
-                        format!("{url} has no vX.Y.Z release tags and no default branch"),
-                        Vec::new(),
-                    ));
-                };
-                warnings.push(format!(
-                    "{url} has no vX.Y.Z release tags; installing the head of its default branch '{branch}'"
-                ));
-                warnings.push(branch_warning(&branch));
-                let target = refs::resolve(&remote, &PackRef::Branch(branch.clone()), &url)
-                    .map_err(anyhow::Error::msg)?;
-                (target, branch)
-            }
-        },
-    };
+        };
 
     let fetched = layer::fetch(layer, &url, &target.reference).map_err(anyhow::Error::msg)?;
-    let name = if install.name.is_empty() {
-        match fetched.manifest_name() {
+    let name = match install.name {
+        Some(name) => name,
+        None => match fetched.manifest_name() {
             Ok(name) => name,
             Err(problem) => {
                 return Ok(refused(
@@ -257,9 +224,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
                     vec![problem],
                 ))
             }
-        }
-    } else {
-        install.name.clone()
+        },
     };
     if install.entry.is_none() && request.as_name.is_none() {
         if let Some(refusal) = name_refusal(layer, &state, &name) {
@@ -339,28 +304,50 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     .with_note(lines.join("\n  ")))
 }
 
+fn add_target(
+    remote: &git::RemoteRefs,
+    reference: Option<&str>,
+    url: &str,
+    warnings: &mut Vec<String>,
+) -> Result<(Target, String), String> {
+    if let Some(text) = reference {
+        let target = refs::resolve(remote, &PackRef::parse(text), url)?;
+        if target.tag.is_none() {
+            warnings.push(branch_warning(text));
+        }
+        return Ok((target, text.to_string()));
+    }
+    if let Some(release) = refs::newest(&refs::releases(remote)) {
+        return Ok((release.target(), format!("v{}", release.version.major)));
+    }
+    let branch = remote
+        .default_branch
+        .clone()
+        .ok_or_else(|| format!("{url} has no vX.Y.Z release tags and no default branch"))?;
+    warnings.push(format!(
+        "{url} has no vX.Y.Z release tags; installing the head of its default branch '{branch}'"
+    ));
+    warnings.push(branch_warning(&branch));
+    let target = refs::resolve(remote, &PackRef::Branch(branch.clone()), url)?;
+    Ok((target, branch))
+}
+
 fn name_refusal(layer: &Layer, state: &layer::LayerState, name: &str) -> Option<Outcome> {
     if let Err(problem) = check_installed_name(name, &state.mcp_servers) {
         return Some(refused(problem, Vec::new()));
     }
     if state.packs.contains_key(name) {
-        return Some(refused(
-            format!(
+        return Some(refused(format!(
                 "a pack named '{name}' is already configured in {}; install this one under another name with --as, or remove it first with `{}`",
                 layer.config_path().display(),
                 layer.command("remove", name)
-            ),
-            Vec::new(),
-        ));
+            ), Vec::new()));
     }
     if layer.copy_dir(name).exists() {
-        return Some(refused(
-            format!(
+        return Some(refused(format!(
                 "{} already exists but is not configured; delete it or install under another name with --as",
                 layer.copy_dir(name).display()
-            ),
-            Vec::new(),
-        ));
+            ), Vec::new()));
     }
     None
 }

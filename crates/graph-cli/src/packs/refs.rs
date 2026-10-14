@@ -73,6 +73,16 @@ pub fn newest_in(releases: &[Release], major: u64) -> Option<&Release> {
         .find(|release| release.version.major == major)
 }
 
+impl Release {
+    pub fn target(&self) -> Target {
+        Target {
+            reference: self.tag.clone(),
+            tag: Some(self.tag.clone()),
+            sha: self.sha.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
     pub reference: String,
@@ -82,22 +92,19 @@ pub struct Target {
 
 pub fn resolve(refs: &RemoteRefs, wanted: &PackRef, url: &str) -> Result<Target, String> {
     let releases = releases(refs);
-    let release = |release: &Release| Target {
-        reference: release.tag.clone(),
-        tag: Some(release.tag.clone()),
-        sha: release.sha.clone(),
-    };
     match wanted {
-        PackRef::Major(major) => newest_in(&releases, *major).map(release).ok_or_else(|| {
-            format!(
-                "{url} has no v{major}.*.* release tag{}",
-                available(&releases)
-            )
-        }),
+        PackRef::Major(major) => newest_in(&releases, *major)
+            .map(Release::target)
+            .ok_or_else(|| {
+                format!(
+                    "{url} has no v{major}.*.* release tag{}",
+                    available(&releases)
+                )
+            }),
         PackRef::Tag(version) => releases
             .iter()
             .find(|candidate| candidate.version == *version)
-            .map(release)
+            .map(Release::target)
             .ok_or_else(|| format!("{url} has no tag v{version}{}", available(&releases))),
         PackRef::Branch(branch) => refs
             .heads
