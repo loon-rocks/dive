@@ -1,0 +1,3 @@
+version = 1
+name = "slack"
+description = "Post messages to Slack channels and threads."

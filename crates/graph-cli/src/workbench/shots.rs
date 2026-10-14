@@ -35,11 +35,10 @@ use async_trait::async_trait;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use graph_config::{ModelChoice, ModelRoles};
 use graph_core::agent::conversation::Conversation;
+use graph_core::packs::{load_pack, PackSet, PackSource};
 use graph_core::pipeline::doc::load_plan_doc;
 use graph_core::pipeline::{Pipeline, ToolCatalog};
-use graph_core::user_tools::{
-    available_packs, load_builtin_tools, load_user_tools, UserToolRegistry,
-};
+use graph_core::user_tools::{load_builtin_tools, load_user_tools, UserToolRegistry};
 use graph_core::{CompositeRegistry, Store, ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use graph_llm::types::{
     ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
@@ -55,6 +54,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+const SHOT_GITHUB_PACK: &str = "crates/graph-core/tests/fixtures/packs/github";
 
 // ── Scenario spec ────────────────────────────────────────────────────────
 
@@ -334,18 +335,34 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
     )]);
     let router = Arc::new(ModelRouter::with_providers(providers, roles));
 
-    // The real catalog: every pack plus the repo's user tools.
-    let packs: Vec<String> = available_packs().iter().map(|s| s.to_string()).collect();
-    let pack_docs = load_builtin_tools(&packs).map_err(anyhow::Error::msg)?;
+    let builtin_docs = load_builtin_tools().map_err(anyhow::Error::msg)?;
     let user_docs = load_user_tools(&[root.join(".graph/tools")]).map_err(anyhow::Error::msg)?;
-    let builtin_defs = UserToolRegistry::builtins(pack_docs, router.clone())
+    let github = load_pack(
+        PackSource {
+            name: "github".to_string(),
+            tag: Some("v1.0.0".to_string()),
+            layer: graph_config::pack::LayerKind::Project,
+            dir: root.join(SHOT_GITHUB_PACK),
+        },
+        &[],
+        &[],
+    )
+    .map_err(|problems| anyhow::anyhow!(problems.join("; ")))?;
+    let mut pack_set = PackSet::default();
+    pack_set.add(&github);
+    let mut defs = UserToolRegistry::builtins(builtin_docs, router.clone())
         .tools()
         .await?;
-    let user_defs = UserToolRegistry::new(user_docs, router.clone())
-        .tools()
-        .await?;
-    let mut defs = builtin_defs;
-    defs.extend(user_defs);
+    defs.extend(
+        UserToolRegistry::new(user_docs, router.clone())
+            .tools()
+            .await?,
+    );
+    defs.extend(
+        UserToolRegistry::pack("github", github.tools, router.clone())
+            .tools()
+            .await?,
+    );
 
     let problems = validate_outcomes(&defs, &spec.tools);
     if !problems.is_empty() {
@@ -380,6 +397,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
             .into_iter()
             .map(|doc| doc.identifier)
             .collect(),
+        packs: pack_set.clone(),
         ..Default::default()
     };
     let scripted: Arc<ScriptedTools> = Arc::new(ScriptedTools {
@@ -388,7 +406,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
     });
 
     let store: Arc<dyn Store> = Arc::new(MemoryStore::new());
-    let llm = graph_core::user_tools::load_builtin_tools(&[]).unwrap();
+    let llm = graph_core::user_tools::load_builtin_tools().unwrap();
     let pipeline = Arc::new(Pipeline {
         registry: Arc::new(graph_core::CompositeRegistry::new(vec![
             Arc::new(graph_core::user_tools::UserToolRegistry::builtins(
@@ -415,7 +433,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
         agent_depth: 0,
         always_loaded: Default::default(),
         drafted: Default::default(),
-        packs: Default::default(),
+        packs: Arc::new(pack_set),
         origin: Default::default(),
     });
 

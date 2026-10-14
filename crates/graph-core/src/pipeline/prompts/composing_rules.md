@@ -72,10 +72,10 @@ input_schema:
     pr: { type: integer, description: Pull request number }
 steps:
   - id: meta
-    tool_name: builtin__gh_pr_meta
+    tool_name: github__tool__gh_pr_meta
     input: { pr: "{{input.pr}}" }
   - id: changed
-    tool_name: builtin__git_changed_files
+    tool_name: github__tool__git_changed_files
     input: { base: "{{meta.base_sha}}", head: "{{meta.head_sha}}", prefix: src/ }
   - id: kept
     tool_name: filter
@@ -88,7 +88,7 @@ steps:
       over: "{{kept.items}}"
       concurrency: 8
       do:
-        tool_name: builtin__git_file
+        tool_name: github__tool__git_file
         input: { path: "{{item.path}}", ref: "{{meta.head_sha}}", max_bytes: 20000 }
   - id: summary
     tool_name: builtin__infer

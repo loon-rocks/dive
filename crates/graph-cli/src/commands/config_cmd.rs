@@ -245,18 +245,26 @@ async fn check() -> Outcome {
     if problems.is_empty() {
         match graph_config::load() {
             Err(error) => problems.push(format!("{error:#}")),
-            Ok(loaded) => match crate::packs::InstalledPacks::for_config(&loaded) {
-                Ok(installed) => {
-                    let manager = graph_mcp::McpManager::new(loaded.config.mcp.clone());
-                    let unmet = installed.unmet(&manager).await;
-                    manager.shutdown().await;
-                    text.push_str(&installed.check_text(&unmet));
-                    packs = installed.check_json(&unmet);
-                    warnings = installed.warnings;
-                    warnings.extend(graph_core::packs::requirements::describe_unmet(&unmet));
+            Ok(loaded) => {
+                warnings.extend(loaded.layers.iter().flat_map(|layer| {
+                    layer
+                        .notes
+                        .iter()
+                        .map(|note| format!("{}: {note}", layer.path.display()))
+                }));
+                match crate::packs::InstalledPacks::for_config(&loaded) {
+                    Ok(installed) => {
+                        let manager = graph_mcp::McpManager::new(loaded.config.mcp.clone());
+                        let unmet = installed.unmet(&manager).await;
+                        manager.shutdown().await;
+                        text.push_str(&installed.check_text(&unmet));
+                        packs = installed.check_json(&unmet);
+                        warnings.extend(installed.warnings);
+                        warnings.extend(graph_core::packs::requirements::describe_unmet(&unmet));
+                    }
+                    Err(error) => problems.push(format!("{error:#}")),
                 }
-                Err(error) => problems.push(format!("{error:#}")),
-            },
+            }
         }
     }
     let ok = problems.is_empty();

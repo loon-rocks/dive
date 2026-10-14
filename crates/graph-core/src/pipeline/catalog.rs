@@ -377,10 +377,18 @@ fn check_tool(
         }
         _ if tool.starts_with(crate::user_tools::BUILTIN_TOOL_PREFIX) => {
             if !catalog.builtin_tools.contains(tool) && !super::is_native_tool(tool) {
-                check.errors.push(format!(
-                    "step {step_id}: unknown builtin tool '{tool}' — not \
-                     provided by the enabled tool packs ([tools].packs)"
-                ));
+                let bare = &tool[crate::user_tools::BUILTIN_TOOL_PREFIX.len()..];
+                check.errors.push(match moved_pack_of(bare) {
+                    Some(pack) => format!(
+                        "step {step_id}: unknown builtin tool '{tool}' — the {pack} tools \
+                         left graph for the {pack} pack: install it with `graph pack add {pack}` \
+                         and call {pack}__tool__{bare}"
+                    ),
+                    None => format!(
+                        "step {step_id}: unknown builtin tool '{tool}' — not one of graph's \
+                         built-in tools"
+                    ),
+                });
             }
         }
         _ if tool.starts_with(crate::user_tools::USER_TOOL_PREFIX) => {
@@ -425,6 +433,16 @@ fn check_pack_item(step_id: &str, tool: &str, catalog: &ToolCatalog, check: &mut
             "step {step_id}: unknown {kind} '{tool}' — pack '{pack}' has no {kind} named '{name}'",
             kind = kind.as_str()
         ));
+    }
+}
+
+fn moved_pack_of(bare: &str) -> Option<&'static str> {
+    if bare.starts_with("gh_") || bare.starts_with("git_") {
+        Some("github")
+    } else if bare.starts_with("slack_") {
+        Some("slack")
+    } else {
+        None
     }
 }
 
@@ -635,9 +653,19 @@ steps:
         let check = resolve_plan_tools(&doc(&bad), &catalog());
         assert_eq!(check.errors.len(), 3, "{:?}", check.errors);
         assert!(check.errors[0].contains("unknown builtin tool 'builtin__nope'"));
-        assert!(check.errors[0].contains("[tools].packs"));
+        assert!(check.errors[0].contains("not one of graph's built-in tools"));
         assert!(check.errors[1].contains("unknown user tool 'user__nope'"));
         assert!(check.errors[2].contains("unknown plan 'nope'"));
+    }
+
+    #[test]
+    fn a_former_github_or_slack_builtin_names_the_pack_to_install() {
+        let moved = OK_DOC.replace("builtin__infer", "builtin__git_log");
+        let check = resolve_plan_tools(&doc(&moved), &catalog());
+        assert_eq!(
+            check.errors,
+            ["step E1: unknown builtin tool 'builtin__git_log' — the github tools left graph for the github pack: install it with `graph pack add github` and call github__tool__git_log"]
+        );
     }
 
     #[test]

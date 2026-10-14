@@ -25,11 +25,11 @@ input_schema:
     pr: { type: integer, description: Pull request number }
 steps:
   - id: E0
-    tool_name: builtin__gh_pr_meta
+    tool_name: github__tool__gh_pr_meta
     input: { pr: "{{input.pr}}" }
     reasoning: Title, body, and the base/head shas to diff.
   - id: E1
-    tool_name: builtin__git_changed_files
+    tool_name: github__tool__git_changed_files
     input:
       base: "{{E0.base_sha}}"
       head: "{{E0.head_sha}}"
@@ -39,7 +39,7 @@ steps:
       absence-style invariants (docs-parity, test-parity) and fails
       loudly on a bad ref.
   - id: E2
-    tool_name: builtin__git_diff
+    tool_name: github__tool__git_diff
     input:
       base: "{{E0.base_sha}}"
       head: "{{E0.head_sha}}"
@@ -69,7 +69,7 @@ steps:
     input: { findings: "{{E3.findings}}" }
     reasoning: Deterministic findings → comment entries; fields pass through.
   - id: E5
-    tool_name: builtin__gh_pr_inline_comments
+    tool_name: github__tool__gh_pr_inline_comments
     input:
       pr: "{{input.pr}}"
       head_sha: "{{E0.head_sha}}"
@@ -79,7 +79,7 @@ steps:
       Anchor line-resolvable findings on the diff; earlier runs' comments
       are cleared first, and each posted entry comes back with its url.
   - id: E6
-    tool_name: builtin__gh_pr_comment
+    tool_name: github__tool__gh_pr_comment
     input:
       pr: "{{input.pr}}"
       marker: "graph:pr_review:summary"

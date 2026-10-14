@@ -37,7 +37,7 @@ output:
 fn with_pack(requires: &str, extra_config: &str) -> Scratch {
     let scratch = Scratch::new();
     scratch.write_config(&format!(
-        "version = 4\n\n[tools]\npacks = [\"data\"]\n\n[packs.example]\ngit = \"https://example.com/graph-pack-example.git\"\nref = \"v1\"\n{extra_config}"
+        "version = 4\n\n[packs.example]\ngit = \"https://example.com/graph-pack-example.git\"\nref = \"v1\"\n{extra_config}"
     ));
     let pack = scratch.path().join(".graph/packs/example");
     std::fs::create_dir_all(pack.join("plans")).unwrap();

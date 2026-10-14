@@ -62,10 +62,7 @@ fn tool_source(docs: &graph_core::user_tools::ToolDocs, name: &str) -> Option<St
     let doc = list.iter().find(|doc| doc.name == bare)?;
     Some(match &doc.path {
         Some(path) => path.display().to_string(),
-        None => match graph_core::user_tools::pack_of(bare) {
-            Some(pack) => format!("built-in ({pack} pack)"),
-            None => "built-in".to_string(),
-        },
+        None => "built-in".to_string(),
     })
 }
 
@@ -215,7 +212,7 @@ mod tests {
 
     #[test]
     fn tool_source_names_the_overriding_file_or_the_pack() {
-        let builtins = graph_core::user_tools::load_builtin_tools(&["github".to_string()]).unwrap();
+        let builtins = graph_core::user_tools::load_builtin_tools().unwrap();
         let pack_tool = graph_core::user_tools::parse_tool_source(
             "name: file_info\ndescription: d\nkind: exec\ncommand: wc\n",
         )
@@ -241,10 +238,6 @@ mod tests {
         assert_eq!(
             tool_source(&docs, "builtin__reshape").as_deref(),
             Some("built-in")
-        );
-        assert_eq!(
-            tool_source(&docs, "builtin__gh_pr_meta").as_deref(),
-            Some("built-in (github pack)")
         );
         let mut mine = builtins
             .iter()

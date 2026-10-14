@@ -141,112 +141,21 @@ pub enum ExecOutput {
     Text,
 }
 
-// ── Bundled tool packs ───────────────────────────────────────────────────
-
-/// Tool YAML shipped inside the binary, keyed by pack name. Pack tools load
-/// through the same validation and registry machinery as user tools, but
-/// are exposed under the `builtin__` namespace — copy one into a tools
-/// directory (as a `user__` tool) to customize it.
-const PACKS: &[(&str, &[&str])] = &[
-    (
-        "github",
-        &[
-            include_str!("packs/github/gh_pr_meta.yaml"),
-            include_str!("packs/github/gh_pr_comment.yaml"),
-            include_str!("packs/github/gh_pr_inline_comments.yaml"),
-            include_str!("packs/github/gh_pr_review_threads.yaml"),
-            include_str!("packs/github/gh_pr_thread_sync.yaml"),
-            include_str!("packs/github/gh_pr_ticket.yaml"),
-            include_str!("packs/github/gh_release.yaml"),
-            include_str!("packs/github/git_diff.yaml"),
-            include_str!("packs/github/git_log.yaml"),
-            include_str!("packs/github/git_changed_files.yaml"),
-            include_str!("packs/github/git_file.yaml"),
-            include_str!("packs/github/git_grep.yaml"),
-        ],
-    ),
-    (
-        "slack",
-        &[include_str!("packs/slack/slack_post_message.yaml")],
-    ),
-];
-
 const BUILTIN_TOOLS: &[&str] = &[
     include_str!("builtins/infer.yaml"),
     include_str!("builtins/decide.yaml"),
     include_str!("builtins/reshape.yaml"),
 ];
 
-const FOLDED_PACKS: &[&str] = &["llm", "data"];
-
-pub fn pack_sources() -> &'static [(&'static str, &'static [&'static str])] {
-    PACKS
-}
-
 pub fn builtin_tool_sources() -> &'static [&'static str] {
     BUILTIN_TOOLS
 }
 
-pub fn available_packs() -> Vec<&'static str> {
-    PACKS.iter().map(|(name, _)| *name).collect()
-}
-
-pub fn pack_of(tool: &str) -> Option<&'static str> {
-    static INDEX: std::sync::OnceLock<Vec<(String, &'static str)>> = std::sync::OnceLock::new();
-    INDEX
-        .get_or_init(|| {
-            PACKS
-                .iter()
-                .flat_map(|(pack, sources)| {
-                    sources.iter().filter_map(move |raw| {
-                        parse_tool_source(raw).ok().map(|doc| (doc.name, *pack))
-                    })
-                })
-                .collect()
-        })
-        .iter()
-        .find(|(name, _)| name == tool)
-        .map(|(_, pack)| *pack)
-}
-
-/// Parse the tools of the named packs. Unknown pack names error, listing
-/// what exists — a typo should fail loudly at startup, not surface as
-/// missing tools at plan time.
-pub fn load_pack_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> {
-    let mut docs: Vec<UserToolDoc> = Vec::new();
-    for (index, pack) in packs.iter().enumerate() {
-        if FOLDED_PACKS.contains(&pack.as_str()) || packs[..index].contains(pack) {
-            continue;
-        }
-        let Some((_, sources)) = PACKS.iter().find(|(name, _)| name == pack) else {
-            return Err(format!(
-                "unknown tool pack '{pack}' (available: {})",
-                available_packs().join(", ")
-            ));
-        };
-        for raw in *sources {
-            let doc = parse_tool_source(raw).map_err(|e| format!("pack '{pack}': {e}"))?;
-            validate_tool(&doc).map_err(|e| format!("pack '{pack}': {e}"))?;
-            if docs.iter().any(|d| d.name == doc.name) {
-                return Err(format!("pack '{pack}': duplicate tool name '{}'", doc.name));
-            }
-            docs.push(doc);
-        }
-    }
-    Ok(docs)
-}
-
-pub fn load_builtin_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> {
+pub fn load_builtin_tools() -> Result<Vec<UserToolDoc>, String> {
     let mut docs = Vec::new();
     for raw in BUILTIN_TOOLS {
         let doc = parse_tool_source(raw)?;
         validate_tool(&doc)?;
-        docs.push(doc);
-    }
-    for doc in load_pack_tools(packs)? {
-        if docs.iter().any(|d| d.name == doc.name) {
-            return Err(format!("duplicate built-in tool name '{}'", doc.name));
-        }
         docs.push(doc);
     }
     Ok(docs)
@@ -293,7 +202,7 @@ pub fn apply_tool_overrides(
             .as_ref()
             .map_or(stray.name.clone(), |path| path.display().to_string());
         return Err(format!(
-            "{location}: no built-in tool named '{}' in the enabled packs; a file under `{BUILTIN_OVERRIDE_DIR}/` must replace an existing `builtin__` tool",
+            "{location}: no built-in tool named '{}'; a file under `{BUILTIN_OVERRIDE_DIR}/` must replace an existing `builtin__` tool",
             stray.name
         ));
     }

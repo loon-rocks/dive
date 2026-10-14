@@ -14,6 +14,7 @@ pub const LOCK_FORMAT_OLDEST: u32 = 1;
 pub const MANIFEST_FILE: &str = "pack.toml";
 pub const LOCK_FILE: &str = "packs.lock";
 pub const PACKS_DIR: &str = "packs";
+pub const DEFAULT_HOST: &str = "github.com/tylerdavis/graph-pack-";
 
 pub const MAX_PACK_NAME: usize = 20;
 pub const MAX_CATALOG_NAME: usize = 64;

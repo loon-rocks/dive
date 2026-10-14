@@ -12,7 +12,7 @@ input_schema:
     since: { type: string, description: "The ref to report from (last week's tag)" }
 steps:
   - id: E0
-    tool_name: builtin__git_changed_files
+    tool_name: github__tool__git_changed_files
     input: { base: "{{input.since}}", head: "HEAD", prefix: "" }
     reasoning: Everything that changed since the last report.
   - id: E1
@@ -23,7 +23,7 @@ steps:
       message: "quiet week — nothing to report since {{input.since}}"
     reasoning: A quiet week needs no diff and no LLM call.
   - id: E2
-    tool_name: builtin__git_diff
+    tool_name: github__tool__git_diff
     input:
       base: "{{input.since}}"
       head: "HEAD"
@@ -36,7 +36,7 @@ steps:
     input:
       over: "{{E0.files}}"
       do:
-        tool_name: builtin__git_file
+        tool_name: github__tool__git_file
         input: { path: "{{item}}", ref: "HEAD" }
     reasoning: Read each changed file — context the diff alone can't give.
 solver:

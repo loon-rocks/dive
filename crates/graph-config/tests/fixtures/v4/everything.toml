@@ -81,7 +81,10 @@ paths = ["./.graph/plans", "~/.config/graph/plans"]
 
 [tools]
 paths = ["./.graph/tools", "~/.config/graph/tools"]
-packs = ["github", "slack"]
+
+[packs.slack]
+git = "github.com/tylerdavis/graph-pack-slack"
+ref = "v1"
 
 [user]
 name = "Fixture User"

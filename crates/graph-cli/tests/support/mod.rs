@@ -24,16 +24,12 @@ pub struct Scratch {
 }
 
 impl Scratch {
-    /// A scratch with a config enabling the `data` pack — which supplies
-    /// `builtin__reshape`, a pure tool needing no LLM, no network, and no
-    /// credentials. Every fixture plan here is built on it so the suite runs
-    /// in CI with no secrets.
     pub fn new() -> Self {
         let scratch = Self {
             dir: tempfile::tempdir().expect("create temp dir"),
         };
         std::fs::create_dir_all(scratch.path().join(".graph/plans")).expect("create .graph/plans");
-        scratch.write_config("[tools]\npacks = [\"data\"]\n");
+        scratch.write_config("");
         scratch
     }
 

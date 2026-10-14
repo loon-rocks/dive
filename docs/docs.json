@@ -117,9 +117,6 @@
                 "$ref": "tools/reference/builtin/navigation.json"
               },
               {
-                "$ref": "tools/reference/packs/navigation.json"
-              },
-              {
                 "$ref": "tools/reference/native/navigation.json"
               },
               {
@@ -224,11 +221,11 @@
     },
     {
       "source": "/untitled-page-3",
-      "destination": "/tools/reference/packs/github/gh_pr_meta"
+      "destination": "/tools/reference/builtin-tools"
     },
     {
       "source": "/untitled-page-4",
-      "destination": "/tools/reference/packs/slack/slack_post_message"
+      "destination": "/tools/reference/builtin-tools"
     },
     {
       "source": "/integrating/mcp/reference/settings",
@@ -312,7 +309,7 @@
     },
     {
       "source": "/reference/tools/stdlib/about",
-      "destination": "/tools/reference/packs"
+      "destination": "/tools/reference/builtin-tools"
     },
     {
       "source": "/tools/finding-tools",

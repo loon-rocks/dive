@@ -365,9 +365,7 @@ fn check_leaves_calls_to_an_unconfigured_required_mcp_server_unchecked_and_check
         "{notes}"
     );
 
-    scratch.write_config(
-        "[tools]\npacks = [\"data\"]\n\n[mcp.everything]\ncommand = \"graph-pack-no-such-server\"\n",
-    );
+    scratch.write_config("[mcp.everything]\ncommand = \"graph-pack-no-such-server\"\n");
     let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
     run.code_is(1);
     has(
