@@ -87,6 +87,16 @@ jobs:
           gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" \
             --generate-notes assets/*
 
+  docs:
+    if: github.event_name == 'push'
+    needs: publish
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish the docs for this release
+        run: git push origin "HEAD:refs/heads/docs-live"
+
   # Container image for CI (and docker run): the linux binary plus git/jq/gh.
   # Tagged vX.Y.Z, X.Y, and latest. Runs after the release exists on tag
   # pushes, standalone on workflow_dispatch backfills.

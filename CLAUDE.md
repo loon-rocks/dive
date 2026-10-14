@@ -4,7 +4,7 @@ A Rust CLI agent with a plan-based execution engine. Cargo workspace, six crates
 
 **Positioning: plans first.** The plan pipeline is the core product. "The workbench" means the workbench TUI (`graph wb`; `graph wb plan|agent|tool` opens a mode directly) — the review/debug surface for plans; the agent loop (`ask`/`chat`) is the conversational layer for probing tools, prototyping, and exercising plans. Frame features and docs accordingly, and keep that vocabulary: never call `ask`/`chat` "the workbench".
 
-**The documentation under `docs/` is the canonical reference** for behavior, file formats, and CLI surface — read it before changing the corresponding code, and update it in the same PR as any behavior change. Start with `docs/getting-started/concepts.mdx` and `docs/architecture/execution-model.mdx`. Published via Mintlify from this repo (`docs.json` is the nav manifest; monorepo contentDirectory `docs/`; builds only trigger when `docs/` changes). The site is public — it is the documentation for a public, open-source library, so treat every page as user-facing.
+**The documentation under `docs/` is the canonical reference** for behavior, file formats, and CLI surface — read it before changing the corresponding code, and update it in the same PR as any behavior change. Start with `docs/getting-started/concepts.mdx` and `docs/architecture/execution-model.mdx`. Published via Mintlify from this repo (`docs.json` is the nav manifest; monorepo contentDirectory `docs/`; Mintlify deploys the `docs-live` branch, which the release workflow moves to each release tag, so docs merged to `main` go live with the next release). The site is public — it is the documentation for a public, open-source library, so treat every page as user-facing.
 
 ## Build & test
 
