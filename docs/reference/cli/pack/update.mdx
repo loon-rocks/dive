@@ -1,0 +1,47 @@
+---
+title: "graph pack update"
+sidebarTitle: "update"
+description: "Move packs to the newest release their ref allows, within the current major"
+playground: "none"
+keywords: ["graph pack update"]
+---
+
+## Arguments
+
+<ParamField path="NAME" type="string[]">
+  Packs to update; every pack in the layer when omitted
+</ParamField>
+
+## Options
+
+<ParamField query="--force" type="boolean">
+  Overwrite a copy whose content differs from packs.lock
+</ParamField>
+
+<ParamField query="--global" type="boolean">
+  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+</ParamField>
+
+<ParamField query="--dir" type="string">
+  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack update [OPTIONS] [NAME]...
+```
+
+</RequestExample>

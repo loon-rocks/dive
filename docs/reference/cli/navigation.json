@@ -87,6 +87,16 @@
     "root": "reference/cli/config"
   },
   {
+    "group": "graph pack",
+    "pages": [
+      "reference/cli/pack/add",
+      "reference/cli/pack/list",
+      "reference/cli/pack/update",
+      "reference/cli/pack/remove"
+    ],
+    "root": "reference/cli/pack"
+  },
+  {
     "group": "graph workbench",
     "pages": [
       "reference/cli/workbench/plan",

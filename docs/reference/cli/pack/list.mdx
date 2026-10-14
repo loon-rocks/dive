@@ -1,0 +1,41 @@
+---
+title: "graph pack list"
+sidebarTitle: "list"
+description: "List installed packs with their tags, newer releases, local edits and shadowing"
+playground: "none"
+keywords: ["graph pack list"]
+---
+
+## Options
+
+<ParamField query="--global" type="boolean">
+  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+</ParamField>
+
+<ParamField query="--dir" type="string">
+  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--offline" type="boolean">
+  Skip the git ls-remote per pack and the columns it fills
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack list [OPTIONS]
+```
+
+</RequestExample>

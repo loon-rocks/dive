@@ -61,6 +61,10 @@ These options work with every command.
 | [`graph config path`](/reference/cli/config/path) | Print the config file locations and which exist |
 | [`graph config check`](/reference/cli/config/check) | Report each config file's format and whether the merged config loads |
 | [`graph config migrate`](/reference/cli/config/migrate) | Rewrite a config file to the current config format, comments intact |
+| [`graph pack add`](/reference/cli/pack/add) | Install a pack from git as a plain copy in the project, global or given graph directory |
+| [`graph pack list`](/reference/cli/pack/list) | List installed packs with their tags, newer releases, local edits and shadowing |
+| [`graph pack update`](/reference/cli/pack/update) | Move packs to the newest release their ref allows, within the current major |
+| [`graph pack remove`](/reference/cli/pack/remove) | Delete a pack's copy, config entry and lock entry, and list files that still call it |
 | [`graph workbench`](/reference/cli/workbench) | Interactive workbench: a dual-pane TUI for building plans, agents and tools |
 | [`graph workbench plan`](/reference/cli/workbench/plan) | Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation |
 | [`graph workbench agent`](/reference/cli/workbench/agent) | Open the workbench in agent mode: draft a new agent, or edit an existing one |
