@@ -123,7 +123,7 @@
 <text x="446.4" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">○</text>
 <text x="463.2" y="193.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">├──</text>
 <text x="496.8" y="193.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" font-weight="600">release</text>
-<text x="564.0" y="193.5" textLength="159.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">builtin__gh_release</text>
+<text x="564.0" y="193.5" textLength="201.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">github__tool__gh_release</text>
 <text x="1009.2" y="193.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="211.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="34.8" y="211.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">release</text>
@@ -140,7 +140,7 @@
 <text x="446.4" y="211.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">○</text>
 <text x="463.2" y="211.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">├──</text>
 <text x="496.8" y="211.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" font-weight="600">commits</text>
-<text x="564.0" y="211.5" textLength="134.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">builtin__git_log</text>
+<text x="564.0" y="211.5" textLength="176.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">github__tool__git_log</text>
 <text x="1009.2" y="211.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="34.8" y="229.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">it,</text>
@@ -164,7 +164,7 @@
 <text x="463.2" y="247.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">│</text>
 <text x="488.4" y="247.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">├──</text>
 <text x="522.0" y="247.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" font-weight="600">files</text>
-<text x="572.4" y="247.5" textLength="218.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">builtin__git_changed_files</text>
+<text x="572.4" y="247.5" textLength="260.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">github__tool__git_changed_files</text>
 <text x="1009.2" y="247.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="412.8" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>

@@ -21,7 +21,7 @@
 //! is validated against the tool's declared `output_schema`. Renames and
 //! shape changes fail generation instead of rendering a plausible lie.
 //!
-//! Regenerate with `cargo test -p graph-cli shots -- --nocapture`
+//! Regenerate with `GRAPH_UPDATE_SHOTS=1 cargo test -p graph-cli shots -- --nocapture`
 //! (or `mise run shots`); output lands in `docs/images/workbench/`.
 
 use super::app::{self, App, Mode, Msg};
@@ -55,6 +55,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+const UPDATE_ENV: &str = "GRAPH_UPDATE_SHOTS";
 const SHOT_GITHUB_PACK: &str = "crates/graph-core/tests/fixtures/packs/github";
 
 // ── Scenario spec ────────────────────────────────────────────────────────
@@ -311,7 +312,7 @@ fn validate_outcomes(defs: &[ToolDef], tools: &BTreeMap<String, VecDeque<Value>>
 
 // ── The harness ──────────────────────────────────────────────────────────
 
-async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
+async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
     let doc = match &spec.plan {
         Some(plan) => Some(load_plan_doc(&root.join(plan)).context("loading the shot's plan")?),
         None => None,
@@ -612,12 +613,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
             (None, Some(rect))
         }
     };
-    let svg = buffer_to_svg(terminal.backend().buffer(), title, clip);
-    let out_dir = root.join("docs/images/workbench");
-    std::fs::create_dir_all(&out_dir)?;
-    let out = out_dir.join(format!("{}.svg", spec.name));
-    std::fs::write(&out, svg)?;
-    Ok(out)
+    Ok(buffer_to_svg(terminal.backend().buffer(), title, clip))
 }
 
 /// Feed one key through the reducer and run any effects it returns.
@@ -667,14 +663,29 @@ async fn generate_docs_screenshots() {
         "no shot specs in {}",
         shots_dir.display()
     );
+    let update = std::env::var(UPDATE_ENV).is_ok_and(|value| value == "1");
+    let out_dir = root.join("docs/images/workbench");
+    let mut stale = Vec::new();
     for path in specs {
         let raw = std::fs::read_to_string(&path).expect("readable spec");
         let spec: ShotSpec = serde_yaml::from_str(&raw)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         let name = spec.name.clone();
-        let out = run_shot(&root, spec)
+        let svg = run_shot(&root, spec)
             .await
             .unwrap_or_else(|error| panic!("shot '{name}': {error:#}"));
-        eprintln!("wrote {}", out.display());
+        let out = out_dir.join(format!("{name}.svg"));
+        if update {
+            std::fs::create_dir_all(&out_dir).expect("screenshot directory");
+            std::fs::write(&out, svg).expect("writable screenshot");
+            eprintln!("wrote {}", out.display());
+        } else if std::fs::read_to_string(&out).ok().as_deref() != Some(svg.as_str()) {
+            stale.push(format!("docs/images/workbench/{name}.svg is out of date"));
+        }
     }
+    assert!(
+        stale.is_empty(),
+        "{}\nregenerate them with `mise run shots`",
+        stale.join("\n")
+    );
 }
