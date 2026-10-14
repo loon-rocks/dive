@@ -691,7 +691,7 @@ pub enum PackCommand {
         json: bool,
     },
     #[command(
-        about = "Move packs to the newest release their ref allows, within the current major"
+        about = "Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each"
     )]
     Update {
         #[arg(
@@ -701,6 +701,17 @@ pub enum PackCommand {
         names: Vec<String>,
         #[arg(long, help = "Overwrite a copy whose content differs from packs.lock")]
         force: bool,
+        #[arg(
+            long,
+            help = "Cross to each newer major in turn: run its migration as a dry run, show the diffs, ask, apply, then move ref to that major"
+        )]
+        major: bool,
+        #[arg(
+            long,
+            requires = "major",
+            help = "Accept every migration and major without asking (required when there is no terminal)"
+        )]
+        yes: bool,
         #[command(flatten)]
         layer: LayerArgs,
         #[arg(long, help = "Print a JSON envelope instead of text")]

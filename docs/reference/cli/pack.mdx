@@ -10,7 +10,7 @@ keywords: ["graph pack"]
 
 - [`graph pack add`](/reference/cli/pack/add): Install a pack from git as a plain copy in the project, global or given graph directory
 - [`graph pack list`](/reference/cli/pack/list): List installed packs with their tags, newer releases, local edits and shadowing
-- [`graph pack update`](/reference/cli/pack/update): Move packs to the newest release their ref allows, within the current major
+- [`graph pack update`](/reference/cli/pack/update): Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each
 - [`graph pack remove`](/reference/cli/pack/remove): Delete a pack's copy, config entry and lock entry, and list files that still call it
 - [`graph pack new`](/reference/cli/pack/new): Scaffold a pack: manifest, one tool, plan and agent, README, CHANGELOG, MIGRATING.md and a CI workflow
 - [`graph pack check`](/reference/cli/pack/check): Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements

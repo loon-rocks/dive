@@ -117,6 +117,27 @@ pub fn with_pack_entry(config: &str, name: &str, source: &str, reference: &str) 
     Ok(doc.to_string())
 }
 
+pub fn with_pack_ref(config: &str, name: &str, reference: &str) -> Result<String> {
+    let mut doc: toml_edit::DocumentMut = config.parse().context("parsing config.toml")?;
+    let entry = doc
+        .get_mut("packs")
+        .and_then(toml_edit::Item::as_table_like_mut)
+        .and_then(|packs| packs.get_mut(name))
+        .and_then(toml_edit::Item::as_table_like_mut)
+        .with_context(|| format!("config.toml has no [packs.{name}] table"))?;
+    match entry.get_mut("ref").and_then(toml_edit::Item::as_value_mut) {
+        Some(value) => {
+            let decor = value.decor().clone();
+            *value = reference.into();
+            *value.decor_mut() = decor;
+        }
+        None => {
+            entry.insert("ref", toml_edit::value(reference));
+        }
+    }
+    Ok(doc.to_string())
+}
+
 pub fn without_pack_entry(config: &str, name: &str) -> Result<String> {
     let mut doc: toml_edit::DocumentMut = config.parse().context("parsing config.toml")?;
     let emptied = match doc
@@ -328,6 +349,22 @@ mod tests {
         assert!(!added.contains("[packs]\n"), "{added}");
         let removed = without_pack_entry(&added, "example").unwrap();
         assert_eq!(removed.trim_end(), config.trim_end());
+    }
+
+    #[test]
+    fn a_pack_ref_is_rewritten_in_place_keeping_formatting_and_comments() {
+        let config = "version = 4\n\n[packs.example]\ngit = \"x\"\nref = \"v1\"   # line\n\n[packs.other]\ngit = \"y\"\n";
+        let moved = with_pack_ref(config, "example", "v3").unwrap();
+        assert_eq!(moved, config.replace("\"v1\"", "\"v3\""));
+        let added = with_pack_ref(config, "other", "v2").unwrap();
+        assert!(
+            added.ends_with("[packs.other]\ngit = \"y\"\nref = \"v2\"\n"),
+            "{added}"
+        );
+        let inline =
+            with_pack_ref("packs = { example = { git = \"x\" } }\n", "example", "v2").unwrap();
+        assert!(inline.contains("ref = \"v2\""), "{inline}");
+        assert!(with_pack_ref(config, "missing", "v2").is_err());
     }
 
     #[test]

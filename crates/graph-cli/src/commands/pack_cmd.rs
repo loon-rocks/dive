@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
 mod author;
+mod major;
 
 pub async fn run(command: PackCommand) -> Result<()> {
     match command {
@@ -36,9 +37,31 @@ pub async fn run(command: PackCommand) -> Result<()> {
         PackCommand::Update {
             names,
             force,
+            major,
+            yes,
             layer,
             json,
-        } => report(update(&target(&layer)?, &names, force)?, json),
+        } => {
+            let layer = target(&layer)?;
+            if !major {
+                return report(update(&layer, &names, force)?, json);
+            }
+            let consent = major::Consent {
+                yes,
+                asker: crate::interlocutor::tty(),
+            };
+            let config = graph_config::load_from(&layer.config_paths)?.config;
+            let majors = major::Majors {
+                consent: &consent,
+                config: &config,
+                events: crate::output::make_sink(
+                    json,
+                    false,
+                    crate::telemetry::RunInfo::plan_run("pack update --major"),
+                ),
+            };
+            report(major::update(&layer, &names, force, &majors).await?, json)
+        }
         PackCommand::Remove { name, layer, json } => report(remove(&target(&layer)?, &name)?, json),
         PackCommand::New { name, path, json } => report(author::new_pack(&name, &path)?, json),
         PackCommand::Check { path, json } => report(author::check(&path).await?, json),
@@ -400,45 +423,79 @@ enum Update {
         to: String,
         requirements: RequirementReport,
     },
+    Crossed(major::Crossed),
     Current(String),
     Pinned(String),
+    Branch(String),
     Refused(String, Vec<String>),
 }
 
-pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
-    let state = layer.state()?;
+fn update_names(
+    layer: &Layer,
+    state: &layer::LayerState,
+    names: &[String],
+) -> Result<Vec<String>, Outcome> {
     let names: Vec<String> = if names.is_empty() {
         state.packs.keys().cloned().collect()
     } else {
         names.to_vec()
     };
     if names.is_empty() {
-        return Ok(
+        return Err(
             Outcome::ok(json!({"ok": true, "packs": []})).with_note(format!(
                 "no packs configured in {}",
                 layer.config_path().display()
             )),
         );
     }
+    Ok(names)
+}
+
+fn not_configured(layer: &Layer, name: &str) -> Update {
+    Update::Refused(
+        format!(
+            "not configured in {}; install it with `{}`",
+            layer.config_path().display(),
+            layer.command("add", name)
+        ),
+        Vec::new(),
+    )
+}
+
+pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
+    let state = layer.state()?;
+    let names = match update_names(layer, &state, names) {
+        Ok(names) => names,
+        Err(outcome) => return Ok(outcome),
+    };
     let mut lock = state.lock.clone();
+    let mut results = Vec::new();
+    for name in names {
+        let mut held_back = None;
+        let result = match state.packs.get(&name) {
+            None => not_configured(layer, &name),
+            Some(entry) => update_one(
+                layer,
+                &state,
+                entry,
+                &name,
+                force,
+                &mut lock,
+                &mut held_back,
+            )?,
+        };
+        results.push((name, result, held_back));
+    }
+    Ok(update_outcome(layer, results))
+}
+
+fn update_outcome(layer: &Layer, updates: Vec<(String, Update, Option<String>)>) -> Outcome {
+    let count = updates.len();
     let mut results = Vec::new();
     let mut lines = Vec::new();
     let mut refusals = 0;
-    for name in &names {
-        let mut held_back = None;
-        let result = match state.packs.get(name) {
-            None => Update::Refused(
-                format!(
-                    "not configured in {}; install it with `{}`",
-                    layer.config_path().display(),
-                    layer.command("add", name)
-                ),
-                Vec::new(),
-            ),
-            Some(entry) => {
-                update_one(layer, &state, entry, name, force, &mut lock, &mut held_back)?
-            }
-        };
+    for (name, result, held_back) in updates {
+        let name = name.as_str();
         let (status, line, problems) = match &result {
             Update::Moved { from, to, .. } if from == to => (
                 "reinstalled",
@@ -448,10 +505,25 @@ pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
             Update::Moved { from, to, .. } => {
                 ("updated", format!("{name}: {from} -> {to}"), Vec::new())
             }
+            Update::Crossed(crossed) => {
+                let status = crossed.status();
+                if status == "refused" {
+                    refusals += 1;
+                }
+                (status, crossed.summary(name, layer), crossed.problems())
+            }
             Update::Current(at) => ("current", format!("{name}: up to date at {at}"), Vec::new()),
             Update::Pinned(tag) => (
                 "pinned",
                 format!("{name}: pinned to {tag} by its ref; skipped"),
+                Vec::new(),
+            ),
+            Update::Branch(branch) => (
+                "branch",
+                format!(
+                    "{name}: tracks branch '{branch}', which has no majors to cross; `{}` moves it to the branch head",
+                    layer.command("update", name)
+                ),
                 Vec::new(),
             ),
             Update::Refused(reason, problems) => {
@@ -460,16 +532,25 @@ pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
             }
         };
         lines.push(line.clone());
+        if let Update::Crossed(crossed) = &result {
+            lines.extend(crossed.lines());
+        }
         lines.extend(problems.iter().map(|problem| format!("  {problem}")));
         if let Some(note) = &held_back {
             lines.push(note.clone());
         }
         let requirements = match &result {
             Update::Moved { requirements, .. } => requirements.clone(),
+            Update::Crossed(crossed) => crossed.requirements.clone(),
             _ => RequirementReport::default(),
         };
         lines.extend(requirements.lines(name));
-        results.push(json!({
+        let (from, to) = match &result {
+            Update::Moved { from, to, .. } => (Some(from.clone()), Some(to.clone())),
+            Update::Crossed(crossed) => (Some(crossed.from.clone()), crossed.to()),
+            _ => (None, None),
+        };
+        let mut row = json!({
             "name": name,
             "status": status,
             "summary": line,
@@ -477,9 +558,13 @@ pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
             "heldBack": held_back,
             "unmet": requirements.unmet,
             "mcpSnippets": requirements.snippets,
-            "from": match &result { Update::Moved { from, .. } => Some(from.clone()), _ => None },
-            "to": match &result { Update::Moved { to, .. } => Some(to.clone()), _ => None },
-        }));
+            "from": from,
+            "to": to,
+        });
+        if let Update::Crossed(crossed) = &result {
+            crossed.describe(&mut row);
+        }
+        results.push(row);
     }
     let body = json!({
         "ok": refusals == 0,
@@ -488,11 +573,33 @@ pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
     });
     if refusals > 0 {
         let mut body = body;
-        body["error"] = json!(format!("{refusals} of {} packs not updated", names.len()));
+        body["error"] = json!(format!("{refusals} of {count} packs not updated"));
         body["problems"] = json!(lines);
-        return Ok(Outcome::rejected(body));
+        return Outcome::rejected(body);
     }
-    Ok(Outcome::ok(body).with_note(lines.join("\n  ")))
+    Outcome::ok(body).with_note(lines.join("\n  "))
+}
+
+fn local_edits(
+    layer: &Layer,
+    name: &str,
+    copy: &Path,
+    locked: &LockEntry,
+    force: bool,
+) -> Result<Result<bool, Update>> {
+    let modified = content_hash(copy)? != locked.hash;
+    if modified && !force {
+        return Ok(Err(Update::Refused(
+            format!(
+                "{} has local edits (its content no longer matches {}); keep them by leaving the pack alone, or overwrite them with `{} --force`",
+                copy.display(),
+                layer.lock_path().display(),
+                layer.command("update", name)
+            ),
+            Vec::new(),
+        )));
+    }
+    Ok(Ok(modified))
 }
 
 fn update_one(
@@ -511,18 +618,10 @@ fn update_one(
             Vec::new(),
         ));
     };
-    let modified = content_hash(&copy)? != locked.hash;
-    if modified && !force {
-        return Ok(Update::Refused(
-            format!(
-                "{} has local edits (its content no longer matches {}); keep them by leaving the pack alone, or overwrite them with `{} --force`",
-                copy.display(),
-                layer.lock_path().display(),
-                layer.command("update", name)
-            ),
-            Vec::new(),
-        ));
-    }
+    let modified = match local_edits(layer, name, &copy, &locked, force)? {
+        Ok(modified) => modified,
+        Err(refusal) => return Ok(refusal),
+    };
     let wanted = wanted_ref(entry, &locked);
     if let Some(PackRef::Tag(version)) = &wanted {
         if !modified {

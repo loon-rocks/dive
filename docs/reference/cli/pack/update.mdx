@@ -1,7 +1,7 @@
 ---
 title: "graph pack update"
 sidebarTitle: "update"
-description: "Move packs to the newest release their ref allows, within the current major"
+description: "Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each"
 playground: "none"
 keywords: ["graph pack update"]
 ---
@@ -16,6 +16,14 @@ keywords: ["graph pack update"]
 
 <ParamField query="--force" type="boolean">
   Overwrite a copy whose content differs from packs.lock
+</ParamField>
+
+<ParamField query="--major" type="boolean">
+  Cross to each newer major in turn: run its migration as a dry run, show the diffs, ask, apply, then move ref to that major
+</ParamField>
+
+<ParamField query="--yes" type="boolean">
+  Accept every migration and major without asking (required when there is no terminal)
 </ParamField>
 
 <ParamField query="--global" type="boolean">
