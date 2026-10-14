@@ -117,6 +117,7 @@ pub struct Pipeline {
     pub agent_depth: usize,
     pub always_loaded: Arc<Vec<String>>,
     pub drafted: Arc<drafter::Drafted>,
+    pub packs: Arc<crate::packs::PackSet>,
 }
 
 #[derive(Debug, thiserror::Error)]

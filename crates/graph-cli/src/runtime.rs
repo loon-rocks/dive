@@ -54,6 +54,7 @@ impl Runtime {
             config,
             sources: Vec::new(),
             layers: Vec::new(),
+            pack_layers: Vec::new(),
         };
         // The meter has to be installed before anything resolves a provider —
         // resolution is when providers get wrapped, so a meter added later
@@ -199,6 +200,7 @@ impl Runtime {
             mcp_servers: self.config.mcp.keys().cloned().collect(),
             agents: agent_set.iter().map(|doc| doc.name.clone()).collect(),
             input_schemas,
+            packs: Default::default(),
         })
     }
 
@@ -371,6 +373,7 @@ impl Runtime {
             agent_depth: 0,
             always_loaded: Arc::new(self.config.tools.always_loaded.clone()),
             drafted: self.drafted.clone(),
+            packs: Default::default(),
         }))
     }
 

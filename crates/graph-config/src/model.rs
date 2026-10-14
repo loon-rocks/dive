@@ -38,6 +38,8 @@ pub struct Config {
     /// Absent prices mean usage is reported in tokens with no dollar figure.
     #[serde(default)]
     pub pricing: BTreeMap<String, ModelPrice>,
+    #[serde(default)]
+    pub packs: BTreeMap<String, crate::pack::PackEntry>,
 }
 
 /// What one model costs, in USD per million tokens.

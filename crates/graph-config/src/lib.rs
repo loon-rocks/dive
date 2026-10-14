@@ -6,6 +6,7 @@
 mod format;
 mod load;
 mod model;
+pub mod pack;
 
 pub use format::{
     inspect, migrate_file, migration_count, window_problem, LayerInfo, Migrated, Unsupported,

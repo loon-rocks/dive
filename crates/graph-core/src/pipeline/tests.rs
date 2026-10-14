@@ -169,6 +169,7 @@ fn pipeline_with_named(
             agent_depth: 0,
             always_loaded: Default::default(),
             drafted: Default::default(),
+            packs: Default::default(),
         },
         provider,
     )

@@ -2,7 +2,9 @@
 
 use crate::format::{self, LayerInfo};
 use crate::model::Config;
+use crate::pack::{LayerKind, PackEntry, PackLayer};
 use anyhow::{Context, Result};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Where a config layer came from, for `graph config path`.
@@ -12,6 +14,7 @@ pub struct LoadedConfig {
     /// Files that contributed, in application order (earlier is overridden by later).
     pub sources: Vec<PathBuf>,
     pub layers: Vec<LayerInfo>,
+    pub pack_layers: Vec<PackLayer>,
 }
 
 /// `~/.config/graph/config.toml` on every platform — CLI convention rather
@@ -50,6 +53,7 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
     let mut merged = toml::Table::new();
     let mut sources = Vec::new();
     let mut layers = Vec::new();
+    let mut pack_layers = Vec::new();
 
     for path in paths {
         let path = expand_tilde(path);
@@ -72,6 +76,21 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
             .parse()
             .with_context(|| format!("parsing config file {}", path.display()))?;
         table.remove(format::FORMAT_KEY);
+        let packs: BTreeMap<String, PackEntry> = match table.remove("packs") {
+            Some(value) => value
+                .try_into()
+                .with_context(|| format!("reading [packs] in {}", path.display()))?,
+            None => BTreeMap::new(),
+        };
+        pack_layers.push(PackLayer {
+            kind: if path == expand_tilde(&global_config_path()) {
+                LayerKind::Global
+            } else {
+                LayerKind::Project
+            },
+            dir: path.parent().map(Path::to_path_buf).unwrap_or_default(),
+            packs,
+        });
         merge_tables(&mut merged, table);
         layers.push(LayerInfo {
             path: path.clone(),
@@ -89,6 +108,9 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
         .try_into()
         .context("config does not match the expected schema")?;
     distribute_missing_env(&mut config, missing)?;
+    for layer in &pack_layers {
+        config.packs.extend(layer.packs.clone());
+    }
 
     for (name, server) in &config.mcp {
         server.validate(name).map_err(anyhow::Error::msg)?;
@@ -98,6 +120,7 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
         config,
         sources,
         layers,
+        pack_layers,
     })
 }
 
