@@ -12,12 +12,12 @@ input_schema:
   type: object
 steps:
 - id: E0
-  tool_name: builtin__gh_pr_meta
+  tool_name: github__tool__gh_pr_meta
   input:
     pr: '{{input.pr}}'
   reasoning: Fetch PR metadata (title, body, base_sha, head_sha, author, state) needed for the empty-diff gate, the thread audit, and the core review's inputs.
 - id: E2
-  tool_name: builtin__git_diff
+  tool_name: github__tool__git_diff
   input:
     base: '{{E0.base_sha}}'
     exclude: Cargo.lock CHANGELOG.md
@@ -26,7 +26,7 @@ steps:
     paths: .
   reasoning: Gate-only diff — this wrapper never reads the text beyond checking emptiness (the excludes must match the core's, or the two would disagree on what "nothing to review" means). plan__graph_review_core fetches its own full diff; the tiny byte budget cannot change the emptiness verdict since truncation only shortens non-empty output.
 - id: E4b
-  tool_name: builtin__gh_pr_review_threads
+  tool_name: github__tool__gh_pr_review_threads
   input:
     marker: graph_review_9000:finding
     pr: '{{input.pr}}'
@@ -139,7 +139,7 @@ steps:
     threads: []
   reasoning: Post the review's new findings as inline comments carrying the graph_review_9000:finding payload tag, read back by E4b on the next run. Transitions to existing threads were already applied inside the audit plan before the empty-diff gate; this call only creates. sweep_marker covers the legacy-comment sweep on reviewed runs (the audit plan only runs when new-style threads exist); drop both once open PRs predating 2026-08-04 are closed.
 - id: E8
-  tool_name: builtin__gh_pr_comment
+  tool_name: github__tool__gh_pr_comment
   input:
     body: |-
       > [!{{C1.overall_alert_type}}]

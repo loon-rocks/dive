@@ -23,7 +23,7 @@ input_schema:
       description: The ref to start after, such as a release tag
 steps:
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{input.base}}'
     head: HEAD
@@ -35,8 +35,8 @@ steps:
       changed, and its diff when the files alone don't tell you.
       {{commits.commits}}
     tools:
-    - builtin__git_changed_files
-    - builtin__git_diff
+    - github__tool__git_changed_files
+    - github__tool__git_diff
     maxIterations: 6
     outputSchema:
       type: object
@@ -83,12 +83,12 @@ graph plan run risky_changes \
 The agent reads every commit's changed files, then the diffs of the ones that look risky:
 
 ```text
-→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
-✓ builtin__git_log 36.2ms
-→ builtin__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
-→ builtin__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}
+→ github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+✓ github__tool__git_log 36.2ms
+→ github__tool__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
+→ github__tool__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}
 …
-→ builtin__git_diff {"base":"dae2d40…~1","exclude":"","head":"dae2d40…",…}
+→ github__tool__git_diff {"base":"dae2d40…~1","exclude":"","head":"dae2d40…",…}
 …
   6 calls · 432k in / 11k out (246k cached) · $0.94
 ```

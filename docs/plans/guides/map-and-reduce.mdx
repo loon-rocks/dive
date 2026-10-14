@@ -15,10 +15,10 @@ name: Unreleased changes
 description: A release note for each commit since the latest release, joined into one list.
 steps:
 - id: release
-  tool_name: builtin__gh_release
+  tool_name: github__tool__gh_release
   input: {}
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{release.tag}}'
     head: HEAD
@@ -29,7 +29,7 @@ steps:
     concurrency: 4
     do:
     - id: files
-      tool_name: builtin__git_changed_files
+      tool_name: github__tool__git_changed_files
       input:
         base: '{{item.sha}}~1'
         head: '{{item.sha}}'
@@ -91,10 +91,10 @@ stderr shows the `map` starting four commits at once, then the `reduce` working 
 
 ```text
 → map {"concurrency":4,"over":28}
-→ builtin__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
-→ builtin__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}
-→ builtin__git_changed_files {"base":"1a8443c…~1","head":"1a8443c…","prefix":""}
-→ builtin__git_changed_files {"base":"dae2d40…~1","head":"dae2d40…","prefix":""}
+→ github__tool__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
+→ github__tool__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}
+→ github__tool__git_changed_files {"base":"1a8443c…~1","head":"1a8443c…","prefix":""}
+→ github__tool__git_changed_files {"base":"dae2d40…~1","head":"dae2d40…","prefix":""}
 …
 ✓ map 11.3s
 → reduce {"over":28}

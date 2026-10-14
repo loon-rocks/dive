@@ -9,7 +9,7 @@ input_schema:
     pr: { type: integer, description: Pull request number }
 steps:
   - id: ticket
-    tool_name: builtin__gh_pr_ticket
+    tool_name: github__tool__gh_pr_ticket
     input: { pr: "{{input.pr}}", pattern: "LN-[0-9]+" }
   - id: none
     tool_name: exit

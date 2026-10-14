@@ -1,0 +1,8 @@
+version = 1
+
+[packs.github]
+git = "github.com/tylerdavis/graph-packs"
+path = "github"
+tag = "github/v1.0.0"
+sha = "e018c6ed6b11c21ba9c0819c566229c7faac1694"
+hash = "sha256:2b5aaa478c67786035346c2ea26e338453655ba8d668cb89b53183317a85614d"

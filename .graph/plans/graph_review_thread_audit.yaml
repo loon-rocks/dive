@@ -25,17 +25,17 @@ input_schema:
       description: PR title, context for the auditor
     findings:
       type: array
-      description: Existing findings as returned by builtin__gh_pr_review_threads (thread_id, state, label, severity, invariant, file, line, finding, replies)
+      description: Existing findings as returned by github__tool__gh_pr_review_threads (thread_id, state, label, severity, invariant, file, line, finding, replies)
 steps:
 - id: E1
-  tool_name: builtin__git_changed_files
+  tool_name: github__tool__git_changed_files
   input:
     base: '{{input.base}}'
     head: '{{input.head}}'
     prefix: ''
   reasoning: Get the complete list of changed files between base and head sha, used for mapping over file contents so the auditor can verify fixes in full files rather than diff hunks.
 - id: E2
-  tool_name: builtin__git_diff
+  tool_name: github__tool__git_diff
   input:
     base: '{{input.base}}'
     exclude: Cargo.lock CHANGELOG.md
@@ -61,7 +61,7 @@ steps:
         max_bytes: 60000
         path: '{{item.path}}'
         ref: '{{input.head}}'
-      tool_name: builtin__git_file
+      tool_name: github__tool__git_file
     over: '{{E3b.items}}'
   reasoning: Fetch the full content of every still-present changed file at the head sha, in parallel — the authoritative evidence for resolving findings, since a fix landed in a later commit of the same PR leaves no cumulative diff hunk. Results are index-aligned with E3b.items by construction.
 - id: E4c

@@ -10,10 +10,10 @@ input_schema:
     path: { type: string, description: Path prefix, e.g. crates/graph-core/ }
 steps:
   - id: meta
-    tool_name: builtin__gh_pr_meta
+    tool_name: github__tool__gh_pr_meta
     input: { pr: "{{input.pr}}" }
   - id: files
-    tool_name: builtin__git_changed_files
+    tool_name: github__tool__git_changed_files
     input: { base: "{{meta.base_sha}}", head: "{{meta.head_sha}}", prefix: "{{input.path}}" }
 finish:
   output:

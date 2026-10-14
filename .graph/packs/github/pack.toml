@@ -1,0 +1,10 @@
+version = 1
+name = "github"
+description = "Read and comment on pull requests, releases and git history."
+license = "MIT"
+homepage = "https://github.com/tylerdavis/graph-packs/tree/main/github"
+
+[requires]
+graph = ">=0.15"
+os = ["macos", "linux"]
+binaries = ["bash", "git", "gh", "jq"]

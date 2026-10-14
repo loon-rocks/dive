@@ -88,7 +88,7 @@ rm ./.graph/plans/<ugly-id>.yaml     # `set identifier` writes a NEW file; the e
 **2. `input_schema` is often missing while steps reference `{{input.*}}`.** This *validates clean* — no static layer ties template roots to the schema — and then dies at run time:
 
 ```
-plan failed at step E0 (builtin__git_log): bad path 'input.base': no key 'base' at input (available: )
+plan failed at step E0 (github__tool__git_log): bad path 'input.base': no key 'base' at input (available: )
 ```
 
 Grep the drafted YAML for `{{input.` and declare every root you find:
@@ -111,7 +111,7 @@ Don't reason about whether a plan works — graph runs it.
 
 ```bash
 graph plan validate commit_digest --json                          # static: refs, ids, tools resolve
-graph tool test builtin__git_log '{"base":"v0.8.0","head":"main"}'   # one tool, real output
+graph tool test github__tool__git_log '{"base":"v0.8.0","head":"main"}'   # one tool, real output
 graph plan run commit_digest '{"base":"v0.8.0","head":"main"}' --json  # the whole plan, real data
 ```
 

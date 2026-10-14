@@ -9,7 +9,7 @@ input_schema:
     key: { type: string, description: Config key name }
 steps:
   - id: matches
-    tool_name: builtin__git_grep
+    tool_name: github__tool__git_grep
     input: { pattern: "{{input.key}}", paths: crates, ref: HEAD, max_matches: 200 }
 finish:
   output:

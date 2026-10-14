@@ -9,7 +9,7 @@ input_schema:
     tag: { type: string, description: Release tag to start after }
 steps:
   - id: commits
-    tool_name: builtin__git_log
+    tool_name: github__tool__git_log
     input: { base: "{{input.tag}}", head: HEAD, paths: "", max_commits: 100 }
   - id: touched
     tool_name: map
@@ -18,10 +18,10 @@ steps:
       concurrency: 8
       do:
         - id: code
-          tool_name: builtin__git_changed_files
+          tool_name: github__tool__git_changed_files
           input: { base: "{{item.sha}}~1", head: "{{item.sha}}", prefix: crates/ }
         - id: docs
-          tool_name: builtin__git_changed_files
+          tool_name: github__tool__git_changed_files
           input: { base: "{{item.sha}}~1", head: "{{item.sha}}", prefix: docs/ }
         - id: row
           tool_name: builtin__reshape

@@ -438,9 +438,9 @@ fn check_shape_templates(
 // ── Registry ─────────────────────────────────────────────────────────────
 
 /// Registry over declarative tool documents. Serves user-authored tools
-/// under `user__` and bundled pack tools under `builtin__` — same YAML
-/// format, same validation, different namespace so the catalog says who
-/// ships each tool.
+/// under `user__`, graph's built-in tools under `builtin__` and installed
+/// pack tools under `<pack>__tool__` — same YAML format, same validation,
+/// different namespace so the catalog says who ships each tool.
 pub struct UserToolRegistry {
     tools: Vec<UserToolDoc>,
     router: Arc<ModelRouter>,
@@ -456,7 +456,7 @@ impl UserToolRegistry {
         }
     }
 
-    /// A registry serving bundled pack tools under `builtin__`.
+    /// A registry serving graph's built-in tools under `builtin__`.
     pub fn builtins(tools: Vec<UserToolDoc>, router: Arc<ModelRouter>) -> Self {
         Self {
             tools,

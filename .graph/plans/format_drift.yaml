@@ -22,7 +22,7 @@ input_schema:
     head: { type: string, description: Head ref or sha of the PR }
 steps:
   - id: E0
-    tool_name: builtin__git_diff
+    tool_name: github__tool__git_diff
     input:
       base: "{{input.base}}"
       head: "{{input.head}}"
@@ -39,7 +39,7 @@ steps:
       output: { format_bump_required: false, reason: no_model_changes }
     reasoning: Most PRs never touch a model file; they pass with no LLM.
   - id: E2
-    tool_name: builtin__git_diff
+    tool_name: github__tool__git_diff
     input:
       base: "{{input.base}}"
       head: "{{input.head}}"

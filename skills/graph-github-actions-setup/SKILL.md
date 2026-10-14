@@ -41,11 +41,13 @@ Ask, in order:
 
 ### Step 3: Scaffold `./.graph/`
 
-Run `graph config init` (targets `./.graph/` by default) or create the directory by hand. The repo carries three things, all committed: `config.toml`, `plans/`, `tools/`. Anything else graph writes under `.graph/` stays gitignored.
+Run `graph config init` (targets `./.graph/` by default) or create the directory by hand. The repo carries five things, all committed: `config.toml`, `plans/`, `tools/`, `packs/` and `packs.lock`. Anything else graph writes under `.graph/` stays gitignored.
 
 `config.toml` — secrets as `${ENV}` references, which fail loudly when the variable is missing (that's the fork-PR backstop, keep it):
 
 ```toml
+version = 4
+
 [providers.anthropic]
 type = "anthropic"
 api_key = "${ANTHROPIC_API_KEY}"
@@ -57,10 +59,9 @@ judge   = { provider = "anthropic", model = "claude-haiku-4-5" }
 repair  = { provider = "anthropic", model = "claude-haiku-4-5" }
 
 # No [storage] section: CI sets GRAPH_STORAGE=memory.
-
-[tools]
-packs = ["github"]   # git_changed_files, git_diff, gh_pr_meta, gh_pr_comment, gh_pr_thread_sync, ...
 ```
+
+Then run `graph pack add github` from the repo root. It copies the [github pack](https://github.com/tylerdavis/graph-packs/tree/main/github) into `.graph/packs/github/`, adds its `[packs.github]` entry to `config.toml` and pins the release in `.graph/packs.lock`; commit all three, so CI runs the same tools without installing anything. Its tools are called as `github__tool__<name>`: `git_changed_files`, `git_diff`, `gh_pr_meta`, `gh_pr_comment`, `gh_pr_thread_sync` and more.
 
 Then author one plan per check under `.graph/plans/`. Adapt from the live references — [`docs_drift.yaml`](https://github.com/tylerdavis/graph/blob/main/.graph/plans/docs_drift.yaml) (gate) and [`graph_review_9000.yaml`](https://github.com/tylerdavis/graph/blob/main/.graph/plans/graph_review_9000.yaml) (reporter; a wrapper composing [`graph_review_core.yaml`](https://github.com/tylerdavis/graph/blob/main/.graph/plans/graph_review_core.yaml), the locally runnable review engine, with [`graph_review_thread_audit.yaml`](https://github.com/tylerdavis/graph/blob/main/.graph/plans/graph_review_thread_audit.yaml) for thread lifecycle) — rather than writing from scratch. A minimal gate skeleton:
 
@@ -76,7 +77,7 @@ input_schema:
     head: { type: string, description: Head ref or sha of the PR }
 steps:
   - id: E0
-    tool_name: builtin__git_changed_files
+    tool_name: github__tool__git_changed_files
     input: { base: "{{input.base}}", head: "{{input.head}}", prefix: "src/" }
   - id: E1                      # deterministic short-circuit: free, instant
     tool_name: exit
@@ -85,7 +86,7 @@ steps:
       status: success
       message: no src/ changes — check not applicable
   - id: E2
-    tool_name: builtin__git_diff
+    tool_name: github__tool__git_diff
     input: { base: "{{input.base}}", head: "{{input.head}}",
              paths: "src/", exclude: "", max_bytes: 60000 }
   - id: E3                      # the judged call, last resort
