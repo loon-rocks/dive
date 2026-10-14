@@ -485,12 +485,14 @@ impl ConversationTools {
     }
 
     fn new(conversation: &Conversation, doc: &AgentDoc, depth: usize, may_hand_off: bool) -> Self {
+        let origin = crate::packs::Origin::of(doc.source.pack());
         Self {
             conversation: conversation.clone(),
             base: AllowlistRegistry::new(conversation.catalog.clone(), doc.tools.clone()),
             subagents: doc
                 .subagents
                 .iter()
+                .filter(|name| conversation.pipeline.packs.shows(&origin, name))
                 .filter_map(|name| conversation.agents.get(name))
                 .map(|doc| named_agent_tool_def(&doc))
                 .collect(),
@@ -798,6 +800,7 @@ mod tests {
             always_loaded: Default::default(),
             drafted: Default::default(),
             packs: Default::default(),
+            origin: Default::default(),
         });
         let conversation = Conversation {
             agents,
@@ -812,6 +815,35 @@ mod tests {
             handoff_guard: None,
         };
         (conversation, provider)
+    }
+
+    #[test]
+    fn subagents_outside_a_packs_interface_are_not_offered() {
+        let (mut conversation, _) = conversation(Vec::new());
+        let mut secret = crate::agent::doc::parse_agent_source(
+            "name: secret\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: hi\n",
+        )
+        .unwrap();
+        secret.name = "example__agent__secret".to_string();
+        conversation.agents = Arc::new((*conversation.agents).clone().with_packs([secret]));
+        let mut packs = crate::packs::PackSet::default();
+        packs.insert(crate::packs::PackItem {
+            pack: "example".to_string(),
+            kind: crate::packs::ItemKind::Agent,
+            name: "secret".to_string(),
+            public: false,
+        });
+        let mut pipeline = (*conversation.pipeline).clone();
+        pipeline.packs = Arc::new(packs);
+        conversation.pipeline = Arc::new(pipeline);
+        let mut front = conversation.agents.get("front").unwrap();
+        front.subagents = vec!["example__agent__secret".to_string(), "helper".to_string()];
+        let offered: Vec<String> = ConversationTools::new(&conversation, &front, 0, true)
+            .subagents
+            .into_iter()
+            .map(|def| def.name)
+            .collect();
+        assert_eq!(offered, ["agent__helper"]);
     }
 
     fn kinds(entries: &[NewEntry]) -> Vec<(String, String)> {

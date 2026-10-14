@@ -170,6 +170,7 @@ fn pipeline_with_named(
             always_loaded: Default::default(),
             drafted: Default::default(),
             packs: Default::default(),
+            origin: Default::default(),
         },
         provider,
     )
