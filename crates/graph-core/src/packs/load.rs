@@ -1,14 +1,16 @@
 use super::requirements::{evaluate, Machine, McpNeed, McpUse, PackNeeds};
 use super::{apply_interface, catalog_name, ItemKind, PackItem, PackSource};
 use crate::agent::doc::{global_fragments, load_agent_file, AgentDoc, AgentSource};
-use crate::pipeline::catalog::{agent_tool_patterns, step_calls};
+use crate::pipeline::catalog::{agent_tool_patterns, step_calls, step_tools};
 use crate::pipeline::doc::{parse_plan_doc, validate_doc, PlanDoc};
 use crate::user_tools::{load_user_tool, UserToolDoc};
 use graph_config::pack::{
-    check_pack_name, load_manifest, PackManifest, MANIFEST_FILE, MAX_CATALOG_NAME,
+    check_pack_name, load_manifest, PackManifest, MANIFEST_FILE, MAX_CATALOG_NAME, PACK_FORMAT,
 };
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+
+pub const MIGRATIONS_DIR: &str = "migrations";
 
 #[derive(Debug, Clone)]
 pub struct LoadedPack {
@@ -19,6 +21,7 @@ pub struct LoadedPack {
     pub agents: Vec<AgentDoc>,
     pub items: Vec<PackItem>,
     pub needs: PackNeeds,
+    pub migrations: Vec<String>,
 }
 
 pub fn check_installed_name(name: &str, mcp_servers: &BTreeSet<String>) -> Result<(), String> {
@@ -36,16 +39,39 @@ pub fn load_pack(
     include: &[String],
     exclude: &[String],
 ) -> Result<LoadedPack, Vec<String>> {
+    let (loaded, problems) = inspect_pack(source, include, exclude);
+    if problems.is_empty() {
+        return Ok(loaded);
+    }
+    let pack = &loaded.source.name;
+    Err(problems
+        .into_iter()
+        .map(|problem| format!("pack '{pack}': {problem}"))
+        .collect())
+}
+
+pub fn inspect_pack(
+    source: PackSource,
+    include: &[String],
+    exclude: &[String],
+) -> (LoadedPack, Vec<String>) {
     let pack = source.name.clone();
     let mut problems = Vec::new();
     if let Err(problem) = check_pack_name(&pack) {
         problems.push(problem);
     }
     let manifest = match load_manifest(&source.dir.join(MANIFEST_FILE)) {
-        Ok(manifest) => Some(manifest),
+        Ok(manifest) => manifest,
         Err(problem) => {
             problems.push(problem);
-            None
+            PackManifest {
+                version: PACK_FORMAT,
+                name: pack.clone(),
+                description: String::new(),
+                license: None,
+                homepage: None,
+                requires: Default::default(),
+            }
         }
     };
 
@@ -71,56 +97,28 @@ pub fn load_pack(
         &mut problems,
     );
 
-    let prefix = |kind: ItemKind| catalog_name(&pack, kind, "");
     let mut items: Vec<PackItem> = tools
         .iter()
         .map(|doc| item(&pack, ItemKind::Tool, &doc.name))
         .chain(plans.iter().map(|doc| {
-            let bare = doc
-                .identifier
-                .strip_prefix(&prefix(ItemKind::Plan))
-                .unwrap_or(&doc.identifier);
-            item(&pack, ItemKind::Plan, bare)
+            item(
+                &pack,
+                ItemKind::Plan,
+                bare(&pack, ItemKind::Plan, &doc.identifier),
+            )
         }))
         .chain(agents.iter().map(|doc| {
-            let bare = doc
-                .name
-                .strip_prefix(&prefix(ItemKind::Agent))
-                .unwrap_or(&doc.name);
-            item(&pack, ItemKind::Agent, bare)
+            item(
+                &pack,
+                ItemKind::Agent,
+                bare(&pack, ItemKind::Agent, &doc.name),
+            )
         }))
         .collect();
-    let long: Vec<String> = items
-        .iter()
-        .map(PackItem::catalog_name)
-        .filter(|name| name.len() > MAX_CATALOG_NAME)
-        .collect();
-    if !long.is_empty() {
-        problems.push(format!(
-            "{} longer than {MAX_CATALOG_NAME} characters: {}; install the pack under a shorter name with --as, or shorten the item names",
-            if long.len() == 1 { "a catalog name is" } else { "catalog names are" },
-            long.iter()
-                .map(|name| format!("{name} ({})", name.len()))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
+    problems.extend(long_names(&items));
 
-    let evaluation = manifest
-        .as_ref()
-        .map(|manifest| evaluate(&manifest.requires, &Machine::current()))
-        .unwrap_or_default();
+    let evaluation = evaluate(&manifest.requires, &Machine::current());
     problems.extend(evaluation.refused);
-
-    let manifest = match manifest {
-        Some(manifest) if problems.is_empty() => manifest,
-        _ => {
-            return Err(problems
-                .into_iter()
-                .map(|problem| format!("pack '{pack}': {problem}"))
-                .collect())
-        }
-    };
     apply_interface(&mut items, include, exclude);
     let needs = PackNeeds {
         unmet: evaluation.unmet,
@@ -137,7 +135,7 @@ pub fn load_pack(
             })
             .collect(),
     };
-    Ok(LoadedPack {
+    let loaded = LoadedPack {
         source,
         manifest,
         tools,
@@ -145,7 +143,137 @@ pub fn load_pack(
         agents,
         items,
         needs,
-    })
+        migrations: Vec::new(),
+    };
+    (loaded, problems)
+}
+
+impl LoadedPack {
+    pub fn load_migrations(&mut self) -> Vec<String> {
+        let mut problems = Vec::new();
+        let source = self.source.clone();
+        let tools = load_dir(
+            &source.dir.join("tools").join(MIGRATIONS_DIR),
+            "tool name",
+            load_user_tool,
+            |doc: &UserToolDoc| &doc.name,
+            &mut problems,
+        );
+        let plans = load_dir(
+            &source.dir.join("plans").join(MIGRATIONS_DIR),
+            "plan identifier",
+            |path| load_plan(path, &source),
+            |doc: &PlanDoc| &doc.identifier,
+            &mut problems,
+        );
+        let pack = source.name.clone();
+        let mut added = Vec::new();
+        for doc in tools {
+            if self.tools.iter().any(|known| known.name == doc.name) {
+                problems.push(format!(
+                    "migration tool '{}' has the same name as a tool in tools/",
+                    doc.name
+                ));
+                continue;
+            }
+            added.push(item(&pack, ItemKind::Tool, &doc.name));
+            self.tools.push(doc);
+        }
+        for doc in plans {
+            let name = bare(&pack, ItemKind::Plan, &doc.identifier).to_string();
+            if self
+                .plans
+                .iter()
+                .any(|known| known.identifier == doc.identifier)
+            {
+                problems.push(format!(
+                    "migration plan '{name}' has the same identifier as a plan in plans/"
+                ));
+                continue;
+            }
+            added.push(item(&pack, ItemKind::Plan, &name));
+            self.plans.push(doc);
+        }
+        problems.extend(long_names(&added));
+        for mut found in added {
+            found.public = false;
+            self.migrations.push(found.catalog_name());
+            self.items.push(found);
+        }
+        problems
+    }
+
+    pub fn is_migration(&self, name: &str) -> bool {
+        self.migrations.iter().any(|known| known == name)
+    }
+}
+
+fn bare<'a>(pack: &str, kind: ItemKind, name: &'a str) -> &'a str {
+    name.strip_prefix(&catalog_name(pack, kind, ""))
+        .unwrap_or(name)
+}
+
+fn long_names(items: &[PackItem]) -> Option<String> {
+    let long: Vec<String> = items
+        .iter()
+        .map(PackItem::catalog_name)
+        .filter(|name| name.len() > MAX_CATALOG_NAME)
+        .collect();
+    if long.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{} longer than {MAX_CATALOG_NAME} characters: {}; install the pack under a shorter name with --as, or shorten the item names",
+        if long.len() == 1 { "a catalog name is" } else { "catalog names are" },
+        long.iter()
+            .map(|name| format!("{name} ({})", name.len()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+pub fn literal_self_names(dir: &Path, pack: &str) -> Vec<String> {
+    let own = |name: &str| {
+        name.strip_prefix(pack)
+            .and_then(|rest| rest.strip_prefix(super::KIND_SEPARATOR))
+            .filter(|rest| !rest.is_empty())
+            .map(|rest| {
+                format!(
+                    "names its own pack literally as '{name}'; write '{}{rest}' so it resolves under any installed name",
+                    super::SELF_PREFIX
+                )
+            })
+    };
+    let mut problems = Vec::new();
+    let plan_dirs = [dir.join("plans"), dir.join("plans").join(MIGRATIONS_DIR)];
+    for path in plan_dirs.iter().flat_map(|dir| yaml_files(dir)) {
+        let Ok(doc) = parse_plan_doc(&path) else {
+            continue;
+        };
+        let names = step_tools(&doc.steps)
+            .into_iter()
+            .chain(agent_tool_patterns(&doc.steps));
+        for (step, name) in names {
+            if let Some(problem) = own(&name) {
+                problems.push(format!("{}: step {step}: {problem}", path.display()));
+            }
+        }
+    }
+    for path in yaml_files(&dir.join("agents")) {
+        let Ok(doc) = load_agent_file(&path) else {
+            continue;
+        };
+        for (field, names) in [
+            ("tools", &doc.tools),
+            ("subagents", &doc.subagents),
+            ("handoffs", &doc.handoffs),
+        ] {
+            for problem in names.iter().filter_map(|name| own(name)) {
+                problems.push(format!("{}: {field}: {problem}", path.display()));
+            }
+        }
+    }
+    problems
 }
 
 fn mcp_uses(prefix: &str, plans: &[PlanDoc], agents: &[AgentDoc]) -> Vec<McpUse> {

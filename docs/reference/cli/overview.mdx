@@ -65,6 +65,11 @@ These options work with every command.
 | [`graph pack list`](/reference/cli/pack/list) | List installed packs with their tags, newer releases, local edits and shadowing |
 | [`graph pack update`](/reference/cli/pack/update) | Move packs to the newest release their ref allows, within the current major |
 | [`graph pack remove`](/reference/cli/pack/remove) | Delete a pack's copy, config entry and lock entry, and list files that still call it |
+| [`graph pack new`](/reference/cli/pack/new) | Scaffold a pack: manifest, one tool, plan and agent, README, CHANGELOG, MIGRATING.md and a CI workflow |
+| [`graph pack check`](/reference/cli/pack/check) | Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements |
+| [`graph pack run`](/reference/cli/pack/run) | Run one of a pack's items, private and migration ones included, under its manifest name |
+| [`graph pack test`](/reference/cli/pack/test) | Run check, then every migration over its sample files in tests/migrations/v&lt;N&gt;/ and validate the result |
+| [`graph pack release`](/reference/cli/pack/release) | Compare the public interface with the previous release tag and create the next annotated tag, without pushing |
 | [`graph workbench`](/reference/cli/workbench) | Interactive workbench: a dual-pane TUI for building plans, agents and tools |
 | [`graph workbench plan`](/reference/cli/workbench/plan) | Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation |
 | [`graph workbench agent`](/reference/cli/workbench/agent) | Open the workbench in agent mode: draft a new agent, or edit an existing one |

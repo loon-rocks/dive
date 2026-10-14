@@ -1,0 +1,7 @@
+version = 1
+name = "@NAME@"
+description = "Say in one sentence what this pack does."
+
+[requires]
+graph = "@GRAPH@"
+binaries = ["sh", "wc", "tr"]

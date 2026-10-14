@@ -1,7 +1,10 @@
+pub mod author;
 pub mod git;
 pub mod hash;
 pub mod layer;
 pub mod refs;
+pub mod release;
+pub mod scaffold;
 
 pub use hash::content_hash;
 
@@ -161,6 +164,29 @@ impl InstalledPacks {
             anyhow::bail!("packs failed to load:\n  - {}", problems.join("\n  - "));
         }
         Ok(installed)
+    }
+
+    pub fn of(loaded: LoadedPack) -> Self {
+        let git = loaded.source.dir.display().to_string();
+        InstalledPacks {
+            packs: vec![InstalledPack {
+                entry: PackEntry {
+                    git: git.clone(),
+                    reference: None,
+                    include: Vec::new(),
+                    exclude: Vec::new(),
+                },
+                lock: LockEntry {
+                    git,
+                    tag: loaded.source.tag.clone(),
+                    sha: String::new(),
+                    hash: String::new(),
+                },
+                hash: String::new(),
+                loaded,
+            }],
+            ..Default::default()
+        }
     }
 
     pub fn pack_set(&self) -> PackSet {

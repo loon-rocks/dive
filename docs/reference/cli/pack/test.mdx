@@ -1,0 +1,43 @@
+---
+title: "graph pack test"
+sidebarTitle: "test"
+description: "Run check, then every migration over its sample files in tests/migrations/v<N>/ and validate the result"
+playground: "none"
+keywords: ["graph pack test"]
+---
+
+For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file.
+
+## Arguments
+
+<ParamField path="PATH" type="string" default=".">
+  The pack's directory, holding pack.toml
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack test [OPTIONS] [PATH]
+```
+
+```bash Example 1
+graph pack test
+```
+
+```bash Example 2
+graph pack test ../graph-pack-files --json
+```
+
+</RequestExample>

@@ -11,7 +11,9 @@ mod resolve;
 #[cfg(test)]
 mod load_tests;
 
-pub use load::{check_installed_name, load_pack, LoadedPack};
+pub use load::{
+    check_installed_name, inspect_pack, literal_self_names, load_pack, LoadedPack, MIGRATIONS_DIR,
+};
 pub use resolve::{resolve_agent, resolve_name, resolve_plan_steps, SELF_PREFIX};
 
 pub const KIND_SEPARATOR: &str = "__";

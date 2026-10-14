@@ -1,0 +1,25 @@
+version: 2
+name: word_count
+description: >
+  Counts the words in a file on disk. Use when a plan needs to know how long
+  a file is.
+kind: exec
+command: sh
+args:
+  - "-c"
+  - |-
+    printf '{"words": %d}\n' "$(wc -w < "$1" | tr -d ' ')"
+  - word_count
+  - "{{input.file}}"
+output: json
+timeout_secs: 10
+read_only: true
+input_schema:
+  type: object
+  required: [file]
+  properties:
+    file: { type: string, description: Path to the file, absolute or relative to the working directory }
+output_schema:
+  type: object
+  properties:
+    words: { type: integer }

@@ -1,0 +1,13 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/tylerdavis/graph:v@VERSION@
+    steps:
+      - uses: actions/checkout@v4
+      - run: graph pack test

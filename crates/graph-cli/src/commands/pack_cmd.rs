@@ -10,7 +10,9 @@ use graph_core::packs::{check_installed_name, layer_label};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-pub fn run(command: PackCommand) -> Result<()> {
+mod author;
+
+pub async fn run(command: PackCommand) -> Result<()> {
     match command {
         PackCommand::Add {
             source,
@@ -38,6 +40,22 @@ pub fn run(command: PackCommand) -> Result<()> {
             json,
         } => report(update(&target(&layer)?, &names, force)?, json),
         PackCommand::Remove { name, layer, json } => report(remove(&target(&layer)?, &name)?, json),
+        PackCommand::New { name, path, json } => report(author::new_pack(&name, &path)?, json),
+        PackCommand::Check { path, json } => report(author::check(&path).await?, json),
+        PackCommand::Run {
+            item,
+            input,
+            inputs,
+            path,
+            json,
+        } => {
+            let input = crate::commands::input::resolve_input(input.as_deref(), &inputs)?;
+            report(author::run_item(&path, &item, input, json).await?, json)
+        }
+        PackCommand::Test { path, json } => report(author::test(&path, json).await?, json),
+        PackCommand::Release { bump, path, json } => {
+            report(author::release(&path, bump, json).await?, json)
+        }
     }
 }
 

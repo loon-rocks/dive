@@ -1,0 +1,47 @@
+---
+title: "graph pack new"
+sidebarTitle: "new"
+description: "Scaffold a pack: manifest, one tool, plan and agent, README, CHANGELOG, MIGRATING.md and a CI workflow"
+playground: "none"
+keywords: ["graph pack new"]
+---
+
+Writes the files from a scaffold built into graph, so it works offline. The target directory is created when missing and refused when it holds anything. The scaffold passes `graph pack check` and `graph pack test` as written.
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The pack's name, written into pack.toml: lowercase letters, digits and underscores, at most 20 characters
+</ParamField>
+
+<ParamField path="PATH" type="string" default=".">
+  The directory to scaffold into; created when missing, refused when not empty
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack new [OPTIONS] <NAME> [PATH]
+```
+
+```bash Example 1
+graph pack new files
+```
+
+```bash Example 2
+graph pack new files ../graph-pack-files
+```
+
+</RequestExample>

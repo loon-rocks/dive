@@ -100,6 +100,51 @@ pub fn clone_at(url: &str, reference: &str, dest: &Path) -> Result<String, Strin
     Ok(sha.trim().to_string())
 }
 
+pub fn toplevel(dir: &Path) -> Result<std::path::PathBuf, String> {
+    let output = git(Some(dir), &["rev-parse", "--show-toplevel"])?;
+    Ok(std::path::PathBuf::from(output.trim()))
+}
+
+pub fn uncommitted(dir: &Path) -> Result<Vec<String>, String> {
+    let output = git(Some(dir), &["status", "--porcelain"])?;
+    Ok(output.lines().map(str::to_string).collect())
+}
+
+pub fn local_tags(dir: &Path) -> Result<Vec<String>, String> {
+    let output = git(Some(dir), &["tag", "--list"])?;
+    Ok(output.lines().map(str::to_string).collect())
+}
+
+pub fn export(dir: &Path, reference: &str, dest: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest).map_err(|e| format!("creating {}: {e}", dest.display()))?;
+    let archive = dest.join(".export.tar");
+    let archive_text = archive.display().to_string();
+    git(
+        Some(dir),
+        &["archive", "--format=tar", "-o", &archive_text, reference],
+    )?;
+    let output = Command::new("tar")
+        .args(["-xf", &archive_text, "-C"])
+        .arg(dest)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("running tar: {e}"))?;
+    let _ = std::fs::remove_file(&archive);
+    if !output.status.success() {
+        return Err(format!(
+            "tar -xf {archive_text}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(())
+}
+
+pub fn annotated_tag(dir: &Path, tag: &str, message: &str) -> Result<String, String> {
+    git(Some(dir), &["tag", "-a", tag, "-m", message])?;
+    let sha = git(Some(dir), &["rev-parse", &format!("{tag}^{{commit}}")])?;
+    Ok(sha.trim().to_string())
+}
+
 fn git(dir: Option<&Path>, args: &[&str]) -> Result<String, String> {
     let mut command = Command::new("git");
     if let Some(dir) = dir {
