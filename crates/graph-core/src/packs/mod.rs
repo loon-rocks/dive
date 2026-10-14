@@ -66,6 +66,13 @@ pub fn layer_label(layer: LayerKind) -> &'static str {
     }
 }
 
+pub fn template_roots(pack: Option<&PackSource>) -> Vec<&'static str> {
+    match pack {
+        Some(_) => vec!["input", PACK_ROOT],
+        None => vec!["input"],
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackSource {
     pub name: String,
@@ -157,6 +164,31 @@ impl PackSet {
     pub fn insert(&mut self, item: PackItem) {
         self.install(&item.pack);
         self.items.insert(item.catalog_name(), item);
+    }
+
+    pub fn add(&mut self, pack: &LoadedPack) {
+        self.install(&pack.source.name);
+        for item in &pack.items {
+            self.insert(item.clone());
+        }
+    }
+
+    pub fn plan_target<'a>(&self, tool: &'a str) -> Option<&'a str> {
+        self.target(tool, ItemKind::Plan, crate::toolbox::PLAN_TOOL_PREFIX)
+    }
+
+    pub fn agent_target<'a>(&self, tool: &'a str) -> Option<&'a str> {
+        self.target(tool, ItemKind::Agent, crate::pipeline::AGENT_TOOL_PREFIX)
+    }
+
+    fn target<'a>(&self, tool: &'a str, kind: ItemKind, prefix: &str) -> Option<&'a str> {
+        match self.routed(tool) {
+            Some((_, routed, _)) if routed == kind => Some(tool),
+            Some(_) => None,
+            None => tool
+                .strip_prefix(prefix)
+                .filter(|name| self.routed(name).is_none()),
+        }
     }
 
     pub fn matching<'a>(&'a self, pattern: &'a str) -> impl Iterator<Item = &'a PackItem> + 'a {

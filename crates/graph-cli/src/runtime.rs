@@ -654,10 +654,7 @@ pub fn title_from(message: &str) -> String {
 }
 
 pub fn load_packs(loaded: &graph_config::LoadedConfig) -> Result<crate::packs::InstalledPacks> {
-    let packs = crate::packs::InstalledPacks::load(
-        &loaded.pack_layers,
-        &loaded.config.mcp.keys().cloned().collect(),
-    )?;
+    let packs = crate::packs::InstalledPacks::for_config(loaded)?;
     packs.warn();
     Ok(packs)
 }

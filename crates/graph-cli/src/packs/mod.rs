@@ -52,6 +52,13 @@ fn add_command(name: &str, layer: LayerKind) -> String {
 }
 
 impl InstalledPacks {
+    pub fn for_config(loaded: &graph_config::LoadedConfig) -> anyhow::Result<Self> {
+        Self::load(
+            &loaded.pack_layers,
+            &loaded.config.mcp.keys().cloned().collect(),
+        )
+    }
+
     pub fn load(layers: &[PackLayer], mcp_servers: &BTreeSet<String>) -> anyhow::Result<Self> {
         let mut installed = InstalledPacks::default();
         let mut problems = Vec::new();
@@ -154,10 +161,7 @@ impl InstalledPacks {
     pub fn pack_set(&self) -> PackSet {
         let mut set = PackSet::default();
         for pack in &self.packs {
-            set.install(pack.name());
-            for item in &pack.loaded.items {
-                set.insert(item.clone());
-            }
+            set.add(&pack.loaded);
         }
         set
     }

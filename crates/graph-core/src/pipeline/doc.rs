@@ -743,10 +743,6 @@ impl std::str::FromStr for PlanDoc {
 }
 
 impl PlanDoc {
-    pub fn pack_name(&self) -> Option<&str> {
-        self.pack.as_ref().map(|source| source.name.as_str())
-    }
-
     pub fn tool_name(&self) -> String {
         match &self.pack {
             Some(_) => self.identifier.clone(),
@@ -755,10 +751,7 @@ impl PlanDoc {
     }
 
     pub fn template_roots(&self) -> Vec<&'static str> {
-        match &self.pack {
-            Some(_) => vec!["input", crate::packs::PACK_ROOT],
-            None => vec!["input"],
-        }
+        crate::packs::template_roots(self.pack.as_ref())
     }
 
     pub fn source_label(&self) -> String {

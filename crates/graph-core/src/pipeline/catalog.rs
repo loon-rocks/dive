@@ -380,16 +380,6 @@ fn check_pack_item(step_id: &str, tool: &str, catalog: &ToolCatalog, check: &mut
     }
 }
 
-fn plan_ref<'a>(tool: &'a str, packs: &crate::packs::PackSet) -> Option<&'a str> {
-    match packs.routed(tool) {
-        Some((_, crate::packs::ItemKind::Plan, _)) => Some(tool),
-        Some(_) => None,
-        None => tool
-            .strip_prefix("plan__")
-            .filter(|identifier| packs.routed(identifier).is_none()),
-    }
-}
-
 /// Every `(step id, tool name)` pair in a plan, control-step bodies
 /// included. Bodies that fail to parse are skipped — the static layer
 /// reports those.
@@ -477,7 +467,7 @@ fn templated_along(input: &Value, path: &str) -> bool {
 fn plan_refs<'a>(plan: &'a Plan, packs: &crate::packs::PackSet) -> Vec<&'a str> {
     let mut refs = Vec::new();
     for step in plan {
-        if let Some(identifier) = plan_ref(&step.tool_name, packs) {
+        if let Some(identifier) = packs.plan_target(&step.tool_name) {
             refs.push(identifier);
         }
         for (_, raw) in control_bodies(&step.tool_name, &step.input) {
@@ -500,13 +490,13 @@ fn collect_plan_refs<'a>(
     };
     match raw {
         serde_json::Value::Object(_) => {
-            if let Some(identifier) = tool_of(raw).and_then(|t| plan_ref(t, packs)) {
+            if let Some(identifier) = tool_of(raw).and_then(|t| packs.plan_target(t)) {
                 refs.push(identifier);
             }
         }
         serde_json::Value::Array(items) => {
             for item in items {
-                if let Some(identifier) = tool_of(item).and_then(|t| plan_ref(t, packs)) {
+                if let Some(identifier) = tool_of(item).and_then(|t| packs.plan_target(t)) {
                     refs.push(identifier);
                 }
             }

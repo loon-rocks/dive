@@ -46,45 +46,27 @@ pub fn load_pack(
         }
     };
 
-    let mut tools: Vec<UserToolDoc> = Vec::new();
-    for path in yaml_files(&source.dir.join("tools")) {
-        match load_user_tool(&path) {
-            Ok(doc) if tools.iter().any(|known| known.name == doc.name) => problems.push(format!(
-                "{}: duplicate tool name '{}'",
-                path.display(),
-                doc.name
-            )),
-            Ok(doc) => tools.push(doc),
-            Err(problem) => problems.push(problem),
-        }
-    }
-
-    let mut plans: Vec<PlanDoc> = Vec::new();
-    for path in yaml_files(&source.dir.join("plans")) {
-        match load_plan(&path, &source) {
-            Ok(doc) if plans.iter().any(|known| known.identifier == doc.identifier) => problems
-                .push(format!(
-                    "{}: duplicate plan identifier '{}'",
-                    path.display(),
-                    doc.identifier
-                )),
-            Ok(doc) => plans.push(doc),
-            Err(problem) => problems.push(problem),
-        }
-    }
-
-    let mut agents: Vec<AgentDoc> = Vec::new();
-    for path in yaml_files(&source.dir.join("agents")) {
-        match load_agent(&path, &source) {
-            Ok(doc) if agents.iter().any(|known| known.name == doc.name) => problems.push(format!(
-                "{}: duplicate agent name '{}'",
-                path.display(),
-                doc.name
-            )),
-            Ok(doc) => agents.push(doc),
-            Err(problem) => problems.push(problem),
-        }
-    }
+    let tools = load_dir(
+        &source.dir.join("tools"),
+        "tool name",
+        load_user_tool,
+        |doc: &UserToolDoc| &doc.name,
+        &mut problems,
+    );
+    let plans = load_dir(
+        &source.dir.join("plans"),
+        "plan identifier",
+        |path| load_plan(path, &source),
+        |doc: &PlanDoc| &doc.identifier,
+        &mut problems,
+    );
+    let agents = load_dir(
+        &source.dir.join("agents"),
+        "agent name",
+        |path| load_agent(path, &source),
+        |doc: &AgentDoc| &doc.name,
+        &mut problems,
+    );
 
     let prefix = |kind: ItemKind| catalog_name(&pack, kind, "");
     let mut items: Vec<PackItem> = tools
@@ -139,6 +121,28 @@ pub fn load_pack(
         agents,
         items,
     })
+}
+
+fn load_dir<T>(
+    dir: &Path,
+    noun: &str,
+    load: impl Fn(&Path) -> Result<T, String>,
+    key: impl Fn(&T) -> &String,
+    problems: &mut Vec<String>,
+) -> Vec<T> {
+    let mut docs: Vec<T> = Vec::new();
+    for path in yaml_files(dir) {
+        match load(&path) {
+            Ok(doc) if docs.iter().any(|known| key(known) == key(&doc)) => problems.push(format!(
+                "{}: duplicate {noun} '{}'",
+                path.display(),
+                key(&doc)
+            )),
+            Ok(doc) => docs.push(doc),
+            Err(problem) => problems.push(problem),
+        }
+    }
+    docs
 }
 
 fn item(pack: &str, kind: ItemKind, name: &str) -> PackItem {

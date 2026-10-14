@@ -646,19 +646,17 @@ impl ToolRegistry for ConversationTools {
         }
         if self.subagents.iter().any(|def| def.name == name) {
             let agent = name.strip_prefix(AGENT_TOOL_PREFIX).unwrap_or(name);
-            {
-                let (outcome, entry) = Box::pin(self.conversation.run_subagent(
-                    &self.caller,
-                    agent,
-                    input,
-                    self.depth + 1,
-                ))
-                .await;
-                if let Some(entry) = entry {
-                    self.runs.lock().unwrap().push(entry);
-                }
-                return Ok(outcome);
+            let (outcome, entry) = Box::pin(self.conversation.run_subagent(
+                &self.caller,
+                agent,
+                input,
+                self.depth + 1,
+            ))
+            .await;
+            if let Some(entry) = entry {
+                self.runs.lock().unwrap().push(entry);
             }
+            return Ok(outcome);
         }
         self.base.invoke(name, input).await
     }

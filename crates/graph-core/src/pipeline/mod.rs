@@ -437,15 +437,14 @@ impl Pipeline {
         if let Some(input) = input {
             state.results.insert("input".to_string(), input);
         }
-        let mut roots = vec!["input"];
         if let Some(pack) = pack {
             state
                 .results
                 .insert(crate::packs::PACK_ROOT.to_string(), pack.template_root());
-            roots.push(crate::packs::PACK_ROOT);
         }
 
-        let mut problems = authoring::validate_steps_in(&state.plan, &roots);
+        let mut problems =
+            authoring::validate_steps_in(&state.plan, &crate::packs::template_roots(pack));
         // Second layer: catalog-aware tool resolution, so an unresolvable
         // tool fails here — before any step spends tool calls or LLM money.
         if let Some(catalog) = &self.catalog {
@@ -1017,26 +1016,6 @@ impl Pipeline {
         ExecutionEnd::Completed
     }
 
-    pub fn plan_target<'a>(&self, tool_name: &'a str) -> Option<&'a str> {
-        match self.packs.routed(tool_name) {
-            Some((_, crate::packs::ItemKind::Plan, _)) => Some(tool_name),
-            Some(_) => None,
-            None => tool_name
-                .strip_prefix(crate::toolbox::PLAN_TOOL_PREFIX)
-                .filter(|identifier| self.packs.routed(identifier).is_none()),
-        }
-    }
-
-    pub fn agent_target<'a>(&self, tool_name: &'a str) -> Option<&'a str> {
-        match self.packs.routed(tool_name) {
-            Some((_, crate::packs::ItemKind::Agent, _)) => Some(tool_name),
-            Some(_) => None,
-            None => tool_name
-                .strip_prefix(AGENT_TOOL_PREFIX)
-                .filter(|name| self.packs.routed(name).is_none()),
-        }
-    }
-
     /// Route one rendered tool call — a `plan__*` step, `plan_and_execute`,
     /// or the registry — consulting the gate and emitting tool and step
     /// events. Every real tool call at any depth funnels through here.
@@ -1086,7 +1065,7 @@ impl Pipeline {
             .step_started(&self.call_stack, &path_text, tool_name, &rendered);
         self.events.tool_started(tool_name, &rendered);
         let started = std::time::Instant::now();
-        let outcome = if let Some(identifier) = self.plan_target(tool_name) {
+        let outcome = if let Some(identifier) = self.packs.plan_target(tool_name) {
             let call = self.call_plan(identifier, rendered).await;
             if call.aborted {
                 // A nested abort is already a gate decision — never re-ask.
@@ -1098,7 +1077,7 @@ impl Pipeline {
                 result: call.result,
                 is_error: call.is_error,
             }
-        } else if let Some(name) = self.agent_target(tool_name) {
+        } else if let Some(name) = self.packs.agent_target(tool_name) {
             self.call_agent(path, name, rendered).await?
         } else if is_native_tool(tool_name) {
             CallSite::role("planner")

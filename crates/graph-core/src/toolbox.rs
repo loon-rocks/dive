@@ -87,7 +87,7 @@ impl ToolRegistry for AgentToolbox {
                 is_error: call.is_error,
             });
         }
-        if let Some(identifier) = self.pipeline.plan_target(name) {
+        if let Some(identifier) = self.pipeline.packs.plan_target(name) {
             if self.plans.iter().any(|d| d.identifier == identifier) {
                 let call = self.pipeline.call_plan(identifier, input).await;
                 return Ok(ToolOutcome {

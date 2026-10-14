@@ -464,7 +464,7 @@ impl WorkbenchTools {
         let Some(name) = input.get("name").and_then(Value::as_str) else {
             return error_outcome("describe_tool requires a 'name' string");
         };
-        if let Some(identifier) = self.pipeline.plan_target(name) {
+        if let Some(identifier) = self.pipeline.packs.plan_target(name) {
             if let Some(doc) = self
                 .pipeline
                 .plans

@@ -124,7 +124,7 @@ fn a_pack_loads_its_items_under_catalog_names_and_skips_migrations() {
         .unwrap();
     assert_eq!(whoami.steps[0].tool_name, "example__tool__echo");
     assert_eq!(whoami.tool_name(), "example__plan__whoami");
-    assert_eq!(whoami.pack_name(), Some("example"));
+    assert_eq!(whoami.pack.as_ref().unwrap().name, "example");
     assert_eq!(whoami.source_label(), "pack example v1.0.0 (project)");
     let helper = &pack.agents[0];
     assert_eq!(helper.name, "example__agent__helper");
@@ -335,10 +335,7 @@ fn pipeline_over(
             pack.tools.clone(),
             router.clone(),
         )));
-        set.install(&pack.source.name);
-        for item in &pack.items {
-            set.insert(item.clone());
-        }
+        set.add(pack);
         plans.extend(pack.plans.iter().cloned());
         agents.extend(pack.agents.iter().cloned());
     }
@@ -471,10 +468,7 @@ finish:
 
 fn catalog_for(pack: &LoadedPack) -> ToolCatalog {
     let mut set = PackSet::default();
-    set.install(&pack.source.name);
-    for item in &pack.items {
-        set.insert(item.clone());
-    }
+    set.add(pack);
     ToolCatalog {
         builtin_tools: Default::default(),
         user_tools: ["user__echo".to_string()].into(),

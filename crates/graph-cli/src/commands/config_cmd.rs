@@ -245,10 +245,7 @@ fn check() -> Outcome {
     if problems.is_empty() {
         match graph_config::load() {
             Err(error) => problems.push(format!("{error:#}")),
-            Ok(loaded) => match crate::packs::InstalledPacks::load(
-                &loaded.pack_layers,
-                &loaded.config.mcp.keys().cloned().collect(),
-            ) {
+            Ok(loaded) => match crate::packs::InstalledPacks::for_config(&loaded) {
                 Ok(installed) => {
                     text.push_str(&installed.check_text());
                     packs = installed.check_json();
