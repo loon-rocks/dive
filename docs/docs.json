@@ -338,6 +338,38 @@
     {
       "source": "/using/tool-selection",
       "destination": "/agents/guides/steer-tool-choice"
+    },
+    {
+      "source": "/reference/cli/tools",
+      "destination": "/reference/cli/tool"
+    },
+    {
+      "source": "/reference/cli/tools/:slug*",
+      "destination": "/reference/cli/tool/:slug*"
+    },
+    {
+      "source": "/reference/cli/agents",
+      "destination": "/reference/cli/agent"
+    },
+    {
+      "source": "/reference/cli/agents/:slug*",
+      "destination": "/reference/cli/agent/:slug*"
+    },
+    {
+      "source": "/reference/cli/threads",
+      "destination": "/reference/cli/thread"
+    },
+    {
+      "source": "/reference/cli/threads/:slug*",
+      "destination": "/reference/cli/thread/:slug*"
+    },
+    {
+      "source": "/reference/cli/shapes",
+      "destination": "/reference/cli/shape"
+    },
+    {
+      "source": "/reference/cli/shapes/:slug*",
+      "destination": "/reference/cli/shape/:slug*"
     }
   ],
   "navbar": {

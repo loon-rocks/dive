@@ -1,7 +1,7 @@
 ---
 title: "Test an MCP server"
 description: "Check that graph can reach an MCP server, list its tools, and call one directly."
-keywords: ["mcp", "graph mcp test", "graph tools test", "troubleshooting"]
+keywords: ["mcp", "graph mcp test", "graph tool test", "troubleshooting"]
 ---
 
 Work from the connection up: confirm graph reaches the server, then that it loads the tools you expect, then that a tool returns what you expect.
@@ -45,10 +45,10 @@ To change that list, see [Filter and override a server's tools](/integrating/mcp
 
 ## Call a tool directly
 
-`graph tools test` calls a tool by its full name and prints the result. Pass input as JSON, as `@file`, on stdin, or with `--input key=value`:
+`graph tool test` calls a tool by its full name and prints the result. Pass input as JSON, as `@file`, on stdin, or with `--input key=value`:
 
 ```bash
-graph tools test everything__get-sum '{"a": 2, "b": 3}'
+graph tool test everything__get-sum '{"a": 2, "b": 3}'
 ```
 
 ```json

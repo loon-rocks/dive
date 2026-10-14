@@ -344,7 +344,7 @@ fn tool_page(doc: &Yaml, words: &Content) -> String {
                 "Plan step",
                 step_yaml(&tool, doc.get("input_schema")),
             ),
-            ("bash", "Inspect", format!("graph tools show {tool}")),
+            ("bash", "Inspect", format!("graph tool show {tool}")),
         ],
     );
     finish(out)
@@ -549,7 +549,7 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
     let mut blocks = vec![(
         "bash",
         "Customize",
-        format!("graph agents show {name} > .graph/agents/{name}.yaml"),
+        format!("graph agent show {name} > .graph/agents/{name}.yaml"),
     )];
     if default_agent {
         blocks.push(("bash", "Run", "graph chat".to_string()));

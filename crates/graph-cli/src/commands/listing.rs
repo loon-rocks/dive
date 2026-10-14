@@ -1,4 +1,4 @@
-//! Shared renderer for grouped tool listings — `graph tools list` and
+//! Shared renderer for grouped tool listings — `graph tool list` and
 //! `graph mcp tools`.
 
 use graph_core::ToolDef;
@@ -18,11 +18,11 @@ fn source_of(name: &str) -> &str {
         .map_or("(core)", |(source, _)| source)
 }
 
-/// One tool as JSON for `graph tools show --json`: the whole definition the
+/// One tool as JSON for `graph tool show --json`: the whole definition the
 /// agent and planner see, losslessly — including the `inputSchema` a caller
 /// needs to write a plan step's input object.
 ///
-/// `outputSchema` is what the tool *declares*; `graph shapes show` is what it
+/// `outputSchema` is what the tool *declares*; `graph shape show` is what it
 /// has actually been observed to return.
 pub fn tool_as_json(def: &ToolDef) -> Value {
     json!({
@@ -42,7 +42,7 @@ pub fn tool_as_json(def: &ToolDef) -> Value {
 /// renderer's sections.
 ///
 /// Schemas are deliberately absent — a catalog of a few hundred tools would
-/// bury the names, which is what a caller enumerates for. `graph tools show`
+/// bury the names, which is what a caller enumerates for. `graph tool show`
 /// is the per-tool schema surface.
 pub fn tool_listing_as_json(defs: &[ToolDef]) -> Value {
     let mut sources: Vec<(&str, usize)> = Vec::new();

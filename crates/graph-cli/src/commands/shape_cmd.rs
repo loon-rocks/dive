@@ -1,21 +1,21 @@
-//! `graph shapes` — inspect the observed-shape cache. Opens the store
+//! `graph shape` — inspect the observed-shape cache. Opens the store
 //! directly; no providers or MCP servers needed.
 
-use crate::cli::ShapesCommand;
+use crate::cli::ShapeCommand;
 use crate::commands::outcome::{report, Outcome};
 use crate::runtime::open_store;
 use anyhow::{bail, Result};
 use graph_core::ToolShape;
 use serde_json::{json, Value};
 
-pub async fn run(command: ShapesCommand) -> Result<()> {
+pub async fn run(command: ShapeCommand) -> Result<()> {
     let config = crate::runtime::load_config()?.config;
     let store = open_store(&config)?;
     let shapes = store.tool_shapes().await?;
 
     match command {
-        ShapesCommand::List { json } => report(list(shapes), json),
-        ShapesCommand::Show { tool, json } => report(show(shapes, &tool)?, json),
+        ShapeCommand::List { json } => report(list(shapes), json),
+        ShapeCommand::Show { tool, json } => report(show(shapes, &tool)?, json),
     }
 }
 

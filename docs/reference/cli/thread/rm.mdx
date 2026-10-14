@@ -1,15 +1,15 @@
 ---
-title: "graph shapes show"
-sidebarTitle: "show"
-description: "Show one tool's cached schema and example"
+title: "graph thread rm"
+sidebarTitle: "rm"
+description: "Delete a thread"
 playground: "none"
-keywords: ["graph shapes show"]
+keywords: ["graph thread rm"]
 ---
 
 ## Arguments
 
-<ParamField path="TOOL" type="string" required>
-  The tool's namespaced name
+<ParamField path="ID" type="string" required>
+  The thread id, as `graph thread list` prints it
 </ParamField>
 
 ## Options
@@ -27,11 +27,11 @@ keywords: ["graph shapes show"]
 <RequestExample>
 
 ```bash Usage
-graph shapes show [OPTIONS] <TOOL>
+graph thread rm [OPTIONS] <ID>
 ```
 
 ```bash Example
-graph shapes show linear__list_issues
+graph thread rm 4f1c9a2b7d3e
 ```
 
 </RequestExample>

@@ -1,0 +1,20 @@
+---
+title: "graph agent"
+sidebarTitle: "graph agent"
+description: "Inspect, validate, and migrate agent definitions"
+playground: "none"
+keywords: ["graph agent"]
+---
+
+## Available commands
+
+- [`graph agent list`](/reference/cli/agent/list): List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents)
+- [`graph agent show`](/reference/cli/agent/show): Print an agent's effective definition, the file to copy when customizing it
+- [`graph agent validate`](/reference/cli/agent/validate): Validate every agent, or one agent file against the others
+- [`graph agent migrate`](/reference/cli/agent/migrate): Rewrite an agent file to the current agent format
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>

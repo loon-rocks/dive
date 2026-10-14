@@ -28,33 +28,33 @@
     "root": "reference/cli/plan"
   },
   {
-    "group": "graph tools",
+    "group": "graph tool",
     "pages": [
-      "reference/cli/tools/list",
-      "reference/cli/tools/show",
-      "reference/cli/tools/test",
-      "reference/cli/tools/migrate"
+      "reference/cli/tool/list",
+      "reference/cli/tool/show",
+      "reference/cli/tool/test",
+      "reference/cli/tool/migrate"
     ],
-    "root": "reference/cli/tools"
+    "root": "reference/cli/tool"
   },
   {
-    "group": "graph agents",
+    "group": "graph agent",
     "pages": [
-      "reference/cli/agents/list",
-      "reference/cli/agents/show",
-      "reference/cli/agents/validate",
-      "reference/cli/agents/migrate"
+      "reference/cli/agent/list",
+      "reference/cli/agent/show",
+      "reference/cli/agent/validate",
+      "reference/cli/agent/migrate"
     ],
-    "root": "reference/cli/agents"
+    "root": "reference/cli/agent"
   },
   {
-    "group": "graph threads",
+    "group": "graph thread",
     "pages": [
-      "reference/cli/threads/list",
-      "reference/cli/threads/show",
-      "reference/cli/threads/rm"
+      "reference/cli/thread/list",
+      "reference/cli/thread/show",
+      "reference/cli/thread/rm"
     ],
-    "root": "reference/cli/threads"
+    "root": "reference/cli/thread"
   },
   {
     "group": "graph mcp",
@@ -68,12 +68,12 @@
     "root": "reference/cli/mcp"
   },
   {
-    "group": "graph shapes",
+    "group": "graph shape",
     "pages": [
-      "reference/cli/shapes/list",
-      "reference/cli/shapes/show"
+      "reference/cli/shape/list",
+      "reference/cli/shape/show"
     ],
-    "root": "reference/cli/shapes"
+    "root": "reference/cli/shape"
   },
   {
     "group": "graph config",

@@ -38,24 +38,24 @@ These options work with every command.
 | [`graph plan step rename`](/reference/cli/plan/step/rename) | Rename a step, rewriting every downstream &#123;&#123;id.*&#125;&#125; reference |
 | [`graph plan step unset`](/reference/cli/plan/step/unset) | Clear one optional attribute of a step |
 | [`graph plan step rm`](/reference/cli/plan/step/rm) | Remove a step |
-| [`graph tools list`](/reference/cli/tools/list) | List every tool visible to the agent and planner |
-| [`graph tools show`](/reference/cli/tools/show) | Show one tool's description and schemas |
-| [`graph tools test`](/reference/cli/tools/test) | Invoke a tool directly |
-| [`graph tools migrate`](/reference/cli/tools/migrate) | Rewrite a user tool file to the current tool format |
-| [`graph agents list`](/reference/cli/agents/list) | List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents) |
-| [`graph agents show`](/reference/cli/agents/show) | Print an agent's effective definition, the file to copy when customizing it |
-| [`graph agents validate`](/reference/cli/agents/validate) | Validate every agent, or one agent file against the others |
-| [`graph agents migrate`](/reference/cli/agents/migrate) | Rewrite an agent file to the current agent format |
-| [`graph threads list`](/reference/cli/threads/list) | List threads |
-| [`graph threads show`](/reference/cli/threads/show) | Show a thread's messages |
-| [`graph threads rm`](/reference/cli/threads/rm) | Delete a thread |
+| [`graph tool list`](/reference/cli/tool/list) | List every tool visible to the agent and planner |
+| [`graph tool show`](/reference/cli/tool/show) | Show one tool's description and schemas |
+| [`graph tool test`](/reference/cli/tool/test) | Invoke a tool directly |
+| [`graph tool migrate`](/reference/cli/tool/migrate) | Rewrite a user tool file to the current tool format |
+| [`graph agent list`](/reference/cli/agent/list) | List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents) |
+| [`graph agent show`](/reference/cli/agent/show) | Print an agent's effective definition, the file to copy when customizing it |
+| [`graph agent validate`](/reference/cli/agent/validate) | Validate every agent, or one agent file against the others |
+| [`graph agent migrate`](/reference/cli/agent/migrate) | Rewrite an agent file to the current agent format |
+| [`graph thread list`](/reference/cli/thread/list) | List threads |
+| [`graph thread show`](/reference/cli/thread/show) | Show a thread's messages |
+| [`graph thread rm`](/reference/cli/thread/rm) | Delete a thread |
 | [`graph mcp list`](/reference/cli/mcp/list) | List configured servers and their status |
 | [`graph mcp tools`](/reference/cli/mcp/tools) | List tools exposed by servers |
 | [`graph mcp test`](/reference/cli/mcp/test) | Connect to a server and verify initialize + tools/list |
 | [`graph mcp serve`](/reference/cli/mcp/serve) | Serve graph's plans and authoring commands to an agent over MCP (stdio) |
 | [`graph mcp probe`](/reference/cli/mcp/probe) | Pre-warm the observed-shape cache by invoking read-only tools |
-| [`graph shapes list`](/reference/cli/shapes/list) | List cached tool shapes |
-| [`graph shapes show`](/reference/cli/shapes/show) | Show one tool's cached schema and example |
+| [`graph shape list`](/reference/cli/shape/list) | List cached tool shapes |
+| [`graph shape show`](/reference/cli/shape/show) | Show one tool's cached schema and example |
 | [`graph config show`](/reference/cli/config/show) | Print the merged effective configuration |
 | [`graph config init`](/reference/cli/config/init) | Write a starter config file |
 | [`graph config path`](/reference/cli/config/path) | Print the config file locations and which exist |

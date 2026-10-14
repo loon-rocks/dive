@@ -11,7 +11,7 @@ required: [name, description, kind]
 properties:
   version:
     type: integer
-    description: The file version the document is written in. Omitted means 1; `graph tools migrate` brings a file to the current version.
+    description: The file version the document is written in. Omitted means 1; `graph tool migrate` brings a file to the current version.
   name:
     type: string
     pattern: "^[A-Za-z0-9_-]+$"

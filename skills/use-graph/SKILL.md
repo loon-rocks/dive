@@ -97,15 +97,15 @@ The agent loop is a standard tool-calling loop over the same catalog — plans
 included, called like any other tool. Use it to probe unfamiliar tools, sketch
 a workflow conversationally, and seed the shape cache; **freeze anything you
 would run twice into a plan** (that is the `/graph-plan-authoring` handoff).
-Turns persist as threads: `graph threads list / show <id> / rm <id>`.
+Turns persist as threads: `graph thread list / show <id> / rm <id>`.
 
 ## Inspecting the catalog
 
 ```bash
-graph tools list [--json]            # every tool, grouped by source
-graph tools show <name> --json       # one tool's full definition + input schema
-graph tools test <name> '<json>'     # call it for real, see what comes back
-graph shapes show <tool>             # what it has returned before (the shape cache)
+graph tool list [--json]            # every tool, grouped by source
+graph tool show <name> --json       # one tool's full definition + input schema
+graph tool test <name> '<json>'     # call it for real, see what comes back
+graph shape show <tool>             # what it has returned before (the shape cache)
 graph mcp list / test <server>       # configured MCP servers, per-server connectivity
 ```
 

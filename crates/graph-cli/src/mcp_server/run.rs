@@ -123,18 +123,18 @@ pub fn step_rm(args: &Map<String, Value>) -> Result<Outcome> {
 /// The `tools` family, delegated to the command layer.
 ///
 /// The bodies below build a toolbox and hand it straight to
-/// `commands::tools_cmd`. They deliberately do NOT re-derive the catalog:
+/// `commands::tool_cmd`. They deliberately do NOT re-derive the catalog:
 /// the command functions are the only definition of what a plan step may
 /// name — invokable tools plus the control-step vocabulary — and a second
 /// copy here is exactly how the control steps went missing from this
-/// surface while `graph tools list` served them.
+/// surface while `graph tool list` served them.
 pub async fn tools_list() -> Result<Outcome> {
     let runtime = runtime()?;
     let store = runtime.store()?;
     let toolbox = runtime
         .toolbox(&store, std::sync::Arc::new(graph_core::NullSink))
         .await?;
-    let outcome = crate::commands::tools_cmd::list(toolbox.as_ref()).await;
+    let outcome = crate::commands::tool_cmd::list(toolbox.as_ref()).await;
     runtime.shutdown().await;
     outcome
 }
@@ -146,7 +146,7 @@ pub async fn tools_show(name: &str) -> Result<Outcome> {
         .toolbox(&store, std::sync::Arc::new(graph_core::NullSink))
         .await?;
     let outcome = match runtime.tool_docs() {
-        Ok(docs) => crate::commands::tools_cmd::show(toolbox.as_ref(), &docs, name).await,
+        Ok(docs) => crate::commands::tool_cmd::show(toolbox.as_ref(), &docs, name).await,
         Err(error) => Err(error),
     };
     runtime.shutdown().await;
@@ -160,7 +160,7 @@ pub async fn tools_test(name: &str, input: Value) -> Result<Outcome> {
         .toolbox(&store, std::sync::Arc::new(graph_core::NullSink))
         .await?;
     let raw = serde_json::to_string(&input)?;
-    let outcome = crate::commands::tools_cmd::test(toolbox.as_ref(), name, Some(&raw), &[]).await;
+    let outcome = crate::commands::tool_cmd::test(toolbox.as_ref(), name, Some(&raw), &[]).await;
     runtime.shutdown().await;
     outcome
 }

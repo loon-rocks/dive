@@ -97,7 +97,7 @@ follow the steps, and write it as a short bullet list, not a paragraph.
 - Before writing, build the example's files in a scratch project (a scratchpad dir
   with its own `.graph/`) or, when it needs this repo's git history, temporarily in
   the worktree's `.graph/` — and delete those files afterwards.
-- Validate every file you show (`graph plan validate`, `graph agents validate`)
+- Validate every file you show (`graph plan validate`, `graph agent validate`)
   and run the example (`graph ask … </dev/null`, `graph plan run`) with the debug
   build. Pass `</dev/null` to `graph ask`, or it waits on stdin.
 - Output blocks are copied from those runs. Trim long lines with `…`, never invent

@@ -20,7 +20,7 @@ If graph is connected as an **MCP server** (`graph mcp serve`), you already have
 | Write | `graph plan new`, `graph plan set`, `graph plan step add` | writing YAML in an editor |
 | Edit | `graph plan set/unset`, `graph plan step update/rename/rm` | patching the file by hand |
 | Check | `graph plan validate --json` | reasoning about whether the plan looks valid |
-| Test | `graph tools test`, `graph plan run` | predicting what a tool returns, or writing your own harness |
+| Test | `graph tool test`, `graph plan run` | predicting what a tool returns, or writing your own harness |
 
 Each one applies a single intent and reports a machine-readable result. Reimplementing any of them by hand is slower, unvalidated, and usually wrong — and drafting is the stage agents skip most often.
 
@@ -43,7 +43,7 @@ Then read what it wrote (`graph plan show <id> --json`), apply the fixes below, 
 
 - **Do not read the docs site first.** Every command is self-describing — `graph plan --help`, `graph plan step add --help`. The reference links at the bottom of this page are for when a rejection message isn't self-explanatory, not for warming up.
 - **Do not write or edit plan YAML in a text editor.** The edit commands enforce validation on every write; a text editor doesn't, and any edit reserializes the file anyway.
-- **Do not enumerate the whole tool catalog and assemble steps yourself.** The planner already sees the catalog and the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx). Probe individual tools (`graph tools show <name>`) when you're fixing a specific step, not as a survey.
+- **Do not enumerate the whole tool catalog and assemble steps yourself.** The planner already sees the catalog and the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx). Probe individual tools (`graph tool show <name>`) when you're fixing a specific step, not as a survey.
 - **Do not ask the user for a plan's steps.** Ask for the *goal*; the goal is what `draft` consumes.
 - **Do not judge a plan by reading it.** `graph plan validate --json` is the verdict, and `graph plan run` is the proof. Neither costs you a guess.
 
@@ -111,13 +111,13 @@ Don't reason about whether a plan works — graph runs it.
 
 ```bash
 graph plan validate commit_digest --json                          # static: refs, ids, tools resolve
-graph tools test builtin__git_log '{"base":"v0.8.0","head":"main"}'   # one tool, real output
+graph tool test builtin__git_log '{"base":"v0.8.0","head":"main"}'   # one tool, real output
 graph plan run commit_digest '{"base":"v0.8.0","head":"main"}' --json  # the whole plan, real data
 ```
 
 `validate` catches what is knowable without running: dangling `{{refs}}`, duplicate ids, tools that don't resolve. Everything else — a path that isn't in a tool's real output, an empty result, a gate that fires — only shows up in a run, as a typed error naming the available keys.
 
-When a step's template path is the suspect, `graph tools test <tool> '<input>'` calls that one tool and prints exactly what it returns; `graph shapes show <tool>` prints what it has returned before. Use those instead of guessing at a field name — and both feed the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx), which makes the next draft better.
+When a step's template path is the suspect, `graph tool test <tool> '<input>'` calls that one tool and prints exactly what it returns; `graph shape show <tool>` prints what it has returned before. Use those instead of guessing at a field name — and both feed the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx), which makes the next draft better.
 
 Read the exit code, not just the output: `0` ok, `1` failure, `3` needs input (the schema is printed — that is fix #2 above), `4` an exit gate fired deliberately.
 

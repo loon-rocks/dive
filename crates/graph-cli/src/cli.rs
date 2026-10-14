@@ -55,24 +55,28 @@ pub enum Command {
         thread: Option<Option<String>>,
     },
     /// Manage and run plan documents
+    #[command(alias = "plans")]
     Plan {
         #[command(subcommand)]
         command: PlanCommand,
     },
     /// Inspect the tool catalog (MCP, user, plan, and built-in tools)
-    Tools {
+    #[command(alias = "tools")]
+    Tool {
         #[command(subcommand)]
-        command: ToolsCommand,
+        command: ToolCommand,
     },
     /// Inspect, validate, and migrate agent definitions
-    Agents {
+    #[command(alias = "agents")]
+    Agent {
         #[command(subcommand)]
-        command: AgentsCommand,
+        command: AgentCommand,
     },
     /// Manage conversation threads
-    Threads {
+    #[command(alias = "threads")]
+    Thread {
         #[command(subcommand)]
-        command: ThreadsCommand,
+        command: ThreadCommand,
     },
     /// Manage MCP servers
     Mcp {
@@ -80,9 +84,10 @@ pub enum Command {
         command: McpCommand,
     },
     /// Inspect the observed-shape cache
-    Shapes {
+    #[command(alias = "shapes")]
+    Shape {
         #[command(subcommand)]
-        command: ShapesCommand,
+        command: ShapeCommand,
     },
     /// Show or initialize configuration
     Config {
@@ -90,7 +95,8 @@ pub enum Command {
         command: ConfigCommand,
     },
     #[command(
-        about = "Install, list, update and remove packs of tools, plans and agents from git"
+        about = "Install, list, update and remove packs of tools, plans and agents from git",
+        alias = "packs"
     )]
     Pack {
         #[command(subcommand)]
@@ -119,19 +125,28 @@ pub enum Command {
 pub enum WorkbenchCommand {
     /// Open the workbench in plan mode: draft a new plan, or open an existing
     /// one to inspect, edit and run — fully, or gated with per-tool-call confirmation
-    #[command(after_long_help = "Examples:\n  graph wb plan\n  graph wb plan weekly_changes")]
+    #[command(
+        alias = "plans",
+        after_long_help = "Examples:\n  graph wb plan\n  graph wb plan weekly_changes"
+    )]
     Plan {
         /// A plan identifier or YAML file path to open; omit for a blank draft
         name_or_path: Option<String>,
     },
     /// Open the workbench in agent mode: draft a new agent, or edit an existing one
-    #[command(after_long_help = "Examples:\n  graph wb agent\n  graph wb agent release_notes")]
+    #[command(
+        alias = "agents",
+        after_long_help = "Examples:\n  graph wb agent\n  graph wb agent release_notes"
+    )]
     Agent {
         /// An agent name to open for editing; omit to draft a new one
         name: Option<String>,
     },
     /// Open the workbench in tool mode: draft a new user tool, or edit an existing one
-    #[command(after_long_help = "Examples:\n  graph wb tool\n  graph wb tool summarize")]
+    #[command(
+        alias = "tools",
+        after_long_help = "Examples:\n  graph wb tool\n  graph wb tool summarize"
+    )]
     Tool {
         /// A user tool name to open for editing; omit to draft a new one
         name: Option<String>,
@@ -450,10 +465,10 @@ pub enum StepCommand {
 }
 
 #[derive(Subcommand)]
-pub enum ToolsCommand {
+pub enum ToolCommand {
     /// List every tool visible to the agent and planner
     #[command(
-        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly` and `hasOutputSchema`.\n\nExamples:\n  graph tools list\n  graph tools list --json"
+        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly` and `hasOutputSchema`.\n\nExamples:\n  graph tool list\n  graph tool list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -461,20 +476,20 @@ pub enum ToolsCommand {
     },
     /// Show one tool's description and schemas
     #[command(
-        after_long_help = "For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.\n\nExamples:\n  graph tools show github__tool__git_log\n  graph tools show linear__list_issues --json"
+        after_long_help = "For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.\n\nExamples:\n  graph tool show github__tool__git_log\n  graph tool show linear__list_issues --json"
     )]
     Show {
-        #[arg(help = "The tool's namespaced name, as `graph tools list` prints it")]
+        #[arg(help = "The tool's namespaced name, as `graph tool list` prints it")]
         name: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Invoke a tool directly
     #[command(
-        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tools test github__tool__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  graph tools test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json"
+        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tool test github__tool__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  graph tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json"
     )]
     Test {
-        #[arg(help = "The tool's namespaced name, as `graph tools list` prints it")]
+        #[arg(help = "The tool's namespaced name, as `graph tool list` prints it")]
         name: String,
         /// Input as a JSON object: inline (`'{"a":1}'`), `@file.json`, or `-` for stdin
         #[arg(value_name = "JSON|@FILE|-")]
@@ -487,7 +502,7 @@ pub enum ToolsCommand {
     },
     /// Rewrite a user tool file to the current tool format
     #[command(
-        after_long_help = "Rewrites one user tool file to the current tool file version. It takes a path rather than a tool name and doesn't connect to MCP servers.\n\nExamples:\n  graph tools migrate .graph/tools/summarize.yaml"
+        after_long_help = "Rewrites one user tool file to the current tool file version. It takes a path rather than a tool name and doesn't connect to MCP servers.\n\nExamples:\n  graph tool migrate .graph/tools/summarize.yaml"
     )]
     Migrate {
         #[arg(help = "Path to the user tool file")]
@@ -498,10 +513,10 @@ pub enum ToolsCommand {
 }
 
 #[derive(Subcommand)]
-pub enum AgentsCommand {
+pub enum AgentCommand {
     /// List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents)
     #[command(
-        after_long_help = "Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).\n\nExamples:\n  graph agents list\n  graph agents list --json"
+        after_long_help = "Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).\n\nExamples:\n  graph agent list\n  graph agent list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -509,7 +524,7 @@ pub enum AgentsCommand {
     },
     /// Print an agent's effective definition, the file to copy when customizing it
     #[command(
-        after_long_help = "Examples:\n  graph agents show chat\n  graph agents show chat > .graph/agents/chat.yaml"
+        after_long_help = "Examples:\n  graph agent show chat\n  graph agent show chat > .graph/agents/chat.yaml"
     )]
     Show {
         #[arg(help = "The agent's name")]
@@ -519,7 +534,7 @@ pub enum AgentsCommand {
     },
     /// Validate every agent, or one agent file against the others
     #[command(
-        after_long_help = "Problems exit 1. `--json` lists them under `problems`.\n\nExamples:\n  graph agents validate\n  graph agents validate .graph/agents/release_notes.yaml"
+        after_long_help = "Problems exit 1. `--json` lists them under `problems`.\n\nExamples:\n  graph agent validate\n  graph agent validate .graph/agents/release_notes.yaml"
     )]
     Validate {
         #[arg(help = "One agent file to check against the others; omit to check every agent")]
@@ -529,7 +544,7 @@ pub enum AgentsCommand {
     },
     /// Rewrite an agent file to the current agent format
     #[command(
-        after_long_help = "Rewrites one agent file to the current agent file version.\n\nExamples:\n  graph agents migrate .graph/agents/release_notes.yaml"
+        after_long_help = "Rewrites one agent file to the current agent file version.\n\nExamples:\n  graph agent migrate .graph/agents/release_notes.yaml"
     )]
     Migrate {
         #[arg(help = "Path to the agent file")]
@@ -540,19 +555,19 @@ pub enum AgentsCommand {
 }
 
 #[derive(Subcommand)]
-pub enum ThreadsCommand {
+pub enum ThreadCommand {
     /// List threads
-    #[command(after_long_help = "Examples:\n  graph threads list")]
+    #[command(after_long_help = "Examples:\n  graph thread list")]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Show a thread's messages
     #[command(
-        after_long_help = "Examples:\n  graph threads show 4f1c9a2b7d3e\n  graph threads show 4f1c9a2b7d3e --state --json"
+        after_long_help = "Examples:\n  graph thread show 4f1c9a2b7d3e\n  graph thread show 4f1c9a2b7d3e --state --json"
     )]
     Show {
-        #[arg(help = "The thread id, as `graph threads list` prints it")]
+        #[arg(help = "The thread id, as `graph thread list` prints it")]
         id: String,
         /// Include the full runtime state
         #[arg(long)]
@@ -561,9 +576,9 @@ pub enum ThreadsCommand {
         json: bool,
     },
     /// Delete a thread
-    #[command(after_long_help = "Examples:\n  graph threads rm 4f1c9a2b7d3e")]
+    #[command(after_long_help = "Examples:\n  graph thread rm 4f1c9a2b7d3e")]
     Rm {
-        #[arg(help = "The thread id, as `graph threads list` prints it")]
+        #[arg(help = "The thread id, as `graph thread list` prints it")]
         id: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
@@ -615,15 +630,15 @@ pub enum McpCommand {
 }
 
 #[derive(Subcommand)]
-pub enum ShapesCommand {
+pub enum ShapeCommand {
     /// List cached tool shapes
-    #[command(after_long_help = "Examples:\n  graph shapes list")]
+    #[command(after_long_help = "Examples:\n  graph shape list")]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Show one tool's cached schema and example
-    #[command(after_long_help = "Examples:\n  graph shapes show linear__list_issues")]
+    #[command(after_long_help = "Examples:\n  graph shape show linear__list_issues")]
     Show {
         #[arg(help = "The tool's namespaced name")]
         tool: String,
@@ -886,5 +901,43 @@ mod tests {
         // otherwise panics at runtime, on the user's terminal, and only for
         // the one subcommand that happens to be broken.
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn plural_command_names_resolve_to_their_singular() {
+        let root = Cli::command();
+        let workbench = root.find_subcommand("wb").unwrap();
+        let cases = [
+            (&root, "plans", "plan"),
+            (&root, "tools", "tool"),
+            (&root, "agents", "agent"),
+            (&root, "threads", "thread"),
+            (&root, "shapes", "shape"),
+            (&root, "packs", "pack"),
+            (workbench, "plans", "plan"),
+            (workbench, "agents", "agent"),
+            (workbench, "tools", "tool"),
+        ];
+        for (parent, plural, singular) in cases {
+            let resolved = parent.find_subcommand(plural).map(|sub| sub.get_name());
+            assert_eq!(resolved, Some(singular), "{plural}");
+        }
+    }
+
+    #[test]
+    fn help_lists_only_singular_command_names() {
+        let root = Cli::command();
+        let workbench = root.find_subcommand("wb").unwrap();
+        for parent in [&root, workbench] {
+            for sub in parent.get_subcommands() {
+                let names = std::iter::once(sub.get_name()).chain(sub.get_visible_aliases());
+                for name in names {
+                    assert!(
+                        !["plans", "tools", "agents", "threads", "shapes", "packs"].contains(&name),
+                        "{name} is visible in help"
+                    );
+                }
+            }
+        }
     }
 }

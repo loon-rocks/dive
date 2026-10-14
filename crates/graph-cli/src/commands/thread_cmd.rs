@@ -1,7 +1,7 @@
-//! `graph threads` — list/show/rm. Opens the store directly; no providers
+//! `graph thread` — list/show/rm. Opens the store directly; no providers
 //! or MCP servers needed.
 
-use crate::cli::ThreadsCommand;
+use crate::cli::ThreadCommand;
 use crate::commands::outcome::{report, Outcome};
 use crate::runtime::open_store;
 use anyhow::{bail, Result};
@@ -10,14 +10,14 @@ use graph_llm::types::ChatMessage;
 use serde_json::json;
 use std::sync::Arc;
 
-pub async fn run(command: ThreadsCommand) -> Result<()> {
+pub async fn run(command: ThreadCommand) -> Result<()> {
     let config = crate::runtime::load_config()?.config;
     let store = open_store(&config)?;
 
     match command {
-        ThreadsCommand::List { json } => report(list(&store).await?, json),
-        ThreadsCommand::Show { id, state, json } => report(show(&store, &id, state).await?, json),
-        ThreadsCommand::Rm { id, json } => report(rm(&store, &id).await?, json),
+        ThreadCommand::List { json } => report(list(&store).await?, json),
+        ThreadCommand::Show { id, state, json } => report(show(&store, &id, state).await?, json),
+        ThreadCommand::Rm { id, json } => report(rm(&store, &id).await?, json),
     }
 }
 

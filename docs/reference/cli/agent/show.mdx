@@ -1,22 +1,18 @@
 ---
-title: "graph threads show"
+title: "graph agent show"
 sidebarTitle: "show"
-description: "Show a thread's messages"
+description: "Print an agent's effective definition, the file to copy when customizing it"
 playground: "none"
-keywords: ["graph threads show"]
+keywords: ["graph agent show"]
 ---
 
 ## Arguments
 
-<ParamField path="ID" type="string" required>
-  The thread id, as `graph threads list` prints it
+<ParamField path="NAME" type="string" required>
+  The agent's name
 </ParamField>
 
 ## Options
-
-<ParamField query="--state" type="boolean">
-  Include the full runtime state
-</ParamField>
 
 <ParamField query="--json" type="boolean">
   Print a JSON envelope instead of text
@@ -31,15 +27,15 @@ keywords: ["graph threads show"]
 <RequestExample>
 
 ```bash Usage
-graph threads show [OPTIONS] <ID>
+graph agent show [OPTIONS] <NAME>
 ```
 
 ```bash Example 1
-graph threads show 4f1c9a2b7d3e
+graph agent show chat
 ```
 
 ```bash Example 2
-graph threads show 4f1c9a2b7d3e --state --json
+graph agent show chat > .graph/agents/chat.yaml
 ```
 
 </RequestExample>

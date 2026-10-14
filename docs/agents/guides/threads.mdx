@@ -1,13 +1,13 @@
 ---
 title: "Manage threads"
 description: "Find the conversation where chat looked up the latest Rust release, see what its researcher did, continue it, and delete it."
-keywords: ["threads", "history", "graph threads", "resume"]
+keywords: ["threads", "history", "graph thread", "resume"]
 ---
 
 ## Find the thread
 
 ```bash
-graph threads list
+graph thread list
 ```
 
 ```text
@@ -17,7 +17,7 @@ graph threads list
 ## Read it
 
 ```bash
-graph threads show 169a26420daf
+graph thread show 169a26420daf
 ```
 
 The thread records each message with its author, every tool call, and the subagents that ran:
@@ -52,7 +52,7 @@ The next stable release, **Rust 1.100.0**, is due **November 12, 2026**…
 ## Delete it
 
 ```bash
-graph threads rm 169a26420daf
+graph thread rm 169a26420daf
 ```
 
 ```text
