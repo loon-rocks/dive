@@ -259,13 +259,11 @@ pub fn plan_tool(doc: &PlanDoc) -> Tool {
 
 pub fn served_plan_tools(packs: &PackSet, docs: &[PlanDoc]) -> Vec<Tool> {
     docs.iter()
-        .filter_map(|doc| {
-            if packs.routed(&doc.identifier).is_none() {
-                return doc.path.is_some().then(|| plan_tool(doc));
-            }
-            packs
+        .filter_map(|doc| match doc.pack {
+            None => doc.path.is_some().then(|| plan_tool(doc)),
+            Some(_) => packs
                 .shows(&Origin::Outside, &doc.identifier)
-                .then(|| plan_tool_named(doc.identifier.clone(), doc))
+                .then(|| plan_tool_named(doc.identifier.clone(), doc)),
         })
         .collect()
 }
@@ -353,6 +351,14 @@ steps:
         let mut doc = doc();
         doc.identifier = identifier.to_string();
         doc.path = None;
+        doc.pack = graph_core::packs::split_catalog_name(identifier).map(|(pack, _, _)| {
+            graph_core::packs::PackSource {
+                name: pack.to_string(),
+                tag: None,
+                layer: graph_config::pack::LayerKind::Project,
+                dir: std::path::PathBuf::from(".graph/packs").join(pack),
+            }
+        });
         doc
     }
 

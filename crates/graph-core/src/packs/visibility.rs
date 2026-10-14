@@ -9,7 +9,7 @@ pub fn is_public(item: &PackItem, include: &[String], exclude: &[String]) -> boo
     included && !exclude.iter().any(|p| glob_matches(p, &name))
 }
 
-pub fn hidden_message(item: &PackItem) -> String {
+fn hidden_message(item: &PackItem) -> String {
     format!(
         "{} '{}' is not in pack '{}''s public interface (narrowed by [packs.{}] include/exclude); \
          only the pack's own plans and agents can call it",
@@ -27,7 +27,7 @@ impl PackSet {
     }
 
     pub fn shows(&self, caller: &Origin, name: &str) -> bool {
-        self.refusal(caller, name).is_none()
+        self.item(name).is_none_or(|item| visible(caller, item))
     }
 
     pub fn retain_shown(&self, caller: &Origin, defs: &mut Vec<ToolDef>) {
@@ -39,14 +39,7 @@ impl PackSet {
             return self.refusal(caller, pattern);
         }
         let (pack, _) = pattern.split_once(KIND_SEPARATOR)?;
-        if !self.is_installed(pack) {
-            return None;
-        }
-        let matched: Vec<&PackItem> = self
-            .items
-            .values()
-            .filter(|item| glob_matches(pattern, &item.catalog_name()))
-            .collect();
+        let matched: Vec<&PackItem> = self.matching(pattern).collect();
         if matched.is_empty() || matched.iter().any(|item| visible(caller, item)) {
             return None;
         }
