@@ -96,7 +96,11 @@ pub async fn run(command: PlanCommand) -> Result<()> {
 /// so it does not move to stderr without `--json`.
 fn list() -> Result<Outcome> {
     let runtime = Runtime::init()?;
-    let loaded = runtime.plan_docs();
+    let mut loaded = runtime.plan_docs();
+    let packs = runtime.packs.pack_set();
+    loaded
+        .docs
+        .retain(|doc| packs.shows(&graph_core::packs::Origin::Outside, &doc.identifier));
     let body = plan_edit::list_as_json(&loaded);
     if loaded.docs.is_empty() && loaded.skipped.is_empty() {
         return Ok(Outcome::raw(String::new(), body)

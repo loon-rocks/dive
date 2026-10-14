@@ -196,3 +196,39 @@ fn reserved_names_and_mcp_collisions_are_refused() {
     .to_string();
     assert!(error.contains("reserved"), "{error}");
 }
+
+#[test]
+fn excluded_agents_are_left_out_of_the_public_list() {
+    let dir = tempfile::tempdir().unwrap();
+    let copy = dir.path().join("packs").join("example");
+    write(
+        &copy,
+        "pack.toml",
+        "version = 1\nname = \"example\"\ndescription = \"d\"\n",
+    );
+    for name in ["helper", "internal"] {
+        write(
+            &copy,
+            &format!("agents/{name}.yaml"),
+            &format!("version: 1\nname: {name}\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: hi\n"),
+        );
+    }
+    let hash = content_hash(&copy).unwrap();
+    write(
+        dir.path(),
+        "packs.lock",
+        &format!(
+            "version = 1\n[packs.example]\ngit = \"g\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"
+        ),
+    );
+    let mut layer = layer(LayerKind::Project, dir.path(), &["example"]);
+    layer.packs.get_mut("example").unwrap().exclude = vec!["agent__internal".to_string()];
+    let installed = InstalledPacks::load(&[layer], &no_servers()).unwrap();
+    let names: Vec<String> = installed
+        .public_agents()
+        .into_iter()
+        .map(|doc| doc.name)
+        .collect();
+    assert_eq!(names, ["example__agent__helper"]);
+    assert_eq!(installed.agents().count(), 2);
+}
