@@ -1702,7 +1702,7 @@ async fn filter_in_decide_branch_and_planner_catalog() {
 /// `builtin__reshape` runs its actual code path behind the pipeline's
 /// render.
 fn registry_with_data_pack(values: Value) -> Arc<dyn ToolRegistry> {
-    let docs = crate::user_tools::load_pack_tools(&["data".to_string()]).unwrap();
+    let docs = crate::user_tools::load_builtin_tools(&[]).unwrap();
     let providers: std::collections::HashMap<String, Arc<dyn ChatProvider>> =
         std::collections::HashMap::new();
     let router = Arc::new(graph_llm::ModelRouter::with_providers(
@@ -3173,7 +3173,7 @@ system_prompt: You summarize.
 "#;
 
 fn with_drafting_builtins(mut pipeline: Pipeline) -> Pipeline {
-    let llm = crate::user_tools::load_pack_tools(&["llm".to_string(), "data".to_string()]).unwrap();
+    let llm = crate::user_tools::load_builtin_tools(&[]).unwrap();
     pipeline.registry = Arc::new(crate::tools::CompositeRegistry::new(vec![
         Arc::new(crate::user_tools::UserToolRegistry::builtins(
             llm,

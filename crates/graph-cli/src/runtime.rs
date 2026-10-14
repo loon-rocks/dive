@@ -125,21 +125,6 @@ impl Runtime {
         Ok(Arc::new(RecordingRegistry::new(base, store.clone())))
     }
 
-    /// The enabled pack names: the default packs (always on) plus whatever
-    /// `[tools].packs` opts into.
-    fn pack_names(&self) -> Vec<String> {
-        let mut packs: Vec<String> = graph_core::user_tools::DEFAULT_PACKS
-            .iter()
-            .map(|p| p.to_string())
-            .collect();
-        for pack in &self.config.tools.packs {
-            if !packs.contains(pack) {
-                packs.push(pack.clone());
-            }
-        }
-        packs
-    }
-
     /// The directories user tools load from (`[tools].paths`, expanded).
     fn tool_dirs(&self) -> Vec<std::path::PathBuf> {
         self.config
@@ -152,7 +137,7 @@ impl Runtime {
 
     pub fn tool_docs(&self) -> Result<graph_core::user_tools::ToolDocs> {
         let dirs = self.tool_dirs();
-        let builtins = graph_core::user_tools::load_pack_tools(&self.pack_names())
+        let builtins = graph_core::user_tools::load_builtin_tools(&self.config.tools.packs)
             .map_err(anyhow::Error::msg)?;
         let overrides = graph_core::user_tools::load_user_tools(
             &graph_core::user_tools::builtin_override_dirs(&dirs),

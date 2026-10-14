@@ -265,7 +265,7 @@ async fn ticket_for(pr_json: Value, pattern: Option<&str>) -> Value {
 
 #[tokio::test]
 async fn reshape_returns_a_bare_value_for_a_single_template_shape() {
-    let docs = load_pack_tools(&["data".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
     let outcome = registry
         .invoke("builtin__reshape", json!({"shape": "abc123"}))
@@ -412,6 +412,32 @@ fn unknown_pack_errors_with_available_list() {
     assert!(err.contains("gitlab"), "{err}");
     assert!(err.contains("github"), "{err}");
     assert!(err.contains("slack"), "{err}");
+    assert!(!err.contains("llm"), "{err}");
+}
+
+#[test]
+fn infer_decide_and_reshape_are_served_with_no_packs_enabled() {
+    let names: Vec<String> = load_builtin_tools(&[])
+        .unwrap()
+        .into_iter()
+        .map(|doc| doc.name)
+        .collect();
+    assert_eq!(names, ["infer", "decide", "reshape"]);
+}
+
+#[test]
+fn naming_the_folded_llm_and_data_packs_still_loads() {
+    let names: Vec<String> = load_builtin_tools(&[
+        "llm".to_string(),
+        "data".to_string(),
+        "slack".to_string(),
+        "slack".to_string(),
+    ])
+    .unwrap()
+    .into_iter()
+    .map(|doc| doc.name)
+    .collect();
+    assert_eq!(names, ["infer", "decide", "reshape", "slack_post_message"]);
 }
 
 #[tokio::test]
@@ -463,11 +489,11 @@ async fn slack_pack_loads_and_validates() {
 }
 
 #[tokio::test]
-async fn llm_pack_infer_returns_text_or_caller_structured_output() {
-    let docs = load_pack_tools(&["llm".to_string()]).unwrap();
+async fn builtin_infer_returns_text_or_caller_structured_output() {
+    let docs = load_builtin_tools(&[]).unwrap();
     assert_eq!(
         docs.iter().map(|doc| doc.name.as_str()).collect::<Vec<_>>(),
-        ["infer", "decide"]
+        ["infer", "decide", "reshape"]
     );
     let registry = UserToolRegistry::builtins(docs, router());
 
@@ -505,7 +531,7 @@ async fn llm_pack_infer_returns_text_or_caller_structured_output() {
 
 #[tokio::test]
 async fn llm_pack_infer_sends_a_caller_system_prompt_as_the_system_prompt() {
-    let docs = load_pack_tools(&["llm".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
     let outcome = registry
         .invoke(
@@ -520,12 +546,11 @@ async fn llm_pack_infer_sends_a_caller_system_prompt_as_the_system_prompt() {
     );
 }
 
-// ── Reshape (data pack) ──────────────────────────────────────────────────
+// ── Reshape ─────────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn data_pack_reshape_returns_the_callers_shape_verbatim() {
-    let docs = load_pack_tools(&["data".to_string()]).unwrap();
-    assert_eq!(docs.len(), 1);
+async fn builtin_reshape_returns_the_callers_shape_verbatim() {
+    let docs = load_builtin_tools(&[]).unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
 
     // A caller-supplied shape is rendered by the *pipeline*, against the
@@ -568,7 +593,7 @@ async fn data_pack_reshape_returns_the_callers_shape_verbatim() {
 
 #[tokio::test]
 async fn reshape_is_read_only() {
-    let docs = load_pack_tools(&["data".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
 
     // Pure transform: advertised read-only.
@@ -1173,7 +1198,7 @@ model: solver
 
 #[tokio::test]
 async fn caller_model_tools_advertise_named_models_in_the_catalog() {
-    let docs = load_pack_tools(&["llm".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
 
     let registry = UserToolRegistry::builtins(docs.clone(), named_model_router());
     let defs = registry.tools().await.unwrap();
@@ -1195,7 +1220,7 @@ async fn caller_model_tools_advertise_named_models_in_the_catalog() {
 
 #[tokio::test]
 async fn llm_pack_infer_routes_by_model_input() {
-    let docs = load_pack_tools(&["llm".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
     let registry = UserToolRegistry::builtins(docs, named_model_router());
     let outcome = registry
         .invoke(
@@ -1562,7 +1587,7 @@ impl ChatProvider for UnusedChat {
 
 #[tokio::test]
 async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_decision_roles() {
-    let docs = load_pack_tools(&["llm".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
     let (router, _) = decision_router(false);
     let names: Vec<String> = UserToolRegistry::builtins(docs.clone(), router)
         .tools()
@@ -1571,7 +1596,7 @@ async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_deci
         .into_iter()
         .map(|def| def.name)
         .collect();
-    assert_eq!(names, ["builtin__infer"]);
+    assert_eq!(names, ["builtin__infer", "builtin__reshape"]);
 
     let (router, _) = decision_router(true);
     let defs = UserToolRegistry::builtins(docs, router)
@@ -1593,7 +1618,7 @@ async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_deci
 
 #[tokio::test]
 async fn builtin_decide_answers_caller_questions_about_the_state() {
-    let docs = load_pack_tools(&["llm".to_string()]).unwrap();
+    let docs = load_builtin_tools(&[]).unwrap();
     let (router, decider) = decision_router(true);
     let registry = UserToolRegistry::builtins(docs, router);
     let outcome = registry
@@ -1708,7 +1733,7 @@ questions: { q: { type: likelihood, instructions: "Is it?" } }
 
 #[test]
 fn a_builtin_override_replaces_the_pack_tool_it_names() {
-    let builtins = load_pack_tools(&["data".to_string()]).unwrap();
+    let builtins = load_builtin_tools(&[]).unwrap();
     let mut mine = builtins
         .iter()
         .find(|d| d.name == "reshape")
@@ -1724,7 +1749,7 @@ fn a_builtin_override_replaces_the_pack_tool_it_names() {
 
 #[test]
 fn a_builtin_override_without_a_matching_pack_tool_is_an_error() {
-    let builtins = load_pack_tools(&["data".to_string()]).unwrap();
+    let builtins = load_builtin_tools(&[]).unwrap();
     let mut stray = doc("name: summarize\ndescription: s\nkind: exec\ncommand: echo\n");
     stray.path = Some(std::path::PathBuf::from("/tools/builtin/summarize.yaml"));
     let err = apply_tool_overrides(builtins, vec![stray]).unwrap_err();
