@@ -1,5 +1,6 @@
 use super::content_hash;
 use super::git;
+use super::refs::{clone_moved, Target};
 use anyhow::{Context, Result};
 use graph_config::pack::{
     load_lock, load_manifest, write_lock, LayerKind, PackEntry, PackLock, MANIFEST_FILE, PACKS_DIR,
@@ -171,7 +172,8 @@ pub struct Fetched {
     pub sha: String,
 }
 
-pub fn fetch(layer: &Layer, url: &str, reference: &str, dir: &str) -> Result<Fetched, String> {
+pub fn fetch(layer: &Layer, url: &str, target: &Target, dir: &str) -> Result<Fetched, String> {
+    let reference = &target.reference;
     let staging = layer.staging().map_err(|e| format!("{e:#}"))?;
     let path = staging.path().join("new");
     let clone = if dir.is_empty() {
@@ -180,6 +182,9 @@ pub fn fetch(layer: &Layer, url: &str, reference: &str, dir: &str) -> Result<Fet
         staging.path().join("clone")
     };
     let sha = git::clone_at(url, reference, &clone)?;
+    if let Some(moved) = clone_moved(target, url, &sha) {
+        return Err(moved);
+    }
     let root = clone.join(dir);
     if !root.is_dir() {
         return Err(format!("{url} at {reference} has no directory {dir}"));

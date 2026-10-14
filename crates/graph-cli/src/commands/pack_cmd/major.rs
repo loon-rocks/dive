@@ -271,6 +271,9 @@ async fn cross_majors(
         Ok(remote) => remote,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
+    if let Some(moved) = refs::moved_tag(&remote, &entry.git, &entry.path, &locked) {
+        return Ok(Update::Refused(moved, Vec::new()));
+    }
     let releases = refs::releases(&remote, &entry.path);
     let newer: BTreeSet<u64> = releases
         .iter()
@@ -325,7 +328,7 @@ async fn cross(
     let fetched = layer::fetch(
         run.layer,
         &remote_url(&entry.git),
-        &release.tag,
+        &release.target(),
         &entry.path,
     )
     .map_err(Halt::failed)?;
