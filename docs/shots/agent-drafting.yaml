@@ -14,7 +14,7 @@ llm:
         name: release_notes
         description: Writes customer-facing release notes from the commits since a tag.
         model: chat
-        tools: [builtin__git_log]
+        tools: [github__tool__git_log]
         input_schema:
           type: object
           required: [since]
@@ -27,7 +27,7 @@ llm:
             notes: { type: string, description: The release notes in markdown }
         system_prompt: |
           You write release notes for one release. Read the commits since the given tag with
-          builtin__git_log, group them into features and fixes, and write short, customer-facing
+          github__tool__git_log, group them into features and fixes, and write short, customer-facing
           notes. Leave out internal changes such as CI and tooling.
   - text: >-
       There's a first draft in the pane. Should it also be usable in chat, or only as a

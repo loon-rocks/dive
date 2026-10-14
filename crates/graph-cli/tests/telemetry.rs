@@ -109,9 +109,6 @@ fn a_plan_run_exports_one_trace_with_the_configured_headers() {
     let scratch = Scratch::new();
     scratch.write_config(&format!(
         r#"
-[tools]
-packs = ["data"]
-
 [telemetry]
 endpoint = "{base}"
 protocol = "http/json"
@@ -200,9 +197,6 @@ fn an_unset_header_variable_disables_telemetry_and_says_so() {
     let scratch = Scratch::new();
     scratch.write_config(&format!(
         r#"
-[tools]
-packs = ["data"]
-
 [telemetry]
 endpoint = "{base}"
 headers = {{ Authorization = "Basic ${{GRAPH_TEST_OTLP_AUTH_DOES_NOT_EXIST}}" }}

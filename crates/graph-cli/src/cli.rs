@@ -350,7 +350,7 @@ impl StepCommand {
 pub enum StepCommand {
     /// Append a step, or anchor it before/after an existing one
     #[command(
-        after_long_help = "Adds one step and validates the plan. The edit is refused if it adds a validation problem.\n\nExamples:\n  graph plan step add weekly_changes E1 builtin__git_log '{\"base\":\"{{input.base}}\",\"head\":\"HEAD\"}'\n  graph plan step add weekly_changes G1 exit '{\"when\":{\"value\":\"{{E1.count}}\",\"op\":\"eq\",\"to\":0},\"status\":\"success\",\"message\":\"Nothing shipped\"}' --after E1"
+        after_long_help = "Adds one step and validates the plan. The edit is refused if it adds a validation problem.\n\nExamples:\n  graph plan step add weekly_changes E1 github__tool__git_log '{\"base\":\"{{input.base}}\",\"head\":\"HEAD\"}'\n  graph plan step add weekly_changes G1 exit '{\"when\":{\"value\":\"{{E1.count}}\",\"op\":\"eq\",\"to\":0},\"status\":\"success\",\"message\":\"Nothing shipped\"}' --after E1"
     )]
     Add {
         #[arg(
@@ -461,7 +461,7 @@ pub enum ToolsCommand {
     },
     /// Show one tool's description and schemas
     #[command(
-        after_long_help = "For a `builtin__` or `user__` tool, also names its source on stderr: the tool file's path, or `built-in (<pack> pack)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.\n\nExamples:\n  graph tools show builtin__git_log\n  graph tools show linear__list_issues --json"
+        after_long_help = "For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.\n\nExamples:\n  graph tools show github__tool__git_log\n  graph tools show linear__list_issues --json"
     )]
     Show {
         #[arg(help = "The tool's namespaced name, as `graph tools list` prints it")]
@@ -471,7 +471,7 @@ pub enum ToolsCommand {
     },
     /// Invoke a tool directly
     #[command(
-        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tools test builtin__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  graph tools test builtin__git_log --input base=v0.15.0 --input head=HEAD --json"
+        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tools test github__tool__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  graph tools test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json"
     )]
     Test {
         #[arg(help = "The tool's namespaced name, as `graph tools list` prints it")]

@@ -28,7 +28,7 @@ llm:
             since: { type: string, description: The last release tag }
         steps:
           - id: commits
-            tool_name: builtin__git_log
+            tool_name: github__tool__git_log
             input: { base: "{{input.since}}", head: HEAD, paths: crates/graph-store/ }
           - id: summary
             tool_name: builtin__infer

@@ -28,11 +28,11 @@ llm:
           type: object
         steps:
         - id: release
-          tool_name: builtin__gh_release
+          tool_name: github__tool__gh_release
           input:
             tag: ''
         - id: commits
-          tool_name: builtin__git_log
+          tool_name: github__tool__git_log
           input:
             base: '{{release.tag}}'
             head: HEAD
@@ -46,7 +46,7 @@ llm:
                 base: '{{item.sha}}~1'
                 head: '{{item.sha}}'
                 prefix: ''
-              tool_name: builtin__git_changed_files
+              tool_name: github__tool__git_changed_files
             - id: row
               input:
                 shape:

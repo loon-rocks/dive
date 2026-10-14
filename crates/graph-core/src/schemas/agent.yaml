@@ -55,7 +55,7 @@ examples:
     name: release_notes
     description: Answers questions about what shipped, from the repo's commit history.
     model: chat
-    tools: [plan__weekly_changes, builtin__git_log]
+    tools: [plan__weekly_changes, github__tool__git_log]
     subagents: [chat]
     system_prompt: |
       You answer questions about what shipped in this repository.

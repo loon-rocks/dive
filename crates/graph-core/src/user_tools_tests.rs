@@ -188,27 +188,34 @@ command: echo
     assert!(validate_tool(&bad_name).is_err());
 }
 
-// ── Bundled tool packs ───────────────────────────────────────────────────
+fn fixture_pack_tools(pack: &str) -> Result<Vec<UserToolDoc>, String> {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/packs")
+        .join(pack)
+        .join("tools");
+    load_user_tools(&[dir])
+}
 
 #[test]
 fn github_pack_loads_and_validates() {
-    let docs = load_pack_tools(&["github".to_string()]).unwrap();
-    let names: Vec<&str> = docs.iter().map(|d| d.name.as_str()).collect();
+    let docs = fixture_pack_tools("github").unwrap();
+    let mut names: Vec<&str> = docs.iter().map(|d| d.name.as_str()).collect();
+    names.sort();
     assert_eq!(
         names,
         [
-            "gh_pr_meta",
             "gh_pr_comment",
             "gh_pr_inline_comments",
+            "gh_pr_meta",
             "gh_pr_review_threads",
             "gh_pr_thread_sync",
             "gh_pr_ticket",
             "gh_release",
-            "git_diff",
-            "git_log",
             "git_changed_files",
+            "git_diff",
             "git_file",
-            "git_grep"
+            "git_grep",
+            "git_log"
         ]
     );
     // The comment tools post; everything else is read-only.
@@ -227,7 +234,7 @@ fn gh_pr_ticket_with(dir: &std::path::Path, pr_json: &str) -> UserToolDoc {
     let shim = dir.join("gh");
     std::fs::write(&shim, "#!/bin/sh\nprintf '%s' \"$FAKE_PR\"\n").unwrap();
     std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let mut doc = load_pack_tools(&["github".to_string()])
+    let mut doc = fixture_pack_tools("github")
         .unwrap()
         .into_iter()
         .find(|d| d.name == "gh_pr_ticket")
@@ -250,13 +257,13 @@ fn gh_pr_ticket_with(dir: &std::path::Path, pr_json: &str) -> UserToolDoc {
 async fn ticket_for(pr_json: Value, pattern: Option<&str>) -> Value {
     let dir = tempfile::tempdir().unwrap();
     let doc = gh_pr_ticket_with(dir.path(), &pr_json.to_string());
-    let registry = UserToolRegistry::builtins(vec![doc], router());
+    let registry = UserToolRegistry::pack("github", vec![doc], router());
     let mut input = json!({"pr": 1});
     if let Some(pattern) = pattern {
         input["pattern"] = json!(pattern);
     }
     let outcome = registry
-        .invoke("builtin__gh_pr_ticket", input)
+        .invoke("github__tool__gh_pr_ticket", input)
         .await
         .unwrap();
     assert!(!outcome.is_error, "{:?}", outcome.result);
@@ -265,7 +272,7 @@ async fn ticket_for(pr_json: Value, pattern: Option<&str>) -> Value {
 
 #[tokio::test]
 async fn reshape_returns_a_bare_value_for_a_single_template_shape() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
     let outcome = registry
         .invoke("builtin__reshape", json!({"shape": "abc123"}))
@@ -314,11 +321,14 @@ async fn git_log_defaults_render_and_an_empty_range_is_not_an_error() {
     // input `include_merges` reaching argv as "false" from its schema
     // default — a default that failed to render would make the script's
     // `[ "$include_merges" = "true" ]` comparison operate on a template.
-    let docs = load_pack_tools(&["github".to_string()]).unwrap();
-    let registry = UserToolRegistry::builtins(docs, router());
+    let docs = fixture_pack_tools("github").unwrap();
+    let registry = UserToolRegistry::pack("github", docs, router());
 
     let outcome = registry
-        .invoke("builtin__git_log", json!({"base": "HEAD", "head": "HEAD"}))
+        .invoke(
+            "github__tool__git_log",
+            json!({"base": "HEAD", "head": "HEAD"}),
+        )
         .await
         .unwrap();
     assert!(!outcome.is_error, "{:?}", outcome.result);
@@ -334,7 +344,7 @@ fn git_log_keeps_commits_whose_subject_has_no_pr_number() {
     // no match, so building `pr` straight from it dropped the entire commit
     // object — a log of PR-less subjects came back `{commits: [], count: N}`.
     // The `// null` keeps the field present and the commit in the list.
-    let docs = load_pack_tools(&["github".to_string()]).unwrap();
+    let docs = fixture_pack_tools("github").unwrap();
     let log = docs.iter().find(|d| d.name == "git_log").unwrap();
     let ToolKind::Exec { args, .. } = &log.kind else {
         panic!("git_log is an exec tool");
@@ -353,7 +363,7 @@ fn gh_pr_review_threads_requires_the_payload_keys_thread_sync_embeds() {
     // required keys. If the required set drifts from what callers embed,
     // findings silently vanish from the read side (skipped, not errored) —
     // pin the set so a change to either side is a conscious one.
-    let docs = load_pack_tools(&["github".to_string()]).unwrap();
+    let docs = fixture_pack_tools("github").unwrap();
     let threads = docs
         .iter()
         .find(|d| d.name == "gh_pr_review_threads")
@@ -373,12 +383,12 @@ async fn gh_pr_thread_sync_with_nothing_to_do_reports_empty_lifecycle() {
     // Empty creates + threads and no sweep_marker must not touch gh at all:
     // every loop renders zero iterations, and the aggregation still emits
     // the full lifecycle shape E8-style templates depend on.
-    let docs = load_pack_tools(&["github".to_string()]).unwrap();
-    let registry = UserToolRegistry::builtins(docs, router());
+    let docs = fixture_pack_tools("github").unwrap();
+    let registry = UserToolRegistry::pack("github", docs, router());
 
     let outcome = registry
         .invoke(
-            "builtin__gh_pr_thread_sync",
+            "github__tool__gh_pr_thread_sync",
             json!({
                 "pr": 1,
                 "head_sha": "deadbeef",
@@ -407,17 +417,8 @@ async fn gh_pr_thread_sync_with_nothing_to_do_reports_empty_lifecycle() {
 }
 
 #[test]
-fn unknown_pack_errors_with_available_list() {
-    let err = load_pack_tools(&["gitlab".to_string()]).unwrap_err();
-    assert!(err.contains("gitlab"), "{err}");
-    assert!(err.contains("github"), "{err}");
-    assert!(err.contains("slack"), "{err}");
-    assert!(!err.contains("llm"), "{err}");
-}
-
-#[test]
-fn infer_decide_and_reshape_are_served_with_no_packs_enabled() {
-    let names: Vec<String> = load_builtin_tools(&[])
+fn infer_decide_and_reshape_are_the_built_in_tools() {
+    let names: Vec<String> = load_builtin_tools()
         .unwrap()
         .into_iter()
         .map(|doc| doc.name)
@@ -425,25 +426,10 @@ fn infer_decide_and_reshape_are_served_with_no_packs_enabled() {
     assert_eq!(names, ["infer", "decide", "reshape"]);
 }
 
-#[test]
-fn naming_the_folded_llm_and_data_packs_still_loads() {
-    let names: Vec<String> = load_builtin_tools(&[
-        "llm".to_string(),
-        "data".to_string(),
-        "slack".to_string(),
-        "slack".to_string(),
-    ])
-    .unwrap()
-    .into_iter()
-    .map(|doc| doc.name)
-    .collect();
-    assert_eq!(names, ["infer", "decide", "reshape", "slack_post_message"]);
-}
-
 #[tokio::test]
-async fn pack_tools_serve_under_builtin_namespace() {
-    let docs = load_pack_tools(&["github".to_string()]).unwrap();
-    let registry = UserToolRegistry::builtins(docs, router());
+async fn pack_tools_serve_under_their_pack_namespace() {
+    let docs = fixture_pack_tools("github").unwrap();
+    let registry = UserToolRegistry::pack("github", docs, router());
 
     let names: Vec<String> = registry
         .tools()
@@ -453,32 +439,59 @@ async fn pack_tools_serve_under_builtin_namespace() {
         .map(|d| d.name)
         .collect();
     assert!(
-        names.iter().all(|n| n.starts_with("builtin__")),
+        names.iter().all(|n| n.starts_with("github__tool__")),
         "{names:?}"
     );
-    assert!(names.contains(&"builtin__gh_pr_meta".to_string()));
+    assert!(names.contains(&"github__tool__gh_pr_meta".to_string()));
 
-    // Invocation honors the namespace: builtin__ resolves, user__ doesn't.
     let err = registry
-        .invoke("user__gh_pr_meta", json!({"pr": 1}))
+        .invoke("builtin__gh_pr_meta", json!({"pr": 1}))
         .await
         .unwrap_err();
     assert!(matches!(err, ToolError::Unknown(_)));
 }
 
+#[test]
+fn a_builtin_override_dir_replaces_infer_decide_and_reshape() {
+    let dir = tempfile::tempdir().unwrap();
+    let overrides = dir.path().join(BUILTIN_OVERRIDE_DIR);
+    std::fs::create_dir(&overrides).unwrap();
+    for name in ["infer", "decide", "reshape"] {
+        std::fs::write(
+            overrides.join(format!("{name}.yaml")),
+            format!("name: {name}\ndescription: my {name}\nkind: exec\ncommand: echo\n"),
+        )
+        .unwrap();
+    }
+    let loaded = load_user_tools(&builtin_override_dirs(&[dir.path().to_path_buf()])).unwrap();
+    let merged = apply_tool_overrides(load_builtin_tools().unwrap(), loaded).unwrap();
+    let descriptions: Vec<(&str, &str)> = merged
+        .iter()
+        .map(|doc| (doc.name.as_str(), doc.description.as_str()))
+        .collect();
+    assert_eq!(
+        descriptions,
+        [
+            ("infer", "my infer"),
+            ("decide", "my decide"),
+            ("reshape", "my reshape")
+        ]
+    );
+}
+
 #[tokio::test]
 async fn slack_pack_loads_and_validates() {
-    let docs = load_pack_tools(&["slack".to_string()]).unwrap();
+    let docs = fixture_pack_tools("slack").unwrap();
     let names: Vec<&str> = docs.iter().map(|d| d.name.as_str()).collect();
     assert_eq!(names, ["slack_post_message"]);
     // Posting is a side effect; the catalog must never advertise it read-only.
     assert_eq!(docs[0].read_only, Some(false));
 
-    let defs = UserToolRegistry::builtins(docs, router())
+    let defs = UserToolRegistry::pack("slack", docs, router())
         .tools()
         .await
         .unwrap();
-    assert_eq!(defs[0].name, "builtin__slack_post_message");
+    assert_eq!(defs[0].name, "slack__tool__slack_post_message");
     assert_eq!(defs[0].read_only, Some(false));
     // channel and ts are the threading contract — a planner only learns it
     // from the declared output schema.
@@ -490,7 +503,7 @@ async fn slack_pack_loads_and_validates() {
 
 #[tokio::test]
 async fn builtin_infer_returns_text_or_caller_structured_output() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     assert_eq!(
         docs.iter().map(|doc| doc.name.as_str()).collect::<Vec<_>>(),
         ["infer", "decide", "reshape"]
@@ -531,7 +544,7 @@ async fn builtin_infer_returns_text_or_caller_structured_output() {
 
 #[tokio::test]
 async fn llm_pack_infer_sends_a_caller_system_prompt_as_the_system_prompt() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
     let outcome = registry
         .invoke(
@@ -550,7 +563,7 @@ async fn llm_pack_infer_sends_a_caller_system_prompt_as_the_system_prompt() {
 
 #[tokio::test]
 async fn builtin_reshape_returns_the_callers_shape_verbatim() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
 
     // A caller-supplied shape is rendered by the *pipeline*, against the
@@ -593,7 +606,7 @@ async fn builtin_reshape_returns_the_callers_shape_verbatim() {
 
 #[tokio::test]
 async fn reshape_is_read_only() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let registry = UserToolRegistry::builtins(docs, router());
 
     // Pure transform: advertised read-only.
@@ -832,7 +845,7 @@ fn scratch_git_repo() -> tempfile::TempDir {
 
 /// The named github pack tool, pinned to run inside `cwd`.
 fn github_tool_in(name: &str, cwd: &std::path::Path) -> UserToolDoc {
-    let mut doc = load_pack_tools(&["github".to_string()])
+    let mut doc = fixture_pack_tools("github")
         .unwrap()
         .into_iter()
         .find(|d| d.name == name)
@@ -846,13 +859,16 @@ fn github_tool_in(name: &str, cwd: &std::path::Path) -> UserToolDoc {
 #[tokio::test]
 async fn git_file_reads_content_at_ref_and_marks_truncation() {
     let repo = scratch_git_repo();
-    let registry =
-        UserToolRegistry::builtins(vec![github_tool_in("git_file", repo.path())], router());
+    let registry = UserToolRegistry::pack(
+        "github",
+        vec![github_tool_in("git_file", repo.path())],
+        router(),
+    );
 
     // max_bytes defaulted: full content.
     let outcome = registry
         .invoke(
-            "builtin__git_file",
+            "github__tool__git_file",
             json!({"ref": "HEAD", "path": "greeting.txt"}),
         )
         .await
@@ -863,7 +879,7 @@ async fn git_file_reads_content_at_ref_and_marks_truncation() {
     // Over budget: capped, with the truncation marker line.
     let outcome = registry
         .invoke(
-            "builtin__git_file",
+            "github__tool__git_file",
             json!({"ref": "HEAD", "path": "greeting.txt", "max_bytes": 5}),
         )
         .await
@@ -876,7 +892,7 @@ async fn git_file_reads_content_at_ref_and_marks_truncation() {
     // A missing path fails loudly, not as empty content.
     let outcome = registry
         .invoke(
-            "builtin__git_file",
+            "github__tool__git_file",
             json!({"ref": "HEAD", "path": "missing.txt"}),
         )
         .await
@@ -887,12 +903,18 @@ async fn git_file_reads_content_at_ref_and_marks_truncation() {
 #[tokio::test]
 async fn git_grep_returns_structured_matches_with_defaults() {
     let repo = scratch_git_repo();
-    let registry =
-        UserToolRegistry::builtins(vec![github_tool_in("git_grep", repo.path())], router());
+    let registry = UserToolRegistry::pack(
+        "github",
+        vec![github_tool_in("git_grep", repo.path())],
+        router(),
+    );
 
     // ref/paths/max_matches all defaulted (HEAD, everything, 200).
     let outcome = registry
-        .invoke("builtin__git_grep", json!({"pattern": "fn (alpha|beta)"}))
+        .invoke(
+            "github__tool__git_grep",
+            json!({"pattern": "fn (alpha|beta)"}),
+        )
         .await
         .unwrap();
     assert!(!outcome.is_error, "{:?}", outcome.result);
@@ -911,7 +933,7 @@ async fn git_grep_returns_structured_matches_with_defaults() {
     // Pathspec scoping + cap: one match returned, the cut flagged.
     let outcome = registry
         .invoke(
-            "builtin__git_grep",
+            "github__tool__git_grep",
             json!({"pattern": "fn", "paths": "src/", "max_matches": 1}),
         )
         .await
@@ -922,7 +944,7 @@ async fn git_grep_returns_structured_matches_with_defaults() {
     // No matches is a result, not an error.
     let outcome = registry
         .invoke(
-            "builtin__git_grep",
+            "github__tool__git_grep",
             json!({"pattern": "nowhere_to_be_found"}),
         )
         .await
@@ -936,7 +958,7 @@ async fn git_grep_returns_structured_matches_with_defaults() {
     // A bad ref fails loudly instead of reading as "no matches".
     let outcome = registry
         .invoke(
-            "builtin__git_grep",
+            "github__tool__git_grep",
             json!({"pattern": "fn", "ref": "no-such-ref"}),
         )
         .await
@@ -1198,7 +1220,7 @@ model: solver
 
 #[tokio::test]
 async fn caller_model_tools_advertise_named_models_in_the_catalog() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
 
     let registry = UserToolRegistry::builtins(docs.clone(), named_model_router());
     let defs = registry.tools().await.unwrap();
@@ -1220,7 +1242,7 @@ async fn caller_model_tools_advertise_named_models_in_the_catalog() {
 
 #[tokio::test]
 async fn llm_pack_infer_routes_by_model_input() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let registry = UserToolRegistry::builtins(docs, named_model_router());
     let outcome = registry
         .invoke(
@@ -1266,7 +1288,7 @@ esac
 /// leak into the assertions. Rust resolves `bash` from the parent PATH; bash
 /// then resolves `curl` from the child env, where the shim comes first.
 fn slack_tool_with(dir: &std::path::Path, post: &str, permalink: &str) -> UserToolDoc {
-    let mut doc = load_pack_tools(&["slack".to_string()])
+    let mut doc = fixture_pack_tools("slack")
         .unwrap()
         .into_iter()
         .find(|d| d.name == "slack_post_message")
@@ -1293,7 +1315,7 @@ fn slack_tool_with(dir: &std::path::Path, post: &str, permalink: &str) -> UserTo
 }
 
 fn slack_registry(doc: UserToolDoc) -> UserToolRegistry {
-    UserToolRegistry::builtins(vec![doc], router())
+    UserToolRegistry::pack("slack", vec![doc], router())
 }
 
 #[tokio::test]
@@ -1307,7 +1329,7 @@ async fn slack_post_message_posts_and_keeps_the_token_out_of_argv() {
 
     let outcome = registry
         .invoke(
-            "builtin__slack_post_message",
+            "slack__tool__slack_post_message",
             // Quotes and braces in the text would break a concatenated
             // payload; jq escapes them.
             json!({"channel": "#eng", "text": r#"deploy *green* — "done", {ok}"#}),
@@ -1355,7 +1377,7 @@ async fn slack_post_message_threads_a_reply_under_a_parent_ts() {
 
     let outcome = registry
         .invoke(
-            "builtin__slack_post_message",
+            "slack__tool__slack_post_message",
             json!({
                 "channel": "C0EN9",
                 "text": "details",
@@ -1384,7 +1406,7 @@ async fn slack_post_message_treats_ok_false_as_a_tool_error() {
 
     let outcome = registry
         .invoke(
-            "builtin__slack_post_message",
+            "slack__tool__slack_post_message",
             json!({"channel": "#nope", "text": "hi"}),
         )
         .await
@@ -1419,7 +1441,7 @@ async fn slack_post_message_reports_a_non_json_body() {
 
     let outcome = registry
         .invoke(
-            "builtin__slack_post_message",
+            "slack__tool__slack_post_message",
             json!({"channel": "C1", "text": "hi"}),
         )
         .await
@@ -1446,7 +1468,7 @@ async fn slack_post_message_permalink_is_best_effort() {
 
     let outcome = registry
         .invoke(
-            "builtin__slack_post_message",
+            "slack__tool__slack_post_message",
             json!({"channel": "C1", "text": "hi"}),
         )
         .await
@@ -1474,7 +1496,7 @@ async fn slack_post_message_without_a_token_never_calls_slack() {
 
     let outcome = slack_registry(doc)
         .invoke(
-            "builtin__slack_post_message",
+            "slack__tool__slack_post_message",
             json!({"channel": "C1", "text": "hi"}),
         )
         .await
@@ -1587,7 +1609,7 @@ impl ChatProvider for UnusedChat {
 
 #[tokio::test]
 async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_decision_roles() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let (router, _) = decision_router(false);
     let names: Vec<String> = UserToolRegistry::builtins(docs.clone(), router)
         .tools()
@@ -1618,7 +1640,7 @@ async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_deci
 
 #[tokio::test]
 async fn builtin_decide_answers_caller_questions_about_the_state() {
-    let docs = load_builtin_tools(&[]).unwrap();
+    let docs = load_builtin_tools().unwrap();
     let (router, decider) = decision_router(true);
     let registry = UserToolRegistry::builtins(docs, router);
     let outcome = registry
@@ -1733,7 +1755,7 @@ questions: { q: { type: likelihood, instructions: "Is it?" } }
 
 #[test]
 fn a_builtin_override_replaces_the_pack_tool_it_names() {
-    let builtins = load_builtin_tools(&[]).unwrap();
+    let builtins = load_builtin_tools().unwrap();
     let mut mine = builtins
         .iter()
         .find(|d| d.name == "reshape")
@@ -1749,7 +1771,7 @@ fn a_builtin_override_replaces_the_pack_tool_it_names() {
 
 #[test]
 fn a_builtin_override_without_a_matching_pack_tool_is_an_error() {
-    let builtins = load_builtin_tools(&[]).unwrap();
+    let builtins = load_builtin_tools().unwrap();
     let mut stray = doc("name: summarize\ndescription: s\nkind: exec\ncommand: echo\n");
     stray.path = Some(std::path::PathBuf::from("/tools/builtin/summarize.yaml"));
     let err = apply_tool_overrides(builtins, vec![stray]).unwrap_err();

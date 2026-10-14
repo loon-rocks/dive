@@ -34,7 +34,7 @@
             "base": "{{input.base}}",
             "head": "HEAD"
           },
-          "tool_name": "builtin__git_log"
+          "tool_name": "github__tool__git_log"
         },
         {
           "id": "nothing_shipped",

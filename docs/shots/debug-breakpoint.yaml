@@ -13,7 +13,7 @@ llm:
       breakpoints: [commits]
 
 tools:
-  builtin__gh_release:
+  github__tool__gh_release:
     - tag: v0.15.0
       name: v0.15.0
       body: ""

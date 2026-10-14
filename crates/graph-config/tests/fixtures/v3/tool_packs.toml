@@ -1,0 +1,5 @@
+version = 3
+
+[tools]
+packs = ["github", "slack", "llm", "data"]
+always_loaded = ["builtin__infer"]

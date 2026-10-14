@@ -63,7 +63,7 @@ graph plan step add [OPTIONS] <NAME|PATH> <ID> <TOOL> <JSON|@FILE|->
 ```
 
 ```bash Example 1
-graph plan step add weekly_changes E1 builtin__git_log '{"base":"{{input.base}}","head":"HEAD"}'
+graph plan step add weekly_changes E1 github__tool__git_log '{"base":"{{input.base}}","head":"HEAD"}'
 ```
 
 ```bash Example 2

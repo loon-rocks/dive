@@ -169,11 +169,6 @@ properties:
           type: string
         default: ["./.graph/tools", "~/.config/graph/tools"]
         description: Tool directories, searched in order.
-      packs:
-        type: array
-        items:
-          type: string
-        description: Packs to enable, such as `github` and `slack`.
       always_loaded:
         type: array
         items:
@@ -367,5 +362,7 @@ examples:
         url: https://mcp.linear.app/mcp
         headers:
           Authorization: Bearer ${LINEAR_API_KEY}
-    tools:
-      packs: [github]
+    packs:
+      github:
+        git: github.com/tylerdavis/graph-pack-github
+        ref: v1

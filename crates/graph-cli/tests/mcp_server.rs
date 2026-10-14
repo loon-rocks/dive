@@ -523,7 +523,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
     // must land on the same file rather than forking a copy into the cwd.
     let (body, is_error) = session.call_parts(
         "graph_plan_step_add",
-        json!({"target": "written_where", "id": "E0", "tool": "builtin__git_log", "input": {}}),
+        json!({"target": "written_where", "id": "E0", "tool": "github__tool__git_log", "input": {}}),
     );
     assert!(!is_error, "{body}");
     assert_eq!(
@@ -615,8 +615,7 @@ fn a_missing_provider_key_still_serves_and_the_error_names_the_variable() {
     // the key's absence is deferred to the calls that need a model.
     let scratch = Scratch::new();
     scratch.write_config(
-        "[tools]\npacks = [\"data\"]\n\n\
-         [providers.anthropic]\ntype = \"anthropic\"\napi_key = \"${ANTHROPIC_API_KEY}\"\n\n\
+        "[providers.anthropic]\ntype = \"anthropic\"\napi_key = \"${ANTHROPIC_API_KEY}\"\n\n\
          [models]\ndefault = { provider = \"anthropic\", model = \"claude-sonnet-5\" }\n",
     );
     scratch.write_plan("echo_ok", ECHO_PLAN);

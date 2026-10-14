@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["graph tools show"]
 ---
 
-For a `builtin__` or `user__` tool, also names its source on stderr: the tool file's path, or `built-in (<pack> pack)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.
+For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.
 
 ## Arguments
 
@@ -33,7 +33,7 @@ graph tools show [OPTIONS] <NAME>
 ```
 
 ```bash Example 1
-graph tools show builtin__git_log
+graph tools show github__tool__git_log
 ```
 
 ```bash Example 2

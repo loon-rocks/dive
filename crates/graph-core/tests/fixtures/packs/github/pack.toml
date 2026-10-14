@@ -1,0 +1,3 @@
+version = 1
+name = "github"
+description = "Read and comment on pull requests, releases and git history."

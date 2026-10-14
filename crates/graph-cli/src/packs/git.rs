@@ -1,8 +1,7 @@
+use graph_config::pack::DEFAULT_HOST;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
-
-pub const DEFAULT_HOST: &str = "github.com/tylerdavis/graph-pack-";
 
 pub fn is_bare_name(text: &str) -> bool {
     text.starts_with(|c: char| c.is_ascii_lowercase())

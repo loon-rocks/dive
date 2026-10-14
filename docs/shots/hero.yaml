@@ -36,14 +36,14 @@ llm:
       tab. On a quiet week the gate exits before a single LLM call.
 
 tools:
-  builtin__git_changed_files:
+  github__tool__git_changed_files:
     - files:
         - crates/graph-store/src/file.rs
         - crates/graph-core/src/pipeline/mod.rs
         - docs/reference/data-directory.mdx
         - .github/workflows/ci.yaml
       count: 4
-  builtin__git_diff:
+  github__tool__git_diff:
     - text: |
         diff --git a/crates/graph-store/src/file.rs b/crates/graph-store/src/file.rs
         @@ -142,9 +142,14 @@ impl FileStore {
@@ -51,7 +51,7 @@ tools:
         +    let tmp = path.with_extension("tmp");
         +    fs::write(&tmp, payload)?;
         +    fs::rename(&tmp, &path)?;
-  builtin__git_file:
+  github__tool__git_file:
     - text: "//! Plain-file storage: whole files write via temp-file+rename …"
     - text: "//! The plan pipeline: validate, run steps sequentially, finish …"
     - text: "# Storage — plain files by default, abstracted for other backends …"

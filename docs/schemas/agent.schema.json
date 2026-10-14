@@ -13,7 +13,7 @@
       "system_prompt": "You answer questions about what shipped in this repository.\nCurrent date and time: {{session.date}}\n",
       "tools": [
         "plan__weekly_changes",
-        "builtin__git_log"
+        "github__tool__git_log"
       ],
       "version": 1
     }

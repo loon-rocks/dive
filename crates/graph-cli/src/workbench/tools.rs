@@ -1961,7 +1961,7 @@ steps:
             },
         )]);
         let router = Arc::new(graph_llm::ModelRouter::with_providers(providers, roles));
-        let llm = graph_core::user_tools::load_builtin_tools(&[]).unwrap();
+        let llm = graph_core::user_tools::load_builtin_tools().unwrap();
         let pipeline = Arc::new(Pipeline {
             registry: Arc::new(graph_core::user_tools::UserToolRegistry::builtins(
                 llm,

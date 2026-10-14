@@ -21,16 +21,17 @@
           "provider": "anthropic"
         }
       },
+      "packs": {
+        "github": {
+          "git": "github.com/tylerdavis/graph-pack-github",
+          "ref": "v1"
+        }
+      },
       "providers": {
         "anthropic": {
           "api_key": "${ANTHROPIC_API_KEY}",
           "type": "anthropic"
         }
-      },
-      "tools": {
-        "packs": [
-          "github"
-        ]
       },
       "version": 4
     }
@@ -408,13 +409,6 @@
             "builtin__reshape"
           ],
           "description": "Tools always offered to drafters, whatever the search returns.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "packs": {
-          "description": "Packs to enable, such as `github` and `slack`.",
           "items": {
             "type": "string"
           },

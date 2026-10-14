@@ -153,8 +153,7 @@ impl Runtime {
 
     pub fn tool_docs(&self) -> Result<graph_core::user_tools::ToolDocs> {
         let dirs = self.tool_dirs();
-        let builtins = graph_core::user_tools::load_builtin_tools(&self.config.tools.packs)
-            .map_err(anyhow::Error::msg)?;
+        let builtins = graph_core::user_tools::load_builtin_tools().map_err(anyhow::Error::msg)?;
         let overrides = graph_core::user_tools::load_user_tools(
             &graph_core::user_tools::builtin_override_dirs(&dirs),
         )

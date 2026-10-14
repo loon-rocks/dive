@@ -2,14 +2,13 @@ use super::content::{apply_fields, content, Content};
 use super::mdx::{attr, frontmatter, scalar, schema_fields, schema_from_example, text_line, Field};
 use super::Section;
 use graph_core::tools::ToolDef;
-use graph_core::user_tools::{builtin_tool_sources, pack_sources};
+use graph_core::user_tools::builtin_tool_sources;
 use serde_json::{json, Value};
 use serde_yaml::Value as Yaml;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 const BUILTIN_DIR: &str = "tools/reference/builtin";
-const PACK_DIR: &str = "tools/reference/packs";
 const STEP_DIR: &str = "plans/reference/steps";
 const AGENT_DIR: &str = "agents/reference/built-in";
 const PLAN_DIR: &str = "plans/reference/built-in";
@@ -18,21 +17,6 @@ const WORKBENCH_TOOL_DIR: &str = "tools/reference/workbench";
 const MCP_TOOL_DIR: &str = "integrating/mcp/reference/server-tools";
 
 const BUILTIN_ORDER: &[&str] = &["infer", "decide", "reshape"];
-const PACK_ORDER: &[&str] = &["github", "slack"];
-const PACK_TOOL_ORDER: &[&str] = &[
-    "git_log",
-    "git_diff",
-    "git_changed_files",
-    "git_file",
-    "git_grep",
-    "gh_pr_meta",
-    "gh_pr_ticket",
-    "gh_pr_comment",
-    "gh_pr_inline_comments",
-    "gh_pr_review_threads",
-    "gh_pr_thread_sync",
-    "gh_release",
-];
 const STEP_ORDER: &[&str] = &["route", "filter", "map", "reduce", "exit", "agent", "ask"];
 const PLAN_ORDER: &[&str] = &["compose_plan", "search_tools"];
 const GLOBAL_AGENT_ORDER: &[&str] = &["chat", "agent_drafter", "tool_drafter"];
@@ -124,7 +108,6 @@ const MCP_TOOL_GROUPS: &[(&str, &[&str])] = &[(
 pub fn sections() -> Vec<Section> {
     vec![
         builtin_tools(),
-        packs(),
         steps(),
         agents(),
         plans(),
@@ -286,72 +269,6 @@ fn index_page(title: &str, doc: &Content, rows: &[(String, String, String)]) -> 
     out
 }
 
-fn packs() -> Section {
-    let mut files = BTreeMap::new();
-    let mut nav = Vec::new();
-    let mut pack_rows = Vec::new();
-    let mut ordered: Vec<_> = pack_sources().iter().collect();
-    ordered.sort_by_key(|(pack, _)| rank(pack, PACK_ORDER));
-    for (pack, sources) in ordered {
-        let mut pages = Vec::new();
-        let mut rows = Vec::new();
-        let mut docs: Vec<Yaml> = sources.iter().map(|raw| yaml(raw)).collect();
-        docs.sort_by_key(|doc| rank(text(doc, "name"), PACK_TOOL_ORDER));
-        for doc in docs {
-            let name = text(&doc, "name");
-            let path = format!("{PACK_DIR}/{pack}/{name}");
-            let words = content(&format!("pack-tools/{name}"), text(&doc, "description"));
-            files.insert(format!("{path}.mdx"), tool_page(Some(pack), &doc, &words));
-            rows.push((
-                path.clone(),
-                format!("builtin__{name}"),
-                words.summary.clone(),
-            ));
-            pages.push(json!(path));
-        }
-        let root = format!("{PACK_DIR}/{pack}");
-        let pack_doc = content(&format!("packs/{pack}"), &format!("The {pack} pack."));
-        let loading =
-            format!("Enable it with `packs = [\"{pack}\"]` under `[tools]` in config.toml.");
-        let mut page = String::new();
-        frontmatter(
-            &mut page,
-            &[
-                ("title", format!("{pack} pack")),
-                ("sidebarTitle", pack.to_string()),
-                ("description", pack_doc.summary.clone()),
-            ],
-            &[pack, "pack"],
-        );
-        let _ = writeln!(page, "{loading}\n");
-        if !pack_doc.body.is_empty() {
-            let _ = writeln!(page, "{}\n", pack_doc.body);
-        }
-        page.push_str("## Tools\n\n| Name | Description |\n| --- | --- |\n");
-        for (link, name, summary) in &rows {
-            let _ = writeln!(page, "| [`{name}`](/{link}) | {} |", text_line(summary));
-        }
-        files.insert(format!("{root}.mdx"), page);
-        pack_rows.push((root.clone(), pack.to_string(), pack_doc.summary.clone()));
-        nav.push(nav_group(pack, Some(&root), pages));
-    }
-    let overview = content("sections/packs", "Packs are bundles of built-in tools.");
-    files.insert(
-        "tools/reference/packs.mdx".to_string(),
-        index_page("Packs", &overview, &pack_rows),
-    );
-    files.insert(
-        nav_file(PACK_DIR),
-        nav_json("Packs", Some("tools/reference/packs"), nav),
-    );
-    Section {
-        dir: Some(PACK_DIR),
-        nav: Some(nav_file(PACK_DIR)),
-        hand_written: &[],
-        files,
-    }
-}
-
 fn builtin_tools() -> Section {
     let mut files = BTreeMap::new();
     let mut pages = Vec::new();
@@ -362,7 +279,7 @@ fn builtin_tools() -> Section {
         let name = text(&doc, "name");
         let path = format!("{BUILTIN_DIR}/{name}");
         let words = content(&format!("builtin-tools/{name}"), text(&doc, "description"));
-        files.insert(format!("{path}.mdx"), tool_page(None, &doc, &words));
+        files.insert(format!("{path}.mdx"), tool_page(&doc, &words));
         rows.push((
             path.clone(),
             format!("builtin__{name}"),
@@ -394,13 +311,11 @@ fn builtin_tools() -> Section {
     }
 }
 
-fn tool_page(pack: Option<&str>, doc: &Yaml, words: &Content) -> String {
+fn tool_page(doc: &Yaml, words: &Content) -> String {
     let name = text(doc, "name");
     let tool = format!("builtin__{name}");
     let mut out = String::new();
-    let mut keywords = vec![tool.as_str()];
-    keywords.extend(pack);
-    page_head(&mut out, &tool, &tool, words, &keywords);
+    page_head(&mut out, &tool, &tool, words, &[tool.as_str()]);
     let read_only = doc.get("read_only").and_then(Yaml::as_bool);
     let kind = text(doc, "kind");
     let effect = match (kind, read_only) {
@@ -408,20 +323,10 @@ fn tool_page(pack: Option<&str>, doc: &Yaml, words: &Content) -> String {
         ("reshape", _) | (_, Some(true)) => "Read-only",
         _ => "Not marked read-only",
     };
-    match pack {
-        Some(pack) => {
-            let _ = writeln!(
-                out,
-                "| Pack | Kind | Effect |\n| --- | --- | --- |\n| [`{pack}`](/{PACK_DIR}/{pack}): add `\"{pack}\"` to `[tools].packs` | `{kind}` | {effect} |\n"
-            );
-        }
-        None => {
-            let _ = writeln!(
-                out,
-                "| Loaded | Kind | Effect |\n| --- | --- | --- |\n| Always | `{kind}` | {effect} |\n"
-            );
-        }
-    }
+    let _ = writeln!(
+        out,
+        "| Loaded | Kind | Effect |\n| --- | --- | --- |\n| Always | `{kind}` | {effect} |\n"
+    );
     input_section(&mut out, doc.get("input_schema").unwrap_or(&Yaml::Null));
     output_section(
         &mut out,

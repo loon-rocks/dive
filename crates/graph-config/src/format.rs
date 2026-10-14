@@ -66,8 +66,110 @@ fn telemetry_section_added(_doc: &mut DocumentMut) -> Result<Vec<String>, String
     Ok(Vec::new())
 }
 
-fn config_version_4_additions(_doc: &mut DocumentMut) -> Result<Vec<String>, String> {
-    Ok(Vec::new())
+const MOVED_PACKS: &[&str] = &["github", "slack"];
+
+const FOLDED_PACKS: &[&str] = &["llm", "data"];
+
+fn config_version_4_additions(doc: &mut DocumentMut) -> Result<Vec<String>, String> {
+    let Some(names) = take_tool_packs(doc)? else {
+        return Ok(Vec::new());
+    };
+    let mut notes = Vec::new();
+    for name in names {
+        if FOLDED_PACKS.contains(&name.as_str()) {
+            notes.push(format!(
+                "dropped \"{name}\" from [tools].packs: its tools are always built in"
+            ));
+            continue;
+        }
+        if !MOVED_PACKS.contains(&name.as_str()) {
+            notes.push(format!(
+                "dropped \"{name}\" from [tools].packs: graph never shipped a pack by that name"
+            ));
+            continue;
+        }
+        if doc
+            .get("mcp")
+            .and_then(Item::as_table_like)
+            .is_some_and(|mcp| mcp.contains_key(&name))
+        {
+            notes.push(format!(
+                "dropped \"{name}\" from [tools].packs: [mcp.{name}] already owns {name}__ tool names; install the pack under another name with `graph pack add {name} --as <name>`"
+            ));
+            continue;
+        }
+        let packs = doc
+            .entry("packs")
+            .or_insert_with(|| {
+                let mut table = toml_edit::Table::new();
+                table.set_implicit(true);
+                Item::Table(table)
+            })
+            .as_table_like_mut()
+            .ok_or("packs must be a table of pack entries")?;
+        if packs.contains_key(&name) {
+            continue;
+        }
+        let mut entry = toml_edit::Table::new();
+        entry.insert(
+            "git",
+            toml_edit::value(format!("{}{name}", crate::pack::DEFAULT_HOST)),
+        );
+        entry.insert("ref", toml_edit::value("v1"));
+        packs.insert(&name, Item::Table(entry));
+        notes.push(format!(
+            "[tools].packs \"{name}\" became [packs.{name}]: its tools are now {name}__tool__<name> from a pack; install it with `graph pack add {name}`"
+        ));
+    }
+    Ok(notes)
+}
+
+fn take_tool_packs(doc: &mut DocumentMut) -> Result<Option<Vec<String>>, String> {
+    let Some(tools) = doc.get_mut("tools").and_then(Item::as_table_like_mut) else {
+        return Ok(None);
+    };
+    let Some(packs) = tools.remove("packs") else {
+        return Ok(None);
+    };
+    if tools.is_empty() {
+        doc.remove("tools");
+    }
+    pack_names(&packs).map(Some)
+}
+
+fn pack_names(packs: &Item) -> Result<Vec<String>, String> {
+    let invalid = || "tools.packs must be a list of pack names".to_string();
+    packs
+        .as_array()
+        .ok_or_else(invalid)?
+        .iter()
+        .map(|name| name.as_str().map(str::to_string).ok_or_else(invalid))
+        .collect()
+}
+
+fn refuse_tool_packs(doc: &DocumentMut, path: &Path) -> Result<(), String> {
+    let Some(packs) = doc
+        .get("tools")
+        .and_then(Item::as_table_like)
+        .and_then(|tools| tools.get("packs"))
+    else {
+        return Ok(());
+    };
+    let commands: Vec<String> = pack_names(packs)
+        .unwrap_or_default()
+        .iter()
+        .filter(|name| MOVED_PACKS.contains(&name.as_str()))
+        .map(|name| format!("`graph pack add {name}`"))
+        .collect();
+    let install = if commands.is_empty() {
+        "install packs with `graph pack add <name>`".to_string()
+    } else {
+        format!("install with {}", commands.join(" and "))
+    };
+    Err(format!(
+        "{}: [tools].packs was replaced by [packs.<name>] entries; remove it, then {install}",
+        path.display()
+    ))
 }
 
 fn named_collision(name: &str) -> String {
@@ -275,6 +377,7 @@ pub fn upgrade(doc: &mut DocumentMut, path: &Path) -> Result<Upgrade, String> {
     for migration in &MIGRATIONS[(from - CONFIG_FORMAT_OLDEST) as usize..] {
         notes.extend(migration(doc)?);
     }
+    refuse_tool_packs(doc, path)?;
     Ok(Upgrade {
         from,
         to: CONFIG_FORMAT,
@@ -607,6 +710,72 @@ input = 1.0
             .unwrap();
         let err = upgrade(&mut doc, Path::new("c.toml")).unwrap_err();
         assert!(err.contains("models.named.judge and models.judge"), "{err}");
+    }
+
+    #[test]
+    fn version_3_tool_packs_become_pack_entries_with_a_note() {
+        let mut doc: DocumentMut =
+            "version = 3\n\n[tools]\npacks = [\"github\", \"llm\"]\nalways_loaded = []\n"
+                .parse()
+                .unwrap();
+        let upgrade = upgrade(&mut doc, Path::new("c.toml")).unwrap();
+        assert_eq!(
+            upgrade.notes,
+            vec![
+                "[tools].packs \"github\" became [packs.github]: its tools are now github__tool__<name> from a pack; install it with `graph pack add github`",
+                "dropped \"llm\" from [tools].packs: its tools are always built in",
+            ]
+        );
+        assert_eq!(
+            doc.to_string(),
+            "version = 3\n\n[tools]\nalways_loaded = []\n\n[packs.github]\ngit = \"github.com/tylerdavis/graph-pack-github\"\nref = \"v1\"\n"
+        );
+    }
+
+    #[test]
+    fn a_tools_table_left_empty_is_dropped_and_existing_entries_are_kept() {
+        let mut doc: DocumentMut = "version = 3\n\n[tools]\npacks = [\"slack\", \"data\", \"gitlab\"]\n\n[packs.slack]\ngit = \"example.com/slack\"\n"
+            .parse()
+            .unwrap();
+        let upgrade = upgrade(&mut doc, Path::new("c.toml")).unwrap();
+        assert!(doc.get("tools").is_none(), "{doc}");
+        assert_eq!(
+            doc["packs"]["slack"]["git"].as_str(),
+            Some("example.com/slack")
+        );
+        assert_eq!(
+            upgrade.notes,
+            vec![
+                "dropped \"data\" from [tools].packs: its tools are always built in",
+                "dropped \"gitlab\" from [tools].packs: graph never shipped a pack by that name",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_pack_named_like_an_mcp_server_is_dropped_naming_the_rename() {
+        let mut doc: DocumentMut =
+            "version = 3\n\n[mcp.github]\ncommand = \"gh-mcp\"\n\n[tools]\npacks = [\"github\"]\n"
+                .parse()
+                .unwrap();
+        let upgrade = upgrade(&mut doc, Path::new("c.toml")).unwrap();
+        assert!(doc.get("packs").is_none(), "{doc}");
+        assert_eq!(
+            upgrade.notes,
+            vec!["dropped \"github\" from [tools].packs: [mcp.github] already owns github__ tool names; install the pack under another name with `graph pack add github --as <name>`"]
+        );
+    }
+
+    #[test]
+    fn version_4_tool_packs_are_refused_naming_the_replacement() {
+        let mut doc: DocumentMut = "version = 4\n\n[tools]\npacks = [\"github\", \"slack\"]\n"
+            .parse()
+            .unwrap();
+        let err = upgrade(&mut doc, Path::new("/x/config.toml")).unwrap_err();
+        assert_eq!(
+            err,
+            "/x/config.toml: [tools].packs was replaced by [packs.<name>] entries; remove it, then install with `graph pack add github` and `graph pack add slack`"
+        );
     }
 
     #[test]
