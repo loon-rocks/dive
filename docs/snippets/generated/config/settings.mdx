@@ -1,0 +1,19 @@
+<ParamField body="settings" type="object">
+  Runtime settings.
+</ParamField>
+
+<ParamField body="settings.data_dir" type="string" default="~/.local/share/graph">
+  Where threads and the shape cache are stored.
+</ParamField>
+
+<ParamField body="settings.max_agent_iterations" type="integer" default="15">
+  Most model rounds a conversation agent takes in one turn.
+</ParamField>
+
+<ParamField body="settings.planning_attempts" type="integer" default="2">
+  Attempts the built-in planner gets before giving up.
+</ParamField>
+
+<ParamField body="settings.history_limit" type="integer" default="20">
+  Most past messages sent with each turn.
+</ParamField>

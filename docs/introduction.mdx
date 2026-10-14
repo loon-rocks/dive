@@ -13,15 +13,15 @@ The goal of graph is to provide an AI native workflow engine that not only allow
 
 ## Why graph
 
-- **Deterministic by default.** Steps are plain tool calls able to reference past step output. The LLM enters only where you put it: a [prompt tool](/tools/user-defined) as a step (classify, extract, summarize mid-plan) and a [finish](/plans/finish-modes) that is a written report, structured JSON, or nothing at all.
+- **Deterministic by default.** Steps are plain tool calls able to reference past step output. The LLM enters only where you put it: a [prompt tool](/tools/reference/tool-file/prompt) as a step (classify, extract, summarize mid-plan) and a [finish](/plans/reference/plan-file#param-finish) that is a written report, structured JSON, or nothing at all.
 - **Any tool you can imagine.** Native MCP support and an intuitive tool framework brings every integration you could possibly need to your fingertips.
 - **Repeatable and reviewable.** A plan is a file you check into a repo, review in a PR, and share with your team. Your Monday status report is the same report every Monday.
 - **Composable.** Every plan joins the tool catalog as `plan__<name>`, callable like any other tool — from the CLI, from a script, or from inside another plan. And a plan's own steps draw from that same catalog: MCP tools, wrapped CLIs, saved queries, prompt tools, and other plans.
-- **Bring your own models and storage.** Any MCP server; Anthropic, OpenAI, or OpenAI-compatible/local models, [assignable per role](/models/models-and-providers). A single binary with plain-file storage — or in-memory storage for ephemeral CI runs. Your data stays on your machine.
+- **Bring your own models and storage.** Any MCP server; Anthropic, OpenAI, or OpenAI-compatible/local models, [assignable per role](/getting-started/models). A single binary with plain-file storage — or in-memory storage for ephemeral CI runs. Your data stays on your machine.
 
 ## Prototype in your favorite harness, test and verify in the workbench
 
-Graph's [built-in MCP server](/tools/mcp-server) brings the entire development tool set and execution runtime to your coding harness of choice.  Coupled with Graph's pre-built skills, your agent will have the tools it needs to quickly iterate on every workflow task you throw at it.  Once you're happy, open the plan in the [graph workbench](workbench) and run a full end-to-end test to make sure everything is running correctly.
+Graph's [built-in MCP server](/integrating/mcp/guides/serve-over-mcp) brings the entire development tool set and execution runtime to your coding harness of choice.  Coupled with Graph's pre-built skills, your agent will have the tools it needs to quickly iterate on every workflow task you throw at it.  Once you're happy, open the plan in the [graph workbench](/getting-started/workbench) and run a full end-to-end test to make sure everything is running correctly.
 
 ## Where to go next
 

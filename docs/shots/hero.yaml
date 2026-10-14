@@ -40,7 +40,7 @@ tools:
     - files:
         - crates/graph-store/src/file.rs
         - crates/graph-core/src/pipeline/mod.rs
-        - docs/architecture/storage.mdx
+        - docs/reference/data-directory.mdx
         - .github/workflows/ci.yaml
       count: 4
   builtin__git_diff:

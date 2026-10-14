@@ -1,0 +1,109 @@
+name: plan-drafting-questions
+title: graph workbench — drafting a plan
+grid: { cols: 120, rows: 36 }
+
+chat: "a plan that writes a one-line release note for each commit since the latest GitHub release, from its subject and the files it changed"
+
+llm:
+  - call: plan__compose_plan
+    input:
+      goal: List the commits merged since the latest GitHub release, and write a one-line release note for each commit from its subject and the files it changed.
+  - structured:
+      inputs: []
+      capabilities:
+        - { does: Find the latest GitHub release, kind: data }
+        - { does: List the commits merged since a git ref, kind: data }
+        - { does: List the files a commit changed, kind: data }
+        - { does: Write a one-line release note per commit, kind: judgment }
+      details: []
+  - structured:
+      yaml: |
+        version: 2
+        identifier: release_notes_since_latest_release
+        name: Release notes since latest release
+        description: Lists commits merged since the latest GitHub release and writes a one-line release note for each based on its subject and changed files.
+        input_schema:
+          properties: {}
+          required: []
+          type: object
+        steps:
+        - id: release
+          tool_name: builtin__gh_release
+          input:
+            tag: ''
+        - id: commits
+          tool_name: builtin__git_log
+          input:
+            base: '{{release.tag}}'
+            head: HEAD
+        - id: file_changes
+          tool_name: map
+          input:
+            concurrency: 8
+            do:
+            - id: changed
+              input:
+                base: '{{item.sha}}~1'
+                head: '{{item.sha}}'
+                prefix: ''
+              tool_name: builtin__git_changed_files
+            - id: row
+              input:
+                shape:
+                  author: '{{item.author}}'
+                  date: '{{item.date}}'
+                  files: '{{changed.files}}'
+                  pr: '{{item.pr}}'
+                  sha: '{{item.sha}}'
+                  short_sha: '{{item.short_sha}}'
+                  subject: '{{item.subject}}'
+              tool_name: builtin__reshape
+            over: '{{commits.commits}}'
+        - id: notes
+          tool_name: builtin__infer
+          input:
+            instruction: |-
+              For each commit below, write one short release-note line (a single sentence, no trailing period required) based on its subject and the files it changed. Return the notes in the same order as the commits, one per commit, prefixed with the commit's short sha.
+
+              Commits (sha, subject, changed files):
+              {{#file_changes.results}}
+              - {{short_sha}} | subject: {{subject}} | files: {{files}}
+              {{/file_changes.results}}
+            output_schema:
+              properties:
+                notes:
+                  items:
+                    properties:
+                      note:
+                        type: string
+                      sha:
+                        type: string
+                      short_sha:
+                        type: string
+                    required:
+                    - sha
+                    - short_sha
+                    - note
+                    type: object
+                  type: array
+              required:
+              - notes
+              type: object
+        finish:
+          output:
+            commits: '{{file_changes.results}}'
+            release_notes: '{{notes.notes}}'
+            release_tag: '{{release.tag}}'
+      questions:
+        - key: merges
+          question: Should merge commits get a release note?
+          guess: "no"
+          options: ["yes", "no"]
+        - key: skip_paths
+          question: Leave out commits that only change these paths?
+          guess: .github/
+
+capture:
+  pause_at: "compose_plan→clarify/then/asked"
+  turn_seconds: 24
+  keys: [tab]

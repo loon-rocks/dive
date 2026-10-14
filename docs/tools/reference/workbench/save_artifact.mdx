@@ -1,0 +1,33 @@
+---
+title: "workbench__save_artifact"
+sidebarTitle: "workbench__save_artifact"
+description: "Saves the draft in the pane to the project."
+playground: "none"
+keywords: ["workbench__save_artifact"]
+---
+
+## Behavior
+
+- A plan goes back to the file it came from, or into the plans directory when it's new.
+- A tool must pass a test run first, unless `untested` is true.
+- Replacing an existing agent or tool file needs `overwrite`.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Has side effects |
+
+## Input
+
+<ParamField body="kind" type="enum<string>" required>
+  What the draft is
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>
+
+<ParamField body="overwrite" type="boolean">
+  Agents and tools: replace an existing file, only after the user confirms
+</ParamField>
+
+<ParamField body="untested" type="boolean">
+  Tools only: save without a test run, only when the user said not to test it
+</ParamField>

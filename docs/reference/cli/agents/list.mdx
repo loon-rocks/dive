@@ -1,0 +1,37 @@
+---
+title: "graph agents list"
+sidebarTitle: "list"
+description: "List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents)"
+playground: "none"
+keywords: ["graph agents list"]
+---
+
+Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph agents list [OPTIONS]
+```
+
+```bash Example 1
+graph agents list
+```
+
+```bash Example 2
+graph agents list --json
+```
+
+</RequestExample>

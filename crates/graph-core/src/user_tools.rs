@@ -179,6 +179,14 @@ const BUILTIN_TOOLS: &[&str] = &[
 
 const FOLDED_PACKS: &[&str] = &["llm", "data"];
 
+pub fn pack_sources() -> &'static [(&'static str, &'static [&'static str])] {
+    PACKS
+}
+
+pub fn builtin_tool_sources() -> &'static [&'static str] {
+    BUILTIN_TOOLS
+}
+
 pub fn available_packs() -> Vec<&'static str> {
     PACKS.iter().map(|(name, _)| *name).collect()
 }
@@ -340,7 +348,7 @@ pub fn load_user_tool(path: &Path) -> Result<UserToolDoc, String> {
     Ok(doc)
 }
 
-const TOOL_KEYS: &[&str] = &[
+pub(crate) const TOOL_KEYS: &[&str] = &[
     "name",
     "description",
     "input_schema",
@@ -349,9 +357,9 @@ const TOOL_KEYS: &[&str] = &[
     "kind",
 ];
 
-const EXEC_KEYS: &[&str] = &["command", "args", "env", "cwd", "timeout_secs", "output"];
+pub(crate) const EXEC_KEYS: &[&str] = &["command", "args", "env", "cwd", "timeout_secs", "output"];
 
-const PROMPT_KEYS: &[&str] = &[
+pub(crate) const PROMPT_KEYS: &[&str] = &[
     "prompt",
     "system",
     "model",
@@ -360,9 +368,9 @@ const PROMPT_KEYS: &[&str] = &[
     "caller_system",
 ];
 
-const RESHAPE_KEYS: &[&str] = &["shape", "caller_shape"];
+pub(crate) const RESHAPE_KEYS: &[&str] = &["shape", "caller_shape"];
 
-const DECISION_KEYS: &[&str] = &[
+pub(crate) const DECISION_KEYS: &[&str] = &[
     "state",
     "questions",
     "model",

@@ -1,0 +1,563 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "mcp": {
+        "linear": {
+          "headers": {
+            "Authorization": "Bearer ${LINEAR_API_KEY}"
+          },
+          "url": "https://mcp.linear.app/mcp"
+        }
+      },
+      "models": {
+        "default": {
+          "model": "claude-sonnet-5-5",
+          "provider": "anthropic"
+        },
+        "judge": {
+          "model": "claude-haiku-4-5-20251001",
+          "provider": "anthropic"
+        }
+      },
+      "providers": {
+        "anthropic": {
+          "api_key": "${ANTHROPIC_API_KEY}",
+          "type": "anthropic"
+        }
+      },
+      "tools": {
+        "packs": [
+          "github"
+        ]
+      },
+      "version": 4
+    }
+  ],
+  "properties": {
+    "mcp": {
+      "additionalProperties": {
+        "properties": {
+          "args": {
+            "description": "Arguments for `command`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "command": {
+            "description": "Executable for a stdio server. Use `command` or `url`, not both.",
+            "type": "string"
+          },
+          "description": {
+            "description": "What the server is for, read by drafters choosing tools.",
+            "type": "string"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Environment for a stdio server. Values expand `${VAR}`.",
+            "type": "object"
+          },
+          "exclude_tools": {
+            "description": "Skip these tools.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "HTTP headers. Values expand `${VAR}`.",
+            "type": "object"
+          },
+          "include_tools": {
+            "description": "Load only these tools.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tool_overrides": {
+            "additionalProperties": {
+              "properties": {
+                "description": {
+                  "description": "Replaces the server's description of the tool.",
+                  "type": "string"
+                },
+                "output_example": {
+                  "description": "An example of the tool's output.",
+                  "type": "object"
+                },
+                "output_schema": {
+                  "description": "The tool's output shape.",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "description": "Per-tool corrections, as `[mcp.<name>.tool_overrides.<tool>]`.",
+            "type": "object"
+          },
+          "url": {
+            "description": "Endpoint for a streamable HTTP server.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "description": "MCP servers, as `[mcp.<name>]`. Their tools join the catalog as `<name>__<tool>`.",
+      "type": "object"
+    },
+    "models": {
+      "additionalProperties": {
+        "properties": {
+          "context_window": {
+            "description": "The model's context window in tokens.",
+            "type": "integer"
+          },
+          "description": {
+            "description": "What the role is for. Roles with a description are offered to drafters and steps by name.",
+            "type": "string"
+          },
+          "fallbacks": {
+            "description": "Models to try, in order, when this one fails.",
+            "items": {
+              "properties": {
+                "context_window": {
+                  "description": "The model's context window in tokens.",
+                  "type": "integer"
+                },
+                "model": {
+                  "description": "The provider's model id.",
+                  "type": "string"
+                },
+                "provider": {
+                  "description": "A name from `[providers]`.",
+                  "type": "string"
+                },
+                "temperature": {
+                  "description": "Sampling temperature.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "provider",
+                "model"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "model": {
+            "description": "The provider's model id.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "A name from `[providers]`.",
+            "type": "string"
+          },
+          "temperature": {
+            "description": "Sampling temperature.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "type": "object"
+      },
+      "description": "Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.",
+      "type": "object"
+    },
+    "packs": {
+      "additionalProperties": {
+        "properties": {
+          "exclude": {
+            "description": "Pack items to hide. Not applied yet.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "git": {
+            "description": "The git repository the pack is installed from.",
+            "type": "string"
+          },
+          "include": {
+            "description": "Pack items to expose. Not applied yet.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "description": "The git ref to install.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "git"
+        ],
+        "type": "object"
+      },
+      "description": "Installed packs, as `[packs.<name>]`. Their tools, plans and agents join the catalog as `<name>__<kind>__<item>`.",
+      "type": "object"
+    },
+    "plans": {
+      "description": "Where plans are loaded from.",
+      "properties": {
+        "paths": {
+          "default": [
+            "./.graph/plans",
+            "~/.config/graph/plans"
+          ],
+          "description": "Plan directories, searched in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "pricing": {
+      "additionalProperties": {
+        "properties": {
+          "cache_read": {
+            "description": "Cache-read tokens.",
+            "type": "number"
+          },
+          "cache_write": {
+            "description": "Cache-write tokens.",
+            "type": "number"
+          },
+          "input": {
+            "description": "Input tokens.",
+            "type": "number"
+          },
+          "output": {
+            "description": "Output tokens.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "input",
+          "output"
+        ],
+        "type": "object"
+      },
+      "description": "Prices per model id, as `[pricing.\"<model>\"]`, in USD per million tokens. Without them, usage is reported in tokens only.",
+      "type": "object"
+    },
+    "prompts": {
+      "description": "Deprecated. Customize agents with agent files instead.",
+      "properties": {
+        "chat": {
+          "description": "Deprecated.",
+          "type": "string"
+        },
+        "workbench": {
+          "description": "Deprecated.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "providers": {
+      "additionalProperties": {
+        "properties": {
+          "api_key": {
+            "description": "API key, usually `${ENV_VAR}`.",
+            "type": "string"
+          },
+          "base_url": {
+            "description": "Endpoint for `openai_compat` and self-hosted providers.",
+            "type": "string"
+          },
+          "profile": {
+            "description": "Credentials profile, where the provider uses one.",
+            "type": "string"
+          },
+          "region": {
+            "description": "Cloud region, where the provider needs one.",
+            "type": "string"
+          },
+          "type": {
+            "description": "The provider. `systemone` serves decision models.",
+            "enum": [
+              "anthropic",
+              "openai",
+              "openai_compat",
+              "systemone"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "description": "Named provider connections, as `[providers.<name>]`.",
+      "type": "object"
+    },
+    "settings": {
+      "description": "Runtime settings.",
+      "properties": {
+        "data_dir": {
+          "default": "~/.local/share/graph",
+          "description": "Where threads and the shape cache are stored.",
+          "type": "string"
+        },
+        "history_limit": {
+          "default": 20,
+          "description": "Most past messages sent with each turn.",
+          "type": "integer"
+        },
+        "max_agent_iterations": {
+          "default": 15,
+          "description": "Most model rounds a conversation agent takes in one turn.",
+          "type": "integer"
+        },
+        "planning_attempts": {
+          "default": 2,
+          "description": "Attempts the built-in planner gets before giving up.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "storage": {
+      "description": "Where graph keeps state.",
+      "properties": {
+        "backend": {
+          "default": "file",
+          "description": "`memory` keeps nothing between runs. `GRAPH_STORAGE` overrides it.",
+          "enum": [
+            "file",
+            "memory"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "telemetry": {
+      "description": "OpenTelemetry export over OTLP/HTTP.",
+      "properties": {
+        "capture_content": {
+          "default": true,
+          "description": "Include prompts and responses in spans.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "The OTLP/HTTP endpoint. Telemetry is off without one.",
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Headers sent with every export, such as auth.",
+          "type": "object"
+        },
+        "logs": {
+          "default": false,
+          "description": "Export logs as well as traces.",
+          "type": "boolean"
+        },
+        "protocol": {
+          "default": "http/protobuf",
+          "description": "Wire format.",
+          "enum": [
+            "http/protobuf",
+            "http/json"
+          ],
+          "type": "string"
+        },
+        "resource": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra resource attributes.",
+          "type": "object"
+        },
+        "service_name": {
+          "description": "The `service.name` resource attribute.",
+          "type": "string"
+        },
+        "timeout_secs": {
+          "description": "Export timeout in seconds.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "tools": {
+      "description": "Where tools come from.",
+      "properties": {
+        "always_loaded": {
+          "default": [
+            "builtin__infer",
+            "builtin__reshape"
+          ],
+          "description": "Tools always offered to drafters, whatever the search returns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packs": {
+          "description": "Packs to enable, such as `github` and `slack`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "paths": {
+          "default": [
+            "./.graph/tools",
+            "~/.config/graph/tools"
+          ],
+          "description": "Tool directories, searched in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "user": {
+      "description": "About you, for agent prompts.",
+      "properties": {
+        "context": {
+          "description": "Anything agents should know about you.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Your name.",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "Your timezone, such as `America/New_York`.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "version": {
+      "description": "The file version the config is written in. Omitted means 1; `graph config migrate` brings a file to the current version.",
+      "type": "integer"
+    },
+    "workbench": {
+      "description": "Workbench settings.",
+      "properties": {
+        "log_path": {
+          "description": "Where the workbench writes its log. Defaults to `<data_dir>/workbench.log`; `GRAPH_WORKBENCH_LOG` overrides it.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "config.toml",
+  "type": "object",
+  "x-environment": [
+    {
+      "group": "Output and logging",
+      "variables": [
+        {
+          "description": "How graph reports progress and failures on stderr. Unset, stderr is for people.",
+          "name": "GRAPH_EVENTS",
+          "values": {
+            "github": "A failing `graph plan run` also prints a `::error::` annotation to stdout, which GitHub Actions shows on the run.",
+            "jsonl": "stderr becomes a stream of JSON events, one per line. `ask` steps can't prompt anyone, so they use their `whenUnanswered` setting."
+          }
+        },
+        {
+          "description": "A log filter for stderr, such as `info` or `graph=debug`. `-v`, `-vv` and `-vvv` set `info`, `debug` and `trace`.",
+          "name": "GRAPH_LOG",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "group": "Storage",
+      "variables": [
+        {
+          "default": "file",
+          "description": "Where graph keeps threads and the shape cache.",
+          "name": "GRAPH_STORAGE",
+          "overrides": "storage.backend",
+          "values": {
+            "file": "Under `settings.data_dir`.",
+            "memory": "In memory only. Nothing is kept between runs."
+          }
+        }
+      ]
+    },
+    {
+      "group": "Workbench",
+      "variables": [
+        {
+          "default": "<data_dir>/workbench.log",
+          "description": "Where the workbench writes its log.",
+          "name": "GRAPH_WORKBENCH_LOG",
+          "overrides": "workbench.log_path",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "group": "Telemetry",
+      "variables": [
+        {
+          "description": "The OTLP/HTTP endpoint to export to.",
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+          "overrides": "telemetry.endpoint",
+          "type": "string"
+        },
+        {
+          "default": "http/protobuf",
+          "description": "The export wire format.",
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "overrides": "telemetry.protocol",
+          "values": {
+            "http/json": "JSON over HTTP.",
+            "http/protobuf": "Protobuf over HTTP."
+          }
+        },
+        {
+          "description": "Export timeout, in milliseconds.",
+          "name": "OTEL_EXPORTER_OTLP_TIMEOUT",
+          "overrides": "telemetry.timeout_secs",
+          "type": "integer"
+        },
+        {
+          "description": "Extra headers as comma-separated `key=value` pairs, added to the configured ones.",
+          "name": "OTEL_EXPORTER_OTLP_HEADERS",
+          "overrides": "telemetry.headers",
+          "type": "string"
+        },
+        {
+          "description": "The `service.name` resource attribute.",
+          "name": "OTEL_SERVICE_NAME",
+          "overrides": "telemetry.service_name",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "x-format": "TOML",
+  "x-locations": [
+    "`~/.config/graph/config.toml` (global)",
+    "`./.graph/config.toml` (project; its values win)"
+  ]
+}

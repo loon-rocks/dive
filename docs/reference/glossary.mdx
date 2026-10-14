@@ -1,0 +1,105 @@
+---
+title: "Glossary"
+description: "The terms graph's docs use, each with a short definition and a link."
+keywords: ["glossary", "terms", "definitions"]
+---
+
+## Agent
+
+A named model with a system prompt, a [model role](#model-role) and a list of [tools](#tool) it may call, defined in an agent file. Agents run in `graph ask`, `graph chat` and the [workbench](#workbench), and [plans](#plan) call them as `agent__<name>` tools. See [Agents](/agents/overview).
+
+## Agent network
+
+Any composition of [agents](#agent), [plans](#plan) and [tools](#tool) that call one another. See [Core concepts](/getting-started/concepts).
+
+## Agent step
+
+The `agent` [control step](#control-step), which hands one [plan](#plan) [step](#step) to a model that calls [tools](#tool) until it can return a result. An agent step is defined inline in the plan. See [agent](/plans/reference/steps/agent).
+
+## Ask step
+
+The `ask` [control step](#control-step), which asks the person running the [plan](#plan) a question and uses the answer. See [ask](/plans/reference/steps/ask).
+
+## Body
+
+The [steps](#step) a `route` branch, `map` or `reduce` runs: a single call or an inline list of steps. See [Conditions and bodies](/plans/reference/conditions-and-bodies).
+
+## Built-in
+
+An [agent](#agent), [plan](#plan) or [tool](#tool) that ships with graph. See [Customize a built-in agent](/agents/guides/customize-built-ins).
+
+## Catalog
+
+Every [tool](#tool) available to an [agent](#agent) or [plan](#plan), each named with a prefix that says where it comes from, such as `user__` or `plan__`. See [Core concepts](/getting-started/concepts).
+
+## Control step
+
+A [step](#step) that steers how a [plan](#plan) runs instead of calling a [tool](#tool). It branches (`route`), narrows a list (`filter`), repeats over a list (`map`, `reduce`) or stops the plan (`exit`), or hands the step to a model ([`agent`](#agent-step)) or a person ([`ask`](#ask-step)). See [Control steps](/plans/reference/control-steps).
+
+## Decision model
+
+A model that answers a fixed question with a likelihood or a choice among options, instead of writing text. [Gates](#gate) using `decide` and `decision` [tools](#tool-kind) use one through the `decider` [model role](#model-role). See [Models and providers](/getting-started/models).
+
+## File version
+
+The schema version a config, [plan](#plan), [tool](#tool) or [agent](#agent) file carries in its `version` key, separate from graph's release version. Each graph release reads a range of file versions and upgrades older files as they load. See [File versions](/reference/file-versions).
+
+## Finish
+
+How a [plan](#plan) ends and what it returns: `silent`, an `output` map built from [step](#step) results, or a `solver` that writes an answer. See [`finish`](/plans/reference/plan-file#param-finish).
+
+## Gate
+
+The condition on an `exit`, `route` or `filter` [step](#step): a comparison of values, an `infer` yes-or-no verdict from a model, or a `decide` call to a [decision model](#decision-model). See [Conditions and bodies](/plans/reference/conditions-and-bodies).
+
+## Handoff
+
+One [agent](#agent) passing the conversation to another through a `transfer_to_<name>` [tool](#tool). The other agent answers from then on. See [Build a multi-agent network](/agents/guides/multi-agent-networks).
+
+## Layer
+
+One of the three places graph loads [agents](#agent), [plans](#plan), [tools](#tool) and config from. [Built-ins](#built-in) load first, then your global files in `~/.config/graph/`, then project files in `./.graph/`. A file in a later layer replaces one with the same name in an earlier layer. See [Core concepts](/getting-started/concepts).
+
+## Model role
+
+A name such as `chat`, `judge` or a role you define, which [agents](#agent), [steps](#step) and [tools](#tool) use instead of naming a model. `[models]` in config.toml maps each role to a model. See [`models`](/reference/configuration#param-models).
+
+## Pack
+
+A set of [tools](#tool) that ships with graph, such as `github` or `slack`. Turn packs on in `[tools].packs`; their tools are called as `builtin__<name>`. See [Packs](/tools/reference/packs).
+
+## Plan
+
+A file of [steps](#step) wired together by their results. Each step's input draws on earlier results through [templates](#template), and [control steps](#control-step) branch, repeat and stop the flow. See [Plans](/plans/overview).
+
+## Shape
+
+The observed output schema of a [tool](#tool), with an example, recorded each time the tool runs. See [Improve what graph knows about a tool](/tools/guides/tool-shapes).
+
+## Step
+
+One entry in a [plan](#plan): a [tool](#tool) call, a [control step](#control-step), or a call to an [agent](#agent) or another plan. See [`steps`](/plans/reference/plan-file#param-steps).
+
+## Subagent
+
+An [agent](#agent) another agent calls as a [tool](#tool). The subagent runs, returns a result, and the caller keeps the conversation. See [Build a multi-agent network](/agents/guides/multi-agent-networks).
+
+## Template
+
+A `{{...}}` reference in a [step](#step), [tool](#tool) or prompt that splices in an input or an earlier result. See [Template language](/reference/template-language).
+
+## Thread
+
+The saved history of a conversation with an [agent](#agent) in `graph ask` or `graph chat`. Continue one with `--thread`. See [Manage threads](/agents/guides/threads).
+
+## Tool
+
+Anything an [agent](#agent) or [step](#step) can call: MCP server tools, your tool files, built-in and [pack](#pack) tools, and [plans](#plan) and agents exposed as tools. See [Tools](/tools/overview).
+
+## Tool kind
+
+What a [tool](#tool) file runs: `exec` runs a command, `prompt` calls a model, `reshape` rebuilds JSON without a model, and `decision` asks a [decision model](#decision-model). See [Tool file](/tools/reference/tool-file).
+
+## Workbench
+
+The full-screen terminal app opened by `graph workbench`, where you draft, run and debug [plans](#plan), [agents](#agent) and [tools](#tool). See [Workbench](/getting-started/workbench).

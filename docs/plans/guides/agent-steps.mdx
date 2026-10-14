@@ -1,0 +1,128 @@
+---
+title: "Delegate a step to an agent"
+description: "Have an agent step pick out the risky commits since a release and return them as typed output."
+keywords: ["agent step", "outputSchema", "maxIterations", "tools"]
+---
+
+`risky_changes` lists the commits since a ref, then gives them to an `agent` step that decides which are risky to ship. Which diffs it reads depends on what each commit changed, so a fixed list of steps can't do it.
+
+<RequestExample>
+
+```yaml .graph/plans/risky_changes.yaml
+version: 2
+identifier: risky_changes
+name: Risky changes
+description: The commits since a git ref that are risky to ship, and why.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+- id: review
+  tool_name: agent
+  input:
+    prompt: |-
+      Which of these commits are risky to ship? Look at the files a commit
+      changed, and its diff when the files alone don't tell you.
+      {{commits.commits}}
+    tools:
+    - builtin__git_changed_files
+    - builtin__git_diff
+    maxIterations: 6
+    outputSchema:
+      type: object
+      required:
+      - risky
+      properties:
+        risky:
+          type: array
+          items:
+            type: object
+            required:
+            - sha
+            - reason
+            properties:
+              sha:
+                type: string
+              reason:
+                type: string
+finish:
+  output:
+    risky: '{{review.output.risky}}'
+    iterations: '{{review.iterations}}'
+    final: '{{review.final}}'
+```
+
+</RequestExample>
+
+## Set up the agent step
+
+The `review` step's input tells the agent what to do and what to return:
+
+- `prompt` is the task, with the commits filled in from the step before.
+- `tools` lists the only tools the agent may call.
+- `maxIterations` caps the model rounds. Each round is one model call.
+- `outputSchema` is the shape of the answer, which later steps read as `{{review.output}}`.
+
+## Run it
+
+```bash
+graph plan run risky_changes \
+  --input base=v0.15.0
+```
+
+The agent reads every commit's changed files, then the diffs of the ones that look risky:
+
+```text
+→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+✓ builtin__git_log 36.2ms
+→ builtin__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
+→ builtin__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}
+…
+→ builtin__git_diff {"base":"dae2d40…~1","exclude":"","head":"dae2d40…",…}
+…
+  6 calls · 432k in / 11k out (246k cached) · $0.94
+```
+
+The answer matches `outputSchema`. `iterations` is how many rounds the agent took, and `final` is `false` when it ran out of rounds before answering:
+
+```json
+{
+  "final": true,
+  "iterations": 6,
+  "risky": [
+    {
+      "reason": "In-place migration of on-disk store format (v1->v2) that rewrites every existing user's thread message logs…",
+      "sha": "dae2d400f1f6fe7c8567d74e15d4b095138e32cb"
+    },
+    {
+      "reason": "Breaking change (feat!) to the core plan contract: finish is now required…",
+      "sha": "648d34e22ede0d8c246576493b39487237272607"
+    },
+    …
+  ]
+}
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Iterate with map and reduce" icon="repeat" href="/plans/guides/map-and-reduce">
+    Run steps once per item instead of one agent over the list.
+  </Card>
+  <Card title="Agents" icon="robot" href="/agents/overview">
+    Write an agent file to reuse as `agent__<name>`.
+  </Card>
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Step through a run in the workbench.
+  </Card>
+</CardGroup>

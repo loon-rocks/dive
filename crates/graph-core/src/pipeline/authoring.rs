@@ -774,7 +774,7 @@ const ASK_INPUT_KEYS: [(&str, &str); 2] = [
 /// than by changing either contract. camelCase stays accepted on the way in
 /// (serde aliases), so this round-trips and normalizes an older file in passing.
 ///
-/// See `docs/reference/plan-schema.mdx` — that page is the contract this
+/// See `docs/plans/reference/plan-file.mdx` — that page is the contract this
 /// function has to satisfy.
 pub fn to_yaml(doc: &PlanDoc) -> Result<String, WriteError> {
     let value = to_file_shape(doc)?;

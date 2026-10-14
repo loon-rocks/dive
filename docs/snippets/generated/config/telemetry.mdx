@@ -1,0 +1,37 @@
+<ParamField body="telemetry" type="object">
+  OpenTelemetry export over OTLP/HTTP.
+</ParamField>
+
+<ParamField body="telemetry.endpoint" type="string">
+  The OTLP/HTTP endpoint. Telemetry is off without one.
+</ParamField>
+
+<ParamField body="telemetry.protocol" type="enum<string>" default="http/protobuf">
+  Wire format.
+
+  Available options: `http/protobuf`, `http/json`
+</ParamField>
+
+<ParamField body="telemetry.timeout_secs" type="integer">
+  Export timeout in seconds.
+</ParamField>
+
+<ParamField body="telemetry.service_name" type="string">
+  The `service.name` resource attribute.
+</ParamField>
+
+<ParamField body="telemetry.headers" type="map<string, string>">
+  Headers sent with every export, such as auth.
+</ParamField>
+
+<ParamField body="telemetry.resource" type="map<string, string>">
+  Extra resource attributes.
+</ParamField>
+
+<ParamField body="telemetry.capture_content" type="boolean" default="true">
+  Include prompts and responses in spans.
+</ParamField>
+
+<ParamField body="telemetry.logs" type="boolean" default="false">
+  Export logs as well as traces.
+</ParamField>

@@ -1,0 +1,78 @@
+---
+title: "Debug a plan"
+description: "Pause a failing plan at a breakpoint, find the bad input, and fix the step."
+keywords: ["workbench", "debugger", "breakpoints", "debug run"]
+---
+
+`unreleased_changes` fails at its `commits` step.
+
+<RequestExample>
+
+```yaml .graph/plans/unreleased_changes.yaml
+version: 2
+identifier: unreleased_changes
+name: Unreleased changes
+description: The commits since the latest release.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.url}}'
+    head: HEAD
+finish:
+  output:
+    since: '{{release.tag}}'
+    commits: '{{commits.commits}}'
+```
+
+</RequestExample>
+
+<Steps>
+  <Step title="Open the plan in the workbench">
+    ```bash
+    graph workbench plan \
+      unreleased_changes
+    ```
+  </Step>
+  <Step title="Set a breakpoint">
+    Press <kbd>Tab</kbd> to focus the steps, select `commits` with <kbd>j</kbd> and <kbd>k</kbd>, and press <kbd>b</kbd>.
+  </Step>
+  <Step title="Start a debug run">
+    Press <kbd>g</kbd>. The run calls `release` and pauses before `commits`, showing the input it's about to send:
+
+    <Frame caption="Paused before commits: base is the release's URL, not its tag.">
+      <img src="/images/workbench/debug-breakpoint.svg" alt="The workbench paused at a breakpoint on commits, with release marked done and the debug pane showing the rendered input: base is https://github.com/tylerdavis/graph/releases/tag/v0.15.0 and head is HEAD." />
+    </Frame>
+
+    `base` is the release page's URL, which git can't read as a revision. It should be the release's `tag`.
+  </Step>
+  <Step title="Fix the step">
+    Press <kbd>a</kbd> to stop the run. With `commits` selected, press <kbd>e</kbd>, change `base` to `{{release.tag}}`, and press <kbd>Ctrl</kbd>+<kbd>S</kbd> to apply it.
+  </Step>
+  <Step title="Run it again">
+    Press <kbd>r</kbd>. The run finishes, and <kbd>3</kbd> opens the run tab with each step's result.
+  </Step>
+  <Step title="Save">
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to write the fix to `./.graph/plans/unreleased_changes.yaml`.
+  </Step>
+</Steps>
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Handle failures" icon="triangle-exclamation" href="/plans/guides/handle-failures">
+    Tell why a run failed and choose how to respond.
+  </Card>
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Run a plan with inputs and use its result.
+  </Card>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Turn a goal into a working, saved plan.
+  </Card>
+  <Card title="Plan file" icon="file-code" href="/plans/reference/plan-file">
+    Every field a plan file takes.
+  </Card>
+</CardGroup>

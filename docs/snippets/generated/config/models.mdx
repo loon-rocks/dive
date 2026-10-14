@@ -1,0 +1,43 @@
+<ParamField body="models" type="object">
+  Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.
+</ParamField>
+
+<ParamField body="models.<name>.provider" type="string" required>
+  A name from `[providers]`.
+</ParamField>
+
+<ParamField body="models.<name>.model" type="string" required>
+  The provider's model id.
+</ParamField>
+
+<ParamField body="models.<name>.temperature" type="number">
+  Sampling temperature.
+</ParamField>
+
+<ParamField body="models.<name>.description" type="string">
+  What the role is for. Roles with a description are offered to drafters and steps by name.
+</ParamField>
+
+<ParamField body="models.<name>.context_window" type="integer">
+  The model's context window in tokens.
+</ParamField>
+
+<ParamField body="models.<name>.fallbacks" type="object[]">
+  Models to try, in order, when this one fails.
+</ParamField>
+
+<ParamField body="models.<name>.fallbacks.[].provider" type="string" required>
+  A name from `[providers]`.
+</ParamField>
+
+<ParamField body="models.<name>.fallbacks.[].model" type="string" required>
+  The provider's model id.
+</ParamField>
+
+<ParamField body="models.<name>.fallbacks.[].temperature" type="number">
+  Sampling temperature.
+</ParamField>
+
+<ParamField body="models.<name>.fallbacks.[].context_window" type="integer">
+  The model's context window in tokens.
+</ParamField>

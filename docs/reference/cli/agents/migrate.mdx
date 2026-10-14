@@ -1,0 +1,39 @@
+---
+title: "graph agents migrate"
+sidebarTitle: "migrate"
+description: "Rewrite an agent file to the current agent format"
+playground: "none"
+keywords: ["graph agents migrate"]
+---
+
+Rewrites one agent file to the current agent file version.
+
+## Arguments
+
+<ParamField path="PATH" type="string" required>
+  Path to the agent file
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph agents migrate [OPTIONS] <PATH>
+```
+
+```bash Example
+graph agents migrate .graph/agents/release_notes.yaml
+```
+
+</RequestExample>

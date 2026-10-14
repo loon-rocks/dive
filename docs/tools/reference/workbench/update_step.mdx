@@ -1,0 +1,56 @@
+---
+title: "workbench__update_step"
+sidebarTitle: "workbench__update_step"
+description: "Updates one top-level step in the plan draft."
+playground: "none"
+keywords: ["workbench__update_step"]
+---
+
+- Changes its tool, input (replaced whole), reasoning, or id.
+- Renaming rewrites `{{id.*}}` references in later steps, the solver and the output.
+- Refused only if it adds a new validation problem.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Not marked read-only |
+
+## Input
+
+<ParamField body="id" type="string" required>
+  The step to update.
+</ParamField>
+
+<ParamField body="input" type="object">
+  New tool input — replaces the step's entire input object.
+</ParamField>
+
+<ParamField body="newId" type="string">
+  Rename the step; downstream template references are rewritten.
+</ParamField>
+
+<ParamField body="reasoning" type="string">
+  New reasoning; an empty string clears it.
+</ParamField>
+
+<ParamField body="toolName" type="string">
+  New tool name from the catalog.
+</ParamField>
+
+## Output
+
+<ResponseField name="id" type="string">
+</ResponseField>
+
+<ResponseField name="ok" type="boolean">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "id": "fetch_issues",
+  "ok": true
+}
+```
+
+</ResponseExample>

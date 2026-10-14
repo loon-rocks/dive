@@ -1,0 +1,57 @@
+---
+title: "builtin__infer"
+sidebarTitle: "builtin__infer"
+description: "Runs one model call over an instruction and returns text or structured JSON."
+playground: "none"
+keywords: ["builtin__infer"]
+---
+
+## Behavior
+
+- Returns `{text}` by default.
+- With `output_schema`, returns JSON validated against it, so every declared field is present.
+- `model` picks a model role; omit it for the chat role.
+
+## When to use it
+
+- Classify, extract or summarize inside a plan.
+- Inside a `map`, interpolate `{{item}}` per call instead of passing the whole list.
+
+| Loaded | Kind | Effect |
+| --- | --- | --- |
+| Always | `prompt` | Not marked read-only |
+
+## Input
+
+<ParamField body="instruction" type="string" required>
+  Complete, self-contained instruction, including the data to analyze (reference earlier step results with &#123;&#123;Ex...&#125;&#125; templates, or the current element with &#123;&#123;item&#125;&#125; inside a map body).
+</ParamField>
+
+<ParamField body="system" type="string">
+  Optional standing instructions sent as the system prompt instead of in the instruction. Keep it identical across calls that share it — across the items of a map, say — so the provider can cache it.
+</ParamField>
+
+<ParamField body="output_schema" type="object">
+  Optional JSON Schema for the result. When present, the output is structured JSON matching this schema instead of &#123;text: ...&#125;. Must be an object schema: give it a top-level "type": "object" and a "properties" map (a bare &#123;properties, required&#125; is coerced to object, but write the type explicitly).
+</ParamField>
+
+<ParamField body="on_mismatch" type="enum<string>">
+  What to do when the output still doesn't match output_schema after the automatic fix-up: "error" (the default) fails the step; "return" hands back the output as it is, for a caller that checks it itself and retries.
+
+  Available options: `error`, `return`
+</ParamField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__infer
+  input:
+    instruction: "{{input.instruction}}"
+```
+
+```bash Inspect
+graph tools show builtin__infer
+```
+
+</RequestExample>

@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One plan, in `./.graph/plans/` or `~/.config/graph/plans/`, run with `graph plan run` and called by agents and other plans as `plan__<identifier>`.",
+  "examples": [
+    {
+      "description": "Summarizes the commits merged since a git ref.",
+      "finish": {
+        "solver": {
+          "data": {
+            "commits": "{{commits.commits}}"
+          },
+          "query_to_answer": "Summarize what changed, grouped by theme."
+        }
+      },
+      "identifier": "weekly_changes",
+      "input_schema": {
+        "properties": {
+          "base": {
+            "description": "The ref to start after, such as the last release tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base"
+        ],
+        "type": "object"
+      },
+      "name": "Weekly changes",
+      "steps": [
+        {
+          "id": "commits",
+          "input": {
+            "base": "{{input.base}}",
+            "head": "HEAD"
+          },
+          "tool_name": "builtin__git_log"
+        },
+        {
+          "id": "nothing_shipped",
+          "input": {
+            "message": "Nothing merged since {{input.base}}",
+            "status": "success",
+            "when": {
+              "op": "eq",
+              "to": 0,
+              "value": "{{commits.count}}"
+            }
+          },
+          "tool_name": "exit"
+        }
+      ],
+      "version": 2
+    }
+  ],
+  "properties": {
+    "description": {
+      "description": "What the plan does. Agents read it when choosing tools.",
+      "type": "string"
+    },
+    "exemplars": {
+      "description": "Example requests the plan handles, added to its tool description.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "finish": {
+      "description": "How the plan ends, and what it returns: `silent`, `output` or `solver`.",
+      "oneOf": [
+        {
+          "const": "silent",
+          "description": "Runs the steps and returns nothing but `{ok, steps_executed}`."
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "output": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "output"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "solver": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "solver"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "output": {
+          "description": "Returns this map as JSON, each template filled from step results. No model call.",
+          "type": "object"
+        },
+        "solver": {
+          "additionalProperties": false,
+          "description": "A model call writes the answer as prose, returned as `{answer}`.",
+          "properties": {
+            "data": {
+              "description": "What the solver sees, as a map of templates over step results.",
+              "type": "object"
+            },
+            "query_to_answer": {
+              "description": "What the answer should say, as a template.",
+              "type": "string"
+            },
+            "system_prompt": {
+              "description": "Extra system prompt for the solver call.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "query_to_answer"
+          ],
+          "type": "object"
+        }
+      },
+      "x-type": "\"silent\" | object"
+    },
+    "identifier": {
+      "description": "Letters, digits, `_` and `-`. The plan is called as `plan__<identifier>`, and a plan with a built-in plan's identifier replaces it.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "type": "string"
+    },
+    "input_schema": {
+      "description": "JSON Schema for the plan's inputs, validated before any step runs. Steps reference inputs as `{{input.<field>}}`.",
+      "type": "object"
+    },
+    "name": {
+      "description": "Display name.",
+      "type": "string"
+    },
+    "output_schema": {
+      "description": "JSON Schema for the result of an output plan. Its `properties` must match the keys of `finish.output`.",
+      "type": "object"
+    },
+    "requires_servers": {
+      "description": "MCP servers the steps use. The plan is hidden from the catalog while any of them isn't configured.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "description": "The steps, run in order.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Unique across the plan, including steps inside bodies. Later steps read the result as `{{<id>.<field>}}`. Can't be `input`, `item`, `index`, `accumulator` or `length`.",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "input": {
+            "description": "The tool's input. String values are templates over `input` and earlier results; a control step's input is described on its page.",
+            "type": "object"
+          },
+          "reasoning": {
+            "description": "Why the step exists, for people reading the plan.",
+            "type": "string"
+          },
+          "tool_name": {
+            "description": "A catalog tool (`<server>__*`, `user__*`, `builtin__*`, `plan__*`, `agent__*`) or a control step (`exit`, `route`, `filter`, `map`, `reduce`, `agent`, `ask`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tool_name",
+          "input"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "version": {
+      "description": "The file version the document is written in. Omitted means 1; `graph plan migrate` brings a file to the current version.",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "identifier",
+    "name",
+    "description",
+    "steps",
+    "finish"
+  ],
+  "title": "Plan file",
+  "type": "object",
+  "x-format": "YAML",
+  "x-locations": [
+    "`./.graph/plans/<identifier>.yaml` (project)",
+    "`~/.config/graph/plans/<identifier>.yaml` (global)"
+  ]
+}

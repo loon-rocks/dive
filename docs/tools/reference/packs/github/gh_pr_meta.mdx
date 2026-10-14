@@ -1,0 +1,56 @@
+---
+title: "builtin__gh_pr_meta"
+sidebarTitle: "builtin__gh_pr_meta"
+description: "Returns a pull request's title, body, state, author and base and head commits."
+playground: "none"
+keywords: ["builtin__gh_pr_meta", "github"]
+---
+
+## When to use it
+
+- First, before diffing or reviewing a pull request.
+
+| Pack | Kind | Effect |
+| --- | --- | --- |
+| [`github`](/tools/reference/packs/github): add `"github"` to `[tools].packs` | `exec` | Read-only |
+
+## Input
+
+<ParamField body="pr" type="integer" required>
+  Pull request number
+</ParamField>
+
+## Output
+
+<ResponseField name="title" type="string">
+</ResponseField>
+
+<ResponseField name="body" type="string">
+</ResponseField>
+
+<ResponseField name="base_sha" type="string">
+</ResponseField>
+
+<ResponseField name="head_sha" type="string">
+</ResponseField>
+
+<ResponseField name="state" type="string">
+</ResponseField>
+
+<ResponseField name="author" type="string">
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__gh_pr_meta
+  input:
+    pr: "{{input.pr}}"
+```
+
+```bash Inspect
+graph tools show builtin__gh_pr_meta
+```
+
+</RequestExample>

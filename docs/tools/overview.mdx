@@ -1,39 +1,61 @@
 ---
-title: "The tool catalog"
-description: "One namespace for MCP, user, plan, and built-in tools"
-icon: "book-arrow-right"
+title: "Tools"
+sidebarTitle: "Overview"
+description: "Where tools come from, how they're named, and how to inspect any of them."
+keywords: ["tools", "catalog", "MCP", "packs", "user tools"]
 ---
 
-Every capability in graph is a tool in a single catalog, visible to the agent, the planner, and plan steps alike. Namespacing tells you where each tool comes from:
+A tool is anything an [agent](/agents/overview) or a [plan](/plans/overview) step can call. Every tool sits in one catalog, and its name says where it comes from.
 
-| Name | Source |
-| --- | --- |
-| `linear__list_issues` | the `[mcp.linear]` server — [MCP servers](/tools/mcp-servers) |
-| `user__git_log` | a YAML file in `[tools].paths` — [user-defined](/tools/user-defined) |
-| `builtin__infer` | a bundled [tool pack](/tools/builtins) compiled into the binary |
-| `plan__project_status` | a plan document — [plans](/plans/overview) |
-| `plan_and_execute` | reserved: [on-the-fly planning](/plans/the-planner) |
+## Where tools come from
 
-A plan step's `tool_name` may also be one of the seven **control steps** - `exit`, [`ask`](/plans/ask-step), [`agent`](/plans/agent-step), [`route`](/plans/branching), [`filter`](/plans/selection), and [`map`/`reduce`](/plans/iteration). They are bare names with no namespace, and they are not tools: the executor evaluates them, so they belong to no registry and cannot be invoked. They are listed and described alongside the catalog anyway, under the `(control)` source, because writing a step needs their input schemas exactly as much as a tool's.
+| Source | Named | Add one |
+| --- | --- | --- |
+| Your tool files | `user__<name>` | [Create a tool in the workbench](/tools/guides/create-in-workbench) |
+| Built-in tools and packs | `builtin__<name>` | [Built-in tools](/tools/reference/builtin-tools), [Packs](/tools/reference/packs) |
+| MCP servers | `<server>__<tool>` | [Connect an MCP server](/integrating/mcp/guides/connect-mcp-server) |
+| Plans | `plan__<identifier>` | [Plans](/plans/overview) |
+| Agents | `agent__<name>` | [Agents](/agents/overview) |
 
-## Inspecting and invoking
+Because plans and agents are tools too, anything you build can be called by the next thing you build.
+
+## Tool files
+
+A tool file is a YAML file in `./.graph/tools/` or `~/.config/graph/tools/`. Its `kind` decides what it runs:
+
+| Kind | Runs | Calls a model |
+| --- | --- | --- |
+| [`exec`](/tools/reference/tool-file/exec) | A command | No |
+| [`prompt`](/tools/reference/tool-file/prompt) | One model call with a prompt | Yes |
+| [`reshape`](/tools/reference/tool-file/reshape) | A rebuild of JSON from the input | No |
+| [`decision`](/tools/reference/tool-file/decision) | Questions to a decision model | Yes |
+
+Only `prompt` and `decision` tools spend tokens, so moving work into `exec` and `reshape` tools makes it cheaper and repeatable.
+
+Mark a tool `read_only` when it has no side effects. `reshape` and `decision` tools are read-only by default.
+
+Tool names must be unique across both directories. To change a built-in or pack tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces graph's version.
+
+## Inspect and run tools
 
 ```bash
-graph tools list                     # the whole catalog, grouped by source (--json for a script)
-graph tools show linear__list_issues # description + input/output schemas (--json for a script)
-graph tools test user__git_log '{"repo":"/path","count":3}'   # direct invocation
+graph tools list
+graph tools show builtin__git_log
+graph tools test builtin__git_log --input base=v0.15.0
 ```
 
-`tools test` uses the same [input model](/plans/inputs) as plans (`'{json}'`, `@file`, `-`, `--input k=v`) and is the fastest way to learn a tool's real output shape before referencing it in a plan.
+`graph tools list` lists the catalog, `graph tools show` prints a tool's description, schemas and source, and `graph tools test` calls it and prints the result.
 
-`tools list` and `tools show` answer for the whole step vocabulary, control steps included (`graph tools show ask`). `tools test` does not — a control step has no implementation to call, and asking for one is refused with an explanation rather than an "unknown tool".
+## Guides
 
-## Composition rules
-
-- **Plan steps can call anything in the catalog** — MCP tools, user tools, **other plans** (`plan__*`), and even `plan_and_execute`. Plans are composable by design: build small focused plans and orchestrate them from larger ones.
-- **Cycles are caught, depth is bounded.** The pipeline tracks the plan call stack — `a → b → a` fails immediately with the cycle named, and nesting is capped at 8 levels.
-- **Everything feeds the [shape cache](/tools/shape-cache)** — every successful call from any surface records the tool's observed output shape.
-
-## Keeping the catalog sharp
-
-The agent and the planner reason over every tool description in the catalog, so curation improves both cost and routing: allowlist or blocklist per-server tools with `include_tools`/`exclude_tools`, and patch weak descriptions or missing output schemas with `tool_overrides` — see [filtering and overrides](/tools/mcp-servers#filtering-and-overrides).
+<CardGroup cols={2}>
+  <Card title="Create a tool in the workbench" icon="wand-magic-sparkles" href="/tools/guides/create-in-workbench">
+    Draft, test-run and save a tool with the tool drafter.
+  </Card>
+  <Card title="Test a tool" icon="flask" href="/tools/guides/test-a-tool">
+    Run any tool directly and see exactly what it returns.
+  </Card>
+  <Card title="Improve what graph knows about a tool" icon="shapes" href="/tools/guides/tool-shapes">
+    Give drafters and the workbench accurate output shapes for your tools.
+  </Card>
+</CardGroup>

@@ -1,0 +1,73 @@
+---
+title: "graph plan step add"
+sidebarTitle: "add"
+description: "Append a step, or anchor it before/after an existing one"
+playground: "none"
+keywords: ["graph plan step add"]
+---
+
+Adds one step and validates the plan. The edit is refused if it adds a validation problem.
+
+## Arguments
+
+<ParamField path="NAME|PATH" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+<ParamField path="ID" type="string" required>
+  Step id — how later steps reference it as &#123;&#123;&lt;id&gt;.field&#125;&#125;
+</ParamField>
+
+<ParamField path="TOOL" type="string" required>
+  Tool name, or a control step: exit, agent, ask, route, filter, map, reduce
+</ParamField>
+
+<ParamField path="JSON|@FILE|-" type="string" required>
+  The step's input object: inline JSON, @file.json, or - for stdin
+</ParamField>
+
+## Options
+
+<ParamField query="--reasoning" type="string">
+  Why this step exists (carried into the plan for readers)
+
+  Format: `REASONING`.
+</ParamField>
+
+<ParamField query="--before" type="string">
+  Insert before this step id instead of appending
+
+  Format: `ID`.
+</ParamField>
+
+<ParamField query="--after" type="string">
+  Insert after this step id instead of appending
+
+  Format: `ID`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan step add [OPTIONS] <NAME|PATH> <ID> <TOOL> <JSON|@FILE|->
+```
+
+```bash Example 1
+graph plan step add weekly_changes E1 builtin__git_log '{"base":"{{input.base}}","head":"HEAD"}'
+```
+
+```bash Example 2
+graph plan step add weekly_changes G1 exit '{"when":{"value":"{{E1.count}}","op":"eq","to":0},"status":"success","message":"Nothing shipped"}' --after E1
+```
+
+</RequestExample>

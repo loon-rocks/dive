@@ -8,7 +8,7 @@ description: Set up graph as a GitHub Actions check on a repository. Use when
 
 # Graph GitHub Actions Setup
 
-The [graph repository](https://github.com/tylerdavis/graph) is the source of truth — it dogfoods this exact setup on its own PRs. Before generating anything, read the worked example: [`docs/cookbook/ci-checks.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/cookbook/ci-checks.mdx) (annotated walkthrough), [`.github/workflows/graph-checks.yaml`](https://github.com/tylerdavis/graph/blob/main/.github/workflows/graph-checks.yaml) (live workflow), and [`.graph/`](https://github.com/tylerdavis/graph/tree/main/.graph) (live config, plans, and tools). Those move ahead of this skill; prefer them over memory.
+The [graph repository](https://github.com/tylerdavis/graph) is the source of truth — it dogfoods this exact setup on its own PRs. Before generating anything, read the worked example: [`.github/workflows/graph-checks.yaml`](https://github.com/tylerdavis/graph/blob/main/.github/workflows/graph-checks.yaml) (live workflow), and [`.graph/`](https://github.com/tylerdavis/graph/tree/main/.graph) (live config, plans, and tools). Those move ahead of this skill; prefer them over memory.
 
 The finished shape: a workflow job runs in graph's release container image (graph + `git`/`jq`/`gh` baked in — no install step), executes one `graph plan run` per check, and the repo carries everything the check needs under `./.graph/` (config, plans, tools), reviewed like any other code.
 
@@ -28,7 +28,7 @@ Each check is one plan and one CI job. Every plan is one of two shapes, and pick
 
 **The test: should a bad answer block the merge button?**
 
-- **Yes → a gate.** The plan ends in an [`exit` gate](https://github.com/tylerdavis/graph/blob/main/docs/plans/branching.mdx) with `status: error`. A fired gate is process exit code **4**, which fails the CI step; `GRAPH_EVENTS=github` prints the gate's message as a `::error::` run annotation. Examples: docs-drift checks, changelog-entry checks, "does this migration have a rollback" checks.
+- **Yes → a gate.** The plan ends in an [`exit` gate](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/branching.mdx) with `status: error`. A fired gate is process exit code **4**, which fails the CI step; `GRAPH_EVENTS=github` prints the gate's message as a `::error::` run annotation. Examples: docs-drift checks, changelog-entry checks, "does this migration have a rollback" checks.
 - **No → a reporter.** The plan posts its own PR comment (via the github tool pack) and exits 0. It's advisory; CI green either way. Examples: PR review with a repo-specific rubric, risk summaries, test-coverage narratives.
 
 For each check the user wants, also apply the **short-circuit principle**: put deterministic `when` gates (file counts, empty diffs) *before* any `infer` gate or prompt step. A well-built gate exits in milliseconds with zero LLM calls on the common path and pays for at most one judge call on the rare path.
@@ -159,7 +159,7 @@ Non-negotiables baked into the template:
 - **`GRAPH_STORAGE=memory`** — runs are stateless, nothing to clean up.
 - **Draft + fork guards.** Drafts cost nothing (a `ready_for_review` trigger runs the check when the draft flips). Fork PRs are skipped because secrets don't flow to them.
 
-For reporters that should post under their own name/avatar instead of **github-actions[bot]**, see [A custom bot identity](https://github.com/tylerdavis/graph/blob/main/docs/cookbook/ci-checks.mdx) — it's a GitHub App token swap on the one posting step, no graph changes.
+For reporters that should post under their own name/avatar instead of **github-actions[bot]**, swap in a GitHub App token on the one posting step — no graph changes.
 
 ### Step 5: Secrets
 

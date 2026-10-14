@@ -1,0 +1,127 @@
+---
+title: "Branch with route"
+description: "Take different steps depending on the data."
+keywords: ["route", "branch", "if", "then", "else"]
+---
+
+`changes_since` groups the commits since a git ref into themes when there are more than 10, and returns them as they are otherwise. Its `digest` step chooses between the two.
+
+<RequestExample>
+
+```yaml .graph/plans/changes_since.yaml
+version: 2
+identifier: changes_since
+name: Changes since
+description: The commits merged since a git ref, grouped into themes when there are many.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+- id: digest
+  tool_name: route
+  input:
+    if:
+      value: '{{commits.count}}'
+      op: gt
+      to: 10
+    then:
+      tool_name: builtin__infer
+      input:
+        instruction: |-
+          Group these commits into three themes, one line each:
+          {{commits.commits}}
+    else:
+      tool_name: builtin__reshape
+      input:
+        shape:
+          commits: '{{commits.commits}}'
+finish:
+  output:
+    branch: '{{digest.branch}}'
+    digest: '{{digest.result}}'
+```
+
+</RequestExample>
+
+## Take the else branch
+
+Run the plan over the last two commits:
+
+```bash
+graph plan run changes_since \
+  --input base=HEAD~2
+```
+
+`if` doesn't hold, so only `else` runs, with no model call. `{{digest.branch}}` names the branch that ran, and `{{digest.result}}` is its result:
+
+```text
+→ route {"if":{"op":"gt","to":10,"value":2}}
+✓ route 5.6µs
+→ builtin__reshape {"shape":{"commits":[…]}}
+✓ builtin__reshape 3.7ms
+{
+  "branch": "else",
+  "digest": {
+    "commits": [
+      {
+        "short_sha": "648d34e",
+        "subject": "feat!: plans state how they finish with a required finish key…",
+        …
+      },
+      …
+    ]
+  }
+}
+```
+
+## Take the then branch
+
+Run it from a release tag with 28 commits since:
+
+```bash
+graph plan run changes_since \
+  --input base=v0.15.0
+```
+
+`if` holds, so `then` runs the `infer` call instead:
+
+```text
+→ route {"if":{"op":"gt","to":10,"value":28}}
+✓ route 5.0µs
+→ builtin__infer {"instruction":"Group these commits into three themes, one line each:…"}
+✓ builtin__infer 13.9s
+{
+  "branch": "then",
+  "digest": {
+    "text": "**Plan drafting & workbench tooling** — compose_plan/tool_drafter/agent_drafter/search_tools build and refine plans and tools…"
+  }
+}
+  1 call · 4k in / 2k out · $0.04
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Stop early with exit gates" icon="right-from-bracket" href="/plans/guides/exit-gates">
+    End the plan instead of branching.
+  </Card>
+  <Card title="Select items with filter" icon="filter" href="/plans/guides/filter">
+    Keep only the items that pass a condition.
+  </Card>
+  <Card title="Compose plans" icon="layer-group" href="/plans/guides/compose-plans">
+    Call another plan from a branch.
+  </Card>
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Step through a run in the workbench.
+  </Card>
+</CardGroup>

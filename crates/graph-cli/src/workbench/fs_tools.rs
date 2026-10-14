@@ -312,90 +312,94 @@ fn glob_find(root: &Path, input: &Value) -> ToolOutcome {
     }
 }
 
+pub fn tool_defs() -> Vec<ToolDef> {
+    let mut defs = vec![
+        ToolDef {
+            name: READ_FILE.to_string(),
+            description: "Read a text file from the project directory the workbench was \
+                          started in (paths outside it are rejected). Returns numbered \
+                          window metadata; pass `offset`/`limit` to page through large \
+                          files."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "path": {"type": "string", "description": "File path, relative to the project directory (or absolute within it)."},
+                    "offset": {"type": "integer", "description": "1-based line to start from. Default 1."},
+                    "limit": {"type": "integer", "description": "Maximum lines to return. Default 500, cap 2000."}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({
+                "path": "src/main.rs",
+                "content": "fn main() {\n    …\n}\n",
+                "offset": 1,
+                "linesReturned": 312,
+                "totalLines": 312,
+                "truncated": false,
+            })),
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: GREP.to_string(),
+            description: "Search file contents in the project directory with a Rust \
+                          regex (read-only; gitignored files and binaries are skipped). \
+                          Returns matching lines with path and line number — follow up \
+                          with workbench__read_file for surrounding context."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["pattern"],
+                "properties": {
+                    "pattern": {"type": "string", "description": "Rust regex matched against each line."},
+                    "path": {"type": "string", "description": "File or directory to search. Default: the project directory."},
+                    "glob": {"type": "string", "description": "Only search matching files, e.g. *.rs (file name) or src/**/*.rs (relative path)."},
+                    "case_insensitive": {"type": "boolean", "description": "Case-insensitive matching. Default false."},
+                    "max_matches": {"type": "integer", "description": "Stop after this many matches. Default 100, cap 500."}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({
+                "matches": [{"path": "crates/graph-core/src/tools.rs", "line": 42, "text": "pub struct ToolDef {"}],
+                "matchCount": 1,
+                "truncated": false,
+            })),
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: GLOB.to_string(),
+            description: "Find files in the project directory by glob pattern, e.g. \
+                          **/*.rs (read-only; gitignored files are skipped). Paths are \
+                          relative to the project directory, sorted."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["pattern"],
+                "properties": {
+                    "pattern": {"type": "string", "description": "Glob matched against project-relative paths, e.g. **/*.rs or docs/**/*.mdx."},
+                    "dir": {"type": "string", "description": "Directory subtree to search. Default: the project directory."}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({
+                "files": ["crates/graph-cli/src/main.rs"],
+                "count": 1,
+                "truncated": false,
+            })),
+            read_only: Some(true),
+        },
+    ];
+    for def in &mut defs {
+        def.description.push_str(super::tools::WORKBENCH_ONLY_NOTE);
+    }
+    defs
+}
+
 #[async_trait]
 impl ToolRegistry for FsTools {
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
-        let mut defs = vec![
-            ToolDef {
-                name: READ_FILE.to_string(),
-                description: "Read a text file from the project directory the workbench was \
-                              started in (paths outside it are rejected). Returns numbered \
-                              window metadata; pass `offset`/`limit` to page through large \
-                              files."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["path"],
-                    "properties": {
-                        "path": {"type": "string", "description": "File path, relative to the project directory (or absolute within it)."},
-                        "offset": {"type": "integer", "description": "1-based line to start from. Default 1."},
-                        "limit": {"type": "integer", "description": "Maximum lines to return. Default 500, cap 2000."}
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(json!({
-                    "path": "src/main.rs",
-                    "content": "fn main() {\n    …\n}\n",
-                    "offset": 1,
-                    "linesReturned": 312,
-                    "totalLines": 312,
-                    "truncated": false,
-                })),
-                read_only: Some(true),
-            },
-            ToolDef {
-                name: GREP.to_string(),
-                description: "Search file contents in the project directory with a Rust \
-                              regex (read-only; gitignored files and binaries are skipped). \
-                              Returns matching lines with path and line number — follow up \
-                              with workbench__read_file for surrounding context."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["pattern"],
-                    "properties": {
-                        "pattern": {"type": "string", "description": "Rust regex matched against each line."},
-                        "path": {"type": "string", "description": "File or directory to search. Default: the project directory."},
-                        "glob": {"type": "string", "description": "Only search matching files, e.g. *.rs (file name) or src/**/*.rs (relative path)."},
-                        "case_insensitive": {"type": "boolean", "description": "Case-insensitive matching. Default false."},
-                        "max_matches": {"type": "integer", "description": "Stop after this many matches. Default 100, cap 500."}
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(json!({
-                    "matches": [{"path": "crates/graph-core/src/tools.rs", "line": 42, "text": "pub struct ToolDef {"}],
-                    "matchCount": 1,
-                    "truncated": false,
-                })),
-                read_only: Some(true),
-            },
-            ToolDef {
-                name: GLOB.to_string(),
-                description: "Find files in the project directory by glob pattern, e.g. \
-                              **/*.rs (read-only; gitignored files are skipped). Paths are \
-                              relative to the project directory, sorted."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["pattern"],
-                    "properties": {
-                        "pattern": {"type": "string", "description": "Glob matched against project-relative paths, e.g. **/*.rs or docs/**/*.mdx."},
-                        "dir": {"type": "string", "description": "Directory subtree to search. Default: the project directory."}
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(json!({
-                    "files": ["crates/graph-cli/src/main.rs"],
-                    "count": 1,
-                    "truncated": false,
-                })),
-                read_only: Some(true),
-            },
-        ];
-        for def in &mut defs {
-            def.description.push_str(super::tools::WORKBENCH_ONLY_NOTE);
-        }
-        Ok(defs)
+        Ok(tool_defs())
     }
 
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {

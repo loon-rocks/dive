@@ -1,0 +1,11 @@
+<ParamField header="OTEL_EXPORTER_OTLP_PROTOCOL" type="enum<string>" default="http/protobuf">
+  The export wire format.
+
+  Overrides [`telemetry.protocol`](/reference/configuration#param-telemetry-protocol) in config.toml.
+
+  | Value | Effect |
+  | --- | --- |
+  | `http/protobuf` | Protobuf over HTTP. |
+  | `http/json` | JSON over HTTP. |
+
+</ParamField>

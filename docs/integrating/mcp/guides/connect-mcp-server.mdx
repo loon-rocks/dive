@@ -1,0 +1,75 @@
+---
+title: "Connect an MCP server"
+description: "Add an MCP server's tools to your catalog and check they work."
+keywords: ["MCP", "mcp servers", "stdio", "http"]
+---
+
+import ConfigMcp from "/snippets/generated/config/mcp.mdx";
+
+Add a server to config.toml and its tools join your catalog as `<name>__<tool>`, ready for agents and plan steps.
+
+## Before you start
+
+You need the server's launch command or its URL. If it needs a token, put the token in an environment variable rather than in the file.
+
+## Add the server
+
+<Steps>
+  <Step title="Add an [mcp.<name>] table">
+    The table name becomes the prefix of every tool from the server. Use `command` for a server graph starts itself over stdio, or `url` for a streamable HTTP server.
+
+    <CodeGroup>
+
+    ```toml stdio
+    [mcp.everything]
+    description = "MCP reference server for testing"
+    command = "npx"
+    args = ["-y", "@modelcontextprotocol/server-everything"]
+    ```
+
+    ```toml HTTP
+    [mcp.tracker]
+    description = "Issues and projects in our tracker"
+    url = "https://mcp.example.com/mcp"
+    headers = { Authorization = "Bearer ${TRACKER_TOKEN}" }
+    ```
+
+    </CodeGroup>
+
+    `description` is optional, but setting it generally improves how well the planner chooses the server's tools. Values in `env` and `headers` expand `${VAR}` from your environment. If a variable isn't set, graph doesn't connect to that server and names the missing variable.
+  </Step>
+  <Step title="Test the connection">
+    ```bash
+    graph mcp test everything
+    ```
+
+    ```text
+    ok: 'everything' initialized in 1.37s — 13 tools (1 declare output schemas)
+    ```
+  </Step>
+</Steps>
+
+## Check it worked
+
+List the server's tools, then call one through graph:
+
+```bash
+graph mcp tools everything
+graph tools test everything__echo --input message=hello
+```
+
+```json
+{
+  "text": "Echo: hello"
+}
+```
+
+graph returns a tool's structured content when the server sends it. Otherwise it parses the text the tool returns as JSON, or wraps plain text as `{"text": ...}`, as here.
+
+To load only some of a server's tools, or fix a tool's description, see [Filter and override a server's tools](/integrating/mcp/guides/filter-and-override-tools). If the server won't connect, see [Test an MCP server](/integrating/mcp/guides/test-an-mcp-server).
+
+## Related config.toml options
+
+<ConfigMcp />
+
+[Go to full reference](/reference/configuration)

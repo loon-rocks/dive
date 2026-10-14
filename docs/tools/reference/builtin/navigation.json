@@ -1,0 +1,9 @@
+{
+  "group": "Built-in tools",
+  "pages": [
+    "tools/reference/builtin/infer",
+    "tools/reference/builtin/decide",
+    "tools/reference/builtin/reshape"
+  ],
+  "root": "tools/reference/builtin-tools"
+}

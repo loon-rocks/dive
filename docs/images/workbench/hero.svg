@@ -50,7 +50,7 @@
 <text x="1017.6" y="103.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="18.0" y="121.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">│</text>
 <text x="34.8" y="121.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">→</text>
-<text x="51.6" y="121.5" textLength="159.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbench__run_plan</text>
+<text x="51.6" y="121.5" textLength="193.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbench__try_artifact</text>
 <text x="412.8" y="121.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">│</text>
 <text x="421.2" y="121.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="429.6" y="121.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">finish:</text>

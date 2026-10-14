@@ -1,0 +1,15 @@
+---
+title: "Built-in tools"
+description: "Model calls and JSON reshaping that every agent and plan step can use, with no pack to enable."
+keywords: ["Built-in tools"]
+---
+
+- Always in the catalog, called as `builtin__<name>`.
+- `infer` and `decide` need a configured model: a chat model for `infer`, a decision model for `decide`. `reshape` makes no model call.
+- To replace one, put a tool file with the same `name` in `<tools dir>/builtin/`, such as `.graph/tools/builtin/reshape.yaml`.
+
+| Name | Description |
+| --- | --- |
+| [`builtin__infer`](/tools/reference/builtin/infer) | Runs one model call over an instruction and returns text or structured JSON. |
+| [`builtin__decide`](/tools/reference/builtin/decide) | Asks a decision model typed questions about one piece of data. |
+| [`builtin__reshape`](/tools/reference/builtin/reshape) | Builds a value in a new JSON shape from earlier step results. |

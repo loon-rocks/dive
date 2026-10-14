@@ -1,0 +1,35 @@
+---
+title: "graph workbench agent"
+sidebarTitle: "agent"
+description: "Open the workbench in agent mode: draft a new agent, or edit an existing one"
+playground: "none"
+keywords: ["graph workbench agent"]
+---
+
+## Arguments
+
+<ParamField path="NAME" type="string">
+  An agent name to open for editing; omit to draft a new one
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph workbench agent [OPTIONS] [NAME]
+```
+
+```bash Example 1
+graph wb agent
+```
+
+```bash Example 2
+graph wb agent release_notes
+```
+
+</RequestExample>

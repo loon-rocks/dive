@@ -1,0 +1,107 @@
+---
+title: "The workbench"
+description: "Find your way around graph's terminal UI for building and testing agents, plans and tools."
+keywords: ["workbench", "graph workbench", "graph wb", "front desk", "keys"]
+---
+
+The workbench is a full-screen terminal UI where you build agents, plans and tools by talking to graph's built-in agents, then run and debug them in the same window.
+
+## Open it
+
+```bash
+graph workbench
+```
+
+It opens at the front desk, which asks what you want to build. To go straight to a mode, name it, and optionally the file to open:
+
+```bash
+graph workbench plan unreleased_changes
+graph workbench agent release_notes
+graph workbench tool merged_prs
+```
+
+`graph wb` is short for `graph workbench`. The workbench needs an interactive terminal. In scripts and CI, use [`graph plan run`](/plans/guides/run-a-plan).
+
+## Layout
+
+<Frame caption="unreleased_changes open in the workbench">
+  <img src="/images/workbench/workbench-layout.svg" alt="The workbench with the chat pane on the left, where plan_editor describes unreleased_changes, and the workspace on the right, showing the plan's steps and the detail of the selected row." />
+</Frame>
+
+- **Chat**, on the left: you talk to the workbench's agents. The pane title names the agent you're talking to.
+- **Workspace**, on the right, with three tabs:
+  - <kbd>1</kbd> the plan, agent or tool you're working on, with the selected row's detail below it.
+  - <kbd>2</kbd> the tool catalog the agents draft from.
+  - <kbd>3</kbd> the latest run.
+
+## Who you're talking to
+
+The front desk hands you to the plan drafter, the agent drafter or the tool drafter. Once a plan is drafted or opened, the plan editor takes over. The plan drafter and plan editor can hand you to the tool or agent drafter when a plan needs a new tool or agent, and those drafters hand you back when they're done.
+
+To switch by hand, type `/agent <name>` in the chat. See [Built-in agents](/agents/reference/built-in-agents) for what each one does.
+
+## Saving
+
+<kbd>Ctrl</kbd>+<kbd>S</kbd> saves what's in the workspace: plans to `./.graph/plans/`, agents to `./.graph/agents/` and tools to `./.graph/tools/`, ready to commit. A file you opened is saved in place.
+
+## Keys
+
+<kbd>Tab</kbd> moves focus between chat and the workspace. Most keys act on the workspace, so press <kbd>Tab</kbd> first when you're typing in chat.
+
+| Key | Does |
+| --- | --- |
+| <kbd>Enter</kbd> | Chat: send. <kbd>Alt</kbd>+<kbd>Enter</kbd> adds a new line |
+| <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> | Switch workspace tab. <kbd>Alt</kbd>+<kbd>1</kbd> works from chat |
+| <kbd>j</kbd> <kbd>k</kbd> | Select a step or tool |
+| <kbd>e</kbd> | Edit the selected step in a form |
+| <kbd>a</kbd> / <kbd>A</kbd> | Add a step after / before the selected one |
+| <kbd>PgUp</kbd> <kbd>PgDn</kbd> | Scroll the focused pane |
+| <kbd>v</kbd> | Validate the plan |
+| <kbd>r</kbd> | Run the plan |
+| <kbd>g</kbd> | Debug run: pause at each breakpoint, or before every call when there are none |
+| <kbd>b</kbd> | Toggle a breakpoint on the selected step |
+| <kbd>u</kbd> | Undo the last time an agent replaced the draft. Press again to redo |
+| <kbd>x</kbd> <kbd>x</kbd> | Discard the agent or tool draft |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
+| <kbd>?</kbd> | Show the keys |
+| <kbd>q</kbd> | Quit |
+
+While a debug run is paused:
+
+| Key | Does |
+| --- | --- |
+| <kbd>n</kbd> | Run this call and pause at the next one |
+| <kbd>c</kbd> | Continue to the next breakpoint or error |
+| <kbd>s</kbd> | Skip this call and give it a result, or replace a failed call's result |
+| <kbd>a</kbd> | Abort the run |
+
+## Mouse
+
+| Action | Does |
+| --- | --- |
+| Click a pane | Focus it |
+| Click a tab | Switch to it |
+| Click a row | Select it |
+| Double-click a row | Edit it |
+| Scroll | Scroll the pane under the pointer |
+
+## Logs
+
+The workbench writes its log to `workbench.log` in the [data directory](/reference/data-directory), not to the terminal. Set `GRAPH_WORKBENCH_LOG` or `[workbench] log_path` to change the path, and `GRAPH_LOG` to change what it records.
+
+## Guides
+
+<CardGroup cols={2}>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Describe a goal and get a plan you can run.
+  </Card>
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Pause at a breakpoint, find the bad input and fix the step.
+  </Card>
+  <Card title="Create an agent in the workbench" icon="robot" href="/agents/guides/create-in-workbench">
+    Draft an agent with tools and save it.
+  </Card>
+  <Card title="Create a tool in the workbench" icon="wrench" href="/tools/guides/create-in-workbench">
+    Draft a tool, test-run it and save it.
+  </Card>
+</CardGroup>

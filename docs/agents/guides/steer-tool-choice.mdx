@@ -1,0 +1,89 @@
+---
+title: "Steer tool choice"
+description: "Get the chat agent to call your digest plan for release questions by describing the plan and giving it exemplars."
+keywords: ["tool selection", "descriptions", "exemplars", "plans as tools"]
+---
+
+## See what the agent calls
+
+This `digest` plan gathers the commits since the latest release, but its description doesn't say so:
+
+```yaml .graph/plans/digest.yaml
+version: 2
+identifier: digest
+name: Digest
+description: Team digest.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.tag}}'
+    head: HEAD
+finish:
+  output:
+    since: '{{release.tag}}'
+    commits: '{{commits.commits}}'
+```
+
+Ask a question the plan answers:
+
+```bash
+graph ask "What have we merged since we last shipped?"
+```
+
+`chat` skips the plan and makes the same calls itself:
+
+```text
+→ builtin__gh_release {}
+✓ builtin__gh_release 1.1s
+→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+✓ builtin__git_log 72.9ms
+```
+
+## Describe the plan and add exemplars
+
+Say what the plan returns in `description`, and list questions it answers under `exemplars`. The agent reads both in the plan's tool description:
+
+```yaml .graph/plans/digest.yaml
+description: Team digest. The commits merged since the latest GitHub release.
+exemplars:
+- What have we merged since the last release?
+- What's unreleased?
+```
+
+## Ask again
+
+```bash
+graph ask "What have we merged since we last shipped?"
+```
+
+`chat` now calls the plan:
+
+```text
+→ plan__digest {}
+  → builtin__gh_release {}
+  ✓ builtin__gh_release 995.2ms
+  → builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+  ✓ builtin__git_log 50.5ms
+✓ plan__digest 1.0s
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Optimize an agent with plans" icon="gauge" href="/agents/guides/optimize-with-plans">
+    Move an agent's repeated tool calls into a plan.
+  </Card>
+  <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
+    Change the `chat` agent itself.
+  </Card>
+  <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
+    Run agents with `graph ask` and `graph chat`.
+  </Card>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Let the workbench write the plan and its description.
+  </Card>
+</CardGroup>

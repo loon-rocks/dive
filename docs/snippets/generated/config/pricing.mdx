@@ -1,0 +1,19 @@
+<ParamField body="pricing" type="object">
+  Prices per model id, as `[pricing."<model>"]`, in USD per million tokens. Without them, usage is reported in tokens only.
+</ParamField>
+
+<ParamField body="pricing.<name>.input" type="number" required>
+  Input tokens.
+</ParamField>
+
+<ParamField body="pricing.<name>.output" type="number" required>
+  Output tokens.
+</ParamField>
+
+<ParamField body="pricing.<name>.cache_write" type="number">
+  Cache-write tokens.
+</ParamField>
+
+<ParamField body="pricing.<name>.cache_read" type="number">
+  Cache-read tokens.
+</ParamField>

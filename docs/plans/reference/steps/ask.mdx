@@ -1,0 +1,83 @@
+---
+title: "ask"
+sidebarTitle: "ask"
+description: "Asks the person running the plan a question and uses their answer."
+playground: "none"
+keywords: ["ask", "control step"]
+---
+
+## When to use it
+
+- For a value only the person running the plan knows, or a confirmation before an irreversible action.
+- Not for anything a tool can look up or a gate can judge.
+
+## How it works
+
+- `outputSchema` must be a flat object of strings, numbers, booleans and enums.
+- The terminal, the workbench and MCP clients each show the question their own way.
+- `whenUnanswered` decides what happens when nobody can answer, such as in CI: `fail` (the default) or `default`, which uses `default`.
+
+## Input
+
+<ParamField body="default" type="any">
+  The fallback answer used when whenUnanswered is 'default', and the answer a host offers prefilled. Must conform to outputSchema. May use templates.
+</ParamField>
+
+<ParamField body="outputSchema" type="any" required>
+  JSON Schema for the answer. Must be type object whose properties are all primitives (string, number, integer, boolean) or string enums — no nested objects or arrays. Give every property a description written as a question: it is what the user reads for that field. May be a template (&#123;&#123;E1.schema&#125;&#125;) or contain templates (an enum from &#123;&#123;E1.names&#125;&#125;); it is then checked when the step runs.
+</ParamField>
+
+<ParamField body="prompt" type="string" required>
+  The question, as the user will see it. May use templates like &#123;&#123;E0.candidates&#125;&#125;.
+</ParamField>
+
+<ParamField body="whenUnanswered" type="enum<string>">
+  What to do when nobody can answer (headless run, client without elicitation support, user declined). 'fail' (the default) fails the step; 'default' falls back to the `default` value.
+
+  Available options: `fail`, `default`
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="answer" type="object">
+  The answer, matching `outputSchema`.
+</ResponseField>
+
+<ResponseField name="answer.repo" type="string">
+</ResponseField>
+
+<ResponseField name="answered" type="boolean">
+  False when the person declined or nobody could be asked.
+</ResponseField>
+
+<ResponseField name="reason" type="string">
+  When `answered` is false: `declined` or `unavailable`.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: ask
+  input:
+    prompt: "{{input.prompt}}"
+    outputSchema: "{{input.outputSchema}}"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "answer": {
+    "repo": "tylerdavis/graph"
+  },
+  "answered": false,
+  "reason": "unavailable"
+}
+```
+
+</ResponseExample>

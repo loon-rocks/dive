@@ -278,7 +278,7 @@ pub fn check_finish_key(doc: &serde_yaml::Value) -> Result<(), String> {
     Ok(())
 }
 
-const STEP_KEYS: &[&str] = &["id", "tool_name", "toolName", "input", "reasoning"];
+pub(crate) const STEP_KEYS: &[&str] = &["id", "tool_name", "toolName", "input", "reasoning"];
 
 /// Reject a key on any step, at any depth, that the step grammar does not
 /// know. Files are read strictly; the planner's structured output is not

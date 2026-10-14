@@ -1,0 +1,78 @@
+---
+title: "search_tools"
+sidebarTitle: "search_tools"
+description: "Finds the catalog tools that fit a task, most likely first."
+playground: "none"
+keywords: ["search_tools", "plan__search_tools"]
+---
+
+## How it works
+
+- With a decision model configured, the model chooses among every tool, and its probabilities rank them.
+- Without one, keywords rank them.
+- Tools below `min_probability` are dropped, so the list can be empty.
+
+`compose_plan` and the drafter agents use this plan to find tools.
+
+## Input
+
+<ParamField body="query" type="string" required>
+  The task the tools are for, as one step
+</ParamField>
+
+<ParamField body="min_probability" type="number" default="0.1">
+  Minimum probability for a tool to be returned
+</ParamField>
+
+<ParamField body="limit" type="integer" default="10">
+  Most tools to return
+</ParamField>
+
+<ParamField body="model" type="string" default="decider">
+  The decision model role that chooses
+</ParamField>
+
+<ParamField body="chunk_size" type="integer" default="250">
+  Most tools per choice question, up to 255; larger catalogs are split, then every tool reaching min_probability meets the others in a final choice
+</ParamField>
+
+<ParamField body="schemas" type="boolean" default="true">
+  Include each tool's input schema and output shape
+</ParamField>
+
+## Output
+
+<ResponseField name="mode" type="string">
+  How tools were ranked, `decision` (a decision model chose) or `keyword` (keyword match).
+</ResponseField>
+
+<ResponseField name="tools" type="object[]">
+  The tools that fit, most likely first, with their scores and, when `schemas` is on, their input schemas and output shapes.
+</ResponseField>
+
+<ResponseField name="always" type="string[]">
+  Tools that are always offered, from `[tools].always_loaded`. They're never ranked.
+</ResponseField>
+
+## Steps
+
+| Step | Calls |
+| --- | --- |
+| `catalog` | `builtin__catalog_tools` |
+| `picked` | `builtin__score_candidates` |
+| `described` | `builtin__describe_tools` |
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: plan__search_tools
+  input:
+    query: "{{input.query}}"
+```
+
+```bash Customize
+graph plan show search_tools > .graph/plans/search_tools.yaml
+```
+
+</RequestExample>

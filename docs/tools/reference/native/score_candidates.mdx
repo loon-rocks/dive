@@ -1,0 +1,83 @@
+---
+title: "builtin__score_candidates"
+sidebarTitle: "builtin__score_candidates"
+description: "Scores candidate tools for a task from 0 to 1 and selects the best."
+playground: "none"
+keywords: ["builtin__score_candidates"]
+---
+
+## Scoring
+
+- With a decision model, scores are the probabilities of one choice question.
+- Large candidate lists are split into several choices, then the leaders compete in a final one.
+- Without a decision model, or if that call fails, candidates are ranked by keyword overlap.
+
+## Selection
+
+- `selected` holds candidates at or above `threshold`, topped up to `floor` and capped at `limit`.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="candidates" type="object[]" required>
+  Objects with `name` and `description`
+</ParamField>
+
+<ParamField body="chunk_size" type="integer">
+  Most options per choice question, up to 255; larger sets are split into choices sent together, then a final choice among every candidate that reached the threshold. Default 250
+</ParamField>
+
+<ParamField body="floor" type="integer">
+  Fewest candidates to select, taking the best below the threshold when needed; default 0
+</ParamField>
+
+<ParamField body="limit" type="integer">
+  Most candidates to select
+</ParamField>
+
+<ParamField body="model" type="string">
+  The decision model role; default decider
+</ParamField>
+
+<ParamField body="query" type="string" required>
+  The task the candidates are scored against
+</ParamField>
+
+<ParamField body="question" type="string" required>
+  The choice question; the task follows it
+</ParamField>
+
+<ParamField body="threshold" type="number">
+  Minimum score to be selected; default 0.5
+</ParamField>
+
+## Output
+
+<ResponseField name="fallback_reason" type="string">
+</ResponseField>
+
+<ResponseField name="mode" type="enum<string>" required>
+  Available options: `decision`, `keyword`
+</ResponseField>
+
+<ResponseField name="scored" type="object[]" required>
+</ResponseField>
+
+<ResponseField name="selected" type="object[]" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__score_candidates
+  input:
+    query: "{{input.query}}"
+    candidates: "{{input.candidates}}"
+    question: "{{input.question}}"
+```
+
+</RequestExample>

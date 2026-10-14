@@ -1,0 +1,127 @@
+---
+title: "Iterate with map and reduce"
+description: "Write a release note for each commit with map, then join the notes into one changelog with reduce."
+keywords: ["map", "reduce", "over", "do", "concurrency", "accumulator"]
+---
+
+`unreleased_changes` writes a note for every commit since the latest release, four commits at a time, and joins the notes into one changelog.
+
+<RequestExample>
+
+```yaml .graph/plans/unreleased_changes.yaml
+version: 2
+identifier: unreleased_changes
+name: Unreleased changes
+description: A release note for each commit since the latest release, joined into one list.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.tag}}'
+    head: HEAD
+- id: notes
+  tool_name: map
+  input:
+    over: '{{commits.commits}}'
+    concurrency: 4
+    do:
+    - id: files
+      tool_name: builtin__git_changed_files
+      input:
+        base: '{{item.sha}}~1'
+        head: '{{item.sha}}'
+        prefix: ''
+    - id: note
+      tool_name: builtin__infer
+      input:
+        instruction: |-
+          Write one release-note line for this commit.
+          Subject: {{item.subject}}
+          Files changed: {{files.files}}
+- id: changelog
+  tool_name: reduce
+  input:
+    over: '{{notes.results}}'
+    initial:
+      text: ''
+    do:
+      tool_name: builtin__reshape
+      input:
+        shape:
+          text: |-
+            {{accumulator.text}}
+            - {{item.text}}
+finish:
+  output:
+    since: '{{release.tag}}'
+    changelog: '{{changelog.result.text}}'
+```
+
+</RequestExample>
+
+## Run steps for each commit with map
+
+The `notes` step is a `map`:
+
+- `over` is the list, here the commits from `git_log`.
+- `do` holds the steps that run once per item. `{{item}}` is the current commit.
+- `concurrency: 4` runs four commits at a time.
+
+Each item's result is the result of its last step, and `{{notes.results}}` lists them in the same order as the commits.
+
+## Join the notes with reduce
+
+The `changelog` step is a `reduce`. It runs `do` once per note, in order:
+
+- `{{accumulator}}` starts as `initial`, and each run's result becomes the next `{{accumulator}}`.
+- Here each run adds the note `{{item.text}}` as a new line under the text so far.
+
+The final value is `{{changelog.result}}`.
+
+## Run it
+
+```bash
+graph plan run unreleased_changes
+```
+
+stderr shows the `map` starting four commits at once, then the `reduce` working through the notes:
+
+```text
+→ map {"concurrency":4,"over":28}
+→ builtin__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
+→ builtin__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}
+→ builtin__git_changed_files {"base":"1a8443c…~1","head":"1a8443c…","prefix":""}
+→ builtin__git_changed_files {"base":"dae2d40…~1","head":"dae2d40…","prefix":""}
+…
+✓ map 11.3s
+→ reduce {"over":28}
+…
+✓ reduce 124.9ms
+  28 calls · 23k in / 2k out · $0.10
+```
+
+The changelog on stdout has one line per commit:
+
+```json
+{
+  "changelog": "\n- **Breaking change:** Plans must now declare a required `finish` key…\n- **BREAKING:** Workbench agents now operate on plans using the same unified artifact tools…\n…",
+  "since": "v0.15.0"
+}
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Select items with filter" icon="filter" href="/plans/guides/filter">
+    Keep only the items that matter before working on them.
+  </Card>
+  <Card title="Compose plans" icon="layer-group" href="/plans/guides/compose-plans">
+    Call a plan from a body for nested iteration.
+  </Card>
+  <Card title="Delegate a step to an agent" icon="robot" href="/plans/guides/agent-steps">
+    Give a step that needs judgment to an agent.
+  </Card>
+</CardGroup>

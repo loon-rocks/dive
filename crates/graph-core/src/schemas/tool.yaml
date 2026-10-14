@@ -1,0 +1,207 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Tool file
+description: One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the pack tool it names instead.
+x-format: YAML
+x-locations:
+  - "`./.graph/tools/<name>.yaml` (project)"
+  - "`~/.config/graph/tools/<name>.yaml` (global)"
+  - "`<tools dir>/builtin/<name>.yaml` (replaces a pack tool)"
+type: object
+required: [name, description, kind]
+properties:
+  version:
+    type: integer
+    description: The file version the document is written in. Omitted means 1; `graph tools migrate` brings a file to the current version.
+  name:
+    type: string
+    pattern: "^[A-Za-z0-9_-]+$"
+    description: Letters, digits, `_` and `-`. The tool is called as `user__<name>`.
+  description:
+    type: string
+    description: What the tool does and returns. Agents and the plan drafter read it when choosing tools.
+  kind:
+    type: string
+    enum: [exec, prompt, reshape, decision]
+    description: What the tool runs. Each kind takes its own fields, listed below.
+  input_schema:
+    type: object
+    description: JSON Schema for the input, validated before the tool runs. Templates reference it as `{{input.<field>}}`.
+  output_schema:
+    type: object
+    description: JSON Schema for the output. A `prompt` tool enforces it as structured output; for every kind it tells drafters what the tool returns.
+  read_only:
+    type: boolean
+    description: Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.
+oneOf:
+  - title: exec
+    description: Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.
+    properties:
+      kind:
+        const: exec
+      command:
+        type: string
+        description: The executable.
+      args:
+        type: array
+        items:
+          type: string
+        description: Arguments, as templates over `{{input.*}}`.
+      env:
+        type: object
+        additionalProperties:
+          type: string
+        description: Extra environment variables. Values expand `${VAR}` from graph's environment, and `${VAR:-default}` falls back when it's unset or empty.
+      cwd:
+        type: string
+        description: Working directory for the process.
+      timeout_secs:
+        type: integer
+        default: 60
+        description: Seconds before the process is killed.
+      output:
+        type: string
+        enum: [json, text]
+        default: json
+        description: "`json` parses stdout as JSON; `text` returns it as `{text}`."
+    required: [command]
+    examples:
+      - version: 2
+        name: open_prs
+        description: Open pull requests in the current repository, newest first.
+        kind: exec
+        command: gh
+        args: [pr, list, --state, open, --json, "number,title,author", --limit, "{{input.limit}}"]
+        read_only: true
+        input_schema:
+          type: object
+          required: [limit]
+          properties:
+            limit:
+              type: integer
+              description: Most pull requests to return
+  - title: prompt
+    description: One model call. The result is `{text}`, or validated JSON when `output_schema` is set.
+    properties:
+      kind:
+        const: prompt
+      prompt:
+        type: string
+        description: The message to send, as a template over `{{input.*}}`.
+      system:
+        type: string
+        description: A fixed system prompt.
+      model:
+        type: string
+        default: chat
+        description: The model role that runs the call, standard or custom.
+      caller_output_schema:
+        type: boolean
+        default: false
+        description: Take `output_schema` from the call's input.
+      caller_model:
+        type: boolean
+        default: false
+        description: Let the call's `model` input pick the role.
+      caller_system:
+        type: boolean
+        default: false
+        description: Take `system` from the call's input.
+    required: [prompt]
+    examples:
+      - version: 2
+        name: summarize
+        description: Summarizes text into a gist and three keywords.
+        kind: prompt
+        prompt: "Summarize into one sentence and three keywords: {{input.text}}"
+        model: chat
+        input_schema:
+          type: object
+          required: [text]
+          properties:
+            text:
+              type: string
+              description: The text to summarize
+        output_schema:
+          type: object
+          required: [gist, keywords]
+          properties:
+            gist:
+              type: string
+            keywords:
+              type: array
+              items:
+                type: string
+  - title: reshape
+    description: Builds a value in a new JSON shape from the input, with no process and no model call. Leaf strings are templates; a leaf that is exactly one template keeps the value's type.
+    properties:
+      kind:
+        const: reshape
+      shape:
+        description: The output shape, as a JSON tree whose leaf strings are templates over `{{input.*}}`.
+      caller_shape:
+        type: boolean
+        default: false
+        description: Take `shape` from the call's input instead.
+    examples:
+      - version: 2
+        name: pr_summary_row
+        description: Turns a pull request into a table row.
+        kind: reshape
+        shape:
+          number: "{{input.pr.number}}"
+          title: "{{input.pr.title}}"
+          author: "{{input.pr.author.login}}"
+        input_schema:
+          type: object
+          required: [pr]
+          properties:
+            pr:
+              type: object
+              description: A pull request from gh
+  - title: decision
+    description: Asks a decision model typed questions about the same state, each answered independently. The result maps each question name to its answer.
+    properties:
+      kind:
+        const: decision
+      state:
+        description: The data to judge, as a template tree over `{{input.*}}`. Omitted, the call's `state` input is used.
+      questions:
+        type: object
+        description: Question name to question. Each has a `type` (`likelihood`, `choice` or `score`), `instructions`, and `criteria` for that type.
+      model:
+        type: string
+        default: decider
+        description: A decision model role. A chat role fails the call.
+      caller_questions:
+        type: boolean
+        default: false
+        description: Take `questions` from the call's input instead.
+      caller_model:
+        type: boolean
+        default: false
+        description: Let the call's `model` input pick the role.
+    examples:
+      - version: 2
+        name: triage
+        description: Routes a support ticket and checks whether it is urgent.
+        kind: decision
+        model: decider
+        state:
+          ticket: "{{input.ticket}}"
+        questions:
+          team:
+            type: choice
+            instructions: Which team should handle this ticket?
+            criteria:
+              billing: Payments
+              technical: Bugs
+          urgent:
+            type: likelihood
+            instructions: Does the ticket convey urgency?
+        input_schema:
+          type: object
+          required: [ticket]
+          properties:
+            ticket:
+              type: string
+              description: The ticket text

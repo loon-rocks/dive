@@ -1,0 +1,41 @@
+---
+title: "graph config init"
+sidebarTitle: "init"
+description: "Write a starter config file"
+playground: "none"
+keywords: ["graph config init"]
+---
+
+Writes a commented starter config to `./.graph/config.toml`, or to `~/.config/graph/config.toml` with `--global`. Refuses to overwrite an existing file unless `--force` is set.
+
+## Options
+
+<ParamField query="--global" type="boolean">
+  Write to the global location (~/.config/graph/) instead of the project (./.graph/)
+</ParamField>
+
+<ParamField query="--force" type="boolean">
+  Overwrite an existing file
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph config init [OPTIONS]
+```
+
+```bash Example 1
+graph config init
+```
+
+```bash Example 2
+graph config init --global
+```
+
+</RequestExample>

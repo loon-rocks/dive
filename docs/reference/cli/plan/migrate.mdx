@@ -1,0 +1,39 @@
+---
+title: "graph plan migrate"
+sidebarTitle: "migrate"
+description: "Rewrite a plan file to the current plan format"
+playground: "none"
+keywords: ["graph plan migrate"]
+---
+
+Rewrites one plan file to the current plan file version. A file already at the current version is left untouched.
+
+## Arguments
+
+<ParamField path="NAME_OR_PATH" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan migrate [OPTIONS] <NAME_OR_PATH>
+```
+
+```bash Example
+graph plan migrate .graph/plans/weekly_changes.yaml
+```
+
+</RequestExample>

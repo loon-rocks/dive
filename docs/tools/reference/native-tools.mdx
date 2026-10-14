@@ -1,0 +1,23 @@
+---
+title: "Native tools"
+description: "Tools built into graph that any agent or plan step can call, with no pack to enable."
+keywords: ["Native tools"]
+---
+
+- Always in the catalog under `builtin__`, like pack tools, but implemented inside graph.
+- The built-in plans (`compose_plan`, `search_tools`) and the drafter agents are built on them.
+- For tools that act on what the workbench has open, see [Workbench tools](/tools/reference/workbench-tools).
+
+| Name | Description |
+| --- | --- |
+| [`builtin__validate_plan`](/tools/reference/native/validate_plan) | Validates a plan's structure, templates and tool calls against the catalog. |
+| [`builtin__check_plan`](/tools/reference/native/check_plan) | Validates a plan written as YAML, optionally after applying a patch to it. |
+| [`builtin__compose_context`](/tools/reference/native/compose_context) | Gathers what a drafting call needs to write a whole plan in one pass. |
+| [`builtin__question_form`](/tools/reference/native/question_form) | Turns the questions a draft asked into the answer schema for an `ask` step. |
+| [`builtin__find_tools`](/tools/reference/native/find_tools) | Searches for tools a drafting call asked for and adds them to the tools already found. |
+| [`builtin__catalog_tools`](/tools/reference/native/catalog_tools) | Lists every tool in the catalog with its description, for searching. |
+| [`builtin__score_candidates`](/tools/reference/native/score_candidates) | Scores candidate tools for a task from 0 to 1 and selects the best. |
+| [`builtin__describe_tools`](/tools/reference/native/describe_tools) | Describes the named tools, in order, with their schemas and output shapes. |
+| [`builtin__try_tool`](/tools/reference/native/try_tool) | Test-runs a drafted tool once, before it's saved. |
+| [`builtin__save_tool`](/tools/reference/native/save_tool) | Saves a drafted tool to the project's tools directory and loads it immediately as `user__<name>`. |
+| [`builtin__save_agent`](/tools/reference/native/save_agent) | Validates a drafted agent file, saves it to the project's agents directory, and loads it immediately. |

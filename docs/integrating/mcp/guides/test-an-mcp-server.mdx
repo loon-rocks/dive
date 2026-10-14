@@ -1,0 +1,79 @@
+---
+title: "Test an MCP server"
+description: "Check that graph can reach an MCP server, list its tools, and call one directly."
+keywords: ["mcp", "graph mcp test", "graph tools test", "troubleshooting"]
+---
+
+Work from the connection up: confirm graph reaches the server, then that it loads the tools you expect, then that a tool returns what you expect.
+
+## Check the connection
+
+`graph mcp list` shows each configured server and how graph reaches it:
+
+```text
+everything	stdio: npx -y @modelcontextprotocol/server-everything
+tracker	http: https://mcp.example.com/mcp
+```
+
+`graph mcp test` connects to one server and lists its tools:
+
+```bash
+graph mcp test everything
+```
+
+```text
+ok: 'everything' initialized in 1.37s — 13 tools (1 declare output schemas)
+```
+
+## List the tools graph loads
+
+`graph mcp tools` shows each tool graph loads from a server, after `include_tools` and `exclude_tools`, with its description:
+
+```bash
+graph mcp tools everything
+```
+
+```text
+everything — 2 tools
+  echo [read-only]
+  Returns the message it is given, prefixed with 'Echo: '.
+  get-sum [read-only]
+  Returns the sum of two numbers
+```
+
+To change that list, see [Filter and override a server's tools](/integrating/mcp/guides/filter-and-override-tools).
+
+## Call a tool directly
+
+`graph tools test` calls a tool by its full name and prints the result. Pass input as JSON, as `@file`, on stdin, or with `--input key=value`:
+
+```bash
+graph tools test everything__get-sum '{"a": 2, "b": 3}'
+```
+
+```json
+{
+  "text": "The sum of 2 and 3 is 5."
+}
+```
+
+When the server rejects the call, graph prints `tool returned an error:` and the server's message:
+
+```text
+tool returned an error:
+{
+  "text": "MCP error -32602: Input validation error: Invalid arguments for tool get-sum: ..."
+}
+```
+
+A tool that returns an error still exits 0. Use `--json` and check `isError` in scripts.
+
+## When it fails
+
+- **A missing environment variable.** graph names the variable and the setting that uses it, and connects to your other servers as usual:
+
+  ```text
+  mcp server 'tracker' cannot connect: environment variable TRACKER_TOKEN (mcp.tracker.headers.Authorization) is not set
+  ```
+
+- **Anything else.** Run with `-v`, or set `GRAPH_LOG=debug`, to see graph's log of the connection on stderr.

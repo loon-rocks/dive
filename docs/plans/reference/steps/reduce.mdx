@@ -1,0 +1,68 @@
+---
+title: "reduce"
+sidebarTitle: "reduce"
+description: "Folds a list into one value by running the same steps for each item in order."
+playground: "none"
+keywords: ["reduce", "control step"]
+---
+
+## How it works
+
+- `over` must produce a list. The body (`do`) runs once per item, in order.
+- `{{accumulator}}` holds the running value, starting at `initial`. Each run's result becomes the next `{{accumulator}}`.
+- `{{item}}` and `{{index}}` are available too.
+
+## Limits
+
+- Always runs one item at a time. For independent per-item work, `map` first and reduce its results.
+- The body can't contain another `map` or `reduce`.
+
+## Input
+
+<ParamField body="do" type="object | object[]" required>
+</ParamField>
+
+<ParamField body="initial" type="any">
+  Starting accumulator value (any JSON; may use templates). Defaults to null.
+</ParamField>
+
+<ParamField body="over" type="any" required>
+  The list to fold — usually a template like &#123;&#123;E1.results&#125;&#125; that resolves to an array.
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="count" type="integer">
+  How many items ran.
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  The final value of the accumulator.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: reduce
+  input:
+    over: "{{input.over}}"
+    do: "{{input.do}}"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "count": 3,
+  "result": {
+    "…": "…"
+  }
+}
+```
+
+</ResponseExample>

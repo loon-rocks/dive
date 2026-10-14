@@ -1,0 +1,36 @@
+---
+title: "builtin__catalog_tools"
+sidebarTitle: "builtin__catalog_tools"
+description: "Lists every tool in the catalog with its description, for searching."
+playground: "none"
+keywords: ["builtin__catalog_tools"]
+---
+
+- Covers MCP, pack and user tools, plans and agents.
+- Always-loaded tools come back in a separate list.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+Takes no input.
+
+## Output
+
+<ResponseField name="always" type="string[]" required>
+</ResponseField>
+
+<ResponseField name="tools" type="object[]" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__catalog_tools
+  input: {}
+```
+
+</RequestExample>

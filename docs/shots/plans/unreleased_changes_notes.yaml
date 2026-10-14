@@ -1,0 +1,36 @@
+version: 2
+identifier: unreleased_changes
+name: Unreleased changes
+description: The commits since the latest release, each with a one-line release note.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.tag}}'
+    head: HEAD
+- id: notes
+  tool_name: map
+  input:
+    over: '{{commits.commits}}'
+    concurrency: 4
+    do:
+    - id: files
+      tool_name: builtin__git_changed_files
+      input:
+        base: '{{item.sha}}~1'
+        head: '{{item.sha}}'
+        prefix: ''
+    - id: note
+      tool_name: builtin__infer
+      input:
+        instruction: |-
+          Write one release-note line for this commit.
+          Subject: {{item.subject}}
+          Files changed: {{files.files}}
+finish:
+  output:
+    since: '{{release.tag}}'
+    notes: '{{notes.results}}'

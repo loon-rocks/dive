@@ -1,6 +1,6 @@
 # The hero shot: pr_review loaded and valid, the agent describing it.
-# Used at the top of using/plan-workbench.mdx, in the quickstart's
-# "Open it in the workbench" step, and in plans/authoring.mdx.
+# Used in the quickstart's
+# "Open it in the workbench" step.
 name: workbench-overview
 title: graph workbench — pr_review
 plan: docs/shots/plans/pr_review.yaml

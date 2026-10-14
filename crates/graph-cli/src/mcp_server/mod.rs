@@ -23,7 +23,7 @@
 //! writing. Diagnostics go to stderr, where MCP clients conventionally
 //! collect them as server logs.
 
-mod catalog;
+pub(crate) mod catalog;
 mod elicit;
 mod progress;
 mod project;

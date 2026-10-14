@@ -1,0 +1,58 @@
+---
+title: "builtin__decide"
+sidebarTitle: "builtin__decide"
+description: "Asks a decision model typed questions about one piece of data."
+playground: "none"
+keywords: ["builtin__decide"]
+---
+
+## Behavior
+
+- Each question is answered independently, in one call.
+- Question types: `likelihood` (a probability), `choice` (one option) and `score` (a level on a scale).
+- The result maps each question name to its answer, such as `{{E1.urgent.probability}}`.
+- Needs a decision model role, `decider` by default.
+
+## When to use it
+
+- Put the data in `state` and keep the questions short.
+
+| Loaded | Kind | Effect |
+| --- | --- | --- |
+| Always | `decision` | Not marked read-only |
+
+## Input
+
+<ParamField body="state" type="any" required>
+  The data to judge: text, an object, or a list, usually a template like &#123;&#123;E2.ticket&#125;&#125; or &#123;&#123;item&#125;&#125;.
+</ParamField>
+
+<ParamField body="questions" type="object" required>
+  Question name → question. Likelihood: &#123;"type": "likelihood", "instructions": "Is it urgent?"&#125;, optionally with "criteria": &#123;"true": …, "false": …&#125;. Choice: &#123;"type": "choice", "instructions": "Which team?", "criteria": &#123;"billing": "Payments", "technical": "Bugs"&#125;&#125;. Score: &#123;"type": "score", "instructions": "How frustrated?", "criteria": ["Calm", "Frustrated", "Angry"]&#125; with 2 to 10 levels.
+</ParamField>
+
+<ParamField body="questions.<name>.type" type="enum<string>" required>
+  Available options: `likelihood`, `choice`, `score`
+</ParamField>
+
+<ParamField body="questions.<name>.instructions" type="string" required>
+</ParamField>
+
+<ParamField body="questions.<name>.criteria" type="any">
+</ParamField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__decide
+  input:
+    state: "{{input.state}}"
+    questions: "{{input.questions}}"
+```
+
+```bash Inspect
+graph tools show builtin__decide
+```
+
+</RequestExample>

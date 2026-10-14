@@ -1,0 +1,94 @@
+---
+title: "compose_plan"
+sidebarTitle: "compose_plan"
+description: "Drafts a whole plan for a goal from the tools in your catalog."
+playground: "none"
+keywords: ["compose_plan", "plan__compose_plan"]
+---
+
+## How it works
+
+1. Lists the plan's inputs and the capabilities it needs.
+2. Searches the catalog for a tool for each capability. If none fits, it stops and returns what's `missing`.
+3. Writes the whole plan in one call.
+4. Asks you about values it had to guess.
+5. Validates the plan and fixes failing steps, up to three rounds.
+
+`graph plan draft`, the workbench and MCP's `graph_plan_draft` all run this plan.
+
+## Input
+
+<ParamField body="goal" type="string" required>
+  What the plan should accomplish
+</ParamField>
+
+<ParamField body="needs_model" type="string" default="outliner">
+  The model role that lists the plan's inputs and capabilities
+</ParamField>
+
+<ParamField body="model" type="string" default="planner">
+  The model role that writes and fixes the plan
+</ParamField>
+
+## Output
+
+<ResponseField name="needs" type="object">
+  What the goal requires, as `inputs`, `capabilities` and `details`, worked out before drafting.
+</ResponseField>
+
+<ResponseField name="plan" type="object">
+  The drafted plan. Null when no tool could do part of the goal.
+</ResponseField>
+
+<ResponseField name="valid" type="boolean">
+  Whether the drafted plan passed validation.
+</ResponseField>
+
+<ResponseField name="problems" type="string[]">
+  Validation problems left after fixing. Empty when the plan is valid.
+</ResponseField>
+
+<ResponseField name="yaml" type="string">
+  The drafted plan as a YAML file.
+</ResponseField>
+
+<ResponseField name="questions" type="object[]">
+  Values the draft had to guess, as questions for you, each with the guess it used.
+</ResponseField>
+
+<ResponseField name="missing" type="object[]">
+  Capabilities no tool in the catalog could cover. Empty when a plan was drafted.
+</ResponseField>
+
+## Steps
+
+| Step | Calls |
+| --- | --- |
+| `needs` | `builtin__infer` |
+| `data` | `filter` |
+| `found` | `map` |
+| `gaps` | `filter` |
+| `stop` | `exit` |
+| `context` | `builtin__compose_context` |
+| `prompt` | `builtin__reshape` |
+| `draft` | `builtin__infer` |
+| `form` | `builtin__question_form` |
+| `clarify` | `route` |
+| `checked` | `builtin__check_plan` |
+| `start` | `builtin__reshape` |
+| `fixed` | `reduce` |
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: plan__compose_plan
+  input:
+    goal: "{{input.goal}}"
+```
+
+```bash Customize
+graph plan show compose_plan > .graph/plans/compose_plan.yaml
+```
+
+</RequestExample>

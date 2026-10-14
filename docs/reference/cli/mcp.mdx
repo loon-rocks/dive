@@ -1,0 +1,21 @@
+---
+title: "graph mcp"
+sidebarTitle: "graph mcp"
+description: "Manage MCP servers"
+playground: "none"
+keywords: ["graph mcp"]
+---
+
+## Available commands
+
+- [`graph mcp list`](/reference/cli/mcp/list): List configured servers and their status
+- [`graph mcp tools`](/reference/cli/mcp/tools): List tools exposed by servers
+- [`graph mcp test`](/reference/cli/mcp/test): Connect to a server and verify initialize + tools/list
+- [`graph mcp serve`](/reference/cli/mcp/serve): Serve graph's plans and authoring commands to an agent over MCP (stdio)
+- [`graph mcp probe`](/reference/cli/mcp/probe): Pre-warm the observed-shape cache by invoking read-only tools
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>

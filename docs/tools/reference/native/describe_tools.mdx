@@ -1,0 +1,40 @@
+---
+title: "builtin__describe_tools"
+sidebarTitle: "builtin__describe_tools"
+description: "Describes the named tools, in order, with their schemas and output shapes."
+playground: "none"
+keywords: ["builtin__describe_tools"]
+---
+
+- Each entry has the name, description and score.
+- With `schemas` (the default), adds the input schema and the declared or observed output shape.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="schemas" type="boolean">
+  Include schemas and output shapes; default true
+</ParamField>
+
+<ParamField body="tools" type="any[]" required>
+  Tool names, or objects with a `name` and optional `score`
+</ParamField>
+
+## Output
+
+<ResponseField name="tools" type="object[]" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__describe_tools
+  input:
+    tools: "{{input.tools}}"
+```
+
+</RequestExample>

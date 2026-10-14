@@ -1,0 +1,147 @@
+---
+title: "Stop early with exit gates"
+description: "End a plan early when there's nothing to do, or fail it when a check doesn't hold."
+keywords: ["exit", "gate", "when", "exit code 4"]
+---
+
+`changes_since` summarizes the commits since a git ref. Its `nothing_new` step ends the plan before the summary when there are no commits.
+
+<RequestExample>
+
+```yaml .graph/plans/changes_since.yaml
+version: 2
+identifier: changes_since
+name: Changes since
+description: The commits merged since a git ref.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+- id: nothing_new
+  tool_name: exit
+  input:
+    when:
+      value: '{{commits.count}}'
+      op: eq
+      to: 0
+    status: success
+    message: No commits since {{input.base}}.
+    output:
+      count: 0
+      commits: []
+      summary: Nothing new since {{input.base}}.
+- id: summary
+  tool_name: builtin__infer
+  input:
+    instruction: |-
+      Summarize these commits in one sentence:
+      {{commits.commits}}
+finish:
+  output:
+    count: '{{commits.count}}'
+    commits: '{{commits.commits}}'
+    summary: '{{summary.text}}'
+```
+
+</RequestExample>
+
+## Stop when there's nothing to do
+
+Run the plan from `HEAD`, so there are no commits:
+
+```bash
+graph plan run changes_since \
+  --input base=HEAD
+```
+
+The `when` condition holds, so the plan stops at `nothing_new`. The `summary` step never runs, so there's no model call, and the exit's `output` is the result:
+
+```text
+→ builtin__git_log {"base":"HEAD","head":"HEAD"}
+✓ builtin__git_log 31.9ms
+→ exit {"message":"No commits since HEAD.",…}
+✓ exit 18.3µs
+{
+  "commits": [],
+  "count": 0,
+  "summary": "Nothing new since HEAD."
+}
+✓ No commits since HEAD.
+```
+
+## Run past the gate
+
+Run it from a release tag:
+
+```bash
+graph plan run changes_since \
+  --input base=v0.15.0
+```
+
+The condition doesn't hold, so the plan carries on to `summary`:
+
+```text
+→ exit {"message":"No commits since v0.15.0.",…}
+✓ exit 24.2µs
+→ builtin__infer {"instruction":"Summarize these commits in one sentence:…"}
+✓ builtin__infer 2.1s
+  1 call · 4k in / 153 out · $0.02
+{
+  "count": 28,
+  "summary": "This series of commits overhauls the Graph platform's agent and planning system…",
+  …
+}
+```
+
+## Fail instead
+
+To make an empty range a failure, such as in a CI check, set `status: error` and drop the `output`:
+
+```yaml .graph/plans/changes_since.yaml
+- id: nothing_new
+  tool_name: exit
+  input:
+    when:
+      value: '{{commits.count}}'
+      op: eq
+      to: 0
+    status: error
+    message: No commits since {{input.base}}.
+```
+
+The plan now exits with code 4 and prints the message as an error:
+
+```bash
+graph plan run changes_since \
+  --input base=HEAD
+```
+
+```text
+→ exit {"message":"No commits since HEAD.","status":"error",…}
+✓ exit 17.6µs
+✗ No commits since HEAD.
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Branch with route" icon="code-branch" href="/plans/guides/branching">
+    Take different steps instead of stopping.
+  </Card>
+  <Card title="Handle failures" icon="triangle-exclamation" href="/plans/guides/handle-failures">
+    Tell why a run failed and choose how to respond.
+  </Card>
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Run a plan with inputs and use its result.
+  </Card>
+</CardGroup>

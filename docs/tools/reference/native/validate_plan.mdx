@@ -1,0 +1,45 @@
+---
+title: "builtin__validate_plan"
+sidebarTitle: "builtin__validate_plan"
+description: "Validates a plan's structure, templates and tool calls against the catalog."
+playground: "none"
+keywords: ["builtin__validate_plan"]
+---
+
+- Pass the whole plan as `plan`, or just its `steps`.
+- Returns every problem, plus the called tools that aren't marked read-only.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="plan" type="object">
+  A plan document
+</ParamField>
+
+<ParamField body="steps" type="object[]">
+  A plan's steps, when there is no whole plan
+</ParamField>
+
+## Output
+
+<ResponseField name="problems" type="string[]" required>
+</ResponseField>
+
+<ResponseField name="side_effects" type="string[]" required>
+</ResponseField>
+
+<ResponseField name="valid" type="boolean" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__validate_plan
+  input: {}
+```
+
+</RequestExample>

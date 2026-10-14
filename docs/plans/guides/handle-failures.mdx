@@ -1,0 +1,127 @@
+---
+title: "Handle failures"
+description: "Read why a plan run failed, and end it cleanly when there's nothing to process."
+keywords: ["errors", "failures", "empty data", "bad path", "exit"]
+---
+
+`changes_since` returns how many commits landed since a git ref, and the newest one's subject.
+
+<RequestExample>
+
+```yaml .graph/plans/changes_since.yaml
+version: 2
+identifier: changes_since
+name: Changes since
+description: The commits merged since a git ref.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+finish:
+  output:
+    count: '{{commits.count}}'
+    latest: '{{commits.commits.0.subject}}'
+```
+
+</RequestExample>
+
+Every failure below exits with code 1 and names the cause on stderr.
+
+## A tool fails
+
+Pass a tag that doesn't exist:
+
+```bash
+graph plan run changes_since \
+  --input base=v9.9.9
+```
+
+The error names the step, the tool, and what the tool printed:
+
+```text
+✗ builtin__git_log 14.3ms
+Error: plan failed at step commits (builtin__git_log): {"error":"'bash' exited with exit status: 128","stderr":"fatal: bad revision 'v9.9.9..HEAD'","stdout":""}
+```
+
+Fix the input and run again.
+
+## A template points nowhere
+
+With a typo in the finish, `'{{commits.comits.0.subject}}'`, the step runs and the plan fails when it fills the template:
+
+```text
+Error: failed to render plan output: bad path 'commits.comits.0.subject': no key 'comits' at commits (available: commits, count, total, truncated)
+```
+
+A bad path is a mistake in the plan. The error lists the keys that do exist, so fix the template.
+
+## The data runs out
+
+Pass the current commit, so there's nothing to list:
+
+```bash
+graph plan run changes_since \
+  --input base=HEAD
+```
+
+The plan is right, but `commits.commits` is empty, so there's no first subject:
+
+```text
+Error: failed to render plan output: empty data at 'commits.commits.0.subject': commits.commits is an empty array
+```
+
+## End cleanly when there's nothing to do
+
+Add an [`exit`](/plans/reference/steps/exit) step after `commits`. When the count is 0, it ends the plan as a success and returns the same keys as `finish.output`:
+
+```yaml .graph/plans/changes_since.yaml
+- id: nothing_new
+  tool_name: exit
+  input:
+    when:
+      value: '{{commits.count}}'
+      op: eq
+      to: 0
+    status: success
+    message: No commits since {{input.base}}.
+    output:
+      count: 0
+      latest: none
+```
+
+Run it again with `base=HEAD`. It exits with code 0:
+
+```text
+{
+  "count": 0,
+  "latest": "none"
+}
+✓ No commits since HEAD.
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Pause a run and inspect the input a step gets.
+  </Card>
+  <Card title="Stop early with exit gates" icon="right-from-bracket" href="/plans/guides/exit-gates">
+    End a plan early on other conditions.
+  </Card>
+  <Card title="Iterate with map and reduce" icon="repeat" href="/plans/guides/map-and-reduce">
+    Keep going past items that fail.
+  </Card>
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Run a plan with inputs and use its result.
+  </Card>
+</CardGroup>

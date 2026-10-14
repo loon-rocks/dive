@@ -7,6 +7,8 @@ mod format;
 mod load;
 mod model;
 pub mod pack;
+#[cfg(test)]
+mod schema_tests;
 
 pub use format::{
     inspect, migrate_file, migration_count, window_problem, LayerInfo, Migrated, Unsupported,
@@ -21,3 +23,5 @@ pub use model::{
     Settings, StorageBackend, StorageConfig, TelemetryConfig, TelemetryProtocol, ToolOverride,
     ToolPaths, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
 };
+
+pub const SCHEMA: &str = include_str!("schema.yaml");

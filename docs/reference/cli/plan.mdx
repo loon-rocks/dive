@@ -1,0 +1,26 @@
+---
+title: "graph plan"
+sidebarTitle: "graph plan"
+description: "Manage and run plan documents"
+playground: "none"
+keywords: ["graph plan"]
+---
+
+## Available commands
+
+- [`graph plan list`](/reference/cli/plan/list): List available plan documents
+- [`graph plan show`](/reference/cli/plan/show): Show a plan document
+- [`graph plan validate`](/reference/cli/plan/validate): Validate a plan document by name or file path
+- [`graph plan migrate`](/reference/cli/plan/migrate): Rewrite a plan file to the current plan format
+- [`graph plan run`](/reference/cli/plan/run): Run a plan directly (bypasses the agent loop)
+- [`graph plan new`](/reference/cli/plan/new): Scaffold an empty plan file to build up with `set` and `step add`
+- [`graph plan draft`](/reference/cli/plan/draft): Draft a plan from a goal using the planner model (costs inference)
+- [`graph plan set`](/reference/cli/plan/set): Set one plan attribute
+- [`graph plan unset`](/reference/cli/plan/unset): Clear one optional plan attribute
+- [`graph plan step`](/reference/cli/plan/step): Add, edit, or remove a plan's steps
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>

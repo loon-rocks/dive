@@ -41,7 +41,7 @@ if the mental model below isn't enough.
   step's result into the next — dataflow, zero inference. Control flow is a
   small set of executor-intercepted steps (`exit`, `decide`, `filter`,
   `map`/`reduce`, `agent`, `ask`). How a plan ends is its
-  [finish mode](https://github.com/tylerdavis/graph/blob/main/docs/plans/finish-modes.mdx):
+  [finish mode](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx):
   a solver **report** (one LLM call), structured **output** JSON (zero), or
   **silent** side effects (zero).
 - **One tool catalog.** MCP servers (`linear__*`), user tools (`user__*`),
@@ -155,7 +155,7 @@ reviewing and debugging plans. A chat agent drafts and edits in one pane while
 you inspect steps, validate on every change, and run under a debugger that
 pauses before each tool call — the way to trust a plan's writes before
 committing it. See
-[`workbench/plan-workbench.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/workbench/plan-workbench.mdx).
+[`getting-started/workbench.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/getting-started/workbench.mdx).
 (The workbench is this TUI; `ask`/`chat` is the agent loop, not the
 workbench.)
 
@@ -171,8 +171,8 @@ Both directions, one catalog:
 
 ## Reference — read only when needed
 
-- Full command surface → [`reference/cli.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/cli.mdx)
-- `--json` envelopes, streams, exit codes → [`reference/scripting-contract.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/scripting-contract.mdx)
-- Every plan field → [`reference/plan-schema.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/plan-schema.mdx)
+- Full command surface → [`reference/cli/`](https://github.com/tylerdavis/graph/tree/main/docs/reference/cli)
+- `--json` envelopes, streams, exit codes → [`reference/cli/error-handling.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/cli/error-handling.mdx)
+- Every plan field → [`plans/reference/plan-file.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx)
 - Config layers, data dir, model roles → [`reference/configuration.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/configuration.mdx)
-- Why a run failed / error taxonomy → [`plans/errors-and-replanning.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/errors-and-replanning.mdx)
+- Why a run failed / error taxonomy → [`plans/guides/handle-failures.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/handle-failures.mdx)

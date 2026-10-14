@@ -1,0 +1,120 @@
+---
+title: "Conditions and bodies"
+description: "The conditions exit, route and filter test, and the step lists route, map and reduce run."
+keywords: ["condition", "when", "if", "where", "infer", "decide", "body", "do", "then"]
+---
+
+<RequestExample>
+
+```yaml Comparison
+- id: digest
+  tool_name: route
+  input:
+    if:
+      value: '{{commits.count}}'
+      op: gt
+      to: 10
+    then:
+      tool_name: builtin__infer
+      input:
+        instruction: 'Group these commits into three themes: {{commits.commits}}'
+    else:
+      tool_name: builtin__reshape
+      input:
+        shape:
+          commits: '{{commits.commits}}'
+```
+
+```yaml infer
+- id: formats
+  tool_name: route
+  input:
+    infer: 'Do any of these commits change a file format? {{commits.commits}}'
+    then:
+      tool_name: builtin__reshape
+      input:
+        shape:
+          note: Bump the file version.
+```
+
+```yaml decide
+- id: bump
+  tool_name: route
+  input:
+    decide:
+      question: Which kind of release do these commits call for?
+      state: '{{commits.commits}}'
+      options:
+        major: A breaking change to a public interface
+        minor: A new feature, nothing breaking
+        patch: Fixes only
+    cases:
+      major: { tool_name: builtin__reshape, input: { shape: { bump: major } } }
+      minor: { tool_name: builtin__reshape, input: { shape: { bump: minor } } }
+      patch: { tool_name: builtin__reshape, input: { shape: { bump: patch } } }
+```
+
+</RequestExample>
+
+## Conditions
+
+`exit`, `route` and `filter` each test one condition. A step takes exactly one of three kinds: a comparison, `infer` or `decide`.
+
+| Step | Comparison key | When the condition holds |
+| --- | --- | --- |
+| [`exit`](/plans/reference/steps/exit) | `when` | The plan ends |
+| [`route`](/plans/reference/steps/route) | `if` | `then` runs, otherwise `else` |
+| [`filter`](/plans/reference/steps/filter) | `where` | The item is kept, tested once per item |
+
+### Comparison
+
+`value`, `op` and `to` compare two values without a model call. `value` is usually a template.
+
+| `op` | Holds when `value`… |
+| --- | --- |
+| `eq` / `ne` | equals / doesn't equal `to` |
+| `gt` / `gte` / `lt` / `lte` | is greater / at least / less / at most `to`; both must be numbers |
+| `empty` / `not_empty` | is or isn't null, `""`, `[]` or `{}`; no `to` |
+| `contains` | is a string containing the string `to`, or a list containing `to` |
+
+### infer
+
+`infer` is a yes/no question for a chat model, with the data in the question as templates. It runs on the `judge` [model role](/getting-started/models), and `model` picks another. The model returns a `verdict` and a `reason`. On `filter`, it asks once per item, and `concurrency` sets how many at once.
+
+### decide
+
+`decide` asks a decision model, which returns a probability instead of a verdict. It needs a `decider` role on a decision-model provider.
+
+| Field | What it holds |
+| --- | --- |
+| `question` | What to decide |
+| `state` | The data to decide on |
+| `criteria` | What `true` and `false` mean |
+| `min_confidence` | The probability needed, 0 to 1; default 0.5 |
+| `model` | The decision model role; default `decider` |
+| `options` | On `route` only: case name to meaning, 2 to 255 entries. The model picks one, and its branch under `cases` runs |
+
+`infer` refuses a decision model, and `decide` refuses a chat model.
+
+## Bodies
+
+A body is the steps a control step runs: `then`, `else` and `cases` on `route`, and `do` on `map` and `reduce`. It's one tool call or a list of steps.
+
+Inside a body, steps read these values as well as the plan's inputs and earlier results:
+
+| Value | Where |
+| --- | --- |
+| `{{item}}` | The current item, in `map`, `reduce` and a `filter` condition |
+| `{{index}}` | The item's position, in `map` and `reduce` |
+| `{{accumulator}}` | The value so far, in `reduce` |
+
+Templates in a body render only when it runs: `route` renders the branch it takes, and `map` renders its body once per item.
+
+### What a body can contain
+
+| Step | In a body |
+| --- | --- |
+| Tools, plans and agents | Yes |
+| `exit` | Yes, and it ends the whole plan |
+| `agent`, `ask`, `filter`, `route` | Yes |
+| `map`, `reduce` | No. Call a plan that iterates instead |

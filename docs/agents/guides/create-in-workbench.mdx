@@ -1,0 +1,61 @@
+---
+title: "Create an agent in the workbench"
+description: "Use the workbench to draft an agent with tools and save it."
+keywords: ["agent drafter", "workbench", "create agent"]
+---
+
+The agent drafter writes an agent file with you. You describe the job, it drafts the file in the workbench's pane, and you save it when it's right.
+
+## Draft the agent
+
+<Steps>
+  <Step title="Open the workbench in agent mode">
+    ```bash
+    graph workbench agent
+    ```
+  </Step>
+  <Step title="Describe the job">
+    Say what the agent is for, what it should read and what it should produce. The drafter picks tools from your catalog and puts a first draft in the pane.
+
+    <Frame caption="The agent drafter's first draft in the pane, with its question in the chat.">
+      <img src="/images/workbench/agent-drafting.svg" alt="The workbench with agent_drafter active: the request and the drafter's question on the left, and the release_notes agent draft on the right with its description, model, tools, input, output and system prompt." />
+    </Frame>
+  </Step>
+  <Step title="Answer its questions">
+    The drafter asks what it can't settle itself, including whether the agent is for conversation, [plan](/plans/overview) steps, or both.
+  </Step>
+  <Step title="Draft any missing tools">
+    When the agent needs a tool that doesn't exist, the drafter offers to draft it. Say yes, and once you save the tool you're back in the agent draft with the tool added.
+
+    <Frame caption="The drafter offers to draft a tool the agent needs.">
+      <img src="/images/workbench/agent-missing-tool.svg" alt="The agent drafter in the workbench saying none of the tools can post to the changelog page and asking whether to draft one now, with the agent draft in the pane on the right." />
+    </Frame>
+  </Step>
+  <Step title="Save">
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes the file to `./.graph/agents/<name>.yaml`.
+  </Step>
+</Steps>
+
+## Run the agent
+
+```bash
+graph ask --agent release_notes \
+  "What shipped since v0.15.0?"
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Agent file" icon="file-code" href="/agents/reference/agent-file">
+    Every field an agent file takes.
+  </Card>
+  <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
+    Use your agent in `graph ask` and `graph chat`.
+  </Card>
+  <Card title="Create a tool in the workbench" icon="wrench" href="/tools/guides/create-in-workbench">
+    Draft a tool on its own with the tool drafter.
+  </Card>
+  <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
+    Change one of graph's own agents.
+  </Card>
+</CardGroup>

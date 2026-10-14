@@ -1,0 +1,120 @@
+---
+title: "Run a plan"
+description: "Run a plan with input and pipe its output to jq."
+keywords: ["graph plan run", "inputs", "--input", "stdout", "jq"]
+---
+
+`changes_since` takes a git ref as its `base` input and returns the commits merged since it.
+
+<RequestExample>
+
+```yaml .graph/plans/changes_since.yaml
+version: 2
+identifier: changes_since
+name: Changes since
+description: The commits merged since a git ref.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+finish:
+  output:
+    count: '{{commits.count}}'
+    commits: '{{commits.commits}}'
+```
+
+</RequestExample>
+
+## See what it needs
+
+Run `changes_since` without inputs:
+
+```bash
+graph plan run changes_since
+```
+
+graph checks the inputs before any step runs. It names what's missing, prints the input schema, and exits with code 3:
+
+```text
+plan 'changes_since' needs inputs:
+  - "base" is a required property
+input schema:
+{
+  "properties": {
+    "base": {
+      "description": "The ref to start after, such as a release tag",
+      "type": "string"
+    }
+  },
+  …
+}
+```
+
+## Pass the input
+
+Set `base` with `--input`:
+
+```bash
+graph plan run changes_since \
+  --input base=v0.15.0
+```
+
+The plan prints its result as JSON on stdout:
+
+```json
+{
+  "commits": [
+    {
+      "author": "Tyler Davis",
+      "date": "2026-10-08T19:39:09-06:00",
+      "pr": null,
+      "sha": "648d34e22ede0d8c246576493b39487237272607",
+      "short_sha": "648d34e",
+      "subject": "feat!: plans state how they finish with a required finish key…"
+    },
+    …
+  ],
+  "count": 28
+}
+```
+
+## Pipe the result into jq
+
+Progress goes to stderr, so stdout carries only the result and pipes cleanly:
+
+```bash
+graph plan run changes_since \
+  --input base=v0.15.0 \
+  | jq -r '.commits[] | "\(.short_sha) \(.subject)"'
+```
+
+```text
+648d34e feat!: plans state how they finish with a required finish key…
+cd01c05 feat!: workbench agents work on plans through the same artifact tools…
+1a8443c ci: a planner eval harness with goal sets, reference plans and a judge…
+…
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Handle failures" icon="triangle-exclamation" href="/plans/guides/handle-failures">
+    Tell why a run failed and choose how to respond.
+  </Card>
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Step through a run in the workbench.
+  </Card>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Turn a goal into a working, saved plan.
+  </Card>
+</CardGroup>

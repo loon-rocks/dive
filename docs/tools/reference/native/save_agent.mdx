@@ -1,0 +1,49 @@
+---
+title: "builtin__save_agent"
+sidebarTitle: "builtin__save_agent"
+description: "Validates a drafted agent file, saves it to the project's agents directory, and loads it immediately."
+playground: "none"
+keywords: ["builtin__save_agent"]
+---
+
+- Checks keys, model role, tool patterns, subagents, handoffs, schemas and prompt templates.
+- Won't replace an existing file unless `overwrite` is true.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Has side effects |
+
+## Input
+
+<ParamField body="overwrite" type="boolean">
+  Replace an existing file with the same name, only after the user confirms
+</ParamField>
+
+<ParamField body="yaml" type="string" required>
+  The whole agent file
+</ParamField>
+
+## Output
+
+<ResponseField name="error" type="string">
+</ResponseField>
+
+<ResponseField name="path" type="string">
+</ResponseField>
+
+<ResponseField name="problems" type="string[]">
+</ResponseField>
+
+<ResponseField name="saved" type="string">
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__save_agent
+  input:
+    yaml: "{{input.yaml}}"
+```
+
+</RequestExample>

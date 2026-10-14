@@ -1,0 +1,65 @@
+---
+title: "decision tools"
+sidebarTitle: "kind: decision"
+description: "Asks a decision model typed questions about the same state, each answered independently."
+playground: "none"
+keywords: ["decision", "tool file", "YAML"]
+---
+
+Asks a decision model typed questions about the same state, each answered independently. The result maps each question name to its answer.
+
+These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: decision`.
+
+## Fields
+
+<ParamField body="state" type="any">
+  The data to judge, as a template tree over `{{input.*}}`. Omitted, the call's `state` input is used.
+</ParamField>
+
+<ParamField body="questions" type="object">
+  Question name to question. Each has a `type` (`likelihood`, `choice` or `score`), `instructions`, and `criteria` for that type.
+</ParamField>
+
+<ParamField body="model" type="string" default="decider">
+  A decision model role. A chat role fails the call.
+</ParamField>
+
+<ParamField body="caller_questions" type="boolean" default="false">
+  Take `questions` from the call's input instead.
+</ParamField>
+
+<ParamField body="caller_model" type="boolean" default="false">
+  Let the call's `model` input pick the role.
+</ParamField>
+
+<RequestExample>
+
+```yaml Example
+version: 2
+name: triage
+description: Routes a support ticket and checks whether it is urgent.
+kind: decision
+model: decider
+state:
+  ticket: '{{input.ticket}}'
+questions:
+  team:
+    type: choice
+    instructions: Which team should handle this ticket?
+    criteria:
+      billing: Payments
+      technical: Bugs
+  urgent:
+    type: likelihood
+    instructions: Does the ticket convey urgency?
+input_schema:
+  type: object
+  required:
+  - ticket
+  properties:
+    ticket:
+      type: string
+      description: The ticket text
+```
+
+</RequestExample>

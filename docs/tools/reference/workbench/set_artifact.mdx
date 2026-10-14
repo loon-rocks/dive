@@ -1,0 +1,56 @@
+---
+title: "workbench__set_artifact"
+sidebarTitle: "workbench__set_artifact"
+description: "Puts a whole plan, agent or tool file in the pane as the current draft."
+playground: "none"
+keywords: ["workbench__set_artifact"]
+---
+
+## Behavior
+
+- Checks the draft right away and returns any problems. Nothing is written to disk.
+- For a plan, omit `yaml` to use the plan `plan__compose_plan` last returned.
+- Replacing a plan draft with unsaved changes fails unless `overwrite_draft` is true.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="kind" type="enum<string>" required>
+  What the file is
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>
+
+<ParamField body="overwrite_draft" type="boolean">
+  Plans only: discard unsaved changes to the current plan draft, only after the user confirms
+</ParamField>
+
+<ParamField body="yaml" type="string">
+  The whole file. Required for an agent or tool; omit it for a plan to publish what plan__compose_plan returned
+</ParamField>
+
+## Output
+
+<ResponseField name="identifier" type="string">
+</ResponseField>
+
+<ResponseField name="steps" type="integer">
+</ResponseField>
+
+<ResponseField name="validation" type="string">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "identifier": "sprint_report",
+  "steps": 3,
+  "validation": "ok"
+}
+```
+
+</ResponseExample>

@@ -1,0 +1,55 @@
+---
+title: "builtin__gh_pr_ticket"
+sidebarTitle: "builtin__gh_pr_ticket"
+description: "Finds a ticket identifier, such as `LN-1234`, in a pull request."
+playground: "none"
+keywords: ["builtin__gh_pr_ticket", "github"]
+---
+
+## Behavior
+
+- Checks the head branch, then the title, then the body; the first match wins.
+- Normalizes to uppercase with a dash.
+- No ticket returns `found: false`, not an error.
+
+| Pack | Kind | Effect |
+| --- | --- | --- |
+| [`github`](/tools/reference/packs/github): add `"github"` to `[tools].packs` | `exec` | Read-only |
+
+## Input
+
+<ParamField body="pr" type="integer" required>
+  Pull request number
+</ParamField>
+
+<ParamField body="pattern" type="string" default="">
+  POSIX extended regex the ticket ID must match, applied to the branch, title and body alike. Empty (the default) matches a tracker key and number joined by a dash: case-insensitively in the branch name (ln-1234), and only as uppercase (LN-1234) in the title and body, skipping standard names such as UTF-8 and SHA-256. Pass a project-specific pattern (e.g. "LN-[0-9]+") for tighter matching.
+</ParamField>
+
+## Output
+
+<ResponseField name="found" type="boolean">
+</ResponseField>
+
+<ResponseField name="ticket" type="string | null">
+  Normalized uppercase-with-dash ID
+</ResponseField>
+
+<ResponseField name="source" type="string | null">
+  Where the match came from — branch
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__gh_pr_ticket
+  input:
+    pr: "{{input.pr}}"
+```
+
+```bash Inspect
+graph tools show builtin__gh_pr_ticket
+```
+
+</RequestExample>

@@ -1,5 +1,7 @@
 mod cli;
 mod commands;
+#[cfg(test)]
+mod docs_gen;
 mod interlocutor;
 mod mcp_server;
 mod output;

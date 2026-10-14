@@ -1,0 +1,137 @@
+---
+title: "builtin__gh_pr_thread_sync"
+sidebarTitle: "builtin__gh_pr_thread_sync"
+description: "Syncs a plan's inline review threads on a pull request."
+playground: "none"
+keywords: ["builtin__gh_pr_thread_sync", "github"]
+---
+
+## Behavior
+
+- Posts each new finding as an inline comment that `gh_pr_review_threads` can read back.
+- Applies a transition to each existing finding: `resolve` and `decline` reply and resolve the thread; `none` leaves it alone.
+- Never deletes open threads or human replies.
+- Has side effects.
+
+| Pack | Kind | Effect |
+| --- | --- | --- |
+| [`github`](/tools/reference/packs/github): add `"github"` to `[tools].packs` | `exec` | Has side effects |
+
+## Input
+
+<ParamField body="pr" type="integer" required>
+  Pull request number
+</ParamField>
+
+<ParamField body="head_sha" type="string" required>
+  Commit new comments anchor to — the PR head sha
+</ParamField>
+
+<ParamField body="marker" type="string" required>
+  Payload tag prefix embedded in every new comment as `<!-- <marker> {json} -->`; pass the same marker to gh_pr_review_threads to read the findings back. Use one marker per plan, e.g. "graph:pr_review:finding".
+</ParamField>
+
+<ParamField body="creates" type="object[]" required>
+  New findings to post as inline comments. Keys beyond path/line/side/body/payload are ignored for posting but preserved in the output.
+</ParamField>
+
+<ParamField body="creates.[].path" type="string" required>
+  File path within the diff
+</ParamField>
+
+<ParamField body="creates.[].line" type="integer">
+  Line in the new file; must be part of the diff. Omit when unknown — the entry passes through unposted.
+</ParamField>
+
+<ParamField body="creates.[].side" type="enum<string>">
+  Diff side; defaults to RIGHT
+
+  Available options: `LEFT`, `RIGHT`
+</ParamField>
+
+<ParamField body="creates.[].body" type="string" required>
+  Markdown comment body
+</ParamField>
+
+<ParamField body="creates.[].payload" type="object" required>
+  Structured finding embedded as the hidden payload tag — what gh_pr_review_threads returns on later runs. Keep it small and flat (label, severity, file, line, finding, ...).
+</ParamField>
+
+<ParamField body="threads" type="object[]" required>
+  Existing findings with their decided transitions (from gh_pr_review_threads plus a transition-audit step). Extra keys pass through to the output.
+</ParamField>
+
+<ParamField body="threads.[].thread_id" type="string" required>
+  GraphQL review-thread node id
+</ParamField>
+
+<ParamField body="threads.[].transition" type="enum<string>" required>
+  none leaves the thread untouched; resolve and decline both reply with the note and resolve the thread.
+
+  Available options: `none`, `resolve`, `decline`
+</ParamField>
+
+<ParamField body="threads.[].note" type="string">
+  One-sentence reply posted before resolving; a default is used when empty.
+</ParamField>
+
+<ParamField body="sweep_marker" type="string" default="">
+  Optional migration aid — a legacy delete-and-repost marker (e.g. the one previously used with gh_pr_inline_comments) whose comments are deleted before syncing. Omit in the steady state.
+</ParamField>
+
+## Output
+
+<ResponseField name="creates" type="any[]">
+  The creates entries in order, each with url added when its comment posted; entries without a line, or rejected by the API, come back without one.
+</ResponseField>
+
+<ResponseField name="threads" type="any[]">
+  The threads entries in order, each with applied (the transition's API calls succeeded) and transitioned (a non-none transition was applied) added.
+</ResponseField>
+
+<ResponseField name="created_count" type="integer">
+  New comments actually posted
+</ResponseField>
+
+<ResponseField name="resolved_now_count" type="integer">
+  Threads resolved this run
+</ResponseField>
+
+<ResponseField name="declined_now_count" type="integer">
+  Threads declined (and resolved) this run
+</ResponseField>
+
+<ResponseField name="still_open_count" type="integer">
+  Threads left open
+</ResponseField>
+
+<ResponseField name="transitions_count" type="integer">
+  Threads whose transition applied
+</ResponseField>
+
+<ResponseField name="has_creates" type="boolean">
+  True when creates is non-empty
+</ResponseField>
+
+<ResponseField name="has_transitions" type="boolean">
+  True when any transition applied
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__gh_pr_thread_sync
+  input:
+    pr: "{{input.pr}}"
+    head_sha: "{{input.head_sha}}"
+    marker: "{{input.marker}}"
+    creates: "{{input.creates}}"
+    threads: "{{input.threads}}"
+```
+
+```bash Inspect
+graph tools show builtin__gh_pr_thread_sync
+```
+
+</RequestExample>

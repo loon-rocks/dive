@@ -1,0 +1,25 @@
+---
+title: "workbench__list_artifacts"
+sidebarTitle: "workbench__list_artifacts"
+description: "Lists the plans, agents or tools that exist."
+playground: "none"
+keywords: ["workbench__list_artifacts"]
+---
+
+## What it returns
+
+- Plans: identifier, name, description and step count.
+- Agents: name, description, source, and whether each takes typed input.
+- Tools: your user tools, and the connected MCP servers.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="kind" type="enum<string>" required>
+  What to list
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>

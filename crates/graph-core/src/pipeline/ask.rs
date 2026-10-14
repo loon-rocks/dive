@@ -104,7 +104,8 @@ pub fn ask_tool_def() -> crate::tools::ToolDef {
         output_schema: None,
         output_example: Some(json!({
             "answer": {"repo": "tylerdavis/graph"},
-            "answered": true
+            "answered": false,
+            "reason": "unavailable"
         })),
         read_only: None,
     }

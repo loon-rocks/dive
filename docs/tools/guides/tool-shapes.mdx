@@ -1,0 +1,160 @@
+---
+title: "Improve what graph knows about a tool"
+description: "Record what a tool returns by running it, then declare its output schema in the tool file."
+keywords: ["shape cache", "output schema", "graph shapes", "drafting"]
+---
+
+Drafters write templates like `{{releases.0.tagName}}` from what a tool returns. `recent_releases` doesn't say yet.
+
+<RequestExample>
+
+```yaml .graph/tools/recent_releases.yaml
+version: 2
+name: recent_releases
+description: The latest releases of a GitHub repository, newest first.
+kind: exec
+command: gh
+args:
+- release
+- list
+- --repo
+- '{{input.repo}}'
+- --json
+- tagName,publishedAt
+- --limit
+- '3'
+output: json
+read_only: true
+input_schema:
+  type: object
+  required:
+  - repo
+  properties:
+    repo:
+      type: string
+      description: The repository as owner/name
+```
+
+</RequestExample>
+
+## Record a shape by running the tool
+
+graph records the shape of each successful result. Before the first call, there's nothing for `recent_releases`:
+
+```bash
+graph shapes show user__recent_releases
+```
+
+```text
+Error: no cached shape for tool user__recent_releases
+```
+
+Call it once:
+
+```bash
+graph tools test user__recent_releases \
+  --input repo=tylerdavis/graph
+```
+
+The shape is now cached, with a schema inferred from the result and an example:
+
+```bash
+graph shapes show user__recent_releases
+```
+
+```json
+{
+  "example": [
+    {
+      "publishedAt": "2026-09-24T04:34:59Z",
+      "tagName": "v0.15.0"
+    },
+    …
+  ],
+  "schema": {
+    "items": {
+      "properties": {
+        "publishedAt": {
+          "type": "string"
+        },
+        "tagName": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "type": "array"
+  },
+  "seen_count": 1,
+  "tool": "user__recent_releases"
+}
+```
+
+## Declare the output schema
+
+A recorded shape only exists after a run, and it can't say what a field means. Add `output_schema` to the tool file:
+
+```yaml .graph/tools/recent_releases.yaml
+output_schema:
+  type: array
+  items:
+    type: object
+    properties:
+      tagName:
+        type: string
+        description: The release's tag
+      publishedAt:
+        type: string
+        description: When it was published, ISO 8601
+```
+
+`graph tools show` now lists it, and drafters use it in place of the recorded shape:
+
+```bash
+graph tools show user__recent_releases
+```
+
+```text
+user__recent_releases
+
+The latest releases of a GitHub repository, newest first.
+
+input schema:
+…
+
+output schema:
+{
+  "items": {
+    "properties": {
+      "publishedAt": {
+        "description": "When it was published, ISO 8601",
+        "type": "string"
+      },
+      "tagName": {
+        "description": "The release's tag",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "type": "array"
+}
+source: ./.graph/tools/recent_releases.yaml
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Test a tool" icon="flask" href="/tools/guides/test-a-tool">
+    Call a tool with input and read its result or error.
+  </Card>
+  <Card title="Filter and override a server's tools" icon="filter" href="/integrating/mcp/guides/filter-and-override-tools">
+    Declare output shapes for an MCP server's tools.
+  </Card>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Draft a plan from the tools in your catalog.
+  </Card>
+  <Card title="Create a tool in the workbench" icon="wand-magic-sparkles" href="/tools/guides/create-in-workbench">
+    Draft, test-run and save a tool with the tool drafter.
+  </Card>
+</CardGroup>

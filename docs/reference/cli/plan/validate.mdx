@@ -1,0 +1,45 @@
+---
+title: "graph plan validate"
+sidebarTitle: "validate"
+description: "Validate a plan document by name or file path"
+playground: "none"
+keywords: ["graph plan validate"]
+---
+
+Checks structure (templates, references, step ids) and resolves every step's tool against the catalog: packs, user tools, plans, agents, and configured MCP servers. MCP tool names are checked at the server level only.
+
+Problems exit 1; success prints nothing to stdout. A plan whose `requires_servers` names an unconfigured server validates with a note.
+
+## Arguments
+
+<ParamField path="NAME_OR_PATH" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan validate [OPTIONS] <NAME_OR_PATH>
+```
+
+```bash Example 1
+graph plan validate weekly_changes
+```
+
+```bash Example 2
+graph plan validate .graph/plans/weekly_changes.yaml
+```
+
+</RequestExample>

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One named agent, in `./.graph/agents/` or `~/.config/graph/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs.",
+  "examples": [
+    {
+      "description": "Answers questions about what shipped, from the repo's commit history.",
+      "model": "chat",
+      "name": "release_notes",
+      "subagents": [
+        "chat"
+      ],
+      "system_prompt": "You answer questions about what shipped in this repository.\nCurrent date and time: {{session.date}}\n",
+      "tools": [
+        "plan__weekly_changes",
+        "builtin__git_log"
+      ],
+      "version": 1
+    }
+  ],
+  "properties": {
+    "description": {
+      "description": "What the agent is for, written for the people and agents choosing it.",
+      "type": "string"
+    },
+    "handoffs": {
+      "description": "Agents this one can hand the conversation to, called as `transfer_to_<name>`. An agent can't hand off to itself, and an agent handed the conversation gets `transfer_back` without listing it.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "input_schema": {
+      "description": "Typed input when the agent runs as a subagent or plan step. An object schema with a `description` on every property. Without it, a call takes `{prompt}`.",
+      "type": "object"
+    },
+    "max_iterations": {
+      "description": "A cap on model rounds. Omitted means no cap as a subagent; in a conversation, `[settings].max_agent_iterations` applies.",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "model": {
+      "description": "The model role the agent runs on, standard (`chat`) or custom.",
+      "type": "string"
+    },
+    "name": {
+      "description": "Starts with a lowercase letter; lowercase letters, digits and `_` only. Other agents and plan steps call it as `agent__<name>`.",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "output_schema": {
+      "description": "Typed output when the agent runs as a subagent or plan step. An object schema. Without it, a call returns the final reply as `{result}`.",
+      "type": "object"
+    },
+    "subagents": {
+      "description": "Agents this one can run as a subagent, each in a fresh context, called as `agent__<name>`. Listing the agent's own name lets it run a fresh copy of itself. Nesting is capped at 3.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "system_prompt": {
+      "description": "The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `templating`, `tool_format`, `agent_format`), and nothing else.",
+      "type": "string"
+    },
+    "tools": {
+      "description": "Catalog tools the agent may call, as exact names or `*` globs such as `linear__*`. `[]` means none and `[\"*\"]` means the whole catalog. Control step names and generated `agent__` and `transfer_to_` names aren't allowed.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "version": {
+      "description": "The file version the document is written in. Omitted means 1; files graph writes always carry it.",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "model",
+    "tools",
+    "system_prompt"
+  ],
+  "title": "Agent file",
+  "type": "object",
+  "x-format": "YAML",
+  "x-locations": [
+    "`./.graph/agents/<name>.yaml` (project)",
+    "`~/.config/graph/agents/<name>.yaml` (global)"
+  ]
+}

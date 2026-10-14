@@ -1,0 +1,42 @@
+name: tool-try
+title: graph workbench — test-running a tool
+grid: { cols: 120, rows: 36 }
+
+agent: tool_drafter
+
+chat: "this repository is enough, test it"
+
+llm:
+  - call: workbench__set_artifact
+    input:
+      kind: tool
+      yaml: |
+        name: merged_prs
+        description: Pull requests merged into this repository since a date, as number, title and merge time.
+        kind: exec
+        command: gh
+        args:
+          - pr
+          - list
+          - --state
+          - merged
+          - --search
+          - "merged:>={{input.since}}"
+          - --json
+          - number,title,mergedAt
+        read_only: true
+        input_schema:
+          type: object
+          required: [since]
+          properties:
+            since:
+              type: string
+              description: The earliest merge date, as YYYY-MM-DD
+  - call: workbench__try_artifact
+    input:
+      kind: tool
+      input: { since: "2026-09-24" }
+
+capture:
+  pause_at: try_tool
+  turn_seconds: 4

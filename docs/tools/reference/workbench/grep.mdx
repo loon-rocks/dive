@@ -1,0 +1,74 @@
+---
+title: "workbench__grep"
+sidebarTitle: "workbench__grep"
+description: "Searches file contents in the project directory with a regular expression."
+playground: "none"
+keywords: ["workbench__grep"]
+---
+
+- Returns matching lines with their path and line number.
+- Skips gitignored and binary files.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="case_insensitive" type="boolean">
+  Case-insensitive matching. Default false.
+</ParamField>
+
+<ParamField body="glob" type="string">
+  Only search matching files, e.g. *.rs (file name) or src/**/*.rs (relative path).
+</ParamField>
+
+<ParamField body="max_matches" type="integer">
+  Stop after this many matches. Default 100, cap 500.
+</ParamField>
+
+<ParamField body="path" type="string">
+  File or directory to search. Default: the project directory.
+</ParamField>
+
+<ParamField body="pattern" type="string" required>
+  Rust regex matched against each line.
+</ParamField>
+
+## Output
+
+<ResponseField name="matchCount" type="integer">
+</ResponseField>
+
+<ResponseField name="matches" type="object[]">
+</ResponseField>
+
+<ResponseField name="matches.[].line" type="integer">
+</ResponseField>
+
+<ResponseField name="matches.[].path" type="string">
+</ResponseField>
+
+<ResponseField name="matches.[].text" type="string">
+</ResponseField>
+
+<ResponseField name="truncated" type="boolean">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "matchCount": 1,
+  "matches": [
+    {
+      "line": 42,
+      "path": "crates/graph-core/src/tools.rs",
+      "text": "pub struct ToolDef {"
+    }
+  ],
+  "truncated": false
+}
+```
+
+</ResponseExample>

@@ -1,0 +1,120 @@
+---
+title: "exit"
+sidebarTitle: "exit"
+description: "Ends the plan early, as a success or an error, when a condition holds."
+playground: "none"
+keywords: ["exit", "control step"]
+---
+
+## How it works
+
+- Gate it with `when`, `infer` or `decide`. See [Conditions and bodies](/plans/reference/conditions-and-bodies). With no gate, it always exits.
+- `status: success` ends the plan with exit code 0. `status: error` ends it with exit code 4.
+- `message` explains the exit.
+- In an output plan, a success exit's `output` returns exactly the `finish.output` keys. Error exits, and exits in solver or silent plans, take no `output`.
+- An exit inside a `route`, `map` or `reduce` body ends the whole plan.
+
+## When to use it
+
+- Stop with success when there's nothing to do, such as an empty search.
+- Stop with an error to fail a check, such as in CI.
+
+## Input
+
+<ParamField body="decide" type="object">
+  A yes/no question answered by a decision model (only when one is configured); fires when its probability reaches min_confidence.
+</ParamField>
+
+<ParamField body="decide.criteria" type="object">
+</ParamField>
+
+<ParamField body="decide.criteria.false" type="string">
+</ParamField>
+
+<ParamField body="decide.criteria.true" type="string">
+</ParamField>
+
+<ParamField body="decide.min_confidence" type="number">
+  0 to 1; default 0.5
+</ParamField>
+
+<ParamField body="decide.model" type="string">
+  A decision model role; defaults to decider
+</ParamField>
+
+<ParamField body="decide.question" type="string" required>
+</ParamField>
+
+<ParamField body="decide.state" type="any">
+  The data to judge, usually a template like &#123;&#123;E2.text&#125;&#125;
+</ParamField>
+
+<ParamField body="infer" type="string">
+  A yes/no question about prior results; exits when the answer is yes.
+</ParamField>
+
+<ParamField body="message" type="string">
+  Shown as the plan's answer / error message. May use templates.
+</ParamField>
+
+<ParamField body="model" type="string">
+  Model role for the `infer` verdict (any configured role, standard or custom); defaults to the judge role.
+</ParamField>
+
+<ParamField body="status" type="enum<string>" required>
+  Available options: `success`, `error`
+</ParamField>
+
+<ParamField body="when" type="object">
+</ParamField>
+
+<ParamField body="when.op" type="enum<string>" required>
+  Available options: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `empty`, `not_empty`, `contains`
+</ParamField>
+
+<ParamField body="when.to" type="any">
+  Comparison operand (omit for empty/not_empty)
+</ParamField>
+
+<ParamField body="when.value" type="any" required>
+  Usually a template like &#123;&#123;E0.issues.length&#125;&#125;
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="passed" type="boolean">
+  Always true. The plan only reaches later steps when the exit didn't fire.
+</ResponseField>
+
+<ResponseField name="reason" type="string">
+  Why the gate decided as it did, for `infer` and `decide` gates.
+</ResponseField>
+
+<ResponseField name="verdict" type="boolean">
+  Whether the condition held. Always false when later steps can read it.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: exit
+  input:
+    status: "{{input.status}}"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "passed": true,
+  "reason": "…",
+  "verdict": false
+}
+```
+
+</ResponseExample>

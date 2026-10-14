@@ -105,7 +105,7 @@ jobs:
   # the plans read and sync findings as review threads via
   # gh_pr_review_threads / gh_pr_thread_sync,
   # which earlier images don't ship. The plan run authenticates as the
-  # review App (see cookbook/bot-identity): the default Actions token
+  # review App: the default Actions token
   # cannot run the review-thread GraphQL mutations (resolveReviewThread /
   # addPullRequestReviewThreadReply return "Resource not accessible by
   # integration" even with pull-requests: write), so without the App

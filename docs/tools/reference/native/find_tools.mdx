@@ -1,0 +1,44 @@
+---
+title: "builtin__find_tools"
+sidebarTitle: "builtin__find_tools"
+description: "Searches for tools a drafting call asked for and adds them to the tools already found."
+playground: "none"
+keywords: ["builtin__find_tools"]
+---
+
+- Runs one `search_tools` search per request.
+- Returns the combined list and descriptions for the next drafting call.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="found" type="object[]" required>
+  The &#123;does, tools&#125; entries found so far
+</ParamField>
+
+<ParamField body="queries" type="string[]" required>
+  What each missing tool should do
+</ParamField>
+
+## Output
+
+<ResponseField name="found" type="object[]" required>
+</ResponseField>
+
+<ResponseField name="tools" type="string" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__find_tools
+  input:
+    queries: "{{input.queries}}"
+    found: "{{input.found}}"
+```
+
+</RequestExample>

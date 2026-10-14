@@ -1,0 +1,117 @@
+---
+title: "Ask for input mid-run"
+description: "Ask which ref to list commits from, and fall back to the latest release when nobody answers."
+keywords: ["ask", "outputSchema", "whenUnanswered", "default", "human in the loop"]
+---
+
+`pick_changes` finds the latest release, asks which ref to start from, and lists the commits since the answer.
+
+<RequestExample>
+
+```yaml .graph/plans/pick_changes.yaml
+version: 2
+identifier: pick_changes
+name: Pick changes
+description: The commits since a ref you pick, starting from the latest release.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: pick
+  tool_name: ask
+  input:
+    prompt: List the commits since which ref?
+    outputSchema:
+      type: object
+      required:
+      - base
+      properties:
+        base:
+          type: string
+          description: Which tag or commit should the list start after?
+    default:
+      base: '{{release.tag}}'
+    whenUnanswered: default
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{pick.answer.base}}'
+    head: HEAD
+finish:
+  output:
+    since: '{{pick.answer.base}}'
+    answered: '{{pick.answered}}'
+    count: '{{commits.count}}'
+```
+
+</RequestExample>
+
+## Set up the ask step
+
+The `pick` step's input sets the question and its answer:
+
+- `prompt` is the question.
+- `outputSchema` lists the fields to fill in. Each field's `description` is what the person reads for it.
+- `default` is the answer to use when nobody answers, here the latest release's tag.
+- `whenUnanswered: default` uses `default` instead of failing the run.
+
+Later steps read the answer as `{{pick.answer.base}}`.
+
+## Answer in the terminal
+
+```bash
+graph plan run pick_changes
+```
+
+The question appears on stderr. Type an answer and press <kbd>Enter</kbd>:
+
+```text
+? List the commits since which ref? [pick]
+  (blank cancels)
+  base — Which tag or commit should the list start after? [text]: v0.14.0
+→ builtin__git_log {"base":"v0.14.0","head":"HEAD"}
+✓ builtin__git_log 71.0ms
+```
+
+```json
+{
+  "answered": true,
+  "count": 32,
+  "since": "v0.14.0"
+}
+```
+
+## When nobody answers
+
+With no terminal to ask, as in a script or a scheduled job, the step uses `default`:
+
+```bash
+graph plan run pick_changes </dev/null
+```
+
+```json
+{
+  "answered": false,
+  "count": 28,
+  "since": "v0.15.0"
+}
+```
+
+A blank answer in the terminal declines the question and gives the same result.
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Branch with route" icon="code-branch" href="/plans/guides/branching">
+    Take different steps depending on the answer.
+  </Card>
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Pass inputs on the command line instead.
+  </Card>
+  <Card title="Serve plans over MCP" icon="server" href="/integrating/mcp/guides/serve-over-mcp">
+    Ask the question through an MCP client.
+  </Card>
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Run the plan in the workbench, where questions appear as a form.
+  </Card>
+</CardGroup>

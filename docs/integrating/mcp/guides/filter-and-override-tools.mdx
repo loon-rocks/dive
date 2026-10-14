@@ -1,0 +1,67 @@
+---
+title: "Filter and override a server's tools"
+description: "Choose which of an MCP server's tools graph exposes, and correct their descriptions and output shapes."
+keywords: ["mcp", "include_tools", "exclude_tools", "tool_overrides"]
+---
+
+These settings go in the server's `[mcp.<name>]` table in config.toml. They change what graph shows agents and drafters, not what the server does.
+
+<RequestExample>
+
+```toml config.toml
+[mcp.everything]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-everything"]
+include_tools = ["echo", "get-sum"]
+
+[mcp.everything.tool_overrides.echo]
+description = "Returns the message it is given, prefixed with 'Echo: '."
+output_schema = { type = "object", properties = { text = { type = "string" } } }
+output_example = { text = "Echo: hello" }
+```
+
+</RequestExample>
+
+## Limit which tools load
+
+List the tools you want in `include_tools`, or the ones you don't in `exclude_tools`. Use the server's own tool names, without the `<name>__` prefix. When you set both, graph loads the included tools that aren't excluded.
+
+```toml
+[mcp.everything]
+include_tools = ["echo", "get-sum"]
+```
+
+Every tool you load is offered to agents and drafters, so leaving out the ones you don't use keeps their prompts smaller and their choices easier.
+
+```bash
+graph mcp tools everything
+```
+
+```text
+everything — 2 tools
+  echo [read-only]
+  Returns the message it is given, prefixed with 'Echo: '.
+  get-sum [read-only]
+  Returns the sum of two numbers
+```
+
+## Override a tool's description
+
+Agents and the planner choose tools by their descriptions. When a server's description is vague, or two tools are hard to tell apart, replace it in a `tool_overrides` table named after the tool:
+
+```toml
+[mcp.everything.tool_overrides.echo]
+description = "Returns the message it is given, prefixed with 'Echo: '."
+```
+
+## Declare a tool's output shape
+
+Many servers don't say what their tools return. Add `output_schema`, `output_example` or both to the same override table so drafters can wire the tool's result into later plan steps, and plan validation can check references to it. A server's own output schema is replaced by yours.
+
+```toml
+[mcp.everything.tool_overrides.echo]
+output_schema = { type = "object", properties = { text = { type = "string" } } }
+output_example = { text = "Echo: hello" }
+```
+
+`graph tools show everything__echo` prints the description and output schema now in effect. graph also learns a tool's output shape as it runs; see [Improve what graph knows about a tool](/tools/guides/tool-shapes).

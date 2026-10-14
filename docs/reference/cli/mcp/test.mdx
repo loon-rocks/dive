@@ -1,0 +1,37 @@
+---
+title: "graph mcp test"
+sidebarTitle: "test"
+description: "Connect to a server and verify initialize + tools/list"
+playground: "none"
+keywords: ["graph mcp test"]
+---
+
+## Arguments
+
+<ParamField path="SERVER" type="string" required>
+  The server name, as configured under `[mcp.<name>]`
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph mcp test [OPTIONS] <SERVER>
+```
+
+```bash Example
+graph mcp test linear
+```
+
+</RequestExample>

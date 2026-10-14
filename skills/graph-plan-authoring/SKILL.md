@@ -43,7 +43,7 @@ Then read what it wrote (`graph plan show <id> --json`), apply the fixes below, 
 
 - **Do not read the docs site first.** Every command is self-describing — `graph plan --help`, `graph plan step add --help`. The reference links at the bottom of this page are for when a rejection message isn't self-explanatory, not for warming up.
 - **Do not write or edit plan YAML in a text editor.** The edit commands enforce validation on every write; a text editor doesn't, and any edit reserializes the file anyway.
-- **Do not enumerate the whole tool catalog and assemble steps yourself.** The planner already sees the catalog and the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/shape-cache.mdx). Probe individual tools (`graph tools show <name>`) when you're fixing a specific step, not as a survey.
+- **Do not enumerate the whole tool catalog and assemble steps yourself.** The planner already sees the catalog and the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx). Probe individual tools (`graph tools show <name>`) when you're fixing a specific step, not as a survey.
 - **Do not ask the user for a plan's steps.** Ask for the *goal*; the goal is what `draft` consumes.
 - **Do not judge a plan by reading it.** `graph plan validate --json` is the verdict, and `graph plan run` is the proof. Neither costs you a guess.
 
@@ -117,7 +117,7 @@ graph plan run commit_digest '{"base":"v0.8.0","head":"main"}' --json  # the who
 
 `validate` catches what is knowable without running: dangling `{{refs}}`, duplicate ids, tools that don't resolve. Everything else — a path that isn't in a tool's real output, an empty result, a gate that fires — only shows up in a run, as a typed error naming the available keys.
 
-When a step's template path is the suspect, `graph tools test <tool> '<input>'` calls that one tool and prints exactly what it returns; `graph shapes show <tool>` prints what it has returned before. Use those instead of guessing at a field name — and both feed the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/shape-cache.mdx), which makes the next draft better.
+When a step's template path is the suspect, `graph tools test <tool> '<input>'` calls that one tool and prints exactly what it returns; `graph shapes show <tool>` prints what it has returned before. Use those instead of guessing at a field name — and both feed the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx), which makes the next draft better.
 
 Read the exit code, not just the output: `0` ok, `1` failure, `3` needs input (the schema is printed — that is fix #2 above), `4` an exit gate fired deliberately.
 
@@ -176,9 +176,9 @@ Also worth branching on: `availableSteps` (unknown step id), `renamedFrom` (an `
 
 ## Reference — read only when needed
 
-- A rejection message you can't act on → [`reference/cli.mdx#authoring-plans`](https://github.com/tylerdavis/graph/blob/main/docs/reference/cli.mdx)
-- An envelope key not covered above → [`reference/scripting-contract.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/scripting-contract.mdx)
-- Writing a control step (`exit`, `decide`, `map`, `reduce`, `agent`) by hand → [`plans/exit-gates`](https://github.com/tylerdavis/graph/blob/main/docs/plans/exit-gates.mdx), [`branching`](https://github.com/tylerdavis/graph/blob/main/docs/plans/branching.mdx), [`iteration`](https://github.com/tylerdavis/graph/blob/main/docs/plans/iteration.mdx), [`agent-step`](https://github.com/tylerdavis/graph/blob/main/docs/plans/agent-step.mdx)
-- A template that won't render → [`plans/template-language.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/template-language.mdx)
-- Choosing a finish mode → [`plans/finish-modes.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/finish-modes.mdx)
-- The full field list → [`reference/plan-schema.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/plan-schema.mdx)
+- A rejection message you can't act on → [`reference/cli/plan/set.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/cli/plan/set.mdx)
+- An envelope key not covered above → [`reference/cli/error-handling.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/cli/error-handling.mdx)
+- Writing a control step (`exit`, `decide`, `map`, `reduce`, `agent`) by hand → [`plans/guides/exit-gates`](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/exit-gates.mdx), [`branching`](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/branching.mdx), [`map-and-reduce`](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/map-and-reduce.mdx), [`agent-steps`](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/agent-steps.mdx)
+- A template that won't render → [`reference/template-language.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/reference/template-language.mdx)
+- Choosing a finish mode → [`plans/reference/plan-file.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx)
+- The full field list → [`plans/reference/plan-file.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx)

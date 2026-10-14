@@ -1,0 +1,23 @@
+---
+title: "graph_plan_step_rm"
+sidebarTitle: "graph_plan_step_rm"
+description: "Removes a step from a plan."
+playground: "none"
+keywords: ["graph_plan_step_rm"]
+---
+
+- Refused while a later step still references it.
+- Mirrors `graph plan step rm`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `graph mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="id" type="string" required>
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>

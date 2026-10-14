@@ -1,99 +1,134 @@
 ---
-title: "What is a plan"
-description: "Repeatable workflows as reviewable YAML files"
-icon: "diagram-project"
+title: "Plans"
+sidebarTitle: "Overview"
+description: "A plan is a YAML file of steps that runs the same way every time, with a model call only where you put one."
+keywords: ["plans", "plan file", "steps", "control steps", "plan__"]
 ---
 
-A **plan** is a YAML document describing a workflow: a sequence of tool calls with data flowing between them, finished by a report, structured output, or nothing at all. Plans are the answer to a specific problem with agents: *improvisation is great until you need the same thing twice*.
+A plan is a list of steps that run in order, the same way every time. Each step calls a [tool](/tools/overview), and the plan makes a model call only where a step asks for one. [Agents](/agents/overview) call plans as tools, so work an agent repeats can run without a model choosing each call.
 
-```yaml
-identifier: project_status
-name: Project Status
-description: Status report for a Linear project — health, activity, risks.
-exemplars:
-  - "How is the New Relic migration going?"
-requires_servers: [linear]
-input_schema:
-  type: object
-  required: [project]
-  properties:
-    project: { type: string, description: The Linear project name }
+<RequestExample>
+
+```yaml .graph/plans/unreleased_changes.yaml
+version: 2
+identifier: unreleased_changes
+name: Unreleased changes
+description: The commits since the latest release, each with a one-line release note.
 steps:
-  - id: E0
-    tool_name: linear__list_projects
-    input: { query: "{{input.project}}", limit: 5 }
-  - id: E1
-    tool_name: linear__list_issues
-    input: { project: "{{E0.projects.0.name}}", updatedAt: "-P14D", limit: 250 }
-solver:
-  query_to_answer: |
-    Write a status report for "{{E0.projects.0.name}}"…
-  data:
-    project: "{{E0.projects.0}}"
-    recentIssues: "{{E1.issues}}"
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.tag}}'
+    head: HEAD
+- id: notes
+  tool_name: map
+  input:
+    over: '{{commits.commits}}'
+    concurrency: 4
+    do:
+    - id: files
+      tool_name: builtin__git_changed_files
+      input:
+        base: '{{item.sha}}~1'
+        head: '{{item.sha}}'
+        prefix: ''
+    - id: note
+      tool_name: builtin__infer
+      input:
+        instruction: |-
+          Write one release-note line for this commit.
+          Subject: {{item.subject}}
+          Files changed: {{files.files}}
+finish:
+  output:
+    since: '{{release.tag}}'
+    notes: '{{notes.results}}'
 ```
 
-## Three ways to run a plan
+</RequestExample>
 
-<CardGroup cols={3}>
-  <Card title="Directly" icon="terminal">
-    `graph plan run project_status '{"project":"New Relic"}'` — deterministic, scriptable, one LLM call (the solver) or zero (output/silent plans).
+## Plan files
+
+A plan is a YAML file in `./.graph/plans/` or `~/.config/graph/plans/`. It has an `identifier`, a `description` that tells agents when to call it, its `steps`, and a `finish` that says what it returns. Steps read the plan's inputs as `{{input.<field>}}` and earlier results as `{{<id>.<field>}}`, in the [template language](/reference/template-language). See [Plan file](/plans/reference/plan-file) for every field.
+
+## Steps
+
+A step calls one of:
+
+- A catalog tool: `builtin__*`, `user__*`, or an MCP server's `<server>__*`
+- Another plan, as `plan__<identifier>`
+- A named agent, as `agent__<name>`
+- A control step, which the plan runs itself
+
+| Control step | What it does |
+| --- | --- |
+| [`exit`](/plans/reference/steps/exit) | Ends the plan early, with success or an error |
+| [`route`](/plans/reference/steps/route) | Takes one branch of steps |
+| [`filter`](/plans/reference/steps/filter) | Keeps the items in a list that pass a condition |
+| [`map`](/plans/reference/steps/map) | Runs steps once per item, several at a time with `concurrency` |
+| [`reduce`](/plans/reference/steps/reduce) | Folds a list into one value |
+| [`agent`](/plans/reference/steps/agent) | Gives one task to an agent with its own prompt and tools |
+| [`ask`](/plans/reference/steps/ask) | Asks a person a question mid-run |
+
+Model calls happen only in `agent` steps, model-backed tools such as `builtin__infer`, `infer` and `decide` conditions, and a `solver` finish.
+
+## How a plan ends
+
+`finish` decides what a plan returns:
+
+- `output` returns a map of step results as JSON, with no model call.
+- `solver` has a model write the answer from the results.
+- `silent` returns nothing, for plans that only act.
+
+## Running plans
+
+- `graph plan run <identifier>` runs a plan from the terminal or a script.
+- Agents and other plans call it as `plan__<identifier>`.
+- `graph mcp serve` offers it to MCP clients as `plan_<identifier>`.
+
+A failing step fails the run. graph doesn't rewrite a plan you wrote to work around it.
+
+## Where plans live
+
+graph reads `./.graph/plans/` before `~/.config/graph/plans/`, and the first plan with an identifier wins, so a project plan replaces one in your home directory. A plan with a [built-in plan's](/plans/reference/built-in-plans) identifier replaces the built-in. Commit `./.graph/plans/` to give your whole team the same plans.
+
+## Guides
+
+<CardGroup cols={2}>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Turn a goal into a working, saved plan.
   </Card>
-  <Card title="As an agent tool" icon="comments">
-    Every plan is a tool named `plan__<identifier>`. In chat, "how's the migration going?" routes to it via the plan's exemplars.
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Run a plan with inputs and use its result.
   </Card>
-  <Card title="Authored by the planner" icon="wand-magic-sparkles" href="/plans/the-planner">
-    `plan_and_execute` writes a plan on the fly for novel tasks — same engine, same template language, plus replanning on failure.
+  <Card title="Debug a plan" icon="bug" href="/plans/guides/debug-a-plan">
+    Step through a run in the workbench.
+  </Card>
+  <Card title="Stop early with exit gates" icon="right-from-bracket" href="/plans/guides/exit-gates">
+    End a plan when a condition holds.
+  </Card>
+  <Card title="Branch with route" icon="code-branch" href="/plans/guides/branching">
+    Take different steps depending on the data.
+  </Card>
+  <Card title="Select items with filter" icon="filter" href="/plans/guides/filter">
+    Keep only the items that matter.
+  </Card>
+  <Card title="Iterate with map and reduce" icon="repeat" href="/plans/guides/map-and-reduce">
+    Run steps per item, or fold a list into one value.
+  </Card>
+  <Card title="Delegate a step to an agent" icon="robot" href="/plans/guides/agent-steps">
+    Hand a fuzzy task to an agent and get typed output back.
+  </Card>
+  <Card title="Ask for input mid-run" icon="circle-question" href="/plans/guides/ask-steps">
+    Pause a plan to ask a person a question.
+  </Card>
+  <Card title="Compose plans" icon="layer-group" href="/plans/guides/compose-plans">
+    Split a large plan into plans that call each other.
+  </Card>
+  <Card title="Handle failures" icon="triangle-exclamation" href="/plans/guides/handle-failures">
+    Tell why a run failed and choose how to respond.
   </Card>
 </CardGroup>
-
-## When to write a plan (vs letting the agent improvise)
-
-Write a plan when any of these are true:
-
-- **You'll run it more than twice.** Plans eliminate run-to-run variance in which tools get called and how.
-- **It feeds automation.** [Output-mode plans](/plans/finish-modes) emit structured JSON; silent plans perform actions. Both are CI primitives.
-- **The workflow embodies judgment.** Which fields matter, what "recent" means, how to group — encode it once, in review-able form, instead of hoping the model re-derives it.
-- **Cost/latency matter.** A plan run makes 0–1 LLM calls regardless of how many tool calls it performs.
-
-Let the agent improvise when the question is genuinely novel or conversational — that's what `ask`/`chat` and `plan_and_execute` are for.
-
-## Composition
-
-Plans call plans: a step whose `tool_name` is `plan__<identifier>` runs that plan and yields its result — a sub-plan's `output` map arrives as structured data your templates can reference:
-
-```yaml
-steps:
-  - id: E0
-    tool_name: plan__urgent_issues      # a whole sub-plan as one step
-    input: {}
-  - id: E1
-    tool_name: exit
-    input:
-      when: { value: "{{E0.count}}", op: eq, to: 0 }
-      status: success
-      message: "Nothing urgent."
-```
-
-An [`agent` step](/plans/agent-step) is the escape hatch for the one case plans can't express: when *which* tools to call depends on what earlier calls returned. It still returns schema-conforming JSON, so the rest of the plan stays typed.
-
-An [`ask` step](/plans/ask-step) covers the other thing a plan can't compute: a value only a person can supply. It declares what happens when there is no person — which is what keeps the same plan runnable from a terminal, from an MCP client, and in CI.
-
-Design small, single-purpose plans (fetch-and-shape, in output mode) and compose them from reporting or gating plans. Cycles fail immediately with the chain named (`a → b → a`); nesting is capped at 8.
-
-A step can also run a [named agent](/reference/agent-schema) as `agent__<name>`. Without schemas the agent takes `{prompt}` and returns `{result}`, its final text. An agent with an `input_schema` takes that object instead, and one with an `output_schema` returns it. The agent runs in its own context window with only the tools its file lists, and agents it calls as subagents nest at most 3 deep. The built-in `chat` agent is the exception: it reaches every tool, so the planner is never offered `agent__chat` and drafting rejects a step that calls it. A plan you write by hand can still call it.
-
-## Plan discovery
-
-Plans load from the directories in `[plans].paths` (default: `./.graph/plans` and `~/.config/graph/plans`, so repos carry their own and your global library fills in the rest). A plan whose `requires_servers` lists an unconfigured MCP server is hidden rather than broken — and asking for it by name (`plan run`, `plan show`, `plan validate`, `workbench plan`) says exactly which servers are missing instead of "no plan named".
-A file that fails to parse or validate is **skipped with a warning** (stderr; the workbench log in the TUI) — one broken plan never takes down the catalog or the commands built on it. Files load in sorted order per directory, directories in the order configured, and the first definition of a duplicate identifier wins; later ones are skipped with a warning too. Asking for a skipped plan by name reports the file's load error.
-
-graph also ships **built-in plans**, which form the lowest layer of the catalog. Today they are the [drafter](/plans/the-planner#composing-a-whole-plan-in-one-call), `compose_plan`, which `graph plan draft` and the workbench run, and `search_tools`, which finds the [tools a task needs](/tools/finding-tools) and which `compose_plan` runs for each capability a goal needs. A plan file whose `identifier` matches a built-in replaces it for every caller, and isn't reported as a duplicate. `graph plan show <identifier>` reports where the plan in effect comes from (`source: built-in` or the file path), and editing a built-in with the `graph plan` editing commands writes your copy into the first `[plans].paths` directory.
-
-On top of the structural check every load performs, `plan validate` and `plan run` resolve each step's tool name against what is actually loadable (enabled packs, user tools, the plan catalog, named agents, configured MCP servers) and fail before anything executes — see [where validation happens](/plans/errors-and-replanning#where-validation-happens).
-
-```bash
-graph plan list
-graph plan show project_status
-graph plan validate project_status        # or a file path, pre-commit
-```

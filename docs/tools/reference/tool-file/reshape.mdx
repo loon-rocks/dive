@@ -1,0 +1,44 @@
+---
+title: "reshape tools"
+sidebarTitle: "kind: reshape"
+description: "Builds a value in a new JSON shape from the input, with no process and no model call."
+playground: "none"
+keywords: ["reshape", "tool file", "YAML"]
+---
+
+Builds a value in a new JSON shape from the input, with no process and no model call. Leaf strings are templates; a leaf that is exactly one template keeps the value's type.
+
+These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: reshape`.
+
+## Fields
+
+<ParamField body="shape" type="any">
+  The output shape, as a JSON tree whose leaf strings are templates over `{{input.*}}`.
+</ParamField>
+
+<ParamField body="caller_shape" type="boolean" default="false">
+  Take `shape` from the call's input instead.
+</ParamField>
+
+<RequestExample>
+
+```yaml Example
+version: 2
+name: pr_summary_row
+description: Turns a pull request into a table row.
+kind: reshape
+shape:
+  number: '{{input.pr.number}}'
+  title: '{{input.pr.title}}'
+  author: '{{input.pr.author.login}}'
+input_schema:
+  type: object
+  required:
+  - pr
+  properties:
+    pr:
+      type: object
+      description: A pull request from gh
+```
+
+</RequestExample>

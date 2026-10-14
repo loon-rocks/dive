@@ -1,0 +1,45 @@
+---
+title: "graph plan unset"
+sidebarTitle: "unset"
+description: "Clear one optional plan attribute"
+playground: "none"
+keywords: ["graph plan unset"]
+---
+
+Clears one optional attribute. Clearing both `solver` and `output` leaves a silent plan. `identifier`, `name` and `description` are required and can only be changed with `graph plan set`.
+
+## Arguments
+
+<ParamField path="NAME|PATH" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+<ParamField path="ATTRIBUTE" type="enum<string>" required>
+  The attribute to clear
+
+  Available options: `name`, `description`, `identifier`, `exemplars`, `requires_servers`, `input_schema`, `solver`, `output`
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan unset [OPTIONS] <NAME|PATH> <ATTRIBUTE>
+```
+
+```bash Example
+graph plan unset weekly_changes exemplars
+```
+
+</RequestExample>

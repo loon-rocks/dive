@@ -1,0 +1,43 @@
+---
+title: "Serve plans over MCP"
+description: "Let Claude, Cursor and other MCP clients run your plans as tools."
+keywords: ["MCP server", "graph mcp serve", "plan_", "elicitation", "Claude Desktop"]
+---
+
+`graph mcp serve` runs graph as an MCP server over stdio. Any MCP client can then call your plans as tools.
+
+## Add graph to a client
+
+Point the client at `graph mcp serve`, and pass `--dir` with the project that holds your `.graph/` directory. Clients start servers in a directory of their own choosing, so without `--dir` graph may not find your plans.
+
+<CodeGroup>
+
+```bash Claude Code
+claude mcp add graph -- graph mcp serve --dir /path/to/project
+```
+
+```json Claude Desktop and Cursor
+{
+  "mcpServers": {
+    "graph": {
+      "command": "graph",
+      "args": ["mcp", "serve", "--dir", "/path/to/project"]
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+## What the client sees
+
+- **One tool per plan,** named `plan_<identifier>` and titled with the plan's `name`. Its input schema is the plan's `input_schema`, and its description is the plan's `description` with the `exemplars` added. A plan whose `requires_servers` aren't configured isn't offered.
+- **What a plan tool returns:** the plan's result when it succeeds, or `{error, kind?, step?, cause?}` when it fails. See [`finish`](/plans/reference/plan-file#param-finish).
+- **Tools for writing and testing plans,** listed in [MCP server tools](/integrating/mcp/reference/server-tools). When the client changes a plan with them, graph tells the client to reload its tool list, so a new plan can be called right away.
+
+## During a run
+
+- **Progress.** When the client asks for progress, graph reports each step as it starts and the tokens spent so far.
+- **Cancellation.** When the client cancels the call, graph stops the plan before its next step.
+- **Questions.** An [`ask` step](/plans/reference/steps/ask) becomes an elicitation request, so the client's user answers it. If the client doesn't support elicitation, or nobody answers within 10 minutes, the step's `whenUnanswered` setting applies.
+- **Long runs.** A plan can take longer than a client's default tool-call timeout. Raise the timeout in the client if long plans are cut off.

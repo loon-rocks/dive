@@ -1,0 +1,32 @@
+---
+title: "workbench__load_artifact"
+sidebarTitle: "workbench__load_artifact"
+description: "Opens an existing plan, agent or user tool in the pane for editing."
+playground: "none"
+keywords: ["workbench__load_artifact"]
+---
+
+## Behavior
+
+- Saving later replaces that file. An edited built-in agent is saved as a project override.
+- Loading a plan over a draft with unsaved changes fails unless `overwrite_draft` is true.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="kind" type="enum<string>" required>
+  What to open
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  A plan identifier or plan file path, an agent's name, or a tool's name (with or without user__)
+</ParamField>
+
+<ParamField body="overwrite_draft" type="boolean">
+  Plans only: load over a plan draft with unsaved changes, only after the user confirms discarding them
+</ParamField>

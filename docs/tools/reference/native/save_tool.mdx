@@ -1,0 +1,56 @@
+---
+title: "builtin__save_tool"
+sidebarTitle: "builtin__save_tool"
+description: "Saves a drafted tool to the project's tools directory and loads it immediately as `user__<name>`."
+playground: "none"
+keywords: ["builtin__save_tool"]
+---
+
+- The tool must pass `builtin__try_tool` first, unless `untested` is true.
+- Won't replace an existing file unless `overwrite` is true.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Has side effects |
+
+## Input
+
+<ParamField body="overwrite" type="boolean">
+  Replace an existing file with the same name, only after the user confirms
+</ParamField>
+
+<ParamField body="untested" type="boolean">
+  Save without a test run, only when the user said not to test it
+</ParamField>
+
+<ParamField body="yaml" type="string" required>
+  The whole user tool file, exactly as tested
+</ParamField>
+
+## Output
+
+<ResponseField name="error" type="string">
+</ResponseField>
+
+<ResponseField name="path" type="string">
+</ResponseField>
+
+<ResponseField name="problems" type="string[]">
+</ResponseField>
+
+<ResponseField name="saved" type="string">
+</ResponseField>
+
+<ResponseField name="untested" type="boolean">
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__save_tool
+  input:
+    yaml: "{{input.yaml}}"
+```
+
+</RequestExample>

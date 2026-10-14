@@ -10,10 +10,10 @@ description: Set up graph locally in a project and land a first working plan. Us
 
 The [graph repository](https://github.com/tylerdavis/graph) is the source of truth. Before generating anything, read the current onboarding docs — they move ahead of this skill; prefer them over memory:
 
-- [`docs/getting-started/quickstart.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/getting-started/quickstart.mdx) — the install → scaffold → run arc this skill drives.
+- [`docs/quickstart.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/quickstart.mdx) — the install → scaffold → run arc this skill drives.
 - [`docs/getting-started/concepts.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/getting-started/concepts.mdx) — plans, the tool catalog, the shape cache.
-- [`docs/plans/authoring.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/authoring.mdx) — builds `project_status`, the plan to adapt for the first one.
-- [`docs/plans/finish-modes.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/finish-modes.mdx), [`docs/tools/mcp-servers.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/tools/mcp-servers.mdx), [`docs/tools/user-defined.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/tools/user-defined.mdx).
+- [`docs/plans/guides/draft-in-workbench.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/guides/draft-in-workbench.mdx) — drafts a first plan in the workbench, then saves and runs it.
+- [`docs/plans/reference/plan-file.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx), [`docs/integrating/mcp/guides/connect-mcp-server.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/integrating/mcp/guides/connect-mcp-server.mdx), [`docs/tools/reference/tool-file.mdx`](https://github.com/tylerdavis/graph/blob/main/docs/tools/reference/tool-file.mdx).
 
 The finished shape: a `./.graph/` directory carrying `config.toml` (a provider, models, and the tools the plan needs) and one plan under `./.graph/plans/` that runs end to end against the user's real data.
 
@@ -61,7 +61,7 @@ Run `graph config init` first if `./.graph/config.toml` doesn't exist yet (it ta
 
 ### Step 3: What data does the plan touch? — connect the tools
 
-This is the interactive heart of the setup. graph reaches external systems through **MCP servers**; it also ships [bundled tool packs](https://github.com/tylerdavis/graph/blob/main/docs/tools/builtins.mdx) and supports [user-defined tools](https://github.com/tylerdavis/graph/blob/main/docs/tools/user-defined.mdx) that wrap a CLI or query.
+This is the interactive heart of the setup. graph reaches external systems through **MCP servers**; it also ships [bundled tool packs](https://github.com/tylerdavis/graph/blob/main/docs/tools/reference/packs.mdx) and supports [user-defined tools](https://github.com/tylerdavis/graph/blob/main/docs/tools/reference/tool-file.mdx) that wrap a CLI or query.
 
 1. **Ask what systems/data the plan needs** — free-form. E.g. "our Linear issues", "a Postgres orders table", "files in this repo", "Slack messages".
 
@@ -103,7 +103,7 @@ This is the interactive heart of the setup. graph reaches external systems throu
 
 ### Step 4: How should the plan finish?
 
-Map the Step 1 outcome to a [finish mode](https://github.com/tylerdavis/graph/blob/main/docs/plans/finish-modes.mdx):
+Map the Step 1 outcome to a [finish mode](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx):
 
 - **report** — the solver writes prose from the collected step results (status reports);
 - **output** — structured JSON for another tool to consume (ETL, data pulls);
@@ -124,8 +124,8 @@ Ask: just locally, or also on cron / in CI later?
    ```bash
    graph ask "<a question that exercises the tools from Step 3>"
    ```
-   Every call records what each tool actually returns (the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/shape-cache.mdx)), which is exactly what the plan's template paths reference.
-2. **Author one plan** under `./.graph/plans/`, adapted from [`project_status`](https://github.com/tylerdavis/graph/blob/main/docs/plans/authoring.mdx) — the same probe → chain steps → shape the finish workflow — matching the finish mode from Step 4.
+   Every call records what each tool actually returns (the [shape cache](https://github.com/tylerdavis/graph/blob/main/docs/tools/guides/tool-shapes.mdx)), which is exactly what the plan's template paths reference.
+2. **Author one plan** under `./.graph/plans/`, adapted from [`project_status`](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx) — the same probe → chain steps → shape the finish workflow — matching the finish mode from Step 4.
 3. **Validate, then run** against real input:
    ```bash
    graph plan validate <name>
@@ -135,7 +135,7 @@ Ask: just locally, or also on cron / in CI later?
 
 ### Step 7: Hand off
 
-- Point to [authoring plans](https://github.com/tylerdavis/graph/blob/main/docs/plans/authoring.mdx) to extend the plan and [user-defined tools](https://github.com/tylerdavis/graph/blob/main/docs/tools/user-defined.mdx) to wrap a CLI or an inline LLM prompt.
+- Point to [authoring plans](https://github.com/tylerdavis/graph/blob/main/docs/plans/reference/plan-file.mdx) to extend the plan and [user-defined tools](https://github.com/tylerdavis/graph/blob/main/docs/tools/reference/tool-file.mdx) to wrap a CLI or an inline LLM prompt.
 - If Step 5 was CI, hand off to [`/graph-github-actions-setup`](https://github.com/tylerdavis/graph/blob/main/skills/graph-github-actions-setup/SKILL.md).
 
 ## Key Concepts

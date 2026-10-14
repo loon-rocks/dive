@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
@@ -47,7 +47,7 @@ pub struct Config {
 /// Deliberately not shipped with built-in defaults: published prices change,
 /// and a stale table that quietly reports the wrong dollar figure is worse
 /// than reporting none. An unpriced model still reports its token counts.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ModelPrice {
     /// Uncached input tokens.
@@ -80,7 +80,7 @@ impl ModelPrice {
 
 /// System-prompt overrides. Each field replaces the built-in text
 /// wholesale; leave unset to keep the default.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct PromptConfig {
     /// Base system prompt for the chat/ask agent loop. The current
@@ -93,7 +93,7 @@ pub struct PromptConfig {
 }
 
 /// `graph workbench` settings.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct WorkbenchConfig {
     /// Where the workbench writes its debug log (tilde-expanded). Default:
@@ -102,7 +102,7 @@ pub struct WorkbenchConfig {
     pub log_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct TelemetryConfig {
     pub endpoint: Option<String>,
@@ -133,7 +133,9 @@ impl Default for TelemetryConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 pub enum TelemetryProtocol {
     #[default]
     #[serde(rename = "http/protobuf")]
@@ -207,13 +209,15 @@ impl TelemetryConfig {
 /// fresh install needs zero configuration; `memory` runs ephemeral (CI
 /// jobs, tests). Centralized backends (postgres/remote) slot in behind the
 /// same trait.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct StorageConfig {
     pub backend: StorageBackend,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum StorageBackend {
     #[default]
@@ -221,7 +225,7 @@ pub enum StorageBackend {
     Memory,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Settings {
     pub data_dir: PathBuf,
@@ -276,7 +280,7 @@ pub fn describe_missing_env(entry: &str, missing: &[MissingEnv]) -> String {
         .join("; ")
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderConfig {
     #[serde(rename = "type")]
@@ -295,7 +299,7 @@ pub struct ProviderConfig {
     pub missing_env: Vec<MissingEnv>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
     Anthropic,
@@ -337,7 +341,7 @@ impl ProviderKind {
 }
 
 /// A role's resolved model choice.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ModelChoice {
     pub provider: String,
@@ -358,7 +362,7 @@ pub struct ModelChoice {
 /// One failover candidate for a [`ModelChoice`]. Deliberately narrower than
 /// `ModelChoice`: no description (never planner-routed on its own) and no
 /// nested fallbacks (one flat chain per entry).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FallbackChoice {
     pub provider: String,
@@ -370,7 +374,7 @@ pub struct FallbackChoice {
     pub context_window: Option<u32>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct ModelRoles(BTreeMap<String, ModelChoice>);
 
@@ -513,7 +517,7 @@ impl<const N: usize> From<[(&str, ModelChoice); N]> for ModelRoles {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct McpServerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -565,7 +569,7 @@ impl McpServerConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct ToolOverride {
     pub description: Option<String>,
@@ -573,7 +577,7 @@ pub struct ToolOverride {
     pub output_example: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct PlanPaths {
     pub paths: Vec<PathBuf>,
@@ -590,7 +594,7 @@ impl Default for PlanPaths {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct ToolPaths {
     pub paths: Vec<PathBuf>,
@@ -614,7 +618,7 @@ impl Default for ToolPaths {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct UserConfig {
     pub name: Option<String>,
