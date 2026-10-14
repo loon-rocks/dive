@@ -882,6 +882,7 @@ version = "0.15.0"
 dependencies = [
  "anyhow",
  "dirs",
+ "schemars 0.8.22",
  "semver",
  "serde",
  "serde_json",

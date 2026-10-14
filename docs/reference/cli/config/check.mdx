@@ -1,0 +1,33 @@
+---
+title: "graph config check"
+sidebarTitle: "check"
+description: "Report each config file's format and whether the merged config loads"
+playground: "none"
+keywords: ["graph config check"]
+---
+
+Reports each config file's version as `current`, `migrate`, `too new` or `too old`, then loads the merged config and exits 1 with the problems if it doesn't load.
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph config check [OPTIONS]
+```
+
+```bash Example
+graph config check
+```
+
+</RequestExample>

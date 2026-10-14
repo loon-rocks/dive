@@ -18,99 +18,174 @@
         "expanded": true,
         "pages": [
           "getting-started/installation",
-          "getting-started/concepts"
+          "getting-started/concepts",
+          "getting-started/models",
+          "getting-started/workbench"
         ]
       },
       {
-        "group": "Authoring plans",
-        "icon": "wrench",
+        "group": "Agents",
+        "icon": "robot",
         "pages": [
-          "building/workbench",
-          "building/mcp-server"
-        ]
+          "agents/overview",
+          {
+            "group": "Guides",
+            "pages": [
+              "agents/guides/create-in-workbench",
+              "agents/guides/talk-to-an-agent",
+              "agents/guides/optimize-with-plans",
+              "agents/guides/multi-agent-networks",
+              "agents/guides/customize-built-ins",
+              "agents/guides/steer-tool-choice",
+              "agents/guides/threads"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "agents/reference/agent-file",
+              {
+                "$ref": "agents/reference/built-in/navigation.json"
+              }
+            ]
+          }
+        ],
+        "expanded": true
       },
       {
-        "group": "Running plans",
-        "icon": "running",
+        "group": "Plans",
+        "icon": "list-radio",
         "pages": [
-          "reference/cli",
-          "cookbook/ci-checks"
+          "plans/overview",
+          {
+            "group": "Guides",
+            "pages": [
+              "plans/guides/draft-in-workbench",
+              "plans/guides/run-a-plan",
+              "plans/guides/debug-a-plan",
+              {
+                "group": "Steps",
+                "pages": [
+                  "plans/guides/exit-gates",
+                  "plans/guides/branching",
+                  "plans/guides/filter",
+                  "plans/guides/map-and-reduce",
+                  "plans/guides/agent-steps",
+                  "plans/guides/ask-steps"
+                ]
+              },
+              "plans/guides/compose-plans",
+              "plans/guides/handle-failures"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "plans/reference/plan-file",
+              "plans/reference/conditions-and-bodies",
+              {
+                "$ref": "plans/reference/steps/navigation.json"
+              },
+              {
+                "$ref": "plans/reference/built-in/navigation.json"
+              }
+            ]
+          }
+        ],
+        "expanded": true
+      },
+      {
+        "group": "Tools",
+        "icon": "toolbox",
+        "pages": [
+          "tools/overview",
+          {
+            "group": "Guides",
+            "pages": [
+              "tools/guides/create-in-workbench",
+              "tools/guides/test-a-tool",
+              "tools/guides/tool-shapes"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              {
+                "$ref": "tools/reference/tool-file/navigation.json"
+              },
+              {
+                "$ref": "tools/reference/builtin/navigation.json"
+              },
+              {
+                "$ref": "tools/reference/packs/navigation.json"
+              },
+              {
+                "$ref": "tools/reference/native/navigation.json"
+              },
+              {
+                "$ref": "tools/reference/workbench/navigation.json"
+              }
+            ]
+          }
+        ],
+        "expanded": true
+      },
+      {
+        "group": "Integrating",
+        "icon": "plug",
+        "pages": [
+          {
+            "group": "MCP",
+            "root": "integrating/mcp/overview",
+            "pages": [
+              {
+                "group": "Guides",
+                "pages": [
+                  "integrating/mcp/guides/connect-mcp-server",
+                  "integrating/mcp/guides/serve-over-mcp",
+                  "integrating/mcp/guides/filter-and-override-tools",
+                  "integrating/mcp/guides/test-an-mcp-server"
+                ]
+              },
+              {
+                "group": "Reference",
+                "pages": [
+                  {
+                    "$ref": "integrating/mcp/reference/server-tools/navigation.json"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "integrating/observability/opentelemetry",
+              "integrating/observability/run-events"
+            ]
+          }
         ]
       },
       {
         "group": "Reference",
         "icon": "book",
         "pages": [
-          "models/models-and-providers",
           {
-            "group": "Tools",
-            "icon": "toolbox",
-            "pages": [
-              "tools/overview",
-              "tools/mcp-servers",
-              "tools/user-defined",
-              "tools/finding-tools",
-              {
-                "group": "Standard library",
-                "icon": "books",
-                "pages": [
-                  "reference/tools/stdlib/about",
-                  "untitled-page",
-                  "untitled-page-2",
-                  "untitled-page-3",
-                  "untitled-page-4"
-                ]
-              },
-              "tools/shape-cache"
-            ]
+            "group": "CLI",
+            "root": "reference/cli/overview",
+            "pages": {
+              "$ref": "reference/cli/navigation.json"
+            }
           },
-          {
-            "group": "Plans",
-            "icon": "list-radio",
-            "pages": [
-              "plans/overview",
-              "plans/inputs",
-              "reference/plans/template-language",
-              "plans/finish-modes",
-              "plans/exit-gates",
-              "plans/branching",
-              "plans/selection",
-              "plans/iteration",
-              "plans/agent-step",
-              "plans/ask-step",
-              "reference/plan-schema"
-            ]
-          },
-          "architecture/storage",
           "reference/configuration",
-          "reference/agent-schema",
-          "reference/file-versions"
+          "reference/environment-variables",
+          "reference/template-language",
+          "reference/file-versions",
+          "reference/data-directory",
+          "reference/glossary"
         ]
       },
-      "changelog",
-      {
-        "group": "Hidden",
-        "hidden": true,
-        "pages": [
-          "plans/the-planner",
-          "plans/errors-and-replanning",
-          "plans/authoring",
-          {
-            "group": "Architecture",
-            "pages": [
-              "architecture/execution-model"
-            ]
-          },
-          {
-            "group": "Cookbook",
-            "pages": [
-              "cookbook/bot-identity",
-              "cookbook/reporting",
-              "cookbook/automation"
-            ]
-          }
-        ]
-      }
+      "changelog"
     ]
   },
   "footer": {
@@ -120,38 +195,163 @@
   },
   "redirects": [
     {
-      "source": "/plans/ci-cookbook",
-      "destination": "/cookbook/ci-checks"
-    },
-    {
-      "source": "/plans/cookbook",
-      "destination": "/cookbook/reporting"
-    },
-    {
-      "source": "/automation/ci",
-      "destination": "/cookbook/ci-checks"
-    },
-    {
       "source": "/plans/escape-hatch",
-      "destination": "/plans/exit-gates"
+      "destination": "/plans/guides/exit-gates"
     },
     {
       "source": "/using/plan-workbench",
-      "destination": "/workbench/plan-workbench"
+      "destination": "/getting-started/workbench"
     },
     {
       "source": "/automation/scripting",
-      "destination": "/reference/scripting-contract"
+      "destination": "/reference/environment-variables"
     },
     {
       "source": "/reference/environment",
-      "destination": "/reference/scripting-contract"
+      "destination": "/reference/environment-variables"
+    },
+    {
+      "source": "/reference/cli",
+      "destination": "/reference/cli/overview"
+    },
+    {
+      "source": "/untitled-page",
+      "destination": "/tools/reference/builtin/infer"
+    },
+    {
+      "source": "/untitled-page-2",
+      "destination": "/tools/reference/builtin/reshape"
+    },
+    {
+      "source": "/untitled-page-3",
+      "destination": "/tools/reference/packs/github/gh_pr_meta"
+    },
+    {
+      "source": "/untitled-page-4",
+      "destination": "/tools/reference/packs/slack/slack_post_message"
+    },
+    {
+      "source": "/integrating/mcp/reference/settings",
+      "destination": "/reference/configuration"
+    },
+    {
+      "source": "/architecture/execution-model",
+      "destination": "/plans/overview"
+    },
+    {
+      "source": "/architecture/storage",
+      "destination": "/reference/data-directory"
+    },
+    {
+      "source": "/building/mcp-server",
+      "destination": "/integrating/mcp/guides/serve-over-mcp"
+    },
+    {
+      "source": "/building/workbench",
+      "destination": "/getting-started/workbench"
+    },
+    {
+      "source": "/models/models-and-providers",
+      "destination": "/getting-started/models"
+    },
+    {
+      "source": "/plans/agent-step",
+      "destination": "/plans/guides/agent-steps"
+    },
+    {
+      "source": "/plans/ask-step",
+      "destination": "/plans/guides/ask-steps"
+    },
+    {
+      "source": "/plans/authoring",
+      "destination": "/plans/reference/plan-file"
+    },
+    {
+      "source": "/plans/branching",
+      "destination": "/plans/guides/branching"
+    },
+    {
+      "source": "/plans/errors-and-replanning",
+      "destination": "/plans/guides/handle-failures"
+    },
+    {
+      "source": "/plans/exit-gates",
+      "destination": "/plans/guides/exit-gates"
+    },
+    {
+      "source": "/plans/finish-modes",
+      "destination": "/plans/reference/plan-file"
+    },
+    {
+      "source": "/plans/inputs",
+      "destination": "/plans/reference/plan-file"
+    },
+    {
+      "source": "/plans/iteration",
+      "destination": "/plans/guides/map-and-reduce"
+    },
+    {
+      "source": "/plans/selection",
+      "destination": "/plans/guides/filter"
+    },
+    {
+      "source": "/plans/the-planner",
+      "destination": "/plans/guides/draft-in-workbench"
+    },
+    {
+      "source": "/reference/agent-schema",
+      "destination": "/agents/reference/agent-file"
+    },
+    {
+      "source": "/reference/plan-schema",
+      "destination": "/plans/reference/plan-file"
+    },
+    {
+      "source": "/reference/plans/template-language",
+      "destination": "/reference/template-language"
+    },
+    {
+      "source": "/reference/tools/stdlib/about",
+      "destination": "/tools/reference/packs"
+    },
+    {
+      "source": "/tools/finding-tools",
+      "destination": "/tools/overview"
+    },
+    {
+      "source": "/tools/mcp-servers",
+      "destination": "/integrating/mcp/guides/connect-mcp-server"
+    },
+    {
+      "source": "/tools/shape-cache",
+      "destination": "/tools/guides/tool-shapes"
+    },
+    {
+      "source": "/tools/user-defined",
+      "destination": "/tools/reference/tool-file"
+    },
+    {
+      "source": "/using/chat-and-ask",
+      "destination": "/agents/guides/talk-to-an-agent"
+    },
+    {
+      "source": "/using/threads",
+      "destination": "/agents/guides/threads"
+    },
+    {
+      "source": "/using/tool-selection",
+      "destination": "/agents/guides/steer-tool-choice"
     }
   ],
   "navbar": {
     "links": []
   },
   "variables": {
-    "release_version": "v0.15.0"
+    "release_version": "v0.16.0",
+    "config_file_version": "4",
+    "plan_file_version": "2",
+    "tool_file_version": "2",
+    "agent_file_version": "1",
+    "data_directory_version": "2"
   }
 }

@@ -1,0 +1,83 @@
+---
+title: "OpenTelemetry"
+description: "Export every run, step, tool call and model call to an OTLP backend such as Langfuse."
+keywords: ["opentelemetry", "otlp", "telemetry", "langfuse", "tracing", "cost"]
+---
+
+import ConfigTelemetry from "/snippets/generated/config/telemetry.mdx";
+import EnvOtelExporterOtlpEndpoint from "/snippets/generated/environment/otel-exporter-otlp-endpoint.mdx";
+import EnvOtelExporterOtlpProtocol from "/snippets/generated/environment/otel-exporter-otlp-protocol.mdx";
+import EnvOtelExporterOtlpTimeout from "/snippets/generated/environment/otel-exporter-otlp-timeout.mdx";
+import EnvOtelExporterOtlpHeaders from "/snippets/generated/environment/otel-exporter-otlp-headers.mdx";
+import EnvOtelServiceName from "/snippets/generated/environment/otel-service-name.mdx";
+
+<RequestExample>
+
+```toml OpenTelemetry
+[telemetry]
+endpoint = "http://localhost:4318"
+service_name = "graph"
+
+[telemetry.resource]
+"deployment.environment" = "dev"
+```
+
+```toml Langfuse
+[telemetry]
+endpoint = "https://cloud.langfuse.com/api/public/otel"
+
+[telemetry.headers]
+Authorization = "Basic ${LANGFUSE_AUTH}"
+"x-langfuse-ingestion-version" = "4"
+```
+
+</RequestExample>
+
+## Related config.toml options
+
+<ConfigTelemetry />
+
+[Go to full reference](/reference/configuration)
+
+## Related environment variables
+
+<EnvOtelExporterOtlpEndpoint />
+
+<EnvOtelExporterOtlpProtocol />
+
+<EnvOtelExporterOtlpTimeout />
+
+<EnvOtelExporterOtlpHeaders />
+
+<EnvOtelServiceName />
+
+[Go to full reference](/reference/environment-variables)
+
+## Send traces to Langfuse
+
+Point `endpoint` at your Langfuse region's OTLP URL and authenticate with your project's API keys in `headers`:
+
+```toml
+[telemetry]
+endpoint = "https://cloud.langfuse.com/api/public/otel"
+
+[telemetry.headers]
+Authorization = "Basic ${LANGFUSE_AUTH}"
+"x-langfuse-ingestion-version" = "4"
+```
+
+- `endpoint` is the base URL. graph adds `/v1/traces` itself. For the US region, use `https://us.cloud.langfuse.com/api/public/otel`.
+- Set `LANGFUSE_AUTH` in your environment to the base64 encoding of `<public key>:<secret key>`. Header values can reference environment variables, so the keys stay out of the file.
+- `x-langfuse-ingestion-version = "4"` makes traces show up in Langfuse right away instead of after a delay.
+
+Langfuse groups the traces of one thread, or one workbench session, into a session.
+
+## What a trace contains
+
+- One trace per run or turn; steps, tool calls and model calls as spans
+- Model, token usage and cost on each model call
+- `capture_content` controls whether prompts and responses are included; `logs` exports logs too
+
+## Check it worked
+
+- Run `graph plan run` or `graph ask` and find the trace in the backend

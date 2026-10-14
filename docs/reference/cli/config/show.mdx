@@ -1,0 +1,35 @@
+---
+title: "graph config show"
+sidebarTitle: "show"
+description: "Print the merged effective configuration"
+playground: "none"
+keywords: ["graph config show"]
+---
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph config show [OPTIONS]
+```
+
+```bash Example 1
+graph config show
+```
+
+```bash Example 2
+graph config show --json
+```
+
+</RequestExample>

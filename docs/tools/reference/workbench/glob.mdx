@@ -1,0 +1,49 @@
+---
+title: "workbench__glob"
+sidebarTitle: "workbench__glob"
+description: "Finds files in the project directory by glob pattern."
+playground: "none"
+keywords: ["workbench__glob"]
+---
+
+- Paths are relative to the project directory and sorted.
+- Skips gitignored files.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="dir" type="string">
+  Directory subtree to search. Default: the project directory.
+</ParamField>
+
+<ParamField body="pattern" type="string" required>
+  Glob matched against project-relative paths, e.g. **/*.rs or docs/**/*.mdx.
+</ParamField>
+
+## Output
+
+<ResponseField name="count" type="integer">
+</ResponseField>
+
+<ResponseField name="files" type="string[]">
+</ResponseField>
+
+<ResponseField name="truncated" type="boolean">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "count": 1,
+  "files": [
+    "crates/graph-cli/src/main.rs"
+  ],
+  "truncated": false
+}
+```
+
+</ResponseExample>

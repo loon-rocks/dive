@@ -1,6 +1,6 @@
 //! Characterization tests for the machine-facing CLI contract.
 //!
-//! These pin the behavior documented in `docs/reference/scripting-contract.mdx`
+//! These pin the behavior documented in `docs/reference/cli/error-handling.mdx`
 //! by running the real binary. They exist so that the planned refactor of
 //! command output (every command returning a value instead of printing, in
 //! service of an MCP server) can be shown to preserve behavior rather than
@@ -235,7 +235,7 @@ fn a_fired_gate_adds_an_exit_block_to_the_envelope() {
          solver report and null for output/silent plans, but a fired exit gate \
          puts its message here on a plan with no solver. If this assertion now \
          fails, the drift was fixed on purpose — update the roadmap and \
-         docs/reference/scripting-contract.mdx together with this test."
+         docs/reference/cli/error-handling.mdx together with this test."
     );
 }
 

@@ -1,0 +1,67 @@
+---
+title: "graph plan draft"
+sidebarTitle: "draft"
+description: "Draft a plan from a goal using the planner model (costs inference)"
+playground: "none"
+keywords: ["graph plan draft"]
+---
+
+Runs the built-in `compose_plan` plan over your tool catalog: it finds the tools the goal needs, writes the whole plan in one call, and fixes steps that fail validation. When it had to guess a value that decides what the plan returns, it asks you in the terminal first.
+
+Problems it couldn't fix are listed under `problems`. When no tool in the catalog can do part of the goal, nothing is written and the result lists what is `missing`.
+
+Drafting replaces every step. To correct a plan whose steps you want to keep, use `graph plan set` and the `graph plan step` commands.
+
+## Arguments
+
+<ParamField path="GOAL" type="string" required>
+  What the plan should do, as a self-contained instruction
+</ParamField>
+
+## Options
+
+<ParamField query="--from" type="string">
+  Draft into this plan's identity (identifier, name, description, input schema). Every step is replaced — use the editing commands to correct a plan whose steps you want to keep
+
+  Format: `NAME|PATH`.
+</ParamField>
+
+<ParamField query="--output" type="string">
+  Write here instead of &lt;plans dir&gt;/&lt;identifier&gt;.yaml
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--stdout" type="boolean">
+  Print the drafted YAML to stdout instead of writing a file
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan draft [OPTIONS] <GOAL>
+```
+
+```bash Example 1
+graph plan draft "Summarize the commits merged since the last release"
+```
+
+```bash Example 2
+graph plan draft "Summarize the commits merged since the last release" --from weekly_changes
+```
+
+```bash Example 3
+graph plan draft "List open pull requests with failing checks" --stdout
+```
+
+</RequestExample>

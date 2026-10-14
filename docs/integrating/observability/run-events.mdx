@@ -1,0 +1,185 @@
+---
+title: "Stream run events"
+description: "Read graph's progress as JSON events on stderr, for scripts, dashboards and CI annotations."
+keywords: ["GRAPH_EVENTS", "jsonl", "events", "github"]
+---
+
+import EnvGraphEvents from "/snippets/generated/environment/graph-events.mdx";
+
+Set `GRAPH_EVENTS=jsonl` and graph writes its progress to stderr as one JSON object per line, instead of text for people. stdout still carries only the result, so you can read both from one run:
+
+```bash
+GRAPH_EVENTS=jsonl graph plan run weekly_changes \
+  --input base=v0.15.0 2> events.jsonl
+```
+
+The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event has an `event` field naming its type.
+
+<ResponseExample>
+
+```json Events on stderr
+{
+  "event": "tool_started",
+  "tool": "builtin__git_log",
+  "args": {
+    "base": "v0.15.0",
+    "head": "HEAD"
+  }
+}
+
+{
+  "event": "tool_finished",
+  "tool": "builtin__git_log",
+  "ms": 41,
+  "is_error": false
+}
+
+{
+  "event": "synthesizing"
+}
+
+{
+  "event": "model_call",
+  "kind": "chat",
+  "site": "solver",
+  "model": "claude-sonnet-5-5",
+  "input_tokens": 2140,
+  "output_tokens": 388,
+  "cache_creation_input_tokens": 0,
+  "cache_read_input_tokens": 0,
+  "ms": 5210
+}
+
+{
+  "event": "usage_summary",
+  "usage": {
+    "calls": 1,
+    "input_tokens": 2140,
+    "output_tokens": 388,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "by_step": [],
+    "by_model": [
+      {
+        "provider": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "calls": 1,
+        "input_tokens": 2140,
+        "output_tokens": 388,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      }
+    ]
+  }
+}
+```
+
+</ResponseExample>
+
+## Events
+
+### tool_started
+
+A tool call began.
+
+<ResponseField name="tool" type="string">
+  The tool's full name, such as `builtin__git_log`.
+</ResponseField>
+
+<ResponseField name="args" type="object">
+  The input the tool was called with, after templates were filled.
+</ResponseField>
+
+### tool_finished
+
+A tool call ended.
+
+<ResponseField name="tool" type="string">
+  The tool's full name.
+</ResponseField>
+
+<ResponseField name="ms" type="integer">
+  How long the call took, in milliseconds.
+</ResponseField>
+
+<ResponseField name="is_error" type="boolean">
+  Whether the tool returned an error.
+</ResponseField>
+
+### agent_round
+
+An agent, or an `agent` step, started another round of model calls and tool calls.
+
+<ResponseField name="n" type="integer">
+  The round number.
+</ResponseField>
+
+### synthesizing
+
+A plan's `solver` started writing its answer.
+
+### model_call
+
+A model call finished.
+
+<ResponseField name="kind" type="enum<string>">
+  `chat` for a chat model, `decision` for a decision model.
+</ResponseField>
+
+<ResponseField name="site" type="string">
+  Where the call was made: the step's path, such as `E3` or `triage/E1`, or the model role when the call belongs to no step.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model id.
+</ResponseField>
+
+<ResponseField name="input_tokens" type="integer">
+  Uncached input tokens.
+</ResponseField>
+
+<ResponseField name="output_tokens" type="integer">
+  Output tokens.
+</ResponseField>
+
+<ResponseField name="cache_creation_input_tokens" type="integer">
+  Input tokens written to the provider's prompt cache.
+</ResponseField>
+
+<ResponseField name="cache_read_input_tokens" type="integer">
+  Input tokens read from the provider's prompt cache.
+</ResponseField>
+
+<ResponseField name="ms" type="integer">
+  How long the call took, in milliseconds.
+</ResponseField>
+
+### usage_summary
+
+What the whole run spent, sent once at the end, including when the run fails. graph skips it when the run made no model calls.
+
+<ResponseField name="usage.calls" type="integer">
+  Model calls in the run.
+</ResponseField>
+
+<ResponseField name="usage.input_tokens" type="integer">
+  Total uncached input tokens. `output_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens` sit alongside it.
+</ResponseField>
+
+<ResponseField name="usage.cost_usd" type="number">
+  Total cost in USD. Present only when [`pricing`](/reference/configuration#param-pricing) covers a model the run used.
+</ResponseField>
+
+<ResponseField name="usage.by_step" type="object[]">
+  The same totals per step, each with its `path`.
+</ResponseField>
+
+<ResponseField name="usage.by_model" type="object[]">
+  The same totals per model, each with its `provider` and `model`.
+</ResponseField>
+
+## Related environment variables
+
+<EnvGraphEvents />
+
+[Go to full reference](/reference/environment-variables)

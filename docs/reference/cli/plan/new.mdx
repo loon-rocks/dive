@@ -1,0 +1,57 @@
+---
+title: "graph plan new"
+sidebarTitle: "new"
+description: "Scaffold an empty plan file to build up with `set` and `step add`"
+playground: "none"
+keywords: ["graph plan new"]
+---
+
+Writes a plan with no steps, which won't validate until you add one. An edit is refused only when it adds a validation problem, so you can build the plan up one step at a time.
+
+## Arguments
+
+<ParamField path="IDENTIFIER" type="string" required>
+  Tool-name-safe identifier; also the file name
+</ParamField>
+
+## Options
+
+<ParamField query="--name" type="string">
+  Display name (defaults to the identifier)
+
+  Format: `NAME`.
+</ParamField>
+
+<ParamField query="--description" type="string">
+  What the plan does — the agent's routing signal
+
+  Format: `DESCRIPTION`.
+</ParamField>
+
+<ParamField query="--output" type="string">
+  Write here instead of &lt;plans dir&gt;/&lt;identifier&gt;.yaml
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan new [OPTIONS] <IDENTIFIER>
+```
+
+```bash Example
+graph plan new weekly_changes --description "Summarize what changed in this repo this week"
+```
+
+</RequestExample>

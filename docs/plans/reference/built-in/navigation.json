@@ -1,0 +1,8 @@
+{
+  "group": "Built-in plans",
+  "pages": [
+    "plans/reference/built-in/compose_plan",
+    "plans/reference/built-in/search_tools"
+  ],
+  "root": "plans/reference/built-in-plans"
+}

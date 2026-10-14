@@ -1,0 +1,53 @@
+---
+title: "graph tools test"
+sidebarTitle: "test"
+description: "Invoke a tool directly"
+playground: "none"
+keywords: ["graph tools test"]
+---
+
+Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The tool's namespaced name, as `graph tools list` prints it
+</ParamField>
+
+<ParamField path="JSON|@FILE|-" type="string">
+  Input as a JSON object: inline (`'{"a":1}'`), `@file.json`, or `-` for stdin
+</ParamField>
+
+## Options
+
+<ParamField query="--input" type="string[]">
+  Override individual input keys (applied on top of the JSON document)
+
+  Format: `KEY=VALUE`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph tools test [OPTIONS] <NAME> [JSON|@FILE|-]
+```
+
+```bash Example 1
+graph tools test builtin__git_log '{"base":"v0.15.0","head":"HEAD"}'
+```
+
+```bash Example 2
+graph tools test builtin__git_log --input base=v0.15.0 --input head=HEAD --json
+```
+
+</RequestExample>

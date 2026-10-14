@@ -1,0 +1,23 @@
+---
+title: "workbench__show_artifact"
+sidebarTitle: "workbench__show_artifact"
+description: "Returns an existing plan, agent or user tool as YAML, without opening it in the pane."
+playground: "none"
+keywords: ["workbench__show_artifact"]
+---
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="kind" type="enum<string>" required>
+  What to read
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  A plan identifier or plan file path, an agent's name, or a tool's name (with or without user__)
+</ParamField>

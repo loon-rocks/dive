@@ -1,0 +1,32 @@
+{
+  "group": "Native tools",
+  "pages": [
+    {
+      "group": "Plan authoring",
+      "pages": [
+        "tools/reference/native/validate_plan",
+        "tools/reference/native/check_plan",
+        "tools/reference/native/compose_context",
+        "tools/reference/native/question_form",
+        "tools/reference/native/find_tools"
+      ]
+    },
+    {
+      "group": "Tool search",
+      "pages": [
+        "tools/reference/native/catalog_tools",
+        "tools/reference/native/score_candidates",
+        "tools/reference/native/describe_tools"
+      ]
+    },
+    {
+      "group": "Drafting",
+      "pages": [
+        "tools/reference/native/try_tool",
+        "tools/reference/native/save_tool",
+        "tools/reference/native/save_agent"
+      ]
+    }
+  ],
+  "root": "tools/reference/native-tools"
+}

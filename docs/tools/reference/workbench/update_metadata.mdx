@@ -1,0 +1,90 @@
+---
+title: "workbench__update_metadata"
+sidebarTitle: "workbench__update_metadata"
+description: "Updates the plan draft's top-level fields."
+playground: "none"
+keywords: ["workbench__update_metadata"]
+---
+
+## Fields
+
+- `identifier`, `name`, `description`, `exemplars`, `input_schema`, `requires_servers`.
+- `finish` sets the result: a `solver`, an `output` map, or neither for a silent plan.
+
+## Notes
+
+- Changing `identifier` makes it a new plan.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Not marked read-only |
+
+## Input
+
+<ParamField body="description" type="string">
+  What the plan does — shown in the catalog and used for routing.
+</ParamField>
+
+<ParamField body="exemplars" type="string[]">
+  Example requests the plan should handle; replaces the current list.
+</ParamField>
+
+<ParamField body="finish" type="object | string">
+  Set the plan's finish: "silent", EITHER &#123;output: &#123;a map of key -&gt; template string&#125;&#125; for a structured result, OR &#123;solver: &#123;queryToAnswer: string, systemPrompt?: string&#125;&#125; for LLM synthesis.
+</ParamField>
+
+<ParamField body="finish.output" type="object">
+  Map of output key to template string, e.g. &#123;"summary": "&#123;&#123;E3.text&#125;&#125;"&#125;.
+</ParamField>
+
+<ParamField body="finish.solver" type="object">
+</ParamField>
+
+<ParamField body="finish.solver.queryToAnswer" type="string">
+</ParamField>
+
+<ParamField body="finish.solver.systemPrompt" type="string">
+</ParamField>
+
+<ParamField body="identifier" type="string">
+  Tool-name-safe identifier (letters, digits, _, -). Changing it detaches the draft from its loaded file.
+</ParamField>
+
+<ParamField body="input_schema" type="object">
+  Replace the plan's input schema (a JSON Schema object describing the plan's inputs, e.g. &#123;"type":"object","required":["pr"],"properties":&#123;"pr":&#123;"type":"integer"&#125;&#125;&#125;). Pass null to clear it.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Human-readable display name.
+</ParamField>
+
+<ParamField body="output_schema" type="object">
+  Replace the JSON Schema of an output plan's result; its properties are the `finish.output` keys. Pass null to clear it.
+</ParamField>
+
+<ParamField body="requires_servers" type="string[]">
+  Replace the list of MCP server names the plan requires to be configured (gates catalog visibility). Empty array clears it.
+</ParamField>
+
+## Output
+
+<ResponseField name="identifier" type="string">
+</ResponseField>
+
+<ResponseField name="name" type="string">
+</ResponseField>
+
+<ResponseField name="ok" type="boolean">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "identifier": "sprint_report",
+  "name": "Sprint report",
+  "ok": true
+}
+```
+
+</ResponseExample>

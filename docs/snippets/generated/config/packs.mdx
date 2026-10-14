@@ -1,0 +1,19 @@
+<ParamField body="packs" type="object">
+  Installed packs, as `[packs.<name>]`. Their tools, plans and agents join the catalog as `<name>__<kind>__<item>`.
+</ParamField>
+
+<ParamField body="packs.<name>.git" type="string" required>
+  The git repository the pack is installed from.
+</ParamField>
+
+<ParamField body="packs.<name>.ref" type="string">
+  The git ref to install.
+</ParamField>
+
+<ParamField body="packs.<name>.include" type="string[]">
+  Glob patterns over `<kind>__<item>`, such as `plan__*`, naming the items callable from outside the pack. Everything when empty.
+</ParamField>
+
+<ParamField body="packs.<name>.exclude" type="string[]">
+  Glob patterns over `<kind>__<item>` for items only the pack's own plans and agents can call.
+</ParamField>

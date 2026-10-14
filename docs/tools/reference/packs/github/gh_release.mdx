@@ -1,0 +1,81 @@
+---
+title: "builtin__gh_release"
+sidebarTitle: "builtin__gh_release"
+description: "Returns a release's tag, title, notes and date, plus the previous release's tag."
+playground: "none"
+keywords: ["builtin__gh_release", "github"]
+---
+
+## Behavior
+
+- Omit `tag` for the latest release.
+- `previous_tag` is the base ref for a `git_log` or `git_diff` over what shipped.
+- `previous_tag` is null on the first release, so check it before diffing.
+
+| Pack | Kind | Effect |
+| --- | --- | --- |
+| [`github`](/tools/reference/packs/github): add `"github"` to `[tools].packs` | `exec` | Read-only |
+
+## Input
+
+<ParamField body="tag" type="string" default="">
+  Release tag to read (e.g. "v1.4.0"); "" for the latest release. In a release-triggered workflow this is the tag that fired it.
+</ParamField>
+
+<ParamField body="include_prereleases" type="boolean" default="false">
+  Whether prereleases count when resolving previous_tag. Default false — a stable release's previous_tag is the last stable release, so the summary covers everything since users last saw a release. Set true to diff against the immediately preceding prerelease instead. Never affects which release `tag` resolves to.
+</ParamField>
+
+## Output
+
+<ResponseField name="tag" type="string">
+  The release's tag
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Release title; "" when untitled
+</ResponseField>
+
+<ResponseField name="body" type="string">
+  Release notes markdown (GitHub's generated notes when that is how the release was made); "" when empty
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  HTML url of the release page
+</ResponseField>
+
+<ResponseField name="published_at" type="string | null">
+  ISO 8601 publication time; null for a draft
+</ResponseField>
+
+<ResponseField name="author" type="string | null">
+  Login of the release author
+</ResponseField>
+
+<ResponseField name="is_prerelease" type="boolean">
+</ResponseField>
+
+<ResponseField name="is_draft" type="boolean">
+</ResponseField>
+
+<ResponseField name="target" type="string | null">
+  Target commitish (branch or sha) the tag was cut from
+</ResponseField>
+
+<ResponseField name="previous_tag" type="string | null">
+  Tag of the release published before this one — the base ref for a git_log or git_diff over what shipped. null when this is the first release (or a draft); gate on it before diffing.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__gh_release
+  input: {}
+```
+
+```bash Inspect
+graph tools show builtin__gh_release
+```
+
+</RequestExample>

@@ -1,0 +1,67 @@
+---
+title: "Talk to an agent"
+description: "Ask an agent one question or hold a conversation with it from the terminal, and pick it up later."
+keywords: ["graph ask", "graph chat", "threads", "conversation"]
+---
+
+`graph ask` runs one turn and exits. `graph chat` keeps the conversation open. Both start with the built-in `chat` agent unless you name another.
+
+## Ask one question
+
+```bash
+graph ask --agent release_notes \
+  "What shipped since v0.15.0?"
+```
+
+The answer streams to stdout. Usage and a resume command follow on stderr:
+
+```text
+3 calls · 12k in / 840 out · $0.04
+resume with `graph chat --thread 0b9c2f6e-…`
+```
+
+Piped input is added to the message:
+
+```bash
+git diff main | graph ask "Review this diff"
+```
+
+## Hold a conversation
+
+```bash
+graph chat release_notes
+```
+
+The prompt shows which agent you are talking to. Switch agents mid-conversation with `/agent <name>`, list them with `/agent`, and leave with `/quit`.
+
+## Pick it up later
+
+Add `--thread` to continue the most recent conversation, or `--thread <id>` for a specific one. On `graph ask`, put it after the message:
+
+<CodeGroup>
+```bash graph chat
+graph chat --thread
+```
+
+```bash graph ask
+graph ask "And the release before?" \
+  --thread
+```
+</CodeGroup>
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Create an agent in the workbench" icon="wand-magic-sparkles" href="/agents/guides/create-in-workbench">
+    Draft and save an agent to talk to.
+  </Card>
+  <Card title="Manage threads" icon="list" href="/agents/guides/threads">
+    Find, inspect and delete past conversations.
+  </Card>
+  <Card title="Build a multi-agent network" icon="diagram-project" href="/agents/guides/multi-agent-networks">
+    Let agents hand the conversation to each other.
+  </Card>
+  <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
+    Change the default `chat` agent.
+  </Card>
+</CardGroup>

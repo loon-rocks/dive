@@ -1,0 +1,49 @@
+---
+title: "graph plan step unset"
+sidebarTitle: "unset"
+description: "Clear one optional attribute of a step"
+playground: "none"
+keywords: ["graph plan step unset"]
+---
+
+Clears one optional attribute of a step. A step's `tool` and `input` are required and can't be cleared.
+
+## Arguments
+
+<ParamField path="NAME|PATH" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+<ParamField path="ID" type="string" required>
+  The step's id
+</ParamField>
+
+<ParamField path="ATTRIBUTE" type="enum<string>" required>
+  The attribute to clear
+
+  Available options: `tool`, `input`, `reasoning`
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan step unset [OPTIONS] <NAME|PATH> <ID> <ATTRIBUTE>
+```
+
+```bash Example
+graph plan step unset weekly_changes E1 reasoning
+```
+
+</RequestExample>

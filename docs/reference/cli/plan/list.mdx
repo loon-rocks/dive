@@ -1,0 +1,37 @@
+---
+title: "graph plan list"
+sidebarTitle: "list"
+description: "List available plan documents"
+playground: "none"
+keywords: ["graph plan list"]
+---
+
+Lists the runnable catalog. `--json` also reports plans that failed to load under `skipped`, and plans hidden by unconfigured `requires_servers` under `hidden`.
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan list [OPTIONS]
+```
+
+```bash Example 1
+graph plan list
+```
+
+```bash Example 2
+graph plan list --json
+```
+
+</RequestExample>

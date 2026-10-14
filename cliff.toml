@@ -110,7 +110,7 @@ commit_parsers = [
   # regenerated in full at every release, so a hand-edit of those sections
   # would be undone by the next `git-cliff --tag` — the correction has to live
   # here to stick. exclude_paths below doesn't reach them: each also touches
-  # docs/cookbook/ci-checks.mdx (the docs-parity invariant) or CLAUDE.md.
+  # docs/ or CLAUDE.md.
   # DO NOT EXTEND THIS LIST — type internal work `ci:` instead (see CLAUDE.md).
   { message = "^feat: scout blast radius with an agent step", skip = true },
   { message = "^feat: raise the context scout's round budget", skip = true },
@@ -135,8 +135,8 @@ commit_parsers = [
 # which ship to nobody. A commit is dropped only when EVERY file it touches
 # is excluded, so mixed commits still land — which is why the primary
 # defense is typing internal-only work `ci:` (see CLAUDE.md). The
-# docs-parity invariant makes those plan changes touch
-# docs/cookbook/ci-checks.mdx too, so this alone cannot catch them.
+# plan changes in .graph/ often touch docs/ or CLAUDE.md
+# too, so this alone cannot catch them.
 exclude_paths = [".graph/**", ".github/**"]
 tag_pattern = "v[0-9].*"
 sort_commits = "oldest"

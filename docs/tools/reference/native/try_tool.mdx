@@ -1,0 +1,56 @@
+---
+title: "builtin__try_tool"
+sidebarTitle: "builtin__try_tool"
+description: "Test-runs a drafted tool once, before it's saved."
+playground: "none"
+keywords: ["builtin__try_tool"]
+---
+
+- Checks the tool file, then asks you to approve the run.
+- Runs it on the sample input and records its output shape.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Has side effects |
+
+## Input
+
+<ParamField body="input" type="object" required>
+  Sample input for one run, matching the tool's input_schema
+</ParamField>
+
+<ParamField body="yaml" type="string" required>
+  The whole user tool file
+</ParamField>
+
+## Output
+
+<ResponseField name="is_error" type="boolean">
+</ResponseField>
+
+<ResponseField name="problems" type="string[]">
+</ResponseField>
+
+<ResponseField name="ran" type="boolean" required>
+</ResponseField>
+
+<ResponseField name="reason" type="string">
+</ResponseField>
+
+<ResponseField name="result" type="any">
+</ResponseField>
+
+<ResponseField name="shape" type="object">
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__try_tool
+  input:
+    yaml: "{{input.yaml}}"
+    input: "{{input.input}}"
+```
+
+</RequestExample>

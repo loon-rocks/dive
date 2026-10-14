@@ -1,0 +1,74 @@
+---
+title: "Manage threads"
+description: "Find the conversation where chat looked up the latest Rust release, see what its researcher did, continue it, and delete it."
+keywords: ["threads", "history", "graph threads", "resume"]
+---
+
+## Find the thread
+
+```bash
+graph threads list
+```
+
+```text
+169a26420daf  2026-10-13 13:46    4 msgs  What is the latest stable version of Rust?
+```
+
+## Read it
+
+```bash
+graph threads show 169a26420daf
+```
+
+The thread records each message with its author, every tool call, and the subagents that ran:
+
+```text
+169a26420daf — What is the latest stable version of Rust? (4 messages, updated 2026-10-13 13:46; owner chat, active chat)
+
+user> What is the latest stable version of Rust?
+
+  → agent__researcher {"prompt":"What is the latest stable version of the Rust programming language…"}
+
+  ✓ {"result":"As of October 2026, the latest stable version of the Rust programming language is **Rust 1.99.0**…"}
+
+chat> The latest stable version of Rust is **1.99.0**, released October 1, 2026.
+
+  ↳ chat ran researcher (8 messages)
+```
+
+## Continue it
+
+Pass the thread's id with `--thread`, after the message:
+
+```bash
+graph ask "When is the next one due?" \
+  --thread 169a26420daf
+```
+
+```text
+The next stable release, **Rust 1.100.0**, is due **November 12, 2026**…
+```
+
+## Delete it
+
+```bash
+graph threads rm 169a26420daf
+```
+
+```text
+deleted 169a26420daf
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
+    Start conversations with `graph ask` and `graph chat`.
+  </Card>
+  <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
+    Give `chat` the researcher subagent used here.
+  </Card>
+  <Card title="Build a multi-agent network" icon="diagram-project" href="/agents/guides/multi-agent-networks">
+    Hand conversations between agents.
+  </Card>
+</CardGroup>

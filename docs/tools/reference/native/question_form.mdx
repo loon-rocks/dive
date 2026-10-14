@@ -1,0 +1,46 @@
+---
+title: "builtin__question_form"
+sidebarTitle: "builtin__question_form"
+description: "Turns the questions a draft asked into the answer schema for an `ask` step."
+playground: "none"
+keywords: ["builtin__question_form"]
+---
+
+- One string field per question, or a pick list when the question has options.
+- Adds an open `instructions` field for anything else the user wants to say.
+- The draft's guesses become the default answers.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="draft" type="object" required>
+  The draft call's result; its `questions` are read when present: [&#123;key, question, guess?, options?&#125;]
+</ParamField>
+
+## Output
+
+<ResponseField name="count" type="integer" required>
+</ResponseField>
+
+<ResponseField name="default" type="object" required>
+</ResponseField>
+
+<ResponseField name="questions" type="object[]" required>
+</ResponseField>
+
+<ResponseField name="schema" type="object" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__question_form
+  input:
+    draft: "{{input.draft}}"
+```
+
+</RequestExample>

@@ -12,8 +12,8 @@ mise run release:publish  # commit, tag, push
 
 Two steps, with the review in between. **Prepare** bumps the single
 workspace version in `Cargo.toml` and the docs' `release_version` variable
-in `docs/docs.json` (the installation page, download cards, and cookbook
-image pins render from it), regenerates `CHANGELOG.md`, and rebuilds the
+in `docs/docs.json` (the installation page and download cards
+render from it), regenerates `CHANGELOG.md`, and rebuilds the
 docs changelog page — graph dogfooding itself: the `changelog_entry` plan
 infers the release's summary (and a migration prompt when consumers must
 act) into `docs/snippets/changelog/graph/<version>/`, and the `compose_changelog`
@@ -226,8 +226,8 @@ real, actionable one.
 
 `cliff.toml` has two backstops, and neither replaces getting the type right.
 `exclude_paths` drops a commit only when *every* file it touches is excluded,
-and the docs-parity invariant makes plan edits touch
-`docs/cookbook/ci-checks.mdx` as well. The skip list above the group parsers
+and plan edits often touch `docs/` or `CLAUDE.md`
+as well. The skip list above the group parsers
 is a fixed set of historical corrections for commits that predate this rule —
 don't extend it.
 

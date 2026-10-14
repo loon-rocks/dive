@@ -1,0 +1,63 @@
+---
+title: "workbench__read_file"
+sidebarTitle: "workbench__read_file"
+description: "Reads a text file from the project directory."
+playground: "none"
+keywords: ["workbench__read_file"]
+---
+
+- Paths outside the project directory are refused.
+- Use `offset` and `limit` to page through large files.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="limit" type="integer">
+  Maximum lines to return. Default 500, cap 2000.
+</ParamField>
+
+<ParamField body="offset" type="integer">
+  1-based line to start from. Default 1.
+</ParamField>
+
+<ParamField body="path" type="string" required>
+  File path, relative to the project directory (or absolute within it).
+</ParamField>
+
+## Output
+
+<ResponseField name="content" type="string">
+</ResponseField>
+
+<ResponseField name="linesReturned" type="integer">
+</ResponseField>
+
+<ResponseField name="offset" type="integer">
+</ResponseField>
+
+<ResponseField name="path" type="string">
+</ResponseField>
+
+<ResponseField name="totalLines" type="integer">
+</ResponseField>
+
+<ResponseField name="truncated" type="boolean">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "content": "fn main() {\n    …\n}\n",
+  "linesReturned": 312,
+  "offset": 1,
+  "path": "src/main.rs",
+  "totalLines": 312,
+  "truncated": false
+}
+```
+
+</ResponseExample>

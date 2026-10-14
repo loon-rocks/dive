@@ -1,0 +1,114 @@
+---
+title: "Models and providers"
+description: "Connect a model provider and decide which model runs each job."
+keywords: ["models", "providers", "roles", "fallbacks", "decision models", "pricing"]
+---
+
+graph never names a model in an agent, plan or tool. They name a role, such as `chat` or `judge`, and `config.toml` maps each role to a provider and a model.
+
+<RequestExample>
+
+```toml .graph/config.toml
+version = 4
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "${ANTHROPIC_API_KEY}"
+
+[providers.openai]
+type = "openai"
+api_key = "${OPENAI_API_KEY}"
+
+[models.default]
+provider = "anthropic"
+model = "claude-sonnet-5"
+fallbacks = [{ provider = "openai", model = "gpt-5" }]
+
+[models.judge]
+provider = "anthropic"
+model = "claude-haiku-4-5"
+
+[models.repair]
+provider = "anthropic"
+model = "claude-haiku-4-5"
+
+[models.fast]
+provider = "anthropic"
+model = "claude-haiku-4-5"
+description = "Fast and cheap. Short, self-contained tasks such as one line per item in a map."
+
+[pricing."claude-sonnet-5"]
+input = 3.00
+output = 15.00
+
+[pricing."claude-haiku-4-5"]
+input = 1.00
+output = 5.00
+```
+
+</RequestExample>
+
+## Providers
+
+A provider is a connection to a model API, written as `[providers.<name>]`:
+
+| `type` | Connects to |
+| --- | --- |
+| `anthropic` | The Anthropic API |
+| `openai` | The OpenAI API |
+| `openai_compat` | Any OpenAI-compatible endpoint, such as Ollama, vLLM or a gateway, at `base_url` |
+| `systemone` | A [decision model](#decision-models) |
+
+`api_key = "${ANTHROPIC_API_KEY}"` reads the key from the environment, so the file is safe to commit.
+
+## Roles
+
+`[models.<role>]` maps a role to a `provider` and a `model`. Agent files, `agent` steps, prompt tools, `builtin__infer` and `infer` conditions select a role by name. graph's own model calls use these roles:
+
+| Role | Used for |
+| --- | --- |
+| `chat` | Agents. Every built-in agent uses it |
+| `planner` | Drafting plans |
+| `outliner` | Listing a goal's inputs and steps before the planner drafts. Falls back to `planner` |
+| `solver` | Writing the answer for a plan that finishes with `solver` |
+| `repair` | One retry when a model's structured output doesn't parse |
+| `judge` | `infer` conditions on `exit`, `route` and `filter` |
+| `decider` | `decide` conditions and tool search. Needs a decision model |
+
+A role with no entry uses `default`, except `decider`. Put a cheaper model on the roles that run most often, such as `judge` and `repair`.
+
+## Custom roles
+
+Any other name under `[models]` is a custom role, such as `fast`. A custom role never uses `default`, so a name that isn't configured fails and lists the roles that are.
+
+A `description` on a role is what the plan drafter reads when it picks a model for a step, and it prefers the smallest one that fits. A role without one is still usable by name in files you write.
+
+## Fallbacks
+
+`fallbacks` on any role, standard or custom, lists other models to try, in order, when the role's provider is down. graph moves to the next one only after the provider's own retries run out, and only on errors that look like an outage. A bad request fails right away. Each fallback names its own provider and model.
+
+## Decision models
+
+A decision model answers a question about a piece of data with a probability instead of text, faster and cheaper than a chat model. Connect one with a `systemone` provider, which defaults to TypeSafe's API, and map it to `decider`:
+
+```toml .graph/config.toml
+[providers.typesafe]
+type = "systemone"
+api_key = "${TYPESAFE_API_KEY}"
+
+[models.decider]
+provider = "typesafe"
+model = "jev-latest"
+```
+
+Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies#decide), [decision tools](/tools/reference/tool-file/decision) such as `builtin__decide`, and tool search when graph drafts a plan. Without one, tool search ranks tools by keyword. graph never swaps a chat model for a decision model or the reverse, and refuses a config that maps one to the other's role.
+
+## What a run cost
+
+`graph ask`, `graph chat` and `graph plan run` print a usage line on stderr after each run:
+
+```text
+1 call · 53k in / 10 out · $0.20
+```
+
+graph ships no prices. Add `[pricing."<model>"]` with input and output prices in US dollars per million tokens, or the line shows tokens only. See [config.toml](/reference/configuration) for every key.

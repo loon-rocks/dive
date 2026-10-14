@@ -1,0 +1,25 @@
+<ParamField body="providers" type="object">
+  Named provider connections, as `[providers.<name>]`.
+</ParamField>
+
+<ParamField body="providers.<name>.type" type="enum<string>" required>
+  The provider. `systemone` serves decision models.
+
+  Available options: `anthropic`, `openai`, `openai_compat`, `systemone`
+</ParamField>
+
+<ParamField body="providers.<name>.api_key" type="string">
+  API key, usually `${ENV_VAR}`.
+</ParamField>
+
+<ParamField body="providers.<name>.base_url" type="string">
+  Endpoint for `openai_compat` and self-hosted providers.
+</ParamField>
+
+<ParamField body="providers.<name>.region" type="string">
+  Cloud region, where the provider needs one.
+</ParamField>
+
+<ParamField body="providers.<name>.profile" type="string">
+  Credentials profile, where the provider uses one.
+</ParamField>

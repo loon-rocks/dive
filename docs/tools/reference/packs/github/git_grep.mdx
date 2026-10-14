@@ -1,0 +1,70 @@
+---
+title: "builtin__git_grep"
+sidebarTitle: "builtin__git_grep"
+description: "Searches tracked files at a git ref with a regular expression."
+playground: "none"
+keywords: ["builtin__git_grep", "github"]
+---
+
+## Behavior
+
+- Uses POSIX extended regex, optionally scoped to pathspecs.
+- Caps results at `max_matches`; `truncated` flags the cut.
+- No match returns `count: 0`, not an error.
+
+| Pack | Kind | Effect |
+| --- | --- | --- |
+| [`github`](/tools/reference/packs/github): add `"github"` to `[tools].packs` | `exec` | Read-only |
+
+## Input
+
+<ParamField body="pattern" type="string" required>
+  POSIX extended regex to search for
+</ParamField>
+
+<ParamField body="ref" type="string" default="HEAD">
+  Ref or commit sha to search at
+</ParamField>
+
+<ParamField body="paths" type="string" default="">
+  Space-separated pathspecs scoping the search; "" for everything
+</ParamField>
+
+<ParamField body="max_matches" type="integer" default="200">
+  Cap on returned matches (truncated flags the cut)
+</ParamField>
+
+## Output
+
+<ResponseField name="matches" type="object[]">
+</ResponseField>
+
+<ResponseField name="matches.[].path" type="string">
+</ResponseField>
+
+<ResponseField name="matches.[].line" type="integer">
+</ResponseField>
+
+<ResponseField name="matches.[].text" type="string">
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+</ResponseField>
+
+<ResponseField name="truncated" type="boolean">
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__git_grep
+  input:
+    pattern: "{{input.pattern}}"
+```
+
+```bash Inspect
+graph tools show builtin__git_grep
+```
+
+</RequestExample>

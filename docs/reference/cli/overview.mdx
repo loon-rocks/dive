@@ -1,0 +1,70 @@
+---
+title: "CLI reference"
+description: "Every graph command, generated from the CLI's own definitions."
+keywords: ["cli", "commands", "flags", "options"]
+---
+
+A command-line agent with a plan-based execution engine
+
+```bash
+graph [OPTIONS] <COMMAND>
+```
+
+## Global options
+
+These options work with every command.
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| [`graph ask`](/reference/cli/ask) | Ask a one-shot question (runs one agent turn) |
+| [`graph chat`](/reference/cli/chat) | Interactive chat (REPL) |
+| [`graph plan list`](/reference/cli/plan/list) | List available plan documents |
+| [`graph plan show`](/reference/cli/plan/show) | Show a plan document |
+| [`graph plan validate`](/reference/cli/plan/validate) | Validate a plan document by name or file path |
+| [`graph plan migrate`](/reference/cli/plan/migrate) | Rewrite a plan file to the current plan format |
+| [`graph plan run`](/reference/cli/plan/run) | Run a plan directly (bypasses the agent loop) |
+| [`graph plan new`](/reference/cli/plan/new) | Scaffold an empty plan file to build up with `set` and `step add` |
+| [`graph plan draft`](/reference/cli/plan/draft) | Draft a plan from a goal using the planner model (costs inference) |
+| [`graph plan set`](/reference/cli/plan/set) | Set one plan attribute |
+| [`graph plan unset`](/reference/cli/plan/unset) | Clear one optional plan attribute |
+| [`graph plan step add`](/reference/cli/plan/step/add) | Append a step, or anchor it before/after an existing one |
+| [`graph plan step update`](/reference/cli/plan/step/update) | Set one attribute of a step |
+| [`graph plan step rename`](/reference/cli/plan/step/rename) | Rename a step, rewriting every downstream &#123;&#123;id.*&#125;&#125; reference |
+| [`graph plan step unset`](/reference/cli/plan/step/unset) | Clear one optional attribute of a step |
+| [`graph plan step rm`](/reference/cli/plan/step/rm) | Remove a step |
+| [`graph tools list`](/reference/cli/tools/list) | List every tool visible to the agent and planner |
+| [`graph tools show`](/reference/cli/tools/show) | Show one tool's description and schemas |
+| [`graph tools test`](/reference/cli/tools/test) | Invoke a tool directly |
+| [`graph tools migrate`](/reference/cli/tools/migrate) | Rewrite a user tool file to the current tool format |
+| [`graph agents list`](/reference/cli/agents/list) | List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents) |
+| [`graph agents show`](/reference/cli/agents/show) | Print an agent's effective definition, the file to copy when customizing it |
+| [`graph agents validate`](/reference/cli/agents/validate) | Validate every agent, or one agent file against the others |
+| [`graph agents migrate`](/reference/cli/agents/migrate) | Rewrite an agent file to the current agent format |
+| [`graph threads list`](/reference/cli/threads/list) | List threads |
+| [`graph threads show`](/reference/cli/threads/show) | Show a thread's messages |
+| [`graph threads rm`](/reference/cli/threads/rm) | Delete a thread |
+| [`graph mcp list`](/reference/cli/mcp/list) | List configured servers and their status |
+| [`graph mcp tools`](/reference/cli/mcp/tools) | List tools exposed by servers |
+| [`graph mcp test`](/reference/cli/mcp/test) | Connect to a server and verify initialize + tools/list |
+| [`graph mcp serve`](/reference/cli/mcp/serve) | Serve graph's plans and authoring commands to an agent over MCP (stdio) |
+| [`graph mcp probe`](/reference/cli/mcp/probe) | Pre-warm the observed-shape cache by invoking read-only tools |
+| [`graph shapes list`](/reference/cli/shapes/list) | List cached tool shapes |
+| [`graph shapes show`](/reference/cli/shapes/show) | Show one tool's cached schema and example |
+| [`graph config show`](/reference/cli/config/show) | Print the merged effective configuration |
+| [`graph config init`](/reference/cli/config/init) | Write a starter config file |
+| [`graph config path`](/reference/cli/config/path) | Print the config file locations and which exist |
+| [`graph config check`](/reference/cli/config/check) | Report each config file's format and whether the merged config loads |
+| [`graph config migrate`](/reference/cli/config/migrate) | Rewrite a config file to the current config format, comments intact |
+| [`graph workbench`](/reference/cli/workbench) | Interactive workbench: a dual-pane TUI for building plans, agents and tools |
+| [`graph workbench plan`](/reference/cli/workbench/plan) | Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation |
+| [`graph workbench agent`](/reference/cli/workbench/agent) | Open the workbench in agent mode: draft a new agent, or edit an existing one |
+| [`graph workbench tool`](/reference/cli/workbench/tool) | Open the workbench in tool mode: draft a new user tool, or edit an existing one |
+| [`graph version`](/reference/cli/version) | Print the binary version and the file formats it reads and writes |
+
+Exit codes and output streams are covered in [Error handling](/reference/cli/error-handling).

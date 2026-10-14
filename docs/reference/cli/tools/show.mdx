@@ -1,0 +1,43 @@
+---
+title: "graph tools show"
+sidebarTitle: "show"
+description: "Show one tool's description and schemas"
+playground: "none"
+keywords: ["graph tools show"]
+---
+
+For a `builtin__` or `user__` tool, also names its source on stderr: the tool file's path, or `built-in (<pack> pack)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The tool's namespaced name, as `graph tools list` prints it
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph tools show [OPTIONS] <NAME>
+```
+
+```bash Example 1
+graph tools show builtin__git_log
+```
+
+```bash Example 2
+graph tools show linear__list_issues --json
+```
+
+</RequestExample>

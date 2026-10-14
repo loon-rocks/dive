@@ -1,0 +1,20 @@
+{
+  "group": "MCP server tools",
+  "pages": [
+    "integrating/mcp/reference/server-tools/graph_plan_list",
+    "integrating/mcp/reference/server-tools/graph_plan_show",
+    "integrating/mcp/reference/server-tools/graph_plan_new",
+    "integrating/mcp/reference/server-tools/graph_plan_draft",
+    "integrating/mcp/reference/server-tools/graph_plan_set",
+    "integrating/mcp/reference/server-tools/graph_plan_unset",
+    "integrating/mcp/reference/server-tools/graph_plan_step_add",
+    "integrating/mcp/reference/server-tools/graph_plan_step_update",
+    "integrating/mcp/reference/server-tools/graph_plan_step_rename",
+    "integrating/mcp/reference/server-tools/graph_plan_step_rm",
+    "integrating/mcp/reference/server-tools/graph_plan_validate",
+    "integrating/mcp/reference/server-tools/graph_tools_list",
+    "integrating/mcp/reference/server-tools/graph_tools_show",
+    "integrating/mcp/reference/server-tools/graph_tools_test"
+  ],
+  "root": "integrating/mcp/reference/server-tools"
+}

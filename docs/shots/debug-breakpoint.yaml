@@ -1,0 +1,31 @@
+name: debug-breakpoint
+title: graph workbench — paused at a breakpoint
+plan: docs/shots/plans/unreleased_changes.yaml
+grid: { cols: 120, rows: 36 }
+
+chat: "debug run, pause before commits"
+
+llm:
+  - call: workbench__try_artifact
+    input:
+      kind: plan
+      gated: true
+      breakpoints: [commits]
+
+tools:
+  builtin__gh_release:
+    - tag: v0.15.0
+      name: v0.15.0
+      body: ""
+      url: https://github.com/tylerdavis/graph/releases/tag/v0.15.0
+      published_at: "2026-09-24T04:34:59Z"
+      author: github-actions[bot]
+      is_prerelease: false
+      is_draft: false
+      target: main
+      previous_tag: v0.14.0
+
+capture:
+  pause_at: commits
+  turn_seconds: 2
+  crop: workspace

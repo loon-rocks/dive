@@ -1,0 +1,43 @@
+---
+title: "graph plan show"
+sidebarTitle: "show"
+description: "Show a plan document"
+playground: "none"
+keywords: ["graph plan show"]
+---
+
+Prints the plan's YAML to stdout and its source, `built-in` or the file path, to stderr. A plan file whose identifier matches a built-in plan replaces it. Opens plans that are invalid or hidden by `requires_servers`.
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Emit the document as JSON instead of YAML
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan show [OPTIONS] <NAME>
+```
+
+```bash Example 1
+graph plan show weekly_changes
+```
+
+```bash Example 2
+graph plan show .graph/plans/weekly_changes.yaml --json
+```
+
+</RequestExample>

@@ -1,0 +1,106 @@
+---
+title: "Compose plans"
+description: "Call one plan from another as a step, and use its result."
+keywords: ["composition", "plan__", "nested plans", "reuse"]
+---
+
+`release_summary` finds the latest release, calls `changes_since` for the commits since it, and summarizes them.
+
+<RequestExample>
+
+```yaml .graph/plans/release_summary.yaml
+version: 2
+identifier: release_summary
+name: Release summary
+description: Summarizes the commits merged since the latest GitHub release.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: changes
+  tool_name: plan__changes_since
+  input:
+    base: '{{release.tag}}'
+finish:
+  solver:
+    query_to_answer: Summarize the {{changes.count}} commits since {{release.tag}} in three one-line bullet points.
+    data:
+      commits: '{{changes.commits}}'
+```
+
+```yaml .graph/plans/changes_since.yaml
+version: 2
+identifier: changes_since
+name: Changes since
+description: The commits merged since a git ref.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+finish:
+  output:
+    count: '{{commits.count}}'
+    commits: '{{commits.commits}}'
+```
+
+</RequestExample>
+
+## Call the plan from a step
+
+The `changes` step calls `changes_since` as `plan__changes_since`. Its `input` matches `changes_since`'s `input_schema`, and later steps read the result through `changes`, the same keys as `changes_since`'s `finish.output`: `{{changes.count}}` and `{{changes.commits}}`.
+
+## Validate it
+
+```bash
+graph plan validate release_summary
+```
+
+```text
+ok: 'release_summary' — 2 steps
+```
+
+## Run it
+
+```bash
+graph plan run release_summary
+```
+
+The called plan's steps show indented under its step:
+
+```text
+→ builtin__gh_release {}
+✓ builtin__gh_release 787.1ms
+→ plan__changes_since {"base":"v0.15.0"}
+  → builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+  ✓ builtin__git_log 31.6ms
+✓ plan__changes_since 32.2ms
+✎ synthesizing answer…
+- **Plan drafting overhaul**: a new agent-driven workbench…
+- **Decision/routing infrastructure added**: new decision-model plumbing…
+- **Execution & storage hardening**: plans now require explicit finish keys…
+  1 call · 5k in / 424 out · $0.02
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Iterate with map and reduce" icon="repeat" href="/plans/guides/map-and-reduce">
+    Call a plan once per item.
+  </Card>
+  <Card title="Optimize an agent with plans" icon="gauge" href="/agents/guides/optimize-with-plans">
+    Give an agent a plan to call.
+  </Card>
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Run a plan with inputs and use its result.
+  </Card>
+</CardGroup>

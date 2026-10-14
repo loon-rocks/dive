@@ -83,7 +83,7 @@ input_schema:
       type: string
       description: >
         Message body in Slack mrkdwn — *bold*, _italic_, `code`,
-        <https://url|label> — not GitHub markdown. Also the notification
+        `<https://url|label>` — not GitHub markdown. Also the notification
         text every channel member sees.
     thread_ts:
       type: string

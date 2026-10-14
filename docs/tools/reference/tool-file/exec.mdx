@@ -1,0 +1,69 @@
+---
+title: "exec tools"
+sidebarTitle: "kind: exec"
+description: "Runs a command."
+playground: "none"
+keywords: ["exec", "tool file", "YAML"]
+---
+
+Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.
+
+These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: exec`.
+
+## Fields
+
+<ParamField body="command" type="string" required>
+  The executable.
+</ParamField>
+
+<ParamField body="args" type="string[]">
+  Arguments, as templates over `{{input.*}}`.
+</ParamField>
+
+<ParamField body="env" type="map<string, string>">
+  Extra environment variables. Values expand `${VAR}` from graph's environment, and `${VAR:-default}` falls back when it's unset or empty.
+</ParamField>
+
+<ParamField body="cwd" type="string">
+  Working directory for the process.
+</ParamField>
+
+<ParamField body="timeout_secs" type="integer" default="60">
+  Seconds before the process is killed.
+</ParamField>
+
+<ParamField body="output" type="enum<string>" default="json">
+  `json` parses stdout as JSON; `text` returns it as `{text}`.
+
+  Available options: `json`, `text`
+</ParamField>
+
+<RequestExample>
+
+```yaml Example
+version: 2
+name: open_prs
+description: Open pull requests in the current repository, newest first.
+kind: exec
+command: gh
+args:
+- pr
+- list
+- --state
+- open
+- --json
+- number,title,author
+- --limit
+- '{{input.limit}}'
+read_only: true
+input_schema:
+  type: object
+  required:
+  - limit
+  properties:
+    limit:
+      type: integer
+      description: Most pull requests to return
+```
+
+</RequestExample>

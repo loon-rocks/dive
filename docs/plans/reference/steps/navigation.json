@@ -1,0 +1,13 @@
+{
+  "group": "Control steps",
+  "pages": [
+    "plans/reference/steps/route",
+    "plans/reference/steps/filter",
+    "plans/reference/steps/map",
+    "plans/reference/steps/reduce",
+    "plans/reference/steps/exit",
+    "plans/reference/steps/agent",
+    "plans/reference/steps/ask"
+  ],
+  "root": "plans/reference/control-steps"
+}

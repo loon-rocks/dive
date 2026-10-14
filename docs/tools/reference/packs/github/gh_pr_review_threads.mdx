@@ -1,0 +1,65 @@
+---
+title: "builtin__gh_pr_review_threads"
+sidebarTitle: "builtin__gh_pr_review_threads"
+description: "Lists the review threads a plan posted on a pull request, as structured findings."
+playground: "none"
+keywords: ["builtin__gh_pr_review_threads", "github"]
+---
+
+## Behavior
+
+- Reads back threads whose first comment carries the marker's hidden payload.
+- Each finding includes its state (`open`, `resolved` or `declined`), anchor, url and human replies.
+- Skips threads without a readable payload and counts them.
+
+| Pack | Kind | Effect |
+| --- | --- | --- |
+| [`github`](/tools/reference/packs/github): add `"github"` to `[tools].packs` | `exec` | Read-only |
+
+## Input
+
+<ParamField body="pr" type="integer" required>
+  Pull request number
+</ParamField>
+
+<ParamField body="marker" type="string" required>
+  Payload tag prefix to look for — the same marker the findings were posted with via gh_pr_thread_sync (e.g. "graph:pr_review:finding"). Only threads whose first comment embeds `<!-- <marker> {json} -->` are returned.
+</ParamField>
+
+## Output
+
+<ResponseField name="findings" type="any[]">
+  One entry per recognized thread — the embedded payload's keys (label, severity, invariant, file, line, finding, ...) flattened together with thread_id, state (open|resolved|declined), path, line, is_outdated, url, replies ([&#123;author, body&#125;]), reply_count.
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  Recognized threads returned
+</ResponseField>
+
+<ResponseField name="open_count" type="integer">
+  Findings currently open
+</ResponseField>
+
+<ResponseField name="skipped" type="integer">
+  Marker-tagged threads dropped because their payload lacked the required keys.
+</ResponseField>
+
+<ResponseField name="has_findings" type="boolean">
+  True when findings is non-empty
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__gh_pr_review_threads
+  input:
+    pr: "{{input.pr}}"
+    marker: "{{input.marker}}"
+```
+
+```bash Inspect
+graph tools show builtin__gh_pr_review_threads
+```
+
+</RequestExample>

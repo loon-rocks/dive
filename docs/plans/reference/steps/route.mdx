@@ -1,0 +1,129 @@
+---
+title: "route"
+sidebarTitle: "route"
+description: "Runs one of two or more branches, depending on a condition."
+playground: "none"
+keywords: ["route", "control step"]
+---
+
+## How it works
+
+- Gate it with exactly one of `if`, `infer` or `decide`. See [Conditions and bodies](/plans/reference/conditions-and-bodies).
+- `then` runs when the condition holds; `else` runs otherwise. Omit `else` to continue without running anything.
+- With a decision model, `decide.options` and `cases` turn it into an N-way choice.
+
+## Limits
+
+- A branch is one tool call or a list of steps. It can contain `exit`, `agent`, `ask`, `filter` and `route`, but not `map` or `reduce`.
+
+## Input
+
+<ParamField body="cases" type="map<string, object | object[]>">
+  One branch per `decide.options` key, used instead of `then`.
+</ParamField>
+
+<ParamField body="decide" type="object">
+  A question answered by a decision model (only when one is configured). Without `options` it is yes/no and runs `then` when its probability reaches min_confidence; with `options` the model picks one and the matching entry in `cases` runs.
+</ParamField>
+
+<ParamField body="decide.criteria" type="object">
+</ParamField>
+
+<ParamField body="decide.criteria.false" type="string">
+</ParamField>
+
+<ParamField body="decide.criteria.true" type="string">
+</ParamField>
+
+<ParamField body="decide.min_confidence" type="number">
+  0 to 1; default 0.5
+</ParamField>
+
+<ParamField body="decide.model" type="string">
+  A decision model role; defaults to decider
+</ParamField>
+
+<ParamField body="decide.options" type="map<string, string>">
+  Case name → what that case means; 2 to 255 entries. Each name needs a branch under `cases`.
+</ParamField>
+
+<ParamField body="decide.question" type="string" required>
+</ParamField>
+
+<ParamField body="decide.state" type="any">
+  The data to judge, usually a template like &#123;&#123;E2.text&#125;&#125;
+</ParamField>
+
+<ParamField body="else" type="object | object[]">
+</ParamField>
+
+<ParamField body="if" type="object">
+</ParamField>
+
+<ParamField body="if.op" type="enum<string>" required>
+  Available options: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `empty`, `not_empty`, `contains`
+</ParamField>
+
+<ParamField body="if.to" type="any">
+  Comparison operand (omit for empty/not_empty)
+</ParamField>
+
+<ParamField body="if.value" type="any" required>
+  Usually a template like &#123;&#123;E0.issues.length&#125;&#125;
+</ParamField>
+
+<ParamField body="infer" type="string">
+  A yes/no question about prior results; runs `then` on yes.
+</ParamField>
+
+<ParamField body="model" type="string">
+  Model role for the `infer` verdict (any configured role, standard or custom); defaults to the judge role.
+</ParamField>
+
+<ParamField body="then" type="object | object[]">
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="branch" type="string">
+  Which branch ran, `then` or `else`, or the case name with `cases`.
+</ResponseField>
+
+<ResponseField name="reason" type="string">
+  Why the gate decided as it did, for `infer` and `decide` gates.
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  The output of the branch that ran.
+</ResponseField>
+
+<ResponseField name="verdict" type="boolean">
+  Whether the condition held.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: route
+  input: {}
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "branch": "then",
+  "reason": "…",
+  "result": {
+    "…": "…"
+  },
+  "verdict": true
+}
+```
+
+</ResponseExample>

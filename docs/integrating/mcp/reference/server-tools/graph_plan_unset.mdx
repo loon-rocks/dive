@@ -1,0 +1,24 @@
+---
+title: "graph_plan_unset"
+sidebarTitle: "graph_plan_unset"
+description: "Clears one optional plan attribute."
+playground: "none"
+keywords: ["graph_plan_unset"]
+---
+
+- `name`, `description` and `identifier` are required and can't be cleared.
+- Mirrors `graph plan unset`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `graph mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="attribute" type="enum<string>" required>
+  Available options: `exemplars`, `requires_servers`, `input_schema`, `solver`, `output`
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>

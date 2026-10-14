@@ -1,0 +1,129 @@
+---
+title: "Plan file"
+description: "One plan, in `./.graph/plans/` or `~/.config/graph/plans/`, run with `graph plan run` and called by agents and other plans as `plan__<identifier>`."
+playground: "none"
+keywords: ["Plan file", "schema", "YAML"]
+---
+
+| File type | Location |
+| --- | --- |
+| YAML | `./.graph/plans/<identifier>.yaml` (project)<br />`~/.config/graph/plans/<identifier>.yaml` (global) |
+
+Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/tylerdavis/graph/main/docs/schemas/plan.schema.json`.
+
+## Fields
+
+<ParamField body="version" type="integer">
+  The file version the document is written in. Omitted means 1; `graph plan migrate` brings a file to the current version.
+</ParamField>
+
+<ParamField body="identifier" type="string" required>
+  Letters, digits, `_` and `-`. The plan is called as `plan__<identifier>`, and a plan with a built-in plan's identifier replaces it.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  What the plan does. Agents read it when choosing tools.
+</ParamField>
+
+<ParamField body="exemplars" type="string[]">
+  Example requests the plan handles, added to its tool description.
+</ParamField>
+
+<ParamField body="requires_servers" type="string[]">
+  MCP servers the steps use. The plan is hidden from the catalog while any of them isn't configured.
+</ParamField>
+
+<ParamField body="input_schema" type="object">
+  JSON Schema for the plan's inputs, validated before any step runs. Steps reference inputs as `{{input.<field>}}`.
+</ParamField>
+
+<ParamField body="steps" type="object[]" required>
+  The steps, run in order.
+</ParamField>
+
+<ParamField body="steps.[].id" type="string" required>
+  Unique across the plan, including steps inside bodies. Later steps read the result as `{{<id>.<field>}}`. Can't be `input`, `item`, `index`, `accumulator` or `length`.
+</ParamField>
+
+<ParamField body="steps.[].tool_name" type="string" required>
+  A catalog tool (`<server>__*`, `user__*`, `builtin__*`, `plan__*`, `agent__*`) or a control step (`exit`, `route`, `filter`, `map`, `reduce`, `agent`, `ask`).
+</ParamField>
+
+<ParamField body="steps.[].input" type="object" required>
+  The tool's input. String values are templates over `input` and earlier results; a control step's input is described on its page.
+</ParamField>
+
+<ParamField body="steps.[].reasoning" type="string">
+  Why the step exists, for people reading the plan.
+</ParamField>
+
+<ParamField body="output_schema" type="object">
+  JSON Schema for the result of an output plan. Its `properties` must match the keys of `finish.output`.
+</ParamField>
+
+<ParamField body="finish" type="&quot;silent&quot; | object" required>
+  How the plan ends, and what it returns: `silent`, `output` or `solver`.
+</ParamField>
+
+<ParamField body="finish.output" type="object">
+  Returns this map as JSON, each template filled from step results. No model call.
+</ParamField>
+
+<ParamField body="finish.solver" type="object">
+  A model call writes the answer as prose, returned as `{answer}`.
+</ParamField>
+
+<ParamField body="finish.solver.query_to_answer" type="string" required>
+  What the answer should say, as a template.
+</ParamField>
+
+<ParamField body="finish.solver.system_prompt" type="string">
+  Extra system prompt for the solver call.
+</ParamField>
+
+<ParamField body="finish.solver.data" type="object">
+  What the solver sees, as a map of templates over step results.
+</ParamField>
+
+<RequestExample>
+
+```yaml Example
+version: 2
+identifier: weekly_changes
+name: Weekly changes
+description: Summarizes the commits merged since a git ref.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as the last release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+- id: nothing_shipped
+  tool_name: exit
+  input:
+    when:
+      value: '{{commits.count}}'
+      op: eq
+      to: 0
+    status: success
+    message: Nothing merged since {{input.base}}
+finish:
+  solver:
+    query_to_answer: Summarize what changed, grouped by theme.
+    data:
+      commits: '{{commits.commits}}'
+```
+
+</RequestExample>

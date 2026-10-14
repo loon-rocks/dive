@@ -1,0 +1,123 @@
+---
+title: "agent"
+sidebarTitle: "agent"
+description: "Hands one step to a model that calls tools until it can return structured output."
+playground: "none"
+keywords: ["agent", "control step"]
+---
+
+## When to use it
+
+- When which tool to call next depends on what an earlier call returned.
+- When the order of calls is known in advance, write plain steps instead. They make no model calls.
+
+## How it works
+
+- `tools` limits what the step can call, by name or glob. Omit it for the whole catalog.
+- `maxIterations` caps model rounds. The default is 8.
+- `systemPrompt` is added after the built-in prompt.
+- Each round is a model call, and inside `map` it runs once per item.
+
+## Input
+
+<ParamField body="maxIterations" type="integer">
+  Maximum inference rounds — every round is one model call, including the one that produces the final answer. Default: 8.
+</ParamField>
+
+<ParamField body="model" type="string">
+  A configured model role, standard or custom. Defaults to the chat role.
+</ParamField>
+
+<ParamField body="outputSchema" type="any" required>
+  JSON Schema for the agent's structured output. Must be type object.
+</ParamField>
+
+<ParamField body="prompt" type="string" required>
+  The task description. May use templates like &#123;&#123;E0.results&#125;&#125;.
+</ParamField>
+
+<ParamField body="systemPrompt" type="string">
+  Extra system prompt guidance. May use templates like the prompt.
+</ParamField>
+
+<ParamField body="tools" type="string[]">
+  Tool names or wildcard patterns (e.g. linear__*) to expose. Every pattern must resolve to at least one tool. Omit for all available tools; an empty list is an error, not 'no tools'.
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="final" type="boolean">
+  False when the round limit ran out before a complete answer.
+</ResponseField>
+
+<ResponseField name="iterations" type="integer">
+  How many model rounds the step took.
+</ResponseField>
+
+<ResponseField name="output" type="object">
+  The answer, matching `outputSchema`.
+</ResponseField>
+
+<ResponseField name="output.classifications" type="object[]">
+</ResponseField>
+
+<ResponseField name="output.classifications.[].issue_id" type="string">
+</ResponseField>
+
+<ResponseField name="output.classifications.[].reason" type="string">
+</ResponseField>
+
+<ResponseField name="output.classifications.[].severity" type="string">
+</ResponseField>
+
+<ResponseField name="tools_called" type="object[]">
+  Each tool call, with the round it happened in.
+</ResponseField>
+
+<ResponseField name="tools_called.[].round" type="integer">
+  The round the call happened in.
+</ResponseField>
+
+<ResponseField name="tools_called.[].tool" type="string">
+  The tool's name.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: agent
+  input:
+    prompt: "{{input.prompt}}"
+    outputSchema: "{{input.outputSchema}}"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "final": true,
+  "iterations": 3,
+  "output": {
+    "classifications": [
+      {
+        "issue_id": "123",
+        "reason": "…",
+        "severity": "high"
+      }
+    ]
+  },
+  "tools_called": [
+    {
+      "round": 1,
+      "tool": "linear__list_issues"
+    }
+  ]
+}
+```
+
+</ResponseExample>

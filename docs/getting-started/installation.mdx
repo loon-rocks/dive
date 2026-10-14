@@ -1,7 +1,6 @@
 ---
 title: "Installation"
 description: "Release binaries and the container image"
-icon: "download"
 ---
 
 import BinaryDownloads from "/shared/binary_downloads.mdx";
@@ -39,7 +38,7 @@ Or from the command line:
 
 ## Container image
 
-Each release also publishes [ghcr.io/tylerdavis/graph](https://github.com/tylerdavis/graph/pkgs/container/graph) ready to use in CI or Lambda:
+Each release also publishes [ghcr.io/tylerdavis/graph](https://github.com/tylerdavis/graph/pkgs/container/graph) with git, gh, jq and curl installed, ready to use in CI:
 
 ```bash
 docker run --rm \
@@ -59,5 +58,5 @@ docker run --rm \
 
 ## First-run notes
 
-- graph creates its data directory at `~/.local/share/graph/` on first use (configurable via `[settings] data_dir`).
+- graph creates its [data directory](/reference/data-directory) at `~/.local/share/graph/` on first use (configurable via `[settings] data_dir`).
 - State is plain files under the data directory, safe under concurrent runs. Use `GRAPH_STORAGE=memory` for ephemeral runs that should leave nothing behind.

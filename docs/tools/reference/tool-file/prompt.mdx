@@ -1,0 +1,70 @@
+---
+title: "prompt tools"
+sidebarTitle: "kind: prompt"
+description: "One model call."
+playground: "none"
+keywords: ["prompt", "tool file", "YAML"]
+---
+
+One model call. The result is `{text}`, or validated JSON when `output_schema` is set.
+
+These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: prompt`.
+
+## Fields
+
+<ParamField body="prompt" type="string" required>
+  The message to send, as a template over `{{input.*}}`.
+</ParamField>
+
+<ParamField body="system" type="string">
+  A fixed system prompt.
+</ParamField>
+
+<ParamField body="model" type="string" default="chat">
+  The model role that runs the call, standard or custom.
+</ParamField>
+
+<ParamField body="caller_output_schema" type="boolean" default="false">
+  Take `output_schema` from the call's input.
+</ParamField>
+
+<ParamField body="caller_model" type="boolean" default="false">
+  Let the call's `model` input pick the role.
+</ParamField>
+
+<ParamField body="caller_system" type="boolean" default="false">
+  Take `system` from the call's input.
+</ParamField>
+
+<RequestExample>
+
+```yaml Example
+version: 2
+name: summarize
+description: Summarizes text into a gist and three keywords.
+kind: prompt
+prompt: 'Summarize into one sentence and three keywords: {{input.text}}'
+model: chat
+input_schema:
+  type: object
+  required:
+  - text
+  properties:
+    text:
+      type: string
+      description: The text to summarize
+output_schema:
+  type: object
+  required:
+  - gist
+  - keywords
+  properties:
+    gist:
+      type: string
+    keywords:
+      type: array
+      items:
+        type: string
+```
+
+</RequestExample>

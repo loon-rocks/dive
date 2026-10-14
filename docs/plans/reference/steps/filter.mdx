@@ -1,0 +1,143 @@
+---
+title: "filter"
+sidebarTitle: "filter"
+description: "Splits a list into the items that pass a per-item condition and the items that don't."
+playground: "none"
+keywords: ["filter", "control step"]
+---
+
+## How it works
+
+- `over` must produce a list. The gate runs once per item, with `{{item}}` and `{{index}}` available.
+- Gate it with exactly one of `where`, `infer` or `decide`. See [Conditions and bodies](/plans/reference/conditions-and-bodies).
+- With `decide`, the result also includes each item's `probabilities`.
+
+## When to use it
+
+- Narrow a list before `map`, so later steps only see items they can handle.
+- Prefer `where` when a field comparison decides. `infer` and `decide` make one model call per item; set `concurrency` to run them in parallel.
+
+## Input
+
+<ParamField body="concurrency" type="integer">
+  Maximum `infer` verdicts in flight; 1 (default) evaluates one at a time.
+</ParamField>
+
+<ParamField body="decide" type="object">
+  A per-item yes/no question answered by a decision model (only when one is configured); keeps the element when its probability reaches min_confidence. Results add `probabilities`, aligned with `over`.
+</ParamField>
+
+<ParamField body="decide.criteria" type="object">
+</ParamField>
+
+<ParamField body="decide.criteria.false" type="string">
+</ParamField>
+
+<ParamField body="decide.criteria.true" type="string">
+</ParamField>
+
+<ParamField body="decide.min_confidence" type="number">
+  0 to 1; default 0.5
+</ParamField>
+
+<ParamField body="decide.model" type="string">
+  A decision model role; defaults to decider
+</ParamField>
+
+<ParamField body="decide.question" type="string" required>
+</ParamField>
+
+<ParamField body="decide.state" type="any">
+  The data to judge, usually &#123;&#123;item&#125;&#125;
+</ParamField>
+
+<ParamField body="infer" type="string">
+  A yes/no question about &#123;&#123;item&#125;&#125;; the element is kept on yes. One judge call per item.
+</ParamField>
+
+<ParamField body="model" type="string">
+  Model role for `infer` verdicts (any configured role, standard or custom); defaults to the judge role.
+</ParamField>
+
+<ParamField body="over" type="any" required>
+  The list to partition — usually a template like &#123;&#123;E0.issues&#125;&#125; that resolves to an array.
+</ParamField>
+
+<ParamField body="where" type="object">
+</ParamField>
+
+<ParamField body="where.op" type="enum<string>" required>
+  Available options: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `empty`, `not_empty`, `contains`
+</ParamField>
+
+<ParamField body="where.to" type="any">
+  Comparison operand (omit for empty/not_empty)
+</ParamField>
+
+<ParamField body="where.value" type="any" required>
+  Usually a template about the current element, like &#123;&#123;item.status&#125;&#125;
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="count" type="integer">
+  How many items passed.
+</ResponseField>
+
+<ResponseField name="dropped" type="object[]">
+  The items that didn't pass.
+</ResponseField>
+
+<ResponseField name="dropped_count" type="integer">
+  How many items didn't pass.
+</ResponseField>
+
+<ResponseField name="items" type="object[]">
+  The items that passed, in their original order.
+</ResponseField>
+
+<ResponseField name="probabilities" type="number[]">
+  With `decide`: each item's probability, in list order.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: filter
+  input:
+    over: "{{input.over}}"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "count": 2,
+  "dropped": [
+    {
+      "…": "…"
+    }
+  ],
+  "dropped_count": 1,
+  "items": [
+    {
+      "…": "…"
+    },
+    {
+      "…": "…"
+    }
+  ],
+  "probabilities": [
+    0.91,
+    0.12,
+    0.77
+  ]
+}
+```
+
+</ResponseExample>

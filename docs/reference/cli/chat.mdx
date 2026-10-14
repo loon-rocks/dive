@@ -1,0 +1,53 @@
+---
+title: "graph chat"
+sidebarTitle: "graph chat"
+description: "Interactive chat (REPL)"
+playground: "none"
+keywords: ["graph chat"]
+---
+
+Starts a conversation with the default `chat` agent or the named one. A resumed thread continues with its active agent; naming an agent other than the thread's owner is refused.
+
+Slash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another, `/thread` and `/state` print the current thread and its state, and `/quit` exits.
+
+## Arguments
+
+<ParamField path="AGENT" type="string">
+  The agent to talk to; the default `chat` agent when omitted
+</ParamField>
+
+## Options
+
+<ParamField query="--thread" type="string">
+  Continue a thread: `--thread <id>` for a specific one, bare `--thread` for the most recent. Omit to start a new thread
+
+  Format: `THREAD`.
+
+  The value is optional: `--thread` on its own is accepted.
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph chat [OPTIONS] [AGENT]
+```
+
+```bash Example 1
+graph chat
+```
+
+```bash Example 2
+graph chat release_notes
+```
+
+```bash Example 3
+graph chat --thread
+```
+
+</RequestExample>

@@ -1,0 +1,71 @@
+---
+title: "workbench__add_step"
+sidebarTitle: "workbench__add_step"
+description: "Adds one top-level step to the plan draft."
+playground: "none"
+keywords: ["workbench__add_step"]
+---
+
+- Appends the step, or places it `before` or `after` an existing step id.
+- Refused only if it adds a new validation problem; existing problems are reported.
+- Steps inside `route`, `map` and `reduce` bodies are edited through their control step with `workbench__update_step`.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Not marked read-only |
+
+## Input
+
+<ParamField body="after" type="string">
+  Insert after this existing step id. Omit both anchors to append.
+</ParamField>
+
+<ParamField body="before" type="string">
+  Insert before this existing step id.
+</ParamField>
+
+<ParamField body="step" type="object" required>
+</ParamField>
+
+<ParamField body="step.id" type="string" required>
+  Unique step id templates reference: E-style (E4) or descriptive (fetch_issues).
+</ParamField>
+
+<ParamField body="step.input" type="object" required>
+  Tool input; string values may reference earlier steps with &#123;&#123;id.path&#125;&#125; templates.
+</ParamField>
+
+<ParamField body="step.reasoning" type="string">
+  Why this step exists and what it should produce.
+</ParamField>
+
+<ParamField body="step.toolName" type="string" required>
+  Exact tool name from the catalog.
+</ParamField>
+
+## Output
+
+<ResponseField name="id" type="string">
+</ResponseField>
+
+<ResponseField name="index" type="integer">
+</ResponseField>
+
+<ResponseField name="ok" type="boolean">
+</ResponseField>
+
+<ResponseField name="steps" type="integer">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "id": "E4",
+  "index": 2,
+  "ok": true,
+  "steps": 5
+}
+```
+
+</ResponseExample>

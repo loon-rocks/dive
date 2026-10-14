@@ -1,0 +1,82 @@
+---
+title: "Template language"
+description: "The template syntax that moves data between steps, and where agents, plans and tools use it."
+keywords: ["templates", "template language", "typed splice", "sections"]
+---
+
+A template is a string with `{{...}}` tags that graph fills from data before a step, tool or agent runs. Templates only move data. They never call a model, and they have no logic beyond iterating over lists.
+
+## Where templates are used
+
+| File | Fields | What a template can reference |
+| --- | --- | --- |
+| [Plan file](/plans/reference/plan-file) | Step `input` strings, `exit` messages, `finish.output`, and `finish.solver` fields | `input` and the ids of earlier steps |
+| [Tool file](/tools/reference/tool-file) | `exec` args, `prompt` messages, `reshape` shapes and `decision` state | `input` |
+| [Agent file](/agents/reference/agent-file) | `system_prompt` | `session.date`, `session.user` and `rules.*` |
+
+Inside a `map` or `reduce` body, `item` and `index` reference the current element, and `reduce` adds `accumulator`. A `filter` gate gets `item` and `index` too.
+
+## Variables
+
+A variable is a dotted path from a root. Number segments index into arrays, and `length` as the last segment counts the items in an array or the characters in a string.
+
+```handlebars
+{{input.team}}
+{{fetch_issues.values.0.id}}
+{{fetch_issues.values.length}}
+```
+
+Spaces inside the braces are ignored. A step id can't be `input`, `item`, `index`, `accumulator` or `length`.
+
+A `route` step's result is read through the route's own id: `{{triage.branch}}` names the branch that ran and `{{triage.result}}` holds what it returned. Steps inside a branch are visible only to later steps in the same branch.
+
+## Typed values
+
+When a string is exactly one tag, the tag's value keeps its JSON type. When a tag sits in other text, the result is a string, and objects and arrays are written as JSON.
+
+```yaml
+input:
+  limit: "{{input.max}}"
+  ids: "{{fetch_issues.ids}}"
+  query: "team {{fetch_teams.values.0.name}}"
+```
+
+With `max` set to `50` and `ids` to `[1, 2, 3]`, `limit` is the number `50`, `ids` is the array `[1, 2, 3]`, and `query` is the string `"team Core"`.
+
+A `null` value written into text renders as nothing.
+
+## Sections
+
+A section renders its body once for each item in a list, once for an object or any other value, and not at all for a missing, `null`, `false` or empty value.
+
+```handlebars
+{{#fetch_issues.values}}
+{{@index}}. {{title}} ({{state}})
+{{/fetch_issues.values}}
+```
+
+- Inside a section, a tag without a root, such as `{{title}}`, reads from the current item, then from enclosing sections. If no item has the key, it renders as nothing.
+- `{{@index}}` is the item's position, starting at 0. `{{@first}}` and `{{@last}}` are booleans you can use as sections.
+- An inverted section, `{{^path}}...{{/path}}`, renders only when the section would not:
+
+  ```handlebars
+  {{^fetch_issues.values}}No open issues.{{/fetch_issues.values}}
+  ```
+
+- A section path that doesn't resolve counts as empty rather than an error, so `{{^fetch.optional}}` works as a fallback. A section over a step that doesn't exist is still an error.
+
+## Errors
+
+A variable that doesn't resolve stops the step with one of three errors:
+
+| Error | Cause | Example |
+| --- | --- | --- |
+| `MissingStep` | The root isn't `input` or an earlier step. | `{{E7.values}}` when there is no step `E7` |
+| `BadPath` | The data exists but has no such key or can't be indexed. The message lists the keys that do exist. | `{{fetch.values.0.idd}}` |
+| `EmptyData` | The path is valid but the data ran out: an empty list, an index past the end, or `null`. | `{{fetch.values.0.id}}` when `values` is `[]` |
+
+`graph plan validate` catches references to steps that don't exist or haven't run yet before the plan runs. To learn how a plan responds to each error, see [Handle failures](/plans/guides/handle-failures).
+
+## Not supported
+
+Templates have no conditionals, functions, partials, comments or inheritance, and using that syntax is a parse error. Put any computation in a step, such as a [`reshape` tool](/tools/reference/tool-file/reshape) or an `infer` gate.

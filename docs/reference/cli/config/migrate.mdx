@@ -1,0 +1,41 @@
+---
+title: "graph config migrate"
+sidebarTitle: "migrate"
+description: "Rewrite a config file to the current config format, comments intact"
+playground: "none"
+keywords: ["graph config migrate"]
+---
+
+Rewrites the config file to the current config file version, keeping comments and layout. A file already at the current version is left untouched.
+
+## Options
+
+<ParamField query="--global" type="boolean">
+  Migrate the global file (~/.config/graph/) instead of the project one (./.graph/)
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph config migrate [OPTIONS]
+```
+
+```bash Example 1
+graph config migrate
+```
+
+```bash Example 2
+graph config migrate --global
+```
+
+</RequestExample>

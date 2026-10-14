@@ -1,0 +1,31 @@
+{
+  "group": "Packs",
+  "pages": [
+    {
+      "group": "github",
+      "pages": [
+        "tools/reference/packs/github/git_log",
+        "tools/reference/packs/github/git_diff",
+        "tools/reference/packs/github/git_changed_files",
+        "tools/reference/packs/github/git_file",
+        "tools/reference/packs/github/git_grep",
+        "tools/reference/packs/github/gh_pr_meta",
+        "tools/reference/packs/github/gh_pr_ticket",
+        "tools/reference/packs/github/gh_pr_comment",
+        "tools/reference/packs/github/gh_pr_inline_comments",
+        "tools/reference/packs/github/gh_pr_review_threads",
+        "tools/reference/packs/github/gh_pr_thread_sync",
+        "tools/reference/packs/github/gh_release"
+      ],
+      "root": "tools/reference/packs/github"
+    },
+    {
+      "group": "slack",
+      "pages": [
+        "tools/reference/packs/slack/slack_post_message"
+      ],
+      "root": "tools/reference/packs/slack"
+    }
+  ],
+  "root": "tools/reference/packs"
+}

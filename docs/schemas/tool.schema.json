@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the pack tool it names instead.",
+  "oneOf": [
+    {
+      "description": "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.",
+      "examples": [
+        {
+          "args": [
+            "pr",
+            "list",
+            "--state",
+            "open",
+            "--json",
+            "number,title,author",
+            "--limit",
+            "{{input.limit}}"
+          ],
+          "command": "gh",
+          "description": "Open pull requests in the current repository, newest first.",
+          "input_schema": {
+            "properties": {
+              "limit": {
+                "description": "Most pull requests to return",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "limit"
+            ],
+            "type": "object"
+          },
+          "kind": "exec",
+          "name": "open_prs",
+          "read_only": true,
+          "version": 2
+        }
+      ],
+      "properties": {
+        "args": {
+          "description": "Arguments, as templates over `{{input.*}}`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "description": "The executable.",
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Working directory for the process.",
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra environment variables. Values expand `${VAR}` from graph's environment, and `${VAR:-default}` falls back when it's unset or empty.",
+          "type": "object"
+        },
+        "kind": {
+          "const": "exec"
+        },
+        "output": {
+          "default": "json",
+          "description": "`json` parses stdout as JSON; `text` returns it as `{text}`.",
+          "enum": [
+            "json",
+            "text"
+          ],
+          "type": "string"
+        },
+        "timeout_secs": {
+          "default": 60,
+          "description": "Seconds before the process is killed.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "exec"
+    },
+    {
+      "description": "One model call. The result is `{text}`, or validated JSON when `output_schema` is set.",
+      "examples": [
+        {
+          "description": "Summarizes text into a gist and three keywords.",
+          "input_schema": {
+            "properties": {
+              "text": {
+                "description": "The text to summarize",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "kind": "prompt",
+          "model": "chat",
+          "name": "summarize",
+          "output_schema": {
+            "properties": {
+              "gist": {
+                "type": "string"
+              },
+              "keywords": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "gist",
+              "keywords"
+            ],
+            "type": "object"
+          },
+          "prompt": "Summarize into one sentence and three keywords: {{input.text}}",
+          "version": 2
+        }
+      ],
+      "properties": {
+        "caller_model": {
+          "default": false,
+          "description": "Let the call's `model` input pick the role.",
+          "type": "boolean"
+        },
+        "caller_output_schema": {
+          "default": false,
+          "description": "Take `output_schema` from the call's input.",
+          "type": "boolean"
+        },
+        "caller_system": {
+          "default": false,
+          "description": "Take `system` from the call's input.",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "prompt"
+        },
+        "model": {
+          "default": "chat",
+          "description": "The model role that runs the call, standard or custom.",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "The message to send, as a template over `{{input.*}}`.",
+          "type": "string"
+        },
+        "system": {
+          "description": "A fixed system prompt.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "title": "prompt"
+    },
+    {
+      "description": "Builds a value in a new JSON shape from the input, with no process and no model call. Leaf strings are templates; a leaf that is exactly one template keeps the value's type.",
+      "examples": [
+        {
+          "description": "Turns a pull request into a table row.",
+          "input_schema": {
+            "properties": {
+              "pr": {
+                "description": "A pull request from gh",
+                "type": "object"
+              }
+            },
+            "required": [
+              "pr"
+            ],
+            "type": "object"
+          },
+          "kind": "reshape",
+          "name": "pr_summary_row",
+          "shape": {
+            "author": "{{input.pr.author.login}}",
+            "number": "{{input.pr.number}}",
+            "title": "{{input.pr.title}}"
+          },
+          "version": 2
+        }
+      ],
+      "properties": {
+        "caller_shape": {
+          "default": false,
+          "description": "Take `shape` from the call's input instead.",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "reshape"
+        },
+        "shape": {
+          "description": "The output shape, as a JSON tree whose leaf strings are templates over `{{input.*}}`."
+        }
+      },
+      "title": "reshape"
+    },
+    {
+      "description": "Asks a decision model typed questions about the same state, each answered independently. The result maps each question name to its answer.",
+      "examples": [
+        {
+          "description": "Routes a support ticket and checks whether it is urgent.",
+          "input_schema": {
+            "properties": {
+              "ticket": {
+                "description": "The ticket text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "ticket"
+            ],
+            "type": "object"
+          },
+          "kind": "decision",
+          "model": "decider",
+          "name": "triage",
+          "questions": {
+            "team": {
+              "criteria": {
+                "billing": "Payments",
+                "technical": "Bugs"
+              },
+              "instructions": "Which team should handle this ticket?",
+              "type": "choice"
+            },
+            "urgent": {
+              "instructions": "Does the ticket convey urgency?",
+              "type": "likelihood"
+            }
+          },
+          "state": {
+            "ticket": "{{input.ticket}}"
+          },
+          "version": 2
+        }
+      ],
+      "properties": {
+        "caller_model": {
+          "default": false,
+          "description": "Let the call's `model` input pick the role.",
+          "type": "boolean"
+        },
+        "caller_questions": {
+          "default": false,
+          "description": "Take `questions` from the call's input instead.",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "decision"
+        },
+        "model": {
+          "default": "decider",
+          "description": "A decision model role. A chat role fails the call.",
+          "type": "string"
+        },
+        "questions": {
+          "description": "Question name to question. Each has a `type` (`likelihood`, `choice` or `score`), `instructions`, and `criteria` for that type.",
+          "type": "object"
+        },
+        "state": {
+          "description": "The data to judge, as a template tree over `{{input.*}}`. Omitted, the call's `state` input is used."
+        }
+      },
+      "title": "decision"
+    }
+  ],
+  "properties": {
+    "description": {
+      "description": "What the tool does and returns. Agents and the plan drafter read it when choosing tools.",
+      "type": "string"
+    },
+    "input_schema": {
+      "description": "JSON Schema for the input, validated before the tool runs. Templates reference it as `{{input.<field>}}`.",
+      "type": "object"
+    },
+    "kind": {
+      "description": "What the tool runs. Each kind takes its own fields, listed below.",
+      "enum": [
+        "exec",
+        "prompt",
+        "reshape",
+        "decision"
+      ],
+      "type": "string"
+    },
+    "name": {
+      "description": "Letters, digits, `_` and `-`. The tool is called as `user__<name>`.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "type": "string"
+    },
+    "output_schema": {
+      "description": "JSON Schema for the output. A `prompt` tool enforces it as structured output; for every kind it tells drafters what the tool returns.",
+      "type": "object"
+    },
+    "read_only": {
+      "description": "Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.",
+      "type": "boolean"
+    },
+    "version": {
+      "description": "The file version the document is written in. Omitted means 1; `graph tools migrate` brings a file to the current version.",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "kind"
+  ],
+  "title": "Tool file",
+  "type": "object",
+  "x-format": "YAML",
+  "x-locations": [
+    "`./.graph/tools/<name>.yaml` (project)",
+    "`~/.config/graph/tools/<name>.yaml` (global)",
+    "`<tools dir>/builtin/<name>.yaml` (replaces a pack tool)"
+  ]
+}

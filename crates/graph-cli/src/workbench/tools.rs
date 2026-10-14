@@ -745,164 +745,168 @@ fn error_outcome(message: &str) -> ToolOutcome {
     }
 }
 
+pub fn tool_defs() -> Vec<ToolDef> {
+    let mut defs = vec![
+        ToolDef {
+            name: DESCRIBE_TOOL.to_string(),
+            description: "Describe one tool from the plan catalog without calling it: its \
+                          description, input schema, declared output schema, the output \
+                          shape observed in earlier runs, and whether it's read-only. Use it \
+                          to write a step's input and the templates that read its result."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string", "description": "The tool's full name, e.g. linear__list_issues or plan__project_status"}
+                }
+            }),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: UPDATE_METADATA.to_string(),
+            description: "Update the draft's plan-level fields: identifier, name, \
+                          description, exemplars, input_schema, output_schema, \
+                          requires_servers, and/or the finish. `input_schema` declares \
+                          the plan's inputs; `requires_servers` lists the MCP servers it \
+                          needs. `finish` sets how the plan produces its result — \
+                          {output: {<template map>}} for a structured templated result, \
+                          {solver: {queryToAnswer, systemPrompt?}} for LLM synthesis of \
+                          the step results, or \"silent\" for a side-effect plan. \
+                          `output_schema` types an output plan's result; every success \
+                          exit's `output` must have the same keys as `finish.output`. \
+                          Changing the identifier makes it a new plan."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Tool-name-safe identifier (letters, digits, _, -). Changing it detaches the draft from its loaded file."},
+                    "name": {"type": "string", "description": "Human-readable display name."},
+                    "description": {"type": "string", "description": "What the plan does — shown in the catalog and used for routing."},
+                    "exemplars": {"type": "array", "items": {"type": "string"}, "description": "Example requests the plan should handle; replaces the current list."},
+                    "input_schema": {"type": "object", "description": "Replace the plan's input schema (a JSON Schema object describing the plan's inputs, e.g. {\"type\":\"object\",\"required\":[\"pr\"],\"properties\":{\"pr\":{\"type\":\"integer\"}}}). Pass null to clear it."},
+                    "requires_servers": {"type": "array", "items": {"type": "string"}, "description": "Replace the list of MCP server names the plan requires to be configured (gates catalog visibility). Empty array clears it."},
+                    "output_schema": {"type": "object", "description": "Replace the JSON Schema of an output plan's result; its properties are the `finish.output` keys. Pass null to clear it."},
+                    "finish": {
+                        "type": ["object", "string"],
+                        "description": "Set the plan's finish: \"silent\", EITHER {output: {a map of key -> template string}} for a structured result, OR {solver: {queryToAnswer: string, systemPrompt?: string}} for LLM synthesis.",
+                        "properties": {
+                            "solver": {"type": "object", "properties": {"queryToAnswer": {"type": "string"}, "systemPrompt": {"type": "string"}}},
+                            "output": {"type": "object", "description": "Map of output key to template string, e.g. {\"summary\": \"{{E3.text}}\"}."}
+                        }
+                    }
+                }
+            }),
+            output_schema: None,
+            output_example: Some(
+                json!({"ok": true, "identifier": "sprint_report", "name": "Sprint report"}),
+            ),
+            read_only: None,
+        },
+        ToolDef {
+            name: ADD_STEP.to_string(),
+            description: "Insert one top-level step into the draft — appended, or \
+                          anchored with `before`/`after` an existing step id. The \
+                          edit is rejected (draft unchanged) only if it introduces \
+                          NEW validation problems, e.g. a duplicate id or a \
+                          reference to a later step; pre-existing problems never \
+                          block it and are reported in the result. Steps inside \
+                          route/map/reduce bodies live in the control step's \
+                          input — use update_step on that step instead."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["step"],
+                "properties": {
+                    "step": {
+                        "type": "object",
+                        "required": ["id", "toolName", "input"],
+                        "properties": {
+                            "id": {"type": "string", "description": "Unique step id templates reference: E-style (E4) or descriptive (fetch_issues)."},
+                            "toolName": {"type": "string", "description": "Exact tool name from the catalog."},
+                            "input": {"type": "object", "description": "Tool input; string values may reference earlier steps with {{id.path}} templates."},
+                            "reasoning": {"type": "string", "description": "Why this step exists and what it should produce."}
+                        }
+                    },
+                    "before": {"type": "string", "description": "Insert before this existing step id."},
+                    "after": {"type": "string", "description": "Insert after this existing step id. Omit both anchors to append."}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({"ok": true, "id": "E4", "index": 2, "steps": 5})),
+            read_only: None,
+        },
+        ToolDef {
+            name: UPDATE_STEP.to_string(),
+            description: "Update fields of one top-level step: toolName, input \
+                          (replaced whole, not merged), reasoning (empty string \
+                          clears it), and/or newId to rename the step — renaming \
+                          rewrites {{id.*}} references in later steps, the solver, \
+                          and the output so templates keep working. Rejected only \
+                          when the edit introduces NEW validation problems; \
+                          pre-existing ones are reported, not blocking. For steps \
+                          inside route/map/reduce bodies, update the owning \
+                          control step's input."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {"type": "string", "description": "The step to update."},
+                    "newId": {"type": "string", "description": "Rename the step; downstream template references are rewritten."},
+                    "toolName": {"type": "string", "description": "New tool name from the catalog."},
+                    "input": {"type": "object", "description": "New tool input — replaces the step's entire input object."},
+                    "reasoning": {"type": "string", "description": "New reasoning; an empty string clears it."}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({"ok": true, "id": "fetch_issues"})),
+            read_only: None,
+        },
+        ToolDef {
+            name: DELETE_STEP.to_string(),
+            description: "Delete one top-level step from the draft. Rejected \
+                          (draft unchanged) if later steps still reference it — \
+                          update those steps first — or if it is the plan's only \
+                          step."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                    "id": {"type": "string", "description": "The step to delete."}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({"ok": true, "id": "E2", "steps": 3})),
+            read_only: None,
+        },
+        ToolDef {
+            name: RESTORE_DRAFT.to_string(),
+            description: "One-level undo: put the draft back to what it was before \
+                          the last replacement (load, draft, or edit) — use it \
+                          when you or the user replaced the draft by mistake. \
+                          Calling it again redoes."
+                .to_string(),
+            input_schema: json!({"type": "object", "properties": {}}),
+            output_schema: None,
+            output_example: Some(json!({"restored": "sprint_report", "dirty": true})),
+            read_only: None,
+        },
+    ];
+    defs.extend(super::artifact::tool_defs());
+    for def in &mut defs {
+        def.description.push_str(WORKBENCH_ONLY_NOTE);
+    }
+    defs
+}
+
 #[async_trait]
 impl ToolRegistry for WorkbenchTools {
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
-        let mut defs = vec![
-            ToolDef {
-                name: DESCRIBE_TOOL.to_string(),
-                description: "Describe one tool from the plan catalog without calling it: its \
-                              description, input schema, declared output schema, the output \
-                              shape observed in earlier runs, and whether it's read-only. Use it \
-                              to write a step's input and the templates that read its result."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["name"],
-                    "properties": {
-                        "name": {"type": "string", "description": "The tool's full name, e.g. linear__list_issues or plan__project_status"}
-                    }
-                }),
-                output_schema: None,
-                output_example: None,
-                read_only: Some(true),
-            },
-            ToolDef {
-                name: UPDATE_METADATA.to_string(),
-                description: "Update the draft's plan-level fields: identifier, name, \
-                              description, exemplars, input_schema, output_schema, \
-                              requires_servers, and/or the finish. `input_schema` declares \
-                              the plan's inputs; `requires_servers` lists the MCP servers it \
-                              needs. `finish` sets how the plan produces its result — \
-                              {output: {<template map>}} for a structured templated result, \
-                              {solver: {queryToAnswer, systemPrompt?}} for LLM synthesis of \
-                              the step results, or \"silent\" for a side-effect plan. \
-                              `output_schema` types an output plan's result; every success \
-                              exit's `output` must have the same keys as `finish.output`. \
-                              Changing the identifier makes it a new plan."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "properties": {
-                        "identifier": {"type": "string", "description": "Tool-name-safe identifier (letters, digits, _, -). Changing it detaches the draft from its loaded file."},
-                        "name": {"type": "string", "description": "Human-readable display name."},
-                        "description": {"type": "string", "description": "What the plan does — shown in the catalog and used for routing."},
-                        "exemplars": {"type": "array", "items": {"type": "string"}, "description": "Example requests the plan should handle; replaces the current list."},
-                        "input_schema": {"type": "object", "description": "Replace the plan's input schema (a JSON Schema object describing the plan's inputs, e.g. {\"type\":\"object\",\"required\":[\"pr\"],\"properties\":{\"pr\":{\"type\":\"integer\"}}}). Pass null to clear it."},
-                        "requires_servers": {"type": "array", "items": {"type": "string"}, "description": "Replace the list of MCP server names the plan requires to be configured (gates catalog visibility). Empty array clears it."},
-                        "output_schema": {"type": "object", "description": "Replace the JSON Schema of an output plan's result; its properties are the `finish.output` keys. Pass null to clear it."},
-                        "finish": {
-                            "type": ["object", "string"],
-                            "description": "Set the plan's finish: \"silent\", EITHER {output: {a map of key -> template string}} for a structured result, OR {solver: {queryToAnswer: string, systemPrompt?: string}} for LLM synthesis.",
-                            "properties": {
-                                "solver": {"type": "object", "properties": {"queryToAnswer": {"type": "string"}, "systemPrompt": {"type": "string"}}},
-                                "output": {"type": "object", "description": "Map of output key to template string, e.g. {\"summary\": \"{{E3.text}}\"}."}
-                            }
-                        }
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(
-                    json!({"ok": true, "identifier": "sprint_report", "name": "Sprint report"}),
-                ),
-                read_only: None,
-            },
-            ToolDef {
-                name: ADD_STEP.to_string(),
-                description: "Insert one top-level step into the draft — appended, or \
-                              anchored with `before`/`after` an existing step id. The \
-                              edit is rejected (draft unchanged) only if it introduces \
-                              NEW validation problems, e.g. a duplicate id or a \
-                              reference to a later step; pre-existing problems never \
-                              block it and are reported in the result. Steps inside \
-                              route/map/reduce bodies live in the control step's \
-                              input — use update_step on that step instead."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["step"],
-                    "properties": {
-                        "step": {
-                            "type": "object",
-                            "required": ["id", "toolName", "input"],
-                            "properties": {
-                                "id": {"type": "string", "description": "Unique step id templates reference: E-style (E4) or descriptive (fetch_issues)."},
-                                "toolName": {"type": "string", "description": "Exact tool name from the catalog."},
-                                "input": {"type": "object", "description": "Tool input; string values may reference earlier steps with {{id.path}} templates."},
-                                "reasoning": {"type": "string", "description": "Why this step exists and what it should produce."}
-                            }
-                        },
-                        "before": {"type": "string", "description": "Insert before this existing step id."},
-                        "after": {"type": "string", "description": "Insert after this existing step id. Omit both anchors to append."}
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(json!({"ok": true, "id": "E4", "index": 2, "steps": 5})),
-                read_only: None,
-            },
-            ToolDef {
-                name: UPDATE_STEP.to_string(),
-                description: "Update fields of one top-level step: toolName, input \
-                              (replaced whole, not merged), reasoning (empty string \
-                              clears it), and/or newId to rename the step — renaming \
-                              rewrites {{id.*}} references in later steps, the solver, \
-                              and the output so templates keep working. Rejected only \
-                              when the edit introduces NEW validation problems; \
-                              pre-existing ones are reported, not blocking. For steps \
-                              inside route/map/reduce bodies, update the owning \
-                              control step's input."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["id"],
-                    "properties": {
-                        "id": {"type": "string", "description": "The step to update."},
-                        "newId": {"type": "string", "description": "Rename the step; downstream template references are rewritten."},
-                        "toolName": {"type": "string", "description": "New tool name from the catalog."},
-                        "input": {"type": "object", "description": "New tool input — replaces the step's entire input object."},
-                        "reasoning": {"type": "string", "description": "New reasoning; an empty string clears it."}
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(json!({"ok": true, "id": "fetch_issues"})),
-                read_only: None,
-            },
-            ToolDef {
-                name: DELETE_STEP.to_string(),
-                description: "Delete one top-level step from the draft. Rejected \
-                              (draft unchanged) if later steps still reference it — \
-                              update those steps first — or if it is the plan's only \
-                              step."
-                    .to_string(),
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["id"],
-                    "properties": {
-                        "id": {"type": "string", "description": "The step to delete."}
-                    }
-                }),
-                output_schema: None,
-                output_example: Some(json!({"ok": true, "id": "E2", "steps": 3})),
-                read_only: None,
-            },
-            ToolDef {
-                name: RESTORE_DRAFT.to_string(),
-                description: "One-level undo: put the draft back to what it was before \
-                              the last replacement (load, draft, or edit) — use it \
-                              when you or the user replaced the draft by mistake. \
-                              Calling it again redoes."
-                    .to_string(),
-                input_schema: json!({"type": "object", "properties": {}}),
-                output_schema: None,
-                output_example: Some(json!({"restored": "sprint_report", "dirty": true})),
-                read_only: None,
-            },
-        ];
-        defs.extend(super::artifact::tool_defs());
-        for def in &mut defs {
-            def.description.push_str(WORKBENCH_ONLY_NOTE);
-        }
-        Ok(defs)
+        Ok(tool_defs())
     }
 
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {

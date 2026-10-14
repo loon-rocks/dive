@@ -1,0 +1,35 @@
+---
+title: "graph workbench tool"
+sidebarTitle: "tool"
+description: "Open the workbench in tool mode: draft a new user tool, or edit an existing one"
+playground: "none"
+keywords: ["graph workbench tool"]
+---
+
+## Arguments
+
+<ParamField path="NAME" type="string">
+  A user tool name to open for editing; omit to draft a new one
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph workbench tool [OPTIONS] [NAME]
+```
+
+```bash Example 1
+graph wb tool
+```
+
+```bash Example 2
+graph wb tool summarize
+```
+
+</RequestExample>

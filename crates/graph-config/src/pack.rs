@@ -19,7 +19,7 @@ pub const MAX_PACK_NAME: usize = 20;
 pub const MAX_CATALOG_NAME: usize = 64;
 pub const RESERVED_NAMES: &[&str] = &["user", "plan", "agent", "builtin", "workbench", "pack"];
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackEntry {
     pub git: String,

@@ -1,0 +1,25 @@
+{
+  "group": "Built-in agents",
+  "pages": [
+    {
+      "group": "Global",
+      "pages": [
+        "agents/reference/built-in/chat",
+        "agents/reference/built-in/agent_drafter",
+        "agents/reference/built-in/tool_drafter"
+      ]
+    },
+    {
+      "group": "Workbench",
+      "pages": [
+        "agents/reference/built-in/workbench/front_desk",
+        "agents/reference/built-in/workbench/plan_drafter",
+        "agents/reference/built-in/workbench/plan_loader",
+        "agents/reference/built-in/workbench/plan_editor",
+        "agents/reference/built-in/workbench/agent_drafter",
+        "agents/reference/built-in/workbench/tool_drafter"
+      ]
+    }
+  ],
+  "root": "agents/reference/built-in-agents"
+}

@@ -1,0 +1,17 @@
+---
+title: "Control steps"
+description: "Steps graph runs itself to control a plan's flow, instead of calling a tool."
+keywords: ["Control steps"]
+---
+
+Use a control step's name as a step's `tool_name`. The conditions and bodies they share are described in [Conditions and bodies](/plans/reference/conditions-and-bodies).
+
+| Name | Description |
+| --- | --- |
+| [`route`](/plans/reference/steps/route) | Runs one of two or more branches, depending on a condition. |
+| [`filter`](/plans/reference/steps/filter) | Splits a list into the items that pass a per-item condition and the items that don't. |
+| [`map`](/plans/reference/steps/map) | Runs the same steps once for each item in a list and collects the results. |
+| [`reduce`](/plans/reference/steps/reduce) | Folds a list into one value by running the same steps for each item in order. |
+| [`exit`](/plans/reference/steps/exit) | Ends the plan early, as a success or an error, when a condition holds. |
+| [`agent`](/plans/reference/steps/agent) | Hands one step to a model that calls tools until it can return structured output. |
+| [`ask`](/plans/reference/steps/ask) | Asks the person running the plan a question and uses their answer. |

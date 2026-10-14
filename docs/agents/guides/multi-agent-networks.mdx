@@ -1,0 +1,103 @@
+---
+title: "Build a multi-agent network"
+description: "Build a triage agent that hands release questions to release_notes, which asks a reviewer subagent about risky changes."
+keywords: ["subagents", "handoffs", "transfer_to", "agent network"]
+---
+
+Agents connect in two ways:
+
+- A handoff moves the conversation to another agent.
+- A subagent does one job for its caller and returns the result.
+
+## Hand off to a specialist
+
+List the agents `triage` can hand the conversation to under `handoffs`. Each one becomes a `transfer_to_<name>` tool:
+
+```yaml .graph/agents/triage.yaml
+version: 1
+name: triage
+description: Routes questions about this repository to the right specialist.
+model: chat
+tools: []
+handoffs:
+- release_notes
+- reviewer
+system_prompt: |
+  You route questions about this repository. Hand release questions to
+  release_notes and code review requests to reviewer.
+```
+
+The specialist takes over the conversation, and later messages go to it.
+
+## Call a subagent
+
+List the agents `release_notes` can call under `subagents`. Each one becomes an `agent__<name>` tool that takes a `prompt` and returns the subagent's answer:
+
+```yaml .graph/agents/release_notes.yaml
+version: 1
+name: release_notes
+description: Writes release notes from the changes since the latest release.
+model: chat
+tools:
+- builtin__gh_release
+- builtin__git_log
+subagents:
+- reviewer
+system_prompt: |
+  You write release notes for this repository. Before you write them, ask
+  reviewer whether any change since the release is risky to ship, and
+  call out what it finds.
+```
+
+```yaml .graph/agents/reviewer.yaml
+version: 1
+name: reviewer
+description: Reviews the code changed between two git refs and reports risky changes.
+model: chat
+tools:
+- builtin__git_diff
+system_prompt: |
+  You review code changes in this repository and report what is risky,
+  briefly.
+```
+
+The subagent starts with a fresh context, so its tool calls stay out of the caller's conversation.
+
+## Run the network
+
+```bash
+graph ask --agent triage \
+  "Draft release notes for what is unreleased."
+```
+
+`triage` hands off, and `release_notes` gathers the commits and calls `reviewer`:
+
+```text
+→ transfer_to_release_notes {"message":"User wants draft release notes…"}
+✓ transfer_to_release_notes 31.6µs
+→ builtin__gh_release {}
+✓ builtin__gh_release 1.4s
+→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+→ agent__reviewer {"prompt":"Please review the code changes…"}
+✓ builtin__git_log 60.6ms
+→ builtin__git_diff {"base":"v0.15.0","head":"HEAD",…}
+✓ builtin__git_diff 104.3ms
+✓ agent__reviewer 76.6s
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Create an agent in the workbench" icon="wand-magic-sparkles" href="/agents/guides/create-in-workbench">
+    Draft each agent in the network with the agent drafter.
+  </Card>
+  <Card title="Optimize an agent with plans" icon="gauge" href="/agents/guides/optimize-with-plans">
+    Replace repeated tool calls with a plan.
+  </Card>
+  <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
+    Continue the conversation with the specialist.
+  </Card>
+  <Card title="Manage threads" icon="list" href="/agents/guides/threads">
+    See which agent said what in a past conversation.
+  </Card>
+</CardGroup>

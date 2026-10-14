@@ -1,0 +1,39 @@
+---
+title: "graph tools migrate"
+sidebarTitle: "migrate"
+description: "Rewrite a user tool file to the current tool format"
+playground: "none"
+keywords: ["graph tools migrate"]
+---
+
+Rewrites one user tool file to the current tool file version. It takes a path rather than a tool name and doesn't connect to MCP servers.
+
+## Arguments
+
+<ParamField path="PATH" type="string" required>
+  Path to the user tool file
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph tools migrate [OPTIONS] <PATH>
+```
+
+```bash Example
+graph tools migrate .graph/tools/summarize.yaml
+```
+
+</RequestExample>

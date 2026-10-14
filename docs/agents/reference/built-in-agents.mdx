@@ -1,0 +1,19 @@
+---
+title: "Built-in agents"
+description: "The agents that ship with graph."
+keywords: ["Built-in agents"]
+---
+
+Global agents run in `graph ask`, `graph chat` and plan steps. Workbench agents run only in `graph wb`. A file in `.graph/agents/` or `~/.config/graph/agents/` with the same name replaces a built-in agent.
+
+| Name | Description |
+| --- | --- |
+| [`chat`](/agents/reference/built-in/chat) | The default agent for questions and tasks, with access to every tool and plan in your catalog. |
+| [`agent_drafter`](/agents/reference/built-in/agent_drafter) | Writes a new agent with you and saves it to the project. |
+| [`tool_drafter`](/agents/reference/built-in/tool_drafter) | Writes a new tool with you, test-runs it, and saves it to the project. |
+| [`front_desk (workbench)`](/agents/reference/built-in/workbench/front_desk) | Greets you when the workbench opens and hands you to the plan, agent or tool drafter. |
+| [`plan_drafter (workbench)`](/agents/reference/built-in/workbench/plan_drafter) | Drafts a new plan with you, or opens an existing plan you want to work on. |
+| [`plan_loader (workbench)`](/agents/reference/built-in/workbench/plan_loader) | Finds an existing plan from a name or description and loads it into the workbench. |
+| [`plan_editor (workbench)`](/agents/reference/built-in/workbench/plan_editor) | Edits, validates, runs and saves the plan open in the workbench, one change at a time. |
+| [`agent_drafter (workbench)`](/agents/reference/built-in/workbench/agent_drafter) | Drafts a new agent with you in the workbench pane and saves it when you say so. |
+| [`tool_drafter (workbench)`](/agents/reference/built-in/workbench/tool_drafter) | Drafts a new tool with you in the workbench pane, test-runs it, and saves it when you say so. |

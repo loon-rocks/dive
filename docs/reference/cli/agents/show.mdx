@@ -1,0 +1,41 @@
+---
+title: "graph agents show"
+sidebarTitle: "show"
+description: "Print an agent's effective definition, the file to copy when customizing it"
+playground: "none"
+keywords: ["graph agents show"]
+---
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The agent's name
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph agents show [OPTIONS] <NAME>
+```
+
+```bash Example 1
+graph agents show chat
+```
+
+```bash Example 2
+graph agents show chat > .graph/agents/chat.yaml
+```
+
+</RequestExample>

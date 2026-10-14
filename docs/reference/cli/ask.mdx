@@ -1,0 +1,73 @@
+---
+title: "graph ask"
+sidebarTitle: "graph ask"
+description: "Ask a one-shot question (runs one agent turn)"
+playground: "none"
+keywords: ["graph ask"]
+---
+
+Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.
+
+Put `--thread` after the message, since it takes an optional value. On an existing thread, `--agent` must name the thread's owner.
+
+With `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, agent}` instead of streaming.
+
+## Arguments
+
+<ParamField path="MESSAGE" type="string">
+  The message; reads stdin when omitted and piped
+</ParamField>
+
+## Options
+
+<ParamField query="--agent" type="string">
+  Run a named agent instead of the default `chat` agent
+
+  Format: `AGENT`.
+</ParamField>
+
+<ParamField query="--thread" type="string">
+  Continue a thread: `--thread <id>` for a specific one, bare `--thread` for the most recent. Omit to start a new thread
+
+  Format: `THREAD`.
+
+  The value is optional: `--thread` on its own is accepted.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Emit a JSON envelope instead of streaming text
+</ParamField>
+
+<ParamField query="--no-stream" type="boolean">
+  Print the final answer only, without streaming
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph ask [OPTIONS] [MESSAGE]
+```
+
+```bash Example 1
+graph ask "Which issues are blocking the release?"
+```
+
+```bash Example 2
+git diff | graph ask "Review this diff"
+```
+
+```bash Example 3
+graph ask --agent release_notes "What shipped this week?"
+```
+
+```bash Example 4
+graph ask "And the week before?" --thread
+```
+
+</RequestExample>

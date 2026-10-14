@@ -128,8 +128,8 @@ graph plan new <identifier> [--goal "<what it should do>"]
   the bare scaffold becomes the explicit hand-build path
 
 Naming undecided (`new --goal` vs `create --goal` with `new` as alias). Blast
-radius: `docs/plans/authoring.mdx`, `docs/reference/cli.mdx`,
-`docs/reference/scripting-contract.mdx`, `skills/graph-plan-authoring/SKILL.md`.
+radius: `docs/plans/reference/plan-file.mdx`, `docs/reference/cli/`,
+`skills/graph-plan-authoring/SKILL.md`.
 
 ## Phase 1 — Commands return values, not prints ☑
 

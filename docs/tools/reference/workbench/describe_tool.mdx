@@ -1,0 +1,19 @@
+---
+title: "workbench__describe_tool"
+sidebarTitle: "workbench__describe_tool"
+description: "Describes one catalog tool without calling it."
+playground: "none"
+keywords: ["workbench__describe_tool"]
+---
+
+- Returns its description, input schema, declared and observed output shape, and whether it's read-only.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="name" type="string" required>
+  The tool's full name, e.g. linear__list_issues or plan__project_status
+</ParamField>

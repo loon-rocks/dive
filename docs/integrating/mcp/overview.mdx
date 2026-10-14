@@ -1,0 +1,59 @@
+---
+title: "MCP"
+description: "graph is both an MCP client, using other servers' tools, and an MCP server, giving other clients your plans."
+keywords: ["mcp", "model context protocol", "client", "server"]
+---
+
+graph works with the [Model Context Protocol](https://modelcontextprotocol.io) in both directions. As a client, it adds other servers' tools to your catalog. As a server, it gives MCP clients such as Claude and Cursor your plans as tools.
+
+<RequestExample>
+
+```toml Client: config.toml
+[mcp.tracker]
+url = "https://mcp.example.com/mcp"
+headers = { Authorization = "Bearer ${TRACKER_TOKEN}" }
+
+[mcp.everything]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-everything"]
+```
+
+```json Server: client config
+{
+  "mcpServers": {
+    "graph": {
+      "command": "graph",
+      "args": ["mcp", "serve", "--dir", "/path/to/project"]
+    }
+  }
+}
+```
+
+</RequestExample>
+
+## graph as an MCP client
+
+Each [`[mcp.<name>]`](/reference/configuration#param-mcp) table in config.toml connects one server, over stdio with `command` or streamable HTTP with `url`. The server's tools join the catalog as `<name>__<tool>`, and agents and plan steps call them like any other tool.
+
+You choose which of a server's tools graph loads, and can correct a tool's description or output shape when the server's own is wrong or missing.
+
+## graph as an MCP server
+
+`graph mcp serve` runs graph as an MCP server over stdio. A connected client gets one tool per plan in your catalog, named `plan_<identifier>`, plus [tools for writing and testing plans](/integrating/mcp/reference/server-tools). An `ask` step in a plan reaches the client's user as an elicitation request.
+
+## Guides
+
+<CardGroup cols={2}>
+  <Card title="Connect an MCP server" icon="plug" href="/integrating/mcp/guides/connect-mcp-server">
+    Add a server's tools to your catalog.
+  </Card>
+  <Card title="Serve plans over MCP" icon="server" href="/integrating/mcp/guides/serve-over-mcp">
+    Run your plans from Claude, Cursor and other clients.
+  </Card>
+  <Card title="Filter and override a server's tools" icon="filter" href="/integrating/mcp/guides/filter-and-override-tools">
+    Load only the tools you need and fix their descriptions.
+  </Card>
+  <Card title="Test an MCP server" icon="flask" href="/integrating/mcp/guides/test-an-mcp-server">
+    Check a connection and call a tool directly.
+  </Card>
+</CardGroup>

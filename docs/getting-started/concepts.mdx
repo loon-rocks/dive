@@ -1,76 +1,68 @@
 ---
 title: "Core concepts"
-description: "Plans, the tool catalog, the shape cache, the workbench, and threads"
-icon: "lightbulb"
+description: "The parts of an agent network, how they call each other, and where their files live."
+keywords: ["concepts", "agent network", "catalog", "model roles", "layers"]
 ---
 
-Six ideas explain almost everything graph does.
+## Agent networks
 
-## 1. Plans: the execution engine
+An agent network is any mix of agents, plans and tools that call each other:
 
-A **plan** is a YAML document listing steps, each a tool call whose inputs may reference earlier results:
+- A **handoff** gives the conversation to another agent, which answers you from then on.
+- A **call** runs a plan, a tool or a subagent and returns its result to the caller.
+- A **step** is one call in a plan, made in a fixed order with no model choosing it.
 
-```yaml
-steps:
-  - id: E0
-    tool_name: linear__list_teams
-    input: { query: "{{input.team}}" }
-  - id: E1
-    tool_name: linear__list_issues
-    input: { team: "{{E0.teams.0.name}}", cycle: current }
-```
+A network can start as one agent and one tool, and grow from there.
 
-`{{E0.teams.0.name}}` is the [template language](/reference/plans/template-language) — typed dataflow between steps, zero inference. Inference appears only where the plan puts it: a [prompt tool](/tools/user-defined) step for a sub-task, and the [finish](/plans/finish-modes) — a solver report, structured JSON, or nothing.
+## Agents
 
-Control flow lives in seven executor-intercepted steps: an [`exit` gate](/plans/exit-gates) ends the plan early with a success or error state, a [`route` step](/plans/branching) forks into one of its branches on the same gates — both gated logically (`when` on exit, `if` on route) or by a cheap model judgment (`infer`) — a [`filter` step](/plans/selection) partitions a list with that same gate evaluated per item (spelled `where`), and [`map`/`reduce` steps](/plans/iteration) run a body once per item of a list, collecting the results or folding them into one value. Two more reach outside the plan for what it cannot compute: an [`agent` step](/plans/agent-step) runs a bounded tool-calling loop when _which_ tool to call next depends on an earlier result, and an [`ask` step](/plans/ask-step) puts a question to the person running the plan — declaring, in the plan, what to do when there is no person.
+An agent is a model with a system prompt and a list of tools it may call. It decides what to call one round at a time, and each round is a model call. It can also call other agents as subagents, or hand the conversation to them. Agents run in `graph ask`, `graph chat` and the workbench, and plans call them as steps. See [Agents](/agents/overview).
 
-Plans run three ways: directly (`graph plan run`), as a tool anything else can invoke, or authored _by_ [the LLM planner](/plans/the-planner) inside `plan_and_execute`.
+## Plans
 
-The key behavioral difference: **human-authored plans never replan**. If a step fails, you get a structured error — the plan you wrote is the plan that runs. `plan_and_execute` plans are LLM-authored, so defects there trigger a replan with the error fed back. Details in [Errors & replanning](/plans/errors-and-replanning).
+A plan is a list of steps that run in order, the same way every time. A step's input reads the plan's inputs and earlier steps' results through templates, such as `{{release.tag}}`. A plan makes a model call only in a step that asks for one. Plans run with `graph plan run`, and agents and other plans call them as tools. See [Plans](/plans/overview).
 
-## 2. One tool catalog
+## Tools
 
-Everything a plan step or the agent can do is a **tool**, and every tool lives in one namespaced catalog:
+A tool is anything an agent or a plan step can call: a command wrapped in a tool file, a tool from an MCP server, a tool built into graph, or another plan or agent. See [Tools](/tools/overview).
 
-| Prefix | Source | Example |
+## The catalog
+
+Every tool sits in one catalog, and its name says where it comes from:
+
+| Name | Comes from | Example |
 | --- | --- | --- |
-| `<server>__` | [MCP servers](/tools/mcp-servers) from `[mcp.*]` config | `linear__list_issues` |
-| `user__` | [User-defined tools](/tools/user-defined) (exec / prompt / reshape / decision YAML) | `user__git_log` |
-| `builtin__` | [Bundled tool packs](/tools/builtins) compiled into the binary | `builtin__infer` |
-| `plan__` | One per [plan document](/plans/overview) | `plan__project_status` |
-| `agent__` | One per [named agent](/reference/agent-schema), callable from plan steps | `agent__search_bot` |
-| — | [`plan_and_execute`](/plans/the-planner): on-the-fly planning for novel multi-step tasks |  |
+| `<server>__<tool>` | An MCP server | `web__fetch` |
+| `user__<name>` | Your tool files | `user__merged_prs` |
+| `builtin__<name>` | graph itself, or a pack bundled with graph | `builtin__infer` |
+| `plan__<identifier>` | A plan | `plan__unreleased_changes` |
+| `agent__<name>` | An agent | `agent__reviewer` |
 
-This is what makes plans composable: authoring a plan _adds a tool to the catalog_, and a plan's steps draw from that same catalog — including other plans. The [composition rules](/tools/overview#composition-rules) and the commands for inspecting and invoking the catalog live in [The tool catalog](/tools/overview).
+Saving a plan or an agent adds it to the catalog, so the next thing you build can call it.
 
-## 3. The shape cache
+Two more kinds of names aren't in the catalog. Plans also use control steps (`exit`, `route`, `filter`, `map`, `reduce`, `agent` and `ask`), which the plan runs itself. Agents hand off with `transfer_to_<name>`, which exists only in a conversation.
 
-MCP tools rarely declare what their output looks like — but the planner needs to know, or it can't write `{{E0.teams.0.name}}`. So graph **learns**: every successful tool call records an inferred schema and example of that tool's output. The planner reads this cache at planning time, which means every probe and every chat turn makes `plan_and_execute` author better plans. See [The shape cache](/tools/shape-cache).
+## Model roles
 
-## 4. The workbench
+Agents, plan steps and tools name a role, such as `chat` or `judge`, not a model. `[models]` in `config.toml` maps each role to a provider and a model, so moving a job to another model is one line of config. See [Models and providers](/getting-started/models).
 
-Plans have a dedicated review surface: `graph wb plan`, the plan mode of the dual-pane workbench TUI (`graph workbench`, alias `graph wb`), which also drafts agents and tools. The workbench's agents draft and edit the plan in a side pane while you inspect its steps, validate on every change, and run it under a debugger that pauses before each tool call — so you can trust a plan's writes before you commit it. Details in [Workbench](/workbench/plan-workbench).
+## Threads
 
-## 5. The agent loop
+`graph ask` and `graph chat` save each conversation as a thread, with every message, tool call and handoff. Pass `--thread <id>` to continue one. See [Manage threads](/agents/guides/threads).
 
-`graph ask` and `graph chat` run a standard tool-calling loop over the catalog: your message goes to the model, tool calls execute (in parallel within a round), results feed back, and the loop continues until the model answers in text. Plans are just tools here — the agent calls `plan__sprint_analysis` the same way it calls `linear__list_issues`.
+## Where files live
 
-Use it to prototype: probe tools, sketch a workflow conversationally, seed the shape cache — then freeze what works into a plan for anything you'll run twice.
+| File | Project | Home |
+| --- | --- | --- |
+| Config | `./.graph/config.toml` | `~/.config/graph/config.toml` |
+| Agents | `./.graph/agents/` | `~/.config/graph/agents/` |
+| Plans | `./.graph/plans/` | `~/.config/graph/plans/` |
+| Tools | `./.graph/tools/` | `~/.config/graph/tools/` |
 
-## 6. Threads
+- **Config** merges both files, and the project file wins where they differ.
+- **Agents and plans** with the same name in both places: the project one replaces the home one, and either replaces a built-in.
+- **Tools** need a unique name across both directories.
 
-Every `ask` and `chat` turn persists to a **thread** under the data directory — messages, tool calls, and results.
+Threads and other state live in the [data directory](/reference/data-directory), `~/.local/share/graph/` by default.
 
-```bash
-graph threads list
-graph ask "and who is assigned?" --thread          # continue the latest
-graph chat --thread 62dac762e251                    # resume a specific one
-```
-
-## What an invocation costs
-
-Running a plan directly (`graph plan run`) is **one** LLM call (the solver) or **zero** (output/silent plans), however many tool calls it makes. A chat turn that invokes a plan tool is exactly three:
-
-1. **Agent** — reads your message, decides to call `plan__project_status`
-2. **Solver** — inside the plan, synthesizes the report from the collected step results (streams dimmed to stderr as progress)
-3. **Agent** — reads the report and writes the final answer (stdout)
+Commit `./.graph/` to give your whole team the same network.

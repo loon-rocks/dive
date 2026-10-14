@@ -1,0 +1,109 @@
+---
+title: "map"
+sidebarTitle: "map"
+description: "Runs the same steps once for each item in a list and collects the results."
+playground: "none"
+keywords: ["map", "control step"]
+---
+
+## How it works
+
+- `over` must produce a list. The body (`do`) runs once per item, with `{{item}}` and `{{index}}` available.
+- `concurrency` runs that many items at once. Use it only when items don't depend on each other.
+- `onError: skip` leaves failed items out of `results` and lists them in `failed`, with `failed_count`, instead of failing the plan.
+
+## Limits
+
+- The body can contain `agent`, `ask`, `filter`, `route` and `exit`, but not another `map` or `reduce`. Call a plan for nested iteration.
+- `ask` steps in the body run one item at a time.
+
+## Input
+
+<ParamField body="concurrency" type="integer">
+  Maximum items in flight; 1 (default) runs items one at a time.
+</ParamField>
+
+<ParamField body="do" type="object | object[]" required>
+</ParamField>
+
+<ParamField body="onError" type="enum<string>">
+  fail (default): a failing item fails the step. skip: failed items are left out of results and listed in failed.
+
+  Available options: `fail`, `skip`
+</ParamField>
+
+<ParamField body="over" type="any" required>
+  The list to iterate — usually a template like &#123;&#123;E0.issues&#125;&#125; that resolves to an array.
+</ParamField>
+
+## Result
+
+Later steps read these as `{{<step id>.<field>}}`.
+
+<ResponseField name="count" type="integer">
+  How many items ran.
+</ResponseField>
+
+<ResponseField name="failed" type="object[]">
+  With `onError: skip`: the items that failed.
+</ResponseField>
+
+<ResponseField name="failed.[].error" type="string">
+  Why it failed.
+</ResponseField>
+
+<ResponseField name="failed.[].index" type="integer">
+  The failed item's position in the list.
+</ResponseField>
+
+<ResponseField name="failed.[].item" type="object">
+  The failed item.
+</ResponseField>
+
+<ResponseField name="failed_count" type="integer">
+  With `onError: skip`: how many items failed.
+</ResponseField>
+
+<ResponseField name="results" type="object[]">
+  Each item's result, in input order.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: map
+  input:
+    over: "{{input.over}}"
+    do: "{{input.do}}"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json Result
+{
+  "count": 2,
+  "failed": [
+    {
+      "error": "tool error: …",
+      "index": 2,
+      "item": {
+        "…": "…"
+      }
+    }
+  ],
+  "failed_count": 1,
+  "results": [
+    {
+      "…": "…"
+    },
+    {
+      "…": "…"
+    }
+  ]
+}
+```
+
+</ResponseExample>

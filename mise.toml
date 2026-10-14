@@ -82,3 +82,7 @@ run = "cd docs && mint dev"
 [tasks.shots]
 description = "Regenerate the workbench docs screenshots from docs/shots/ scenarios"
 run = "cargo test -p graph-cli shots -- --nocapture"
+
+[tasks."docs:generate"]
+description = "Regenerate the reference pages generated from code: the CLI, packs, control steps, built-in agents and built-in plans"
+run = "GRAPH_UPDATE_DOCS=1 cargo test -p graph-cli docs_gen"

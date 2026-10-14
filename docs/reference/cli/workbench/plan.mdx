@@ -1,0 +1,35 @@
+---
+title: "graph workbench plan"
+sidebarTitle: "plan"
+description: "Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation"
+playground: "none"
+keywords: ["graph workbench plan"]
+---
+
+## Arguments
+
+<ParamField path="NAME_OR_PATH" type="string">
+  A plan identifier or YAML file path to open; omit for a blank draft
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph workbench plan [OPTIONS] [NAME_OR_PATH]
+```
+
+```bash Example 1
+graph wb plan
+```
+
+```bash Example 2
+graph wb plan weekly_changes
+```
+
+</RequestExample>

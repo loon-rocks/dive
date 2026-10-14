@@ -1,0 +1,100 @@
+[
+  "reference/cli/ask",
+  "reference/cli/chat",
+  {
+    "group": "graph plan",
+    "pages": [
+      "reference/cli/plan/list",
+      "reference/cli/plan/show",
+      "reference/cli/plan/validate",
+      "reference/cli/plan/migrate",
+      "reference/cli/plan/run",
+      "reference/cli/plan/new",
+      "reference/cli/plan/draft",
+      "reference/cli/plan/set",
+      "reference/cli/plan/unset",
+      {
+        "group": "graph plan step",
+        "pages": [
+          "reference/cli/plan/step/add",
+          "reference/cli/plan/step/update",
+          "reference/cli/plan/step/rename",
+          "reference/cli/plan/step/unset",
+          "reference/cli/plan/step/rm"
+        ],
+        "root": "reference/cli/plan/step"
+      }
+    ],
+    "root": "reference/cli/plan"
+  },
+  {
+    "group": "graph tools",
+    "pages": [
+      "reference/cli/tools/list",
+      "reference/cli/tools/show",
+      "reference/cli/tools/test",
+      "reference/cli/tools/migrate"
+    ],
+    "root": "reference/cli/tools"
+  },
+  {
+    "group": "graph agents",
+    "pages": [
+      "reference/cli/agents/list",
+      "reference/cli/agents/show",
+      "reference/cli/agents/validate",
+      "reference/cli/agents/migrate"
+    ],
+    "root": "reference/cli/agents"
+  },
+  {
+    "group": "graph threads",
+    "pages": [
+      "reference/cli/threads/list",
+      "reference/cli/threads/show",
+      "reference/cli/threads/rm"
+    ],
+    "root": "reference/cli/threads"
+  },
+  {
+    "group": "graph mcp",
+    "pages": [
+      "reference/cli/mcp/list",
+      "reference/cli/mcp/tools",
+      "reference/cli/mcp/test",
+      "reference/cli/mcp/serve",
+      "reference/cli/mcp/probe"
+    ],
+    "root": "reference/cli/mcp"
+  },
+  {
+    "group": "graph shapes",
+    "pages": [
+      "reference/cli/shapes/list",
+      "reference/cli/shapes/show"
+    ],
+    "root": "reference/cli/shapes"
+  },
+  {
+    "group": "graph config",
+    "pages": [
+      "reference/cli/config/show",
+      "reference/cli/config/init",
+      "reference/cli/config/path",
+      "reference/cli/config/check",
+      "reference/cli/config/migrate"
+    ],
+    "root": "reference/cli/config"
+  },
+  {
+    "group": "graph workbench",
+    "pages": [
+      "reference/cli/workbench/plan",
+      "reference/cli/workbench/agent",
+      "reference/cli/workbench/tool"
+    ],
+    "root": "reference/cli/workbench"
+  },
+  "reference/cli/version",
+  "reference/cli/error-handling"
+]

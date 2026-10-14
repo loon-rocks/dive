@@ -1,0 +1,51 @@
+<ParamField body="mcp" type="object">
+  MCP servers, as `[mcp.<name>]`. Their tools join the catalog as `<name>__<tool>`.
+</ParamField>
+
+<ParamField body="mcp.<name>.description" type="string">
+  What the server is for, read by drafters choosing tools.
+</ParamField>
+
+<ParamField body="mcp.<name>.command" type="string">
+  Executable for a stdio server. Use `command` or `url`, not both.
+</ParamField>
+
+<ParamField body="mcp.<name>.args" type="string[]">
+  Arguments for `command`.
+</ParamField>
+
+<ParamField body="mcp.<name>.env" type="map<string, string>">
+  Environment for a stdio server. Values expand `${VAR}`.
+</ParamField>
+
+<ParamField body="mcp.<name>.url" type="string">
+  Endpoint for a streamable HTTP server.
+</ParamField>
+
+<ParamField body="mcp.<name>.headers" type="map<string, string>">
+  HTTP headers. Values expand `${VAR}`.
+</ParamField>
+
+<ParamField body="mcp.<name>.include_tools" type="string[]">
+  Load only these tools.
+</ParamField>
+
+<ParamField body="mcp.<name>.exclude_tools" type="string[]">
+  Skip these tools.
+</ParamField>
+
+<ParamField body="mcp.<name>.tool_overrides" type="object">
+  Per-tool corrections, as `[mcp.<name>.tool_overrides.<tool>]`.
+</ParamField>
+
+<ParamField body="mcp.<name>.tool_overrides.<name>.description" type="string">
+  Replaces the server's description of the tool.
+</ParamField>
+
+<ParamField body="mcp.<name>.tool_overrides.<name>.output_schema" type="object">
+  The tool's output shape.
+</ParamField>
+
+<ParamField body="mcp.<name>.tool_overrides.<name>.output_example" type="object">
+  An example of the tool's output.
+</ParamField>

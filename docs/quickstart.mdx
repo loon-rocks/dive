@@ -10,7 +10,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
   <Tab title="Automated">
     ## Automated setup
 
-    Grab a binary, scaffold a project, and hand the setup to your coding agent. A [skill](#let-your-agent-finish-the-setup) walks the agent through wiring a provider, adding tools, and drafting a first plan against your own data — then you review it in the [workbench](/building/workbench) and run it. Prefer to do it by hand?
+    Grab a binary, scaffold a project, and hand the setup to your coding agent. A [skill](#let-your-agent-finish-the-setup) walks the agent through wiring a provider, adding tools, and drafting a first plan against your own data — then you review it in the [workbench](/getting-started/workbench) and run it. Prefer to do it by hand?
 
     <Steps>
       <Step title="Install graph">
@@ -37,11 +37,11 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         This installs `/graph-project-setup` for Claude Code, Cursor, Codex, and most other agents. Point your agent at it — "set up graph in this project" — and it asks a few questions, then picks a provider and models, finds and connects the MCP servers or tools you want, scaffolds a first plan against your real data, and runs it end to end. It reads the live docs and example plans as it goes, so the result matches the current release.
 
         <Tip>
-          The same `npx skills add` command installs two more: `/graph-plan-authoring`, which teaches the agent to build and repair plans with the [authoring commands](/plans/authoring#authoring-from-the-command-line), and `/graph-github-actions-setup`, which scaffolds a merge gate or PR reviewer as a plan — see [CI checks](/cookbook/ci-checks) for the worked example.
+          The same `npx skills add` command installs two more: `/graph-plan-authoring`, which teaches the agent to build and repair plans with the [authoring commands](/reference/cli/plan), and `/graph-github-actions-setup`, which scaffolds a merge gate or PR reviewer as a plan.
         </Tip>
       </Step>
       <Step title="Open it in the workbench">
-        Before you commit the plan, open it in the [workbench](/workbench/plan-workbench) — a dual-pane TUI for reviewing, tweaking, and test-running plans:
+        Before you commit the plan, open it in the [workbench](/getting-started/workbench) — a dual-pane TUI for reviewing, tweaking, and test-running plans:
 
         ```bash
         graph workbench plan project_status
@@ -107,7 +107,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         graph tools test linear__list_issues '{"priority":1,"limit":5}'
         ```
 
-        Every probe also teaches graph what the tool returns (the [shape cache](/tools/shape-cache)), so the references you write next are grounded in real output — and the workbench's drafting agent gets smarter too.
+        Every probe also teaches graph what the tool returns (its [shape](/tools/guides/tool-shapes)), so the references you write next are grounded in real output — and the workbench's drafting agent gets smarter too.
       </Step>
       <Step title="Build the plan in the workbench">
         Open a blank draft and describe the goal — the agent drafts the plan into the side pane, where you inspect, validate, and test-run it:
@@ -116,7 +116,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         graph wb plan     # or just graph wb, and say you want a plan
         ```
 
-        Prefer to write the YAML yourself? [Authoring plans](/plans/authoring) builds one from scratch. Either way, `Ctrl+S` (or a save in the workbench) writes it to `./.graph/plans/`.
+        Prefer to write the YAML yourself? The [plan file reference](/plans/reference/plan-file) covers every field. Either way, `Ctrl+S` (or a save in the workbench) writes it to `./.graph/plans/`.
       </Step>
       <Step title="Run it headless">
         ```bash
@@ -135,20 +135,20 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
 | --- | --- |
 | `./.graph/config.toml` | project config, deep-merged over global |
 | `~/.config/graph/config.toml` | optional global config (providers, models, MCP servers) |
-| `./.graph/plans/` | your [plan documents](/plans/authoring) (`~/.config/graph/plans/` for global ones) |
-| `./.graph/tools/` | your [user-defined tools](/tools/user-defined) (`~/.config/graph/tools/` for global ones) |
+| `./.graph/plans/` | your [plan files](/plans/reference/plan-file) (`~/.config/graph/plans/` for global ones) |
+| `./.graph/tools/` | your [tool files](/tools/reference/tool-file) (`~/.config/graph/tools/` for global ones) |
 | `~/.local/share/graph/` | threads and learned tool shapes, as plain files |
 
 ## What's next
 
 <Columns cols={2}>
   <Column>
-    <Card title="Core concepts" icon="sparkles" href="getting-started/concepts">
+    <Card title="Core concepts" icon="sparkles" href="/getting-started/concepts">
       learn about the graph primitives
     </Card>
   </Column>
   <Column>
-    <Card title="Add your MCP tools" icon="sparkles" href="tools/mcp-servers">
+    <Card title="Add your MCP tools" icon="sparkles" href="/integrating/mcp/guides/connect-mcp-server">
       Integrate with everything via MCP
     </Card>
   </Column>

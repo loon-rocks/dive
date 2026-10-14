@@ -1,0 +1,17 @@
+version: 2
+identifier: unreleased_changes
+name: Unreleased changes
+description: The commits since the latest release.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.url}}'
+    head: HEAD
+finish:
+  output:
+    since: '{{release.tag}}'
+    commits: '{{commits.commits}}'

@@ -1,0 +1,57 @@
+---
+title: "graph plan step update"
+sidebarTitle: "update"
+description: "Set one attribute of a step"
+playground: "none"
+keywords: ["graph plan step update"]
+---
+
+Sets one attribute of a step. `tool` takes a tool name or a control step (`exit`, `agent`, `ask`, `route`, `filter`, `map`, `reduce`), `input` takes the step's whole input object, and `reasoning` takes a string.
+
+## Arguments
+
+<ParamField path="NAME|PATH" type="string" required>
+  The plan's identifier or YAML file path
+</ParamField>
+
+<ParamField path="ID" type="string" required>
+  The step's id
+</ParamField>
+
+<ParamField path="ATTRIBUTE" type="enum<string>" required>
+  The attribute to set
+
+  Available options: `tool`, `input`, `reasoning`
+</ParamField>
+
+<ParamField path="VALUE" type="string" required>
+  `input` takes JSON, @file, or -; the others take a string
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph plan step update [OPTIONS] <NAME|PATH> <ID> <ATTRIBUTE> <VALUE>
+```
+
+```bash Example 1
+graph plan step update weekly_changes E1 reasoning "Commit subjects are enough for a summary"
+```
+
+```bash Example 2
+graph plan step update weekly_changes E1 input @e1.json
+```
+
+</RequestExample>

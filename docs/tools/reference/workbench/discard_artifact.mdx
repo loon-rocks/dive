@@ -1,0 +1,21 @@
+---
+title: "workbench__discard_artifact"
+sidebarTitle: "workbench__discard_artifact"
+description: "Discards the agent or tool draft in the pane."
+playground: "none"
+keywords: ["workbench__discard_artifact"]
+---
+
+- Plan drafts can't be discarded.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="kind" type="enum<string>" required>
+  What the draft is
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>

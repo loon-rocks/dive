@@ -1,0 +1,32 @@
+---
+title: "Data directory"
+description: "Where graph keeps threads, tool shapes and the workbench log."
+keywords: ["data directory", "data_dir", "storage", "threads", "shapes"]
+---
+
+graph keeps its runtime state in one directory, `~/.local/share/graph` by default. Set [`settings.data_dir`](/reference/configuration#param-settings-data-dir) to move it. graph creates the directory the first time it needs it.
+
+## Layout
+
+| Path | Contents |
+| --- | --- |
+| `FORMAT` | The directory's [file version](/reference/file-versions), as a single number. |
+| `threads/<id>/meta.json` | A thread's title, timestamps, message count, and the agent that owns it and the one that's active. |
+| `threads/<id>/entries.jsonl` | A thread's history, one entry per line: messages, handoffs between agents, and subagent runs. |
+| `threads/<id>/.lock` | A lock file that keeps concurrent writers in order. |
+| `shapes/<tool>.json` | The observed output of one tool: an inferred schema, an example, and how many times it was seen. |
+| `workbench.log` | The workbench's log, appended across sessions. |
+
+Every file is plain JSON or JSONL, so `cat` and `jq` can read it. Thread IDs are 12 hex characters. In a shape file name, any character other than a letter, digit, `_`, `.` or `-` is percent-encoded.
+
+## Share a directory between processes
+
+Several graph processes can use one data directory at the same time. Whole files are written to a temporary file and renamed into place, so a reader never sees a partial write. Appends to a thread are serialized by its lock file. When two processes record the same tool shape, the last write wins.
+
+Keep the directory on a local filesystem. File locks aren't reliable on network filesystems such as NFS.
+
+## Back up and reset
+
+- To back up your state, copy the directory.
+- To discard learned shapes, delete `shapes/`. graph records them again as tools run.
+- To delete a thread, use [`graph threads rm`](/reference/cli/threads/rm).

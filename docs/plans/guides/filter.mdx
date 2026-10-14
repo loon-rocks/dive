@@ -1,0 +1,116 @@
+---
+title: "Select items with filter"
+description: "Keep only the items in a list that pass a condition."
+keywords: ["filter", "where", "infer", "items", "dropped"]
+---
+
+`breaking_changes` keeps the commits since a git ref whose subject marks a breaking change, like `feat!:`. Its `breaking` step checks each commit once.
+
+<RequestExample>
+
+```yaml .graph/plans/breaking_changes.yaml
+version: 2
+identifier: breaking_changes
+name: Breaking changes
+description: The breaking changes since a release tag.
+input_schema:
+  type: object
+  required:
+  - base
+  properties:
+    base:
+      type: string
+      description: The ref to start after, such as a release tag
+steps:
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{input.base}}'
+    head: HEAD
+- id: breaking
+  tool_name: filter
+  input:
+    over: '{{commits.commits}}'
+    where:
+      value: '{{item.subject}}'
+      op: contains
+      to: '!:'
+finish:
+  output:
+    kept: '{{breaking.count}}'
+    dropped: '{{breaking.dropped_count}}'
+    commits: '{{breaking.items}}'
+```
+
+</RequestExample>
+
+## Keep the items that match
+
+`where` compares a field of each item, read as `{{item.<field>}}`, with no model call. Run the plan from a release tag:
+
+```bash
+graph plan run breaking_changes \
+  --input base=v0.15.0
+```
+
+`{{breaking.items}}` holds the 7 commits that passed, in their original order, and `{{breaking.dropped}}` the 21 that didn't:
+
+```text
+→ filter {"concurrency":1,"mode":"where","over":28}
+✓ filter 788.0µs
+{
+  "commits": [
+    {
+      "short_sha": "648d34e",
+      "subject": "feat!: plans state how they finish with a required finish key…",
+      …
+    },
+    …
+  ],
+  "dropped": 21,
+  "kept": 7
+}
+```
+
+## Ask a model about each item
+
+When no field decides, replace `where` with an `infer` question. Each item gets its own yes/no verdict, and `concurrency` sets how many run at once:
+
+```yaml .graph/plans/breaking_changes.yaml
+- id: breaking
+  tool_name: filter
+  input:
+    over: '{{commits.commits}}'
+    infer: 'Could this change break an existing plan, config or script? {{item.subject}}'
+    concurrency: 8
+```
+
+The same run now makes one model call per commit:
+
+```text
+→ filter {"concurrency":8,"mode":"infer","over":28}
+✓ filter 6.2s
+  28 calls · 22k in / 3k out · $0.04
+{
+  …
+  "dropped": 4,
+  "kept": 24
+}
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Iterate with map and reduce" icon="repeat" href="/plans/guides/map-and-reduce">
+    Run steps on each item that passed.
+  </Card>
+  <Card title="Branch with route" icon="code-branch" href="/plans/guides/branching">
+    Take different steps depending on the data.
+  </Card>
+  <Card title="Stop early with exit gates" icon="right-from-bracket" href="/plans/guides/exit-gates">
+    End the plan when nothing passes.
+  </Card>
+  <Card title="Run a plan" icon="play" href="/plans/guides/run-a-plan">
+    Run a plan with inputs and use its result.
+  </Card>
+</CardGroup>

@@ -1,0 +1,71 @@
+---
+title: "builtin__check_plan"
+sidebarTitle: "builtin__check_plan"
+description: "Validates a plan written as YAML, optionally after applying a patch to it."
+playground: "none"
+keywords: ["builtin__check_plan"]
+---
+
+## Checks
+
+- Structure, templates, and every tool against the catalog.
+- Agent steps list their tools; `agent__chat` isn't used.
+
+## Patches
+
+- `patch` replaces steps by id, removes ids, or sets `input_schema` or `output` before checking.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="patch" type="string">
+  Optional YAML patch to apply first
+</ParamField>
+
+<ParamField body="pending" type="boolean">
+  Answers that the plan has not taken in yet; the plan is not settled while true
+</ParamField>
+
+<ParamField body="search" type="string[]">
+  Tools the model asked to be searched for; the plan is not settled while any are pending
+</ParamField>
+
+<ParamField body="yaml" type="string" required>
+  The plan as YAML
+</ParamField>
+
+## Output
+
+<ResponseField name="plan" type="object | null" required>
+</ResponseField>
+
+<ResponseField name="problems" type="string[]" required>
+</ResponseField>
+
+<ResponseField name="search" type="string[]">
+  The tool searches still requested, including any written into the plan by mistake
+</ResponseField>
+
+<ResponseField name="settled" type="boolean" required>
+  Valid, with no search requested and no answers pending
+</ResponseField>
+
+<ResponseField name="valid" type="boolean" required>
+</ResponseField>
+
+<ResponseField name="yaml" type="string" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__check_plan
+  input:
+    yaml: "{{input.yaml}}"
+```
+
+</RequestExample>

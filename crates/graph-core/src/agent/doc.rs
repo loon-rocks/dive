@@ -29,7 +29,7 @@ pub const TEMPLATE_ROOTS: &[&str] = &["rules", "session"];
 
 pub const SESSION_KEYS: &[&str] = &["date", "user"];
 
-const AGENT_KEYS: &[&str] = &[
+pub(crate) const AGENT_KEYS: &[&str] = &[
     "name",
     "description",
     "model",

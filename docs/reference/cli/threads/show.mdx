@@ -1,0 +1,45 @@
+---
+title: "graph threads show"
+sidebarTitle: "show"
+description: "Show a thread's messages"
+playground: "none"
+keywords: ["graph threads show"]
+---
+
+## Arguments
+
+<ParamField path="ID" type="string" required>
+  The thread id, as `graph threads list` prints it
+</ParamField>
+
+## Options
+
+<ParamField query="--state" type="boolean">
+  Include the full runtime state
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph threads show [OPTIONS] <ID>
+```
+
+```bash Example 1
+graph threads show 4f1c9a2b7d3e
+```
+
+```bash Example 2
+graph threads show 4f1c9a2b7d3e --state --json
+```
+
+</RequestExample>

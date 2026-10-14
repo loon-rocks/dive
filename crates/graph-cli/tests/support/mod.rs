@@ -1,7 +1,7 @@
 //! A hermetic scratch environment for driving the real `graph` binary.
 //!
 //! These are characterization tests: they pin the machine-facing contract in
-//! `docs/reference/scripting-contract.mdx` — which stream carries what, which
+//! `docs/reference/cli/error-handling.mdx` — which stream carries what, which
 //! exit code means what, which keys are in each envelope — so that refactors
 //! of how commands emit their results are provably behavior-preserving.
 //!

@@ -1,0 +1,36 @@
+---
+title: "workbench__restore_draft"
+sidebarTitle: "workbench__restore_draft"
+description: "Undoes the last replacement of the plan draft."
+playground: "none"
+keywords: ["workbench__restore_draft"]
+---
+
+- Covers loads, new drafts and edits. Calling it again redoes.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Not marked read-only |
+
+## Input
+
+Takes no input.
+
+## Output
+
+<ResponseField name="dirty" type="boolean">
+</ResponseField>
+
+<ResponseField name="restored" type="string">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "dirty": true,
+  "restored": "sprint_report"
+}
+```
+
+</ResponseExample>

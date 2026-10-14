@@ -1,0 +1,37 @@
+---
+title: "workbench__try_artifact"
+sidebarTitle: "workbench__try_artifact"
+description: "Runs the plan or tool draft in the pane."
+playground: "none"
+keywords: ["workbench__try_artifact"]
+---
+
+## Behavior
+
+- A tool runs once on a sample input, after you approve it.
+- A plan runs with its steps streaming to the pane. `gated` or `breakpoints` make it a debug run that pauses for you.
+- Agent drafts can't be run.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Has side effects |
+
+## Input
+
+<ParamField body="breakpoints" type="string[]">
+  Plans only: top-level step ids to pause at. Implies gated; the run proceeds until a breakpoint (or a failing call) and pauses for the USER.
+</ParamField>
+
+<ParamField body="gated" type="boolean">
+  Plans only: debug run, pausing for the user's decisions and breaking on errors. Default false.
+</ParamField>
+
+<ParamField body="input" type="object">
+  A tool's sample input matching its input_schema, or a plan's input validated against its input_schema
+</ParamField>
+
+<ParamField body="kind" type="enum<string>" required>
+  What the draft is
+
+  Available options: `plan`, `agent`, `tool`
+</ParamField>

@@ -1,0 +1,83 @@
+---
+title: "Tool file"
+description: "One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the pack tool it names instead."
+playground: "none"
+keywords: ["Tool file", "schema", "YAML"]
+---
+
+| File type | Location |
+| --- | --- |
+| YAML | `./.graph/tools/<name>.yaml` (project)<br />`~/.config/graph/tools/<name>.yaml` (global)<br />`<tools dir>/builtin/<name>.yaml` (replaces a pack tool) |
+
+Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/tylerdavis/graph/main/docs/schemas/tool.schema.json`.
+
+## Common fields
+
+<ParamField body="version" type="integer">
+  The file version the document is written in. Omitted means 1; `graph tools migrate` brings a file to the current version.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Letters, digits, `_` and `-`. The tool is called as `user__<name>`.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  What the tool does and returns. Agents and the plan drafter read it when choosing tools.
+</ParamField>
+
+<ParamField body="kind" type="enum<string>" required>
+  What the tool runs. Each kind takes its own fields, listed below.
+
+  Available options: `exec`, `prompt`, `reshape`, `decision`
+</ParamField>
+
+<ParamField body="input_schema" type="object">
+  JSON Schema for the input, validated before the tool runs. Templates reference it as `{{input.<field>}}`.
+</ParamField>
+
+<ParamField body="output_schema" type="object">
+  JSON Schema for the output. A `prompt` tool enforces it as structured output; for every kind it tells drafters what the tool returns.
+</ParamField>
+
+<ParamField body="read_only" type="boolean">
+  Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.
+</ParamField>
+
+## Kinds
+
+Each `kind` adds its own fields.
+
+- [`exec`](/tools/reference/tool-file/exec): Runs a command.
+- [`prompt`](/tools/reference/tool-file/prompt): One model call.
+- [`reshape`](/tools/reference/tool-file/reshape): Builds a value in a new JSON shape from the input, with no process and no model call.
+- [`decision`](/tools/reference/tool-file/decision): Asks a decision model typed questions about the same state, each answered independently.
+
+<RequestExample>
+
+```yaml Example
+version: 2
+name: open_prs
+description: Open pull requests in the current repository, newest first.
+kind: exec
+command: gh
+args:
+- pr
+- list
+- --state
+- open
+- --json
+- number,title,author
+- --limit
+- '{{input.limit}}'
+read_only: true
+input_schema:
+  type: object
+  required:
+  - limit
+  properties:
+    limit:
+      type: integer
+      description: Most pull requests to return
+```
+
+</RequestExample>

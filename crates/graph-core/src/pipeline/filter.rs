@@ -106,7 +106,8 @@ pub fn filter_tool_def() -> crate::tools::ToolDef {
             "count": 2,
             "items": [{"…": "…"}, {"…": "…"}],
             "dropped": [{"…": "…"}],
-            "dropped_count": 1
+            "dropped_count": 1,
+            "probabilities": [0.91, 0.12, 0.77]
         })),
         read_only: Some(true), // evaluates conditions; never dispatches
     }

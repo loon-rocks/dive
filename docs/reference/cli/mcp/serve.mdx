@@ -1,0 +1,33 @@
+---
+title: "graph mcp serve"
+sidebarTitle: "serve"
+description: "Serve graph's plans and authoring commands to an agent over MCP (stdio)"
+playground: "none"
+keywords: ["graph mcp serve"]
+---
+
+## Options
+
+<ParamField query="--dir" type="string">
+  Project directory to serve from — the one holding `.graph/`. MCP clients launch servers with an arbitrary working directory, so without this the plan catalog resolves against wherever the client happened to be
+
+  Format: `PATH`.
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph mcp serve [OPTIONS]
+```
+
+```bash Example
+graph mcp serve --dir ~/code/my-project
+```
+
+</RequestExample>

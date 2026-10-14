@@ -1,0 +1,27 @@
+---
+title: "graph_tools_test"
+sidebarTitle: "graph_tools_test"
+description: "Calls one tool directly and returns its result."
+playground: "none"
+keywords: ["graph_tools_test"]
+---
+
+## Behavior
+
+- Use it to see a tool's real output before writing templates against it.
+- A tool that reports failure returns `isError: true` instead of failing the call.
+- Control steps can't be tested this way; run a plan instead.
+- Mirrors `graph tools test`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `graph mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="input" type="object">
+  The tool's input object.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+</ParamField>

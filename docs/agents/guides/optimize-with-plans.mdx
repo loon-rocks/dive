@@ -1,0 +1,87 @@
+---
+title: "Optimize an agent with plans"
+description: "Move tool calls an agent repeats every time into a plan it calls once, so it makes fewer model calls."
+keywords: ["plans as tools", "plan__", "cost", "efficiency"]
+---
+
+Every tool call an agent makes costs a model round. When it makes the same calls on every run, a plan can make them instead, with no model in between.
+
+## Find the repeated calls
+
+Run the agent and read the tool calls on stderr. This `release_notes` agent looks up the latest release, then reads the commits since it:
+
+```bash
+graph ask --agent release_notes \
+  "Draft release notes for what is unreleased."
+```
+
+```text
+→ builtin__gh_release {"tag":""}
+✓ builtin__gh_release 1.3s
+→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+✓ builtin__git_log 69.9ms
+3 calls · 10k in / 2k out (4k cached) · $0.06
+```
+
+It makes the same two calls every time, so they can move into a plan.
+
+## Put the calls in a plan
+
+Save the sequence as `./.graph/plans/unreleased_changes.yaml`. The `output` finish returns the results as JSON without a model call:
+
+```yaml
+version: 2
+identifier: unreleased_changes
+name: Unreleased changes
+description: The commits since the latest release.
+steps:
+- id: release
+  tool_name: builtin__gh_release
+  input: {}
+- id: commits
+  tool_name: builtin__git_log
+  input:
+    base: '{{release.tag}}'
+    head: HEAD
+finish:
+  output:
+    since: '{{release.tag}}'
+    commits: '{{commits.commits}}'
+```
+
+## Give the agent the plan
+
+Replace the tools in the agent's `tools` list with the plan, as `plan__<identifier>`:
+
+```yaml
+tools:
+- plan__unreleased_changes
+```
+
+## Compare
+
+Run the same question again. The agent calls the plan once, and the plan makes the tool calls:
+
+```text
+→ plan__unreleased_changes {}
+  → builtin__gh_release {}
+  ✓ builtin__gh_release 1.1s
+  → builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+  ✓ builtin__git_log 51.7ms
+✓ plan__unreleased_changes 1.2s
+2 calls · 5k in / 1k out · $0.04
+```
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
+    Describe the work and let the workbench write the plan.
+  </Card>
+  <Card title="Steer tool choice" icon="signs-post" href="/agents/guides/steer-tool-choice">
+    Help the agent pick the plan over other tools.
+  </Card>
+  <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
+    Run the agent with `graph ask` and `graph chat`.
+  </Card>
+</CardGroup>

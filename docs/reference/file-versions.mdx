@@ -1,84 +1,62 @@
 ---
 title: "File versions"
-description: "Versions for config, plans, tools, agents, and the data directory"
-icon: "code-branch"
+description: "The version each kind of graph file carries, which versions a graph release reads, and how to upgrade files."
+keywords: ["file versions", "migrate", "compatibility", "upgrade"]
 ---
 
-graph reads five kinds of file it did not write in the same release: `config.toml`, plan documents, tool documents, agent documents, and the data directory. Each carries a **file version** — an integer, separate from the binary's version and from each other — that moves every time that file's schema changes.
+Each kind of file graph reads carries its own version number, separate from graph's release version and from each other.
 
-| File | Where the version lives | Missing means |
-| --- | --- | --- |
-| `config.toml` (global and project) | top-level `version = 1` | version 1 |
-| plan documents | top-level `version: 1` | version 1 |
-| tool documents | top-level `version: 1` | version 1 |
-| agent documents | top-level `version: 1` | version 1 |
-| data directory | `<data_dir>/FORMAT`, written on first open | version 1 |
-
-`graph version` prints the binary version and the file version each kind is written at:
-
-```text
-$ graph version
-graph 0.13.0
-file versions: config 1, plan 1, tool 1, agent 1, store 1
-```
-
-Each file kind has a **support window**: the oldest version this binary still reads through the one it writes. The line shows the window whenever it is wider than one version (`config 3 (reads 2-3)`), and `graph version --json` reports `oldest` and `current` under `fileVersions`.
-
-## The compatibility promise
-
-- **Every schema change bumps the file version.** A new optional key, a removed key, a rename, a changed shape: all of them. The version is the schema's generation number, so two binaries that agree on it agree on every key.
-- **A binary reads every version in its window, and nothing outside it.** Older files inside the window are migrated in memory as they load; the file on disk is not modified until you run a `migrate` command. The data directory is the exception: graph wrote it, so graph migrates it in place (see [Data directory](#data-directory)). Upgrading graph within a window never requires touching a file first.
-- **A file outside the window fails, by name, before the schema is consulted.** The message says which file, which version it found, which versions this binary reads, and what to do: upgrade graph for a newer file, or migrate an older file with a release that still reads it. Never an "unknown field" for a key that is correct.
-- **The window narrows only at a major release**, announced one minor release ahead. `graph config check` reports files that would fall outside it.
-
-Version 1 is the schema graph has always read; introducing the versions changed nothing for existing files.
-
-## What a bump carries
-
-| Change | What the migration does |
+| File | Current version |
 | --- | --- |
-| add an optional key with a default | nothing — a no-op step, so the generation number still moves |
-| remove a key | deletes it; notes a value the new version cannot honor |
-| rename a key or an enum value | moves the value under the new name |
-| change a key's shape (string → table) | rewrites the value into the new shape |
-| change a key's meaning, same shape | rewrites the value so it means what it did |
-| add a required key with a derivable value | derives and writes it |
-| add a required key with no derivable value | fails, naming the key to set |
+| config.toml, global and project | {{config_file_version}} |
+| Plan file | {{plan_file_version}} |
+| Tool file | {{tool_file_version}} |
+| Agent file | {{agent_file_version}} |
+| [Data directory](/reference/data-directory) | {{data_directory_version}} |
 
-A migration is a forward-only step from version N to N+1. The binary carries the chain for its whole window, so a version 2 file on a binary that writes version 4 runs two steps; each step is verified by a frozen fixture pair in the repository (the version N file and the version N+1 file it must produce), and the fixtures for every version in the window must still load on every release.
+## Check which versions your graph reads
 
-Files graph writes always carry the current version. A plan re-saved from a newer workbench therefore carries the newer number even if it uses nothing new, and an older binary outside that window refuses it — the number is the contract, not the keys the file happens to use.
+[`graph version`](/reference/cli/version) prints the version graph writes for each kind of file, and the oldest it still reads when that differs:
 
-## Config
-
-Both layers are migrated **independently, before they merge**: the global file and the project file may sit at different versions. The `version` key itself never reaches the merged config.
-
-```text
-graph config check              # each file's version and whether the merged config loads
-graph config migrate            # rewrite ./.graph/config.toml to the current version
-graph config migrate --global   # the same for ~/.config/graph/config.toml
+```bash
+graph version
 ```
 
-`migrate` preserves comments and layout; it writes `version` as the first key and leaves everything else where it was. A file already at the current version is left untouched. On a terminal, any command that loads a config file older than the current version prints a one-line hint to run `migrate`; non-interactive runs (CI, `graph mcp serve`) stay silent, since the in-memory upgrade already happened.
+`graph version --json` reports both numbers for every kind under `fileVersions`, as `current` and `oldest`.
 
-## Plans, tools, and agents
+## Compatibility
 
-A plan file outside the binary's window is **skipped with a diagnostic** and stays out of the catalog, exactly like a file that fails to parse: `plan list --json` reports it under `skipped`, and naming it (`plan run`, `plan show`) reports the version mismatch rather than "no plan named". A tool file outside the window fails the tool catalog by name.
+- graph reads every version from the oldest it supports to the current one. It upgrades an older file in memory as it loads and leaves the file on disk unchanged.
+- graph refuses a file outside that range before reading its contents. The error names the file, the version it found and the versions graph reads.
 
-```text
-graph plan migrate <name|path>      # rewrite a plan file to the current plan version
-graph tools migrate <path>          # rewrite a tool file to the current tool version
-graph agents migrate <path>         # rewrite an agent file to the current agent version
+Files graph writes, such as a plan saved from the workbench, always carry the current version. A graph release that doesn't read that version refuses them, even if they use no new keys.
+
+## Deprecation
+
+graph currently reads every file version, back to version 1. A future release will drop the oldest versions, and a deprecation process will give you notice and time to migrate before it does.
+
+## Upgrade your files
+
+Run the migrate command for each file you want to bring to the current version. A file already at the current version is left untouched. Commit the migrated files so everyone on your team moves together.
+
+```bash
+graph config check
+graph config migrate
+graph config migrate --global
+graph plan migrate .graph/plans/weekly_changes.yaml
+graph tools migrate .graph/tools/summarize.yaml
+graph agents migrate .graph/agents/release_notes.yaml
 ```
 
-An agent file outside the window, or one that fails to parse, is reported by `graph agents list` and `graph agents validate` with its path.
+- **config.toml.** `graph config check` reports each config file's version as `current`, `migrate`, `too new` or `too old`. `graph config migrate` keeps comments and layout. graph upgrades the global and project files separately, so they can be at different versions. In a terminal, graph prints a reminder to migrate when it loads an older config file.
+- **Plan, tool and agent files.** Migrating keeps the order of keys and the comment block at the top of the file. Comments further down are dropped, and the command reports how many.
 
-Both rewrite the document through the YAML tree, so field order survives. A **leading comment block** (the lines before the first key) is preserved verbatim; comments elsewhere in the file do not survive a YAML round-trip, and the command says how many it dropped. Files written by graph itself — the workbench's save, `plan new`, `plan draft`, `plan show`, `agents show` — always carry the current `version`.
+## Files outside the range
 
-Every plan, tool, and agent file is read strictly: an unknown key anywhere in a step, a tool document, or an agent document is a load error naming the key, never silently ignored. A misspelled `timeout_secs` used to be dropped on the floor; now the file is skipped and the diagnostic says why.
+- A plan file graph can't read is left out of the catalog. `graph plan list --json` lists it under `skipped`, and running it by name reports the version problem.
+- A tool file graph can't read fails tool loading with the file's name.
+- An agent file graph can't read is reported with its path by `graph agents list` and `graph agents validate`.
 
-## Data directory
+## Data directory upgrades
 
-`FileStore` writes `<data_dir>/FORMAT` holding the store version on first open and refuses to open a directory whose marker is outside its window. That refusal matters more here than anywhere else: thread entries are appended under a lock without re-reading the file, so an older graph must never write into a layout it does not understand.
-
-A directory at an older version inside the window is migrated **in place** the first time a newer graph opens it, with no command to run. The migration holds a lock on `FORMAT`, so concurrent graph processes wait for it rather than run it twice, and it raises the marker as each step finishes. After that, older binaries refuse the directory by name. Keep a copy of the data directory if you may need to go back to an older graph.
+graph upgrades an older data directory in place the first time a newer release opens it. Concurrent graph processes wait for the upgrade to finish rather than run it twice. Afterwards, releases that don't read the new version refuse the directory, so copy it first if you may need to go back to an older graph.
