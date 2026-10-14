@@ -53,3 +53,23 @@ async fn discovers_and_invokes_tools() {
         assert!(outcome.is_error)
     }
 }
+
+#[tokio::test]
+#[ignore = "requires npx and network"]
+async fn reports_server_info_and_tools_for_pack_requirements() {
+    let manager = manager();
+    let identity = manager
+        .server_identity("everything")
+        .await
+        .expect("configured")
+        .expect("connects");
+    assert!(!identity.name.is_empty());
+    assert!(semver_like(&identity.version), "{}", identity.version);
+    assert!(identity.tools.iter().any(|t| t.name == "everything__echo"));
+    assert!(manager.server_identity("missing").await.is_none());
+    manager.shutdown().await;
+}
+
+fn semver_like(version: &str) -> bool {
+    version.split('.').count() >= 2
+}

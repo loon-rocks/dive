@@ -93,6 +93,13 @@ pub struct ToolServer {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ServerIdentity {
+    pub name: String,
+    pub version: String,
+    pub tools: Vec<ToolDef>,
+}
+
 #[async_trait]
 pub trait ToolRegistry: Send + Sync {
     /// Every tool this registry exposes, already namespaced and filtered.
@@ -103,6 +110,10 @@ pub trait ToolRegistry: Send + Sync {
 
     async fn servers(&self) -> Vec<ToolServer> {
         Vec::new()
+    }
+
+    async fn server_identity(&self, _server: &str) -> Option<Result<ServerIdentity, String>> {
+        None
     }
 }
 
@@ -149,6 +160,15 @@ impl ToolRegistry for CompositeRegistry {
         }
         all
     }
+
+    async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
+        for registry in &self.registries {
+            if let Some(identity) = registry.server_identity(server).await {
+                return Some(identity);
+            }
+        }
+        None
+    }
 }
 
 /// Wraps a registry and hides a fixed set of tool names from `tools()`,
@@ -181,6 +201,9 @@ impl ToolRegistry for ExcludingRegistry {
     }
     async fn servers(&self) -> Vec<ToolServer> {
         self.inner.servers().await
+    }
+    async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
+        self.inner.server_identity(server).await
     }
 }
 
@@ -216,6 +239,9 @@ impl ToolRegistry for AllowlistRegistry {
     }
     async fn servers(&self) -> Vec<ToolServer> {
         self.inner.servers().await
+    }
+    async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
+        self.inner.server_identity(server).await
     }
 }
 

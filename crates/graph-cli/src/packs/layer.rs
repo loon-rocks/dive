@@ -5,7 +5,7 @@ use graph_config::pack::{
     load_lock, load_manifest, write_lock, LayerKind, PackEntry, PackLock, MANIFEST_FILE, PACKS_DIR,
 };
 use graph_config::{CONFIG_FORMAT, FORMAT_KEY};
-use graph_core::packs::{check_installed_name, load_pack, PackSource};
+use graph_core::packs::{check_installed_name, load_pack, LoadedPack, PackSource};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -164,7 +164,7 @@ impl Fetched {
         layer: &Layer,
         entry: Option<&PackEntry>,
         mcp_servers: &BTreeSet<String>,
-    ) -> Result<String, Vec<String>> {
+    ) -> Result<(String, LoadedPack), Vec<String>> {
         check_installed_name(name, mcp_servers).map_err(|problem| vec![problem])?;
         let source = PackSource {
             name: name.to_string(),
@@ -175,13 +175,15 @@ impl Fetched {
         let (include, exclude) = entry
             .map(|entry| (entry.include.as_slice(), entry.exclude.as_slice()))
             .unwrap_or_default();
-        load_pack(source, include, exclude).map_err(|problems| {
+        let loaded = load_pack(source, include, exclude).map_err(|problems| {
             problems
                 .into_iter()
                 .map(|problem| self.relative(problem))
                 .collect::<Vec<_>>()
         })?;
-        content_hash(&self.path).map_err(|e| vec![format!("hashing the staged pack: {e}")])
+        let hash =
+            content_hash(&self.path).map_err(|e| vec![format!("hashing the staged pack: {e}")])?;
+        Ok((hash, loaded))
     }
 
     fn relative(&self, problem: String) -> String {

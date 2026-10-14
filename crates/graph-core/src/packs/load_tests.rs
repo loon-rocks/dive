@@ -655,3 +655,261 @@ async fn the_agent_toolbox_routes_pack_items_behind_the_visibility_check() {
     assert!(hidden.is_error);
     assert!(hidden.result.to_string().contains("pack 'example'"));
 }
+
+fn pack_requiring(requires: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    example_pack(dir.path());
+    write(
+        dir.path(),
+        "pack.toml",
+        &format!("{MANIFEST}\n[requires]\n{requires}\n"),
+    );
+    dir
+}
+
+fn other_os() -> &'static str {
+    if std::env::consts::OS == "linux" {
+        "macos"
+    } else {
+        "linux"
+    }
+}
+
+#[test]
+fn a_pack_needing_a_newer_graph_or_another_os_is_refused_by_name() {
+    let dir = pack_requiring("graph = \">=99\"");
+    let errors = load_pack(source("example", dir.path()), &[], &[]).unwrap_err();
+    assert_eq!(
+        errors,
+        [format!(
+            "pack 'example': requires.graph: needs graph >=99; this is graph {}",
+            env!("CARGO_PKG_VERSION")
+        )]
+    );
+
+    let dir = pack_requiring(&format!("os = [\"{}\"]", other_os()));
+    let errors = load_pack(source("example", dir.path()), &[], &[]).unwrap_err();
+    assert_eq!(
+        errors,
+        [format!(
+            "pack 'example': requires.os: needs {}; this machine runs {}",
+            other_os(),
+            std::env::consts::OS
+        )]
+    );
+
+    let dir = pack_requiring(&format!(
+        "graph = \">=0.1\"\nos = [\"{}\"]",
+        std::env::consts::OS
+    ));
+    assert!(load_pack(source("example", dir.path()), &[], &[]).is_ok());
+}
+
+const MISSING: &str =
+    "binaries = [\"graph-pack-no-such-binary\"]\nenv = [\"GRAPH_PACK_TEST_NEVER_SET\"]";
+
+#[test]
+fn a_pack_missing_a_binary_or_env_var_loads_with_the_gaps_recorded() {
+    let dir = pack_requiring(MISSING);
+    let pack = load_pack(source("example", dir.path()), &[], &[]).unwrap();
+    assert_eq!(
+        pack.needs.unmet,
+        [
+            "requires.binaries: graph-pack-no-such-binary not found on PATH",
+            "requires.env: GRAPH_PACK_TEST_NEVER_SET not set (or empty)",
+        ]
+    );
+    let mut set = PackSet::default();
+    set.add(&pack);
+    assert_eq!(set.needs["example"], pack.needs);
+}
+
+#[test]
+fn mcp_requirements_record_the_literal_server_tools_plans_and_agents_name() {
+    let dir = pack_requiring("[requires.mcp.everything]\nserver = \"mcp-servers/everything\"");
+    write(
+        dir.path(),
+        "plans/say.yaml",
+        r#"version: 2
+identifier: say
+name: Say
+description: Echoes through the server
+steps:
+  - id: a
+    tool_name: everything__echo
+    input:
+      message: hi
+  - id: b
+    tool_name: linear__list_issues
+    input: {}
+finish:
+  output:
+    said: "{{a.text}}"
+"#,
+    );
+    write(
+        dir.path(),
+        "agents/talker.yaml",
+        "version: 1\nname: talker\ndescription: Talks\nmodel: chat\ntools: [everything__echo, everything__add, \"everything__*\"]\nsystem_prompt: Talk.\n",
+    );
+    let pack = load_pack(source("example", dir.path()), &[], &[]).unwrap();
+    let need = &pack.needs.mcp["everything"];
+    assert_eq!(
+        need.requirement.server.as_deref(),
+        Some("mcp-servers/everything")
+    );
+    let uses: Vec<(&str, &str, Option<Value>)> = need
+        .uses
+        .iter()
+        .map(|found| {
+            (
+                found.site.as_str(),
+                found.tool.as_str(),
+                found.input.clone().map(Value::Object),
+            )
+        })
+        .collect();
+    assert_eq!(
+        uses,
+        [
+            (
+                "plan 'example__plan__say' step a",
+                "everything__echo",
+                Some(json!({"message": "hi"}))
+            ),
+            (
+                "agent 'example__agent__talker' tools",
+                "everything__echo",
+                None
+            ),
+            (
+                "agent 'example__agent__talker' tools",
+                "everything__add",
+                None
+            ),
+        ]
+    );
+}
+
+#[derive(Default)]
+struct CountingGate {
+    calls: Mutex<usize>,
+}
+
+#[async_trait]
+impl crate::pipeline::ExecutionGate for CountingGate {
+    async fn before_tool(
+        &self,
+        _ctx: crate::pipeline::GateContext<'_>,
+    ) -> crate::pipeline::GateDecision {
+        *self.calls.lock().unwrap() += 1;
+        crate::pipeline::GateDecision::Proceed
+    }
+}
+
+fn reaching_pack_plan() -> Plan {
+    steps(json!([
+        {"id": "first", "toolName": "user__echo", "input": {"name": "first"}},
+        {"id": "p", "toolName": "plan__wrap", "input": {}},
+    ]))
+}
+
+fn wrap_plan() -> PlanDoc {
+    r#"version: 2
+identifier: wrap
+name: Wrap
+description: Calls the pack plan
+steps:
+  - id: w
+    tool_name: example__plan__whoami
+    input: {}
+finish:
+  output:
+    name: "{{w.name}}"
+"#
+    .parse()
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_run_that_can_reach_a_pack_with_unmet_requirements_fails_before_its_first_step() {
+    let dir = pack_requiring(MISSING);
+    let pack = load_pack(source("example", dir.path()), &[], &[]).unwrap();
+    let (mut pipeline, _) = pipeline_over(&[pack], vec![wrap_plan()], Vec::new());
+    let gate = Arc::new(CountingGate::default());
+    pipeline.gate = Some(gate.clone());
+
+    let error = pipeline
+        .run_explicit(
+            "run",
+            reaching_pack_plan(),
+            crate::pipeline::Finish::Silent,
+            None,
+        )
+        .await
+        .err()
+        .unwrap();
+    let crate::pipeline::PipelineError::UnmetRequirements(message) = &error else {
+        panic!("expected unmet requirements, got {error}");
+    };
+    assert_eq!(
+        message,
+        "pack 'example' has unmet requirements: requires.binaries: graph-pack-no-such-binary not found on PATH; requires.env: GRAPH_PACK_TEST_NEVER_SET not set (or empty)"
+    );
+    assert_eq!(*gate.calls.lock().unwrap(), 0);
+
+    let direct = pipeline.call_plan("example__plan__outer", json!({})).await;
+    assert!(direct.is_error);
+    assert!(
+        direct
+            .result
+            .to_string()
+            .contains("graph-pack-no-such-binary"),
+        "{}",
+        direct.result
+    );
+    assert_eq!(*gate.calls.lock().unwrap(), 0);
+}
+
+#[tokio::test]
+async fn a_run_that_cannot_reach_the_pack_runs() {
+    let dir = pack_requiring(MISSING);
+    let pack = load_pack(source("example", dir.path()), &[], &[]).unwrap();
+    let (mut pipeline, _) = pipeline_over(&[pack], vec![wrap_plan()], Vec::new());
+    let gate = Arc::new(CountingGate::default());
+    pipeline.gate = Some(gate.clone());
+    pipeline
+        .run_explicit(
+            "run",
+            steps(json!([{"id": "only", "toolName": "user__echo", "input": {"name": "x"}}])),
+            crate::pipeline::Finish::Silent,
+            None,
+        )
+        .await
+        .ok()
+        .unwrap();
+    assert_eq!(*gate.calls.lock().unwrap(), 1);
+}
+
+#[tokio::test]
+async fn a_run_reaching_a_pack_whose_mcp_server_is_not_configured_fails_naming_it() {
+    let dir = pack_requiring(
+        "[requires.mcp.everything]\nserver = \"mcp-servers/everything\"\nurl = \"https://example.com/mcp\"",
+    );
+    let pack = load_pack(source("example", dir.path()), &[], &[]).unwrap();
+    let (pipeline, _) = pipeline_over(&[pack], vec![wrap_plan()], Vec::new());
+    let error = pipeline
+        .run_explicit(
+            "run",
+            reaching_pack_plan(),
+            crate::pipeline::Finish::Silent,
+            None,
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        error.to_string(),
+        "pack 'example' has unmet requirements: requires.mcp.everything: no MCP server is configured under [mcp.everything] (url = \"https://example.com/mcp\")"
+    );
+}

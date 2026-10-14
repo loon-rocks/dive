@@ -978,6 +978,13 @@ impl ToolRegistry for ComposedCapture {
     async fn servers(&self) -> Vec<graph_core::ToolServer> {
         self.inner.servers().await
     }
+
+    async fn server_identity(
+        &self,
+        server: &str,
+    ) -> Option<Result<graph_core::ServerIdentity, String>> {
+        self.inner.server_identity(server).await
+    }
 }
 
 const COMPOSE_PLAN_TOOL: &str = "plan__compose_plan";

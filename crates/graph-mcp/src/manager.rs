@@ -1,7 +1,7 @@
 //! MCP server lifecycle: lazy connection, tool discovery, invocation.
 
 use graph_config::McpServerConfig;
-use graph_core::{ToolDef, ToolError, ToolOutcome, ToolRegistry, ToolServer};
+use graph_core::{ServerIdentity, ToolDef, ToolError, ToolOutcome, ToolRegistry, ToolServer};
 use rmcp::model::{CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation};
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
@@ -29,6 +29,7 @@ struct Connection {
     client: Client,
     tools: Vec<ToolDef>,
     description: Option<String>,
+    reported: Option<(String, String)>,
 }
 
 impl McpManager {
@@ -121,6 +122,11 @@ impl ToolRegistry for McpManager {
             .ok_or_else(|| ToolError::Unknown(name.to_string()))?;
         handle.call(tool, input).await
     }
+
+    async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
+        let handle = self.servers.get(server)?;
+        Some(handle.identity().await)
+    }
 }
 
 impl ServerHandle {
@@ -130,6 +136,20 @@ impl ServerHandle {
             *guard = Some(self.establish().await?);
         }
         Ok(guard.as_ref().unwrap().tools.clone())
+    }
+
+    async fn identity(&self) -> Result<ServerIdentity, String> {
+        let tools = self.tools().await.map_err(|e| e.to_string())?;
+        let guard = self.connection.lock().await;
+        let (name, version) = guard
+            .as_ref()
+            .and_then(|connection| connection.reported.clone())
+            .ok_or_else(|| format!("mcp server '{}' did not report serverInfo", self.name))?;
+        Ok(ServerIdentity {
+            name,
+            version,
+            tools,
+        })
     }
 
     async fn call(&self, tool: &str, input: Value) -> Result<ToolOutcome, ToolError> {
@@ -268,10 +288,17 @@ impl ServerHandle {
             self.config.description.as_deref(),
             client.peer_info().as_deref().map(|info| &info.server_info),
         );
+        let reported = client.peer_info().as_deref().map(|info| {
+            (
+                info.server_info.name.clone(),
+                info.server_info.version.clone(),
+            )
+        });
         Ok(Connection {
             client,
             tools,
             description,
+            reported,
         })
     }
 

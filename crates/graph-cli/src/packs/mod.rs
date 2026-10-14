@@ -7,7 +7,9 @@ pub use hash::content_hash;
 
 use graph_config::pack::{load_lock, LayerKind, LockEntry, PackEntry, PackLayer};
 use graph_core::agent::doc::AgentDoc;
-use graph_core::packs::{check_installed_name, load_pack, LoadedPack, PackSet, PackSource};
+use graph_core::packs::{
+    check_installed_name, load_pack, requirements, LoadedPack, PackSet, PackSource,
+};
 use graph_core::pipeline::doc::PlanDoc;
 use graph_core::user_tools::UserToolDoc;
 use std::collections::BTreeSet;
@@ -192,7 +194,19 @@ impl InstalledPacks {
             .collect()
     }
 
-    pub fn check_text(&self) -> String {
+    pub async fn unmet(
+        &self,
+        registry: &dyn graph_core::ToolRegistry,
+    ) -> std::collections::BTreeMap<String, Vec<String>> {
+        requirements::unmet(
+            &self.pack_set(),
+            self.packs.iter().map(InstalledPack::name),
+            registry,
+        )
+        .await
+    }
+
+    pub fn check_text(&self, unmet: &std::collections::BTreeMap<String, Vec<String>>) -> String {
         let mut text = String::new();
         for pack in &self.packs {
             text.push_str(&format!(
@@ -205,6 +219,9 @@ impl InstalledPacks {
                     "matches packs.lock"
                 }
             ));
+            for problem in unmet.get(pack.name()).into_iter().flatten() {
+                text.push_str(&format!("  unmet {problem}\n"));
+            }
         }
         for shadowed in &self.shadowed {
             text.push_str(&format!(
@@ -218,7 +235,10 @@ impl InstalledPacks {
         text
     }
 
-    pub fn check_json(&self) -> serde_json::Value {
+    pub fn check_json(
+        &self,
+        unmet: &std::collections::BTreeMap<String, Vec<String>>,
+    ) -> serde_json::Value {
         let mut entries: Vec<serde_json::Value> = self
             .packs
             .iter()
@@ -234,6 +254,7 @@ impl InstalledPacks {
                     "hash": pack.hash,
                     "lockedHash": pack.lock.hash,
                     "modified": pack.modified(),
+                    "unmet": unmet.get(pack.name()).cloned().unwrap_or_default(),
                     "shadowed": false,
                 })
             })
@@ -256,6 +277,53 @@ impl InstalledPacks {
         for warning in &self.warnings {
             tracing::warn!("{warning}");
         }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RequirementReport {
+    pub unmet: Vec<String>,
+    pub snippets: Vec<String>,
+}
+
+impl RequirementReport {
+    pub fn of(loaded: &LoadedPack, mcp_servers: &BTreeSet<String>) -> Self {
+        let mut report = RequirementReport {
+            unmet: loaded.needs.unmet.clone(),
+            snippets: Vec::new(),
+        };
+        for (prefix, need) in &loaded.needs.mcp {
+            if mcp_servers.contains(prefix) {
+                continue;
+            }
+            report
+                .unmet
+                .extend(requirements::mcp_problems(prefix, need, None));
+            report
+                .snippets
+                .extend(requirements::mcp_snippet(prefix, &need.requirement));
+        }
+        report
+    }
+
+    pub fn lines(&self, name: &str) -> Vec<String> {
+        let mut lines: Vec<String> = self
+            .unmet
+            .iter()
+            .map(|problem| format!("{name}: unmet {problem}"))
+            .collect();
+        if !self.snippets.is_empty() {
+            lines.push(format!(
+                "{name} needs MCP servers graph does not write for you; add to your config:"
+            ));
+            lines.extend(
+                self.snippets
+                    .iter()
+                    .flat_map(|snippet| snippet.lines())
+                    .map(|line| format!("  {line}")),
+            );
+        }
+        lines
     }
 }
 

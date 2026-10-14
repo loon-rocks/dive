@@ -25,7 +25,7 @@ pub use store::{
     ToolShape, USER_AUTHOR,
 };
 pub use tools::{
-    AllowlistRegistry, CompositeRegistry, ExcludingRegistry, ToolDef, ToolError, ToolOutcome,
-    ToolRegistry, ToolServer,
+    AllowlistRegistry, CompositeRegistry, ExcludingRegistry, ServerIdentity, ToolDef, ToolError,
+    ToolOutcome, ToolRegistry, ToolServer,
 };
 pub use usage::{compact_tokens, CallSite, ModelUsage, StepUsage, UsageLedger, UsageReport};
