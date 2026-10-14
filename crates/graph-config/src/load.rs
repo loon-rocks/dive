@@ -2,7 +2,7 @@
 
 use crate::format::{self, LayerInfo};
 use crate::model::Config;
-use crate::pack::{LayerKind, PackEntry, PackLayer};
+use crate::pack::{check_pack_name, LayerKind, PackEntry, PackLayer};
 use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -76,12 +76,7 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
             .parse()
             .with_context(|| format!("parsing config file {}", path.display()))?;
         table.remove(format::FORMAT_KEY);
-        let packs: BTreeMap<String, PackEntry> = match table.remove("packs") {
-            Some(value) => value
-                .try_into()
-                .with_context(|| format!("reading [packs] in {}", path.display()))?,
-            None => BTreeMap::new(),
-        };
+        let packs = read_pack_entries(table.remove("packs"), &path)?;
         pack_layers.push(PackLayer {
             kind: if path == expand_tilde(&global_config_path()) {
                 LayerKind::Global
@@ -115,6 +110,18 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
     for (name, server) in &config.mcp {
         server.validate(name).map_err(anyhow::Error::msg)?;
     }
+    for (layer, source) in pack_layers.iter().zip(&sources) {
+        if let Some(name) = layer
+            .packs
+            .keys()
+            .find(|name| config.mcp.contains_key(*name))
+        {
+            anyhow::bail!(
+                "[packs.{name}] in {}: '{name}' is also the name of the MCP server [mcp.{name}], and both would own {name}__ tool names; install the pack under another name",
+                source.display()
+            );
+        }
+    }
 
     Ok(LoadedConfig {
         config,
@@ -122,6 +129,37 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
         layers,
         pack_layers,
     })
+}
+
+fn read_pack_entries(
+    value: Option<toml::Value>,
+    path: &Path,
+) -> Result<BTreeMap<String, PackEntry>> {
+    let table = match value {
+        None => return Ok(BTreeMap::new()),
+        Some(toml::Value::Table(table)) => table,
+        Some(other) => anyhow::bail!(
+            "[packs] in {} must be a table of pack entries, not a {}",
+            path.display(),
+            other.type_str()
+        ),
+    };
+    let mut packs = BTreeMap::new();
+    for (name, entry) in table {
+        check_pack_name(&name)
+            .map_err(|e| anyhow::anyhow!("[packs.{name}] in {}: {e}", path.display()))?;
+        let entry: PackEntry = entry
+            .try_into()
+            .with_context(|| format!("reading [packs.{name}] in {}", path.display()))?;
+        if entry.git.trim().is_empty() {
+            anyhow::bail!(
+                "[packs.{name}] in {}: git must not be empty",
+                path.display()
+            );
+        }
+        packs.insert(name, entry);
+    }
+    Ok(packs)
 }
 
 /// Deep-merge `overlay` into `base`: tables merge recursively, everything
@@ -884,5 +922,138 @@ fallbacks = [
             "environment variable GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST \
              (telemetry.headers.Authorization) is not set"
         );
+    }
+
+    #[test]
+    fn each_layer_keeps_its_own_packs_and_the_project_entry_replaces_the_global_one_whole() {
+        let global_dir = tempfile::tempdir().unwrap();
+        let project_dir = tempfile::tempdir().unwrap();
+        let global = write(
+            global_dir.path(),
+            "config.toml",
+            r#"
+[packs.example]
+git = "github.com/acme/graph-pack-example"
+ref = "v1"
+include = ["plan__*"]
+
+[packs.shared]
+git = "github.com/acme/graph-pack-shared"
+"#,
+        );
+        let project = write(
+            project_dir.path(),
+            "config.toml",
+            r#"
+[packs.example]
+git = "github.com/fork/graph-pack-example"
+"#,
+        );
+        let loaded = load_from(&[global, project]).unwrap();
+        assert_eq!(loaded.pack_layers.len(), 2);
+        assert_eq!(loaded.pack_layers[0].dir, global_dir.path());
+        assert_eq!(
+            loaded.pack_layers[0].packs.keys().collect::<Vec<_>>(),
+            ["example", "shared"]
+        );
+        assert_eq!(loaded.pack_layers[0].packs["example"].include, ["plan__*"]);
+        assert_eq!(loaded.pack_layers[1].dir, project_dir.path());
+        assert_eq!(
+            loaded.pack_layers[1].packs.keys().collect::<Vec<_>>(),
+            ["example"]
+        );
+        let example = &loaded.config.packs["example"];
+        assert_eq!(example.git, "github.com/fork/graph-pack-example");
+        assert_eq!(example.reference, None);
+        assert!(example.include.is_empty());
+        assert_eq!(
+            loaded.config.packs["shared"].git,
+            "github.com/acme/graph-pack-shared"
+        );
+    }
+
+    #[test]
+    fn an_unknown_key_in_a_pack_entry_is_refused_naming_the_table_and_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(
+            dir.path(),
+            "config.toml",
+            "[packs.example]\ngit = \"github.com/acme/x\"\nbranch = \"main\"\n",
+        );
+        let err = format!("{:#}", load_from(&[path]).unwrap_err());
+        assert!(err.contains("[packs.example]"), "{err}");
+        assert!(err.contains("branch"), "{err}");
+    }
+
+    #[test]
+    fn a_pack_entry_needs_a_git_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(dir.path(), "config.toml", "[packs.example]\nref = \"v1\"\n");
+        let err = format!("{:#}", load_from(&[path]).unwrap_err());
+        assert!(err.contains("[packs.example]"), "{err}");
+        assert!(err.contains("git"), "{err}");
+        let path = write(dir.path(), "config.toml", "[packs.example]\ngit = \"\"\n");
+        let err = format!("{:#}", load_from(&[path]).unwrap_err());
+        assert!(
+            err.contains("[packs.example]") && err.contains("git must not be empty"),
+            "{err}"
+        );
+        let path = write(dir.path(), "config.toml", "packs = 3\n");
+        let err = format!("{:#}", load_from(&[path]).unwrap_err());
+        assert!(err.contains("[packs]"), "{err}");
+    }
+
+    #[test]
+    fn pack_names_follow_the_naming_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, expected) in [
+            ("Example", "lowercase"),
+            ("my__pack", "'__'"),
+            ("a_name_that_is_far_too_long", "limit is 20"),
+            ("builtin", "reserved"),
+        ] {
+            let path = write(
+                dir.path(),
+                "config.toml",
+                &format!("[packs.{name}]\ngit = \"github.com/acme/x\"\n"),
+            );
+            let err = format!("{:#}", load_from(&[path]).unwrap_err());
+            assert!(err.contains(&format!("[packs.{name}]")), "{err}");
+            assert!(err.contains(expected), "{name}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_pack_may_not_share_its_name_with_an_mcp_server_in_any_layer() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = write(
+            dir.path(),
+            "global.toml",
+            "[mcp.linear]\nurl = \"https://mcp.linear.app/mcp\"\n",
+        );
+        let project = write(
+            dir.path(),
+            "project.toml",
+            "[packs.linear]\ngit = \"github.com/acme/graph-pack-linear\"\n",
+        );
+        let err = format!("{:#}", load_from(&[global, project.clone()]).unwrap_err());
+        assert!(err.contains("[packs.linear]"), "{err}");
+        assert!(err.contains("[mcp.linear]"), "{err}");
+        assert!(err.contains(&project.display().to_string()), "{err}");
+    }
+
+    #[test]
+    fn an_mcp_server_may_not_take_a_reserved_name() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in crate::pack::RESERVED_NAMES {
+            let path = write(
+                dir.path(),
+                "config.toml",
+                &format!("[mcp.{name}]\nurl = \"http://localhost\"\n"),
+            );
+            let err = format!("{:#}", load_from(&[path]).unwrap_err());
+            assert!(err.contains(&format!("[mcp.{name}]")), "{err}");
+            assert!(err.contains("reserved"), "{err}");
+        }
     }
 }

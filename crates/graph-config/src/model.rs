@@ -547,6 +547,12 @@ pub struct McpServerConfig {
 
 impl McpServerConfig {
     pub fn validate(&self, name: &str) -> Result<(), String> {
+        if crate::pack::RESERVED_NAMES.contains(&name) {
+            return Err(format!(
+                "[mcp.{name}]: '{name}' is reserved for graph's own tool names ({}); rename the server",
+                crate::pack::RESERVED_NAMES.join(", ")
+            ));
+        }
         match (&self.command, &self.url) {
             (Some(_), Some(_)) => Err(format!(
                 "mcp server '{name}': `command` and `url` are mutually exclusive"
