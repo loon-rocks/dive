@@ -38,6 +38,10 @@ run = "cargo fmt --all"
 description = "Install the repo's git hooks (commit subject linting)"
 run = "git config core.hooksPath .githooks"
 
+[tasks."worktrees:clean"]
+description = "Remove worktrees under .claude/worktrees whose pull request merged or closed, with their build output (pass --apply to remove; lists them otherwise)"
+run = "scripts/clean-worktrees.sh"
+
 [tasks.run]
 description = "Run the graph binary (pass args after --)"
 run = "cargo run -p graph-cli --"
