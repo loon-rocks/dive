@@ -12,7 +12,8 @@ A tool is anything an [agent](/agents/overview) or a [plan](/plans/overview) ste
 | Source | Named | Add one |
 | --- | --- | --- |
 | Your tool files | `user__<name>` | [Create a tool in the workbench](/tools/guides/create-in-workbench) |
-| Built-in tools and packs | `builtin__<name>` | [Built-in tools](/tools/reference/builtin-tools), [Packs](/tools/reference/packs) |
+| Built-in tools | `builtin__<name>` | [Built-in tools](/tools/reference/builtin-tools) |
+| Packs | `<pack>__tool__<name>` | [`graph pack add`](/reference/cli/pack/add) |
 | MCP servers | `<server>__<tool>` | [Connect an MCP server](/integrating/mcp/guides/connect-mcp-server) |
 | Plans | `plan__<identifier>` | [Plans](/plans/overview) |
 | Agents | `agent__<name>` | [Agents](/agents/overview) |
@@ -34,14 +35,14 @@ Only `prompt` and `decision` tools spend tokens, so moving work into `exec` and 
 
 Mark a tool `read_only` when it has no side effects. `reshape` and `decision` tools are read-only by default.
 
-Tool names must be unique across both directories. To change a built-in or pack tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces graph's version.
+Tool names must be unique across both directories. To change a built-in tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces graph's version. A pack is a plain copy in `packs/<name>/`, so you change its tools by editing them there; `graph pack list` reports the edits.
 
 ## Inspect and run tools
 
 ```bash
 graph tool list
-graph tool show builtin__git_log
-graph tool test builtin__git_log --input base=v0.15.0
+graph tool show github__tool__git_log
+graph tool test github__tool__git_log --input base=v0.15.0
 ```
 
 `graph tool list` lists the catalog, `graph tool show` prints a tool's description, schemas and source, and `graph tool test` calls it and prints the result.

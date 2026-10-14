@@ -23,7 +23,7 @@ input_schema:
       description: The ref to start after, such as a release tag
 steps:
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{input.base}}'
     head: HEAD
@@ -67,8 +67,8 @@ graph plan run changes_since \
 The `when` condition holds, so the plan stops at `nothing_new`. The `summary` step never runs, so there's no model call, and the exit's `output` is the result:
 
 ```text
-→ builtin__git_log {"base":"HEAD","head":"HEAD"}
-✓ builtin__git_log 31.9ms
+→ github__tool__git_log {"base":"HEAD","head":"HEAD"}
+✓ github__tool__git_log 31.9ms
 → exit {"message":"No commits since HEAD.",…}
 ✓ exit 18.3µs
 {

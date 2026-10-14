@@ -114,8 +114,8 @@ impl Runtime {
         open_store(&self.config)
     }
 
-    /// Base tool catalog (MCP servers + builtin packs + user-defined
-    /// tools), wrapped with shape recording.
+    /// Base tool catalog (MCP servers + built-in tools + user-defined
+    /// tools + installed packs), wrapped with shape recording.
     pub fn recording_registry(&self, store: &Arc<dyn Store>) -> Result<Arc<dyn ToolRegistry>> {
         let docs = self.tool_docs()?;
         let mut sources: Vec<Arc<dyn ToolRegistry>> = vec![

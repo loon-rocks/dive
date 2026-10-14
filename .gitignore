@@ -11,6 +11,8 @@
 !/.graph/plans/
 !/.graph/tools/
 !/.graph/evals/
+!/.graph/packs/
+!/.graph/packs.lock
 *.db
 mise.local.toml
 __pycache__/

@@ -16,10 +16,10 @@ graph ask --agent release_notes \
 ```
 
 ```text
-→ builtin__gh_release {"tag":""}
-✓ builtin__gh_release 1.3s
-→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
-✓ builtin__git_log 69.9ms
+→ github__tool__gh_release {"tag":""}
+✓ github__tool__gh_release 1.3s
+→ github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+✓ github__tool__git_log 69.9ms
 3 calls · 10k in / 2k out (4k cached) · $0.06
 ```
 
@@ -36,10 +36,10 @@ name: Unreleased changes
 description: The commits since the latest release.
 steps:
 - id: release
-  tool_name: builtin__gh_release
+  tool_name: github__tool__gh_release
   input: {}
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{release.tag}}'
     head: HEAD
@@ -64,10 +64,10 @@ Run the same question again. The agent calls the plan once, and the plan makes t
 
 ```text
 → plan__unreleased_changes {}
-  → builtin__gh_release {}
-  ✓ builtin__gh_release 1.1s
-  → builtin__git_log {"base":"v0.15.0","head":"HEAD"}
-  ✓ builtin__git_log 51.7ms
+  → github__tool__gh_release {}
+  ✓ github__tool__gh_release 1.1s
+  → github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+  ✓ github__tool__git_log 51.7ms
 ✓ plan__unreleased_changes 1.2s
 2 calls · 5k in / 1k out · $0.04
 ```

@@ -15,7 +15,7 @@ name: Pick changes
 description: The commits since a ref you pick, starting from the latest release.
 steps:
 - id: release
-  tool_name: builtin__gh_release
+  tool_name: github__tool__gh_release
   input: {}
 - id: pick
   tool_name: ask
@@ -33,7 +33,7 @@ steps:
       base: '{{release.tag}}'
     whenUnanswered: default
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{pick.answer.base}}'
     head: HEAD
@@ -69,8 +69,8 @@ The question appears on stderr. Type an answer and press <kbd>Enter</kbd>:
 ? List the commits since which ref? [pick]
   (blank cancels)
   base — Which tag or commit should the list start after? [text]: v0.14.0
-→ builtin__git_log {"base":"v0.14.0","head":"HEAD"}
-✓ builtin__git_log 71.0ms
+→ github__tool__git_log {"base":"v0.14.0","head":"HEAD"}
+✓ github__tool__git_log 71.0ms
 ```
 
 ```json

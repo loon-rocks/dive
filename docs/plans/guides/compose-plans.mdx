@@ -15,7 +15,7 @@ name: Release summary
 description: Summarizes the commits merged since the latest GitHub release.
 steps:
 - id: release
-  tool_name: builtin__gh_release
+  tool_name: github__tool__gh_release
   input: {}
 - id: changes
   tool_name: plan__changes_since
@@ -43,7 +43,7 @@ input_schema:
       description: The ref to start after, such as a release tag
 steps:
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{input.base}}'
     head: HEAD
@@ -78,11 +78,11 @@ graph plan run release_summary
 The called plan's steps show indented under its step:
 
 ```text
-→ builtin__gh_release {}
-✓ builtin__gh_release 787.1ms
+→ github__tool__gh_release {}
+✓ github__tool__gh_release 787.1ms
 → plan__changes_since {"base":"v0.15.0"}
-  → builtin__git_log {"base":"v0.15.0","head":"HEAD"}
-  ✓ builtin__git_log 31.6ms
+  → github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+  ✓ github__tool__git_log 31.6ms
 ✓ plan__changes_since 32.2ms
 ✎ synthesizing answer…
 - **Plan drafting overhaul**: a new agent-driven workbench…

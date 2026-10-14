@@ -9,10 +9,10 @@ input_schema:
     pr: { type: integer, description: Pull request number }
 steps:
   - id: meta
-    tool_name: builtin__gh_pr_meta
+    tool_name: github__tool__gh_pr_meta
     input: { pr: "{{input.pr}}" }
   - id: docs
-    tool_name: builtin__git_changed_files
+    tool_name: github__tool__git_changed_files
     input: { base: "{{meta.base_sha}}", head: "{{meta.head_sha}}", prefix: docs/ }
   - id: answer
     tool_name: route
@@ -20,7 +20,7 @@ steps:
       if: { value: "{{docs.count}}", op: gt, to: 0 }
       then:
         - id: docs_diff
-          tool_name: builtin__git_diff
+          tool_name: github__tool__git_diff
           input: { base: "{{meta.base_sha}}", head: "{{meta.head_sha}}", paths: docs, exclude: "", max_bytes: 60000 }
         - id: docs_summary
           tool_name: builtin__infer
@@ -30,7 +30,7 @@ steps:
 
               {{docs_diff}}
       else:
-        tool_name: builtin__git_changed_files
+        tool_name: github__tool__git_changed_files
         input: { base: "{{meta.base_sha}}", head: "{{meta.head_sha}}", prefix: crates/ }
 finish:
   output:

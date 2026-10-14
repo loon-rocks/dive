@@ -9,7 +9,7 @@ input_schema:
     tag: { type: string, description: Release tag to start after, e.g. v0.15.0 }
 steps:
   - id: commits
-    tool_name: builtin__git_log
+    tool_name: github__tool__git_log
     input: { base: "{{input.tag}}", head: HEAD, paths: "", max_commits: 300 }
   - id: summary
     tool_name: builtin__infer

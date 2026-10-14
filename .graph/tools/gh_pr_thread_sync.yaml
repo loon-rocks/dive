@@ -1,5 +1,5 @@
 # Repo-local override of the github pack's gh_pr_thread_sync (the pack
-# version stays available as builtin__gh_pr_thread_sync; this loads as
+# version stays available as github__tool__gh_pr_thread_sync; this loads as
 # user__gh_pr_thread_sync and the review plans call it explicitly).
 # Two behavioral deltas over the pack tool, both tracked by issue #111
 # for upstreaming:

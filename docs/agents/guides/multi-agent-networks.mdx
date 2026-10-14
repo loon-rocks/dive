@@ -39,8 +39,8 @@ name: release_notes
 description: Writes release notes from the changes since the latest release.
 model: chat
 tools:
-- builtin__gh_release
-- builtin__git_log
+- github__tool__gh_release
+- github__tool__git_log
 subagents:
 - reviewer
 system_prompt: |
@@ -55,7 +55,7 @@ name: reviewer
 description: Reviews the code changed between two git refs and reports risky changes.
 model: chat
 tools:
-- builtin__git_diff
+- github__tool__git_diff
 system_prompt: |
   You review code changes in this repository and report what is risky,
   briefly.
@@ -75,13 +75,13 @@ graph ask --agent triage \
 ```text
 → transfer_to_release_notes {"message":"User wants draft release notes…"}
 ✓ transfer_to_release_notes 31.6µs
-→ builtin__gh_release {}
-✓ builtin__gh_release 1.4s
-→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
+→ github__tool__gh_release {}
+✓ github__tool__gh_release 1.4s
+→ github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
 → agent__reviewer {"prompt":"Please review the code changes…"}
-✓ builtin__git_log 60.6ms
-→ builtin__git_diff {"base":"v0.15.0","head":"HEAD",…}
-✓ builtin__git_diff 104.3ms
+✓ github__tool__git_log 60.6ms
+→ github__tool__git_diff {"base":"v0.15.0","head":"HEAD",…}
+✓ github__tool__git_diff 104.3ms
 ✓ agent__reviewer 76.6s
 ```
 

@@ -20,7 +20,7 @@ The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event ha
 ```json Events on stderr
 {
   "event": "tool_started",
-  "tool": "builtin__git_log",
+  "tool": "github__tool__git_log",
   "args": {
     "base": "v0.15.0",
     "head": "HEAD"
@@ -29,7 +29,7 @@ The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event ha
 
 {
   "event": "tool_finished",
-  "tool": "builtin__git_log",
+  "tool": "github__tool__git_log",
   "ms": 41,
   "is_error": false
 }
@@ -83,7 +83,7 @@ The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event ha
 A tool call began.
 
 <ResponseField name="tool" type="string">
-  The tool's full name, such as `builtin__git_log`.
+  The tool's full name, such as `github__tool__git_log`.
 </ResponseField>
 
 <ResponseField name="args" type="object">

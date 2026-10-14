@@ -15,10 +15,10 @@ name: Unreleased changes
 description: The commits since the latest release.
 steps:
 - id: release
-  tool_name: builtin__gh_release
+  tool_name: github__tool__gh_release
   input: {}
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{release.url}}'
     head: HEAD

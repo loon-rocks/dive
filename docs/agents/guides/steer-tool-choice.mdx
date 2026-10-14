@@ -15,10 +15,10 @@ name: Digest
 description: Team digest.
 steps:
 - id: release
-  tool_name: builtin__gh_release
+  tool_name: github__tool__gh_release
   input: {}
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{release.tag}}'
     head: HEAD
@@ -37,10 +37,10 @@ graph ask "What have we merged since we last shipped?"
 `chat` skips the plan and makes the same calls itself:
 
 ```text
-→ builtin__gh_release {}
-✓ builtin__gh_release 1.1s
-→ builtin__git_log {"base":"v0.15.0","head":"HEAD"}
-✓ builtin__git_log 72.9ms
+→ github__tool__gh_release {}
+✓ github__tool__gh_release 1.1s
+→ github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+✓ github__tool__git_log 72.9ms
 ```
 
 ## Describe the plan and add exemplars
@@ -64,10 +64,10 @@ graph ask "What have we merged since we last shipped?"
 
 ```text
 → plan__digest {}
-  → builtin__gh_release {}
-  ✓ builtin__gh_release 995.2ms
-  → builtin__git_log {"base":"v0.15.0","head":"HEAD"}
-  ✓ builtin__git_log 50.5ms
+  → github__tool__gh_release {}
+  ✓ github__tool__gh_release 995.2ms
+  → github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+  ✓ github__tool__git_log 50.5ms
 ✓ plan__digest 1.0s
 ```
 

@@ -23,7 +23,7 @@ input_schema:
       description: The ref to start after, such as a release tag
 steps:
 - id: commits
-  tool_name: builtin__git_log
+  tool_name: github__tool__git_log
   input:
     base: '{{input.base}}'
     head: HEAD
@@ -49,8 +49,8 @@ graph plan run changes_since \
 The error names the step, the tool, and what the tool printed:
 
 ```text
-✗ builtin__git_log 14.3ms
-Error: plan failed at step commits (builtin__git_log): {"error":"'bash' exited with exit status: 128","stderr":"fatal: bad revision 'v9.9.9..HEAD'","stdout":""}
+✗ github__tool__git_log 14.3ms
+Error: plan failed at step commits (github__tool__git_log): {"error":"'bash' exited with exit status: 128","stderr":"fatal: bad revision 'v9.9.9..HEAD'","stdout":""}
 ```
 
 Fix the input and run again.
