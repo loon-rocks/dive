@@ -39,6 +39,9 @@ ignore = "0.4"
 globset = "0.4"
 regex = "1"
 sha2 = "0.10"
+semver.workspace = true
+tempfile = "3"
+toml_edit.workspace = true
 # graph as an MCP *server* (`graph mcp serve`). graph-mcp holds the client
 # half; the server lives here because what it serves is this crate's command
 # layer. Feature-unified with graph-mcp's client build.
@@ -73,5 +76,4 @@ opentelemetry-otlp = { version = "0.33", default-features = false, features = [
 opentelemetry-appender-tracing = "0.33"
 
 [dev-dependencies]
-tempfile = "3"
 opentelemetry_sdk = { version = "0.33", features = ["testing"] }

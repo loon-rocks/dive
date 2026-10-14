@@ -83,6 +83,13 @@ pub enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    #[command(
+        about = "Install, list, update and remove packs of tools, plans and agents from git"
+    )]
+    Pack {
+        #[command(subcommand)]
+        command: PackCommand,
+    },
     /// Interactive workbench: a dual-pane TUI for building plans, agents and tools
     #[command(visible_alias = "wb")]
     Workbench {
@@ -481,6 +488,92 @@ pub enum ShapesCommand {
     /// Show one tool's cached schema and example
     Show {
         tool: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(clap::Args)]
+pub struct LayerArgs {
+    #[arg(
+        long,
+        conflicts_with = "dir",
+        help = "Target the global layer (~/.config/graph/) instead of the project's ./.graph/"
+    )]
+    pub global: bool,
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)"
+    )]
+    pub dir: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+pub enum PackCommand {
+    #[command(
+        about = "Install a pack from git as a plain copy in the project, global or given graph directory"
+    )]
+    Add {
+        #[arg(
+            value_name = "NAME|URL",
+            help = "A bare name (github.com/tylerdavis/graph-pack-<name>) or a git URL; a name already in [packs] installs that entry"
+        )]
+        source: String,
+        #[arg(
+            long = "as",
+            value_name = "NAME",
+            help = "Install under this name instead of the manifest's"
+        )]
+        as_name: Option<String>,
+        #[arg(
+            long = "ref",
+            value_name = "REF",
+            help = "A major line (v2), an exact tag (v2.1.0, pinned) or a branch; default: the newest release"
+        )]
+        reference: Option<String>,
+        #[command(flatten)]
+        layer: LayerArgs,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(
+        about = "List installed packs with their tags, newer releases, local edits and shadowing"
+    )]
+    List {
+        #[command(flatten)]
+        layer: LayerArgs,
+        #[arg(
+            long,
+            help = "Skip the git ls-remote per pack and the columns it fills"
+        )]
+        offline: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(
+        about = "Move packs to the newest release their ref allows, within the current major"
+    )]
+    Update {
+        #[arg(
+            value_name = "NAME",
+            help = "Packs to update; every pack in the layer when omitted"
+        )]
+        names: Vec<String>,
+        #[arg(long, help = "Overwrite a copy whose content differs from packs.lock")]
+        force: bool,
+        #[command(flatten)]
+        layer: LayerArgs,
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(
+        about = "Delete a pack's copy, config entry and lock entry, and list files that still call it"
+    )]
+    Remove {
+        name: String,
+        #[command(flatten)]
+        layer: LayerArgs,
         #[arg(long)]
         json: bool,
     },

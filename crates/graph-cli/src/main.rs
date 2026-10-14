@@ -66,6 +66,7 @@ fn telemetry_config_paths(command: &Command) -> Vec<PathBuf> {
 async fn dispatch(command: Command, verbose: u8) -> Result<()> {
     match command {
         Command::Config { command } => commands::config_cmd::run(command),
+        Command::Pack { command } => commands::pack_cmd::run(command),
         // `serve` owns stdio for the whole process, so it never reaches the
         // McpCommand dispatcher (which opens a client manager first).
         Command::Mcp {
