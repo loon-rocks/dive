@@ -1,0 +1,43 @@
+---
+title: "graph pack remove"
+sidebarTitle: "remove"
+description: "Delete a pack's copy, config entry and lock entry, and list files that still call it"
+playground: "none"
+keywords: ["graph pack remove"]
+---
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The installed pack to remove
+</ParamField>
+
+## Options
+
+<ParamField query="--global" type="boolean">
+  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+</ParamField>
+
+<ParamField query="--dir" type="string">
+  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack remove [OPTIONS] <NAME>
+```
+
+</RequestExample>

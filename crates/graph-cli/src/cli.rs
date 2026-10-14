@@ -673,7 +673,7 @@ pub enum PackCommand {
         reference: Option<String>,
         #[command(flatten)]
         layer: LayerArgs,
-        #[arg(long)]
+        #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     #[command(
@@ -687,7 +687,7 @@ pub enum PackCommand {
             help = "Skip the git ls-remote per pack and the columns it fills"
         )]
         offline: bool,
-        #[arg(long)]
+        #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     #[command(
@@ -703,17 +703,18 @@ pub enum PackCommand {
         force: bool,
         #[command(flatten)]
         layer: LayerArgs,
-        #[arg(long)]
+        #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     #[command(
         about = "Delete a pack's copy, config entry and lock entry, and list files that still call it"
     )]
     Remove {
+        #[arg(value_name = "NAME", help = "The installed pack to remove")]
         name: String,
         #[command(flatten)]
         layer: LayerArgs,
-        #[arg(long)]
+        #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
 }

@@ -1,0 +1,55 @@
+---
+title: "graph pack add"
+sidebarTitle: "add"
+description: "Install a pack from git as a plain copy in the project, global or given graph directory"
+playground: "none"
+keywords: ["graph pack add"]
+---
+
+## Arguments
+
+<ParamField path="NAME|URL" type="string" required>
+  A bare name (github.com/tylerdavis/graph-pack-&lt;name&gt;) or a git URL; a name already in [packs] installs that entry
+</ParamField>
+
+## Options
+
+<ParamField query="--as" type="string">
+  Install under this name instead of the manifest's
+
+  Format: `NAME`.
+</ParamField>
+
+<ParamField query="--ref" type="string">
+  A major line (v2), an exact tag (v2.1.0, pinned) or a branch; default: the newest release
+
+  Format: `REF`.
+</ParamField>
+
+<ParamField query="--global" type="boolean">
+  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+</ParamField>
+
+<ParamField query="--dir" type="string">
+  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack add [OPTIONS] <NAME|URL>
+```
+
+</RequestExample>
