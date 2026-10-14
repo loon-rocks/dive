@@ -526,6 +526,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_custom_role_fails_over_to_its_own_fallback() {
+        let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
+        providers.insert(
+            "down".into(),
+            Arc::new(TaggedProvider {
+                tag: "down",
+                healthy: false,
+            }),
+        );
+        providers.insert(
+            "up".into(),
+            Arc::new(TaggedProvider {
+                tag: "up",
+                healthy: true,
+            }),
+        );
+        let roles = graph_config::ModelRoles::from([
+            ("default", choice("down", "default-model", vec![])),
+            (
+                "nano",
+                choice(
+                    "down",
+                    "nano-model",
+                    vec![FallbackChoice {
+                        provider: "up".into(),
+                        model: "nano-backup".into(),
+                        temperature: None,
+                        context_window: None,
+                    }],
+                ),
+            ),
+        ]);
+        let router = ModelRouter::with_providers(providers, roles);
+
+        let response = router
+            .chat_named("nano", ChatRequest::default())
+            .await
+            .unwrap();
+        assert_eq!(response.content.as_deref(), Some("up:nano-backup"));
+        assert!(router
+            .chat_named("default", ChatRequest::default())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
     async fn metering_attributes_a_failed_over_call_to_the_model_that_served_it() {
         #[derive(Default)]
         struct Recorder(std::sync::Mutex<Vec<crate::ModelCall>>);
@@ -901,6 +947,49 @@ mod tests {
         );
         let response = router
             .decide_named(None, decision_request(serde_json::json!("state")))
+            .await
+            .unwrap();
+        assert_eq!(response.model, "local:openjev-latest");
+        assert_eq!(primary.seen.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_custom_decision_role_fails_over_to_its_own_fallback() {
+        let primary = ScriptedDecider::new("ts", false);
+        let local = ScriptedDecider::new("local", true);
+        let providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::from([(
+            "anthropic".to_string(),
+            Arc::new(TaggedProvider {
+                tag: "chat",
+                healthy: true,
+            }) as Arc<dyn ChatProvider>,
+        )]);
+        let roles = graph_config::ModelRoles::from([
+            ("default", choice("anthropic", "m", vec![])),
+            (
+                "triage",
+                choice(
+                    "typesafe",
+                    "jev-latest",
+                    vec![FallbackChoice {
+                        provider: "local".into(),
+                        model: "openjev-latest".into(),
+                        temperature: None,
+                        context_window: None,
+                    }],
+                ),
+            ),
+        ]);
+        let router = ModelRouter::with_providers(providers, roles).with_deciders(HashMap::from([
+            (
+                "typesafe".to_string(),
+                primary.clone() as Arc<dyn DecisionProvider>,
+            ),
+            ("local".to_string(), local as Arc<dyn DecisionProvider>),
+        ]));
+
+        let response = router
+            .decide_named(Some("triage"), decision_request(serde_json::json!("state")))
             .await
             .unwrap();
         assert_eq!(response.model, "local:openjev-latest");
