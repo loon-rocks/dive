@@ -1,3 +1,4 @@
+pub mod requirements;
 pub mod visibility;
 
 use graph_config::pack::LayerKind;
@@ -149,6 +150,7 @@ pub fn apply_interface(items: &mut [PackItem], include: &[String], exclude: &[St
 pub struct PackSet {
     pub installed: Vec<String>,
     pub items: BTreeMap<String, PackItem>,
+    pub needs: BTreeMap<String, requirements::PackNeeds>,
 }
 
 impl PackSet {
@@ -183,6 +185,10 @@ impl PackSet {
         self.install(&pack.source.name);
         for item in &pack.items {
             self.insert(item.clone());
+        }
+        if !pack.needs.is_empty() {
+            self.needs
+                .insert(pack.source.name.clone(), pack.needs.clone());
         }
     }
 

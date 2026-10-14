@@ -135,6 +135,8 @@ pub enum PipelineError {
     },
     #[error("invalid plan: {0}")]
     InvalidPlan(String),
+    #[error("{0}")]
+    UnmetRequirements(String),
     #[error("plan data ran out at step {step}: {message}")]
     EmptyData { step: String, message: String },
     #[error("failed to render plan output: {0}")]
@@ -472,6 +474,10 @@ impl Pipeline {
         if !problems.is_empty() {
             return Err(PipelineError::InvalidPlan(problems.join("; ")));
         }
+        let unmet = self.unmet_requirements(&state.plan, pack).await;
+        if !unmet.is_empty() {
+            return Err(PipelineError::UnmetRequirements(unmet.join("; ")));
+        }
         match self.execute_all(&mut state).await {
             ExecutionEnd::Completed => self.finish(state, finish).await,
             ExecutionEnd::Exited(exit) => Ok(self.exit_outcome(state, exit)),
@@ -499,6 +505,29 @@ impl Pipeline {
                 message,
             }),
         }
+    }
+
+    async fn unmet_requirements(
+        &self,
+        plan: &Plan,
+        pack: Option<&crate::packs::PackSource>,
+    ) -> Vec<String> {
+        if self.packs.needs.is_empty() {
+            return Vec::new();
+        }
+        let reached = catalog::reachable_packs(
+            plan,
+            pack.map(|source| source.name.as_str()),
+            &self.plans,
+            &self.packs,
+        );
+        let unmet = crate::packs::requirements::unmet(
+            &self.packs,
+            reached.iter().map(String::as_str),
+            self.registry.as_ref(),
+        )
+        .await;
+        crate::packs::requirements::describe_unmet(&unmet)
     }
 
     /// A nested pipeline sharing everything but one level deeper on the

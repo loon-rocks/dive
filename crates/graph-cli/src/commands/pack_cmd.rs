@@ -1,9 +1,9 @@
 use crate::cli::{LayerArgs, PackCommand};
 use crate::commands::outcome::{report, Outcome};
-use crate::packs::content_hash;
 use crate::packs::git::{self, is_bare_name, remote_url, source_of};
 use crate::packs::layer::{self, Layer};
 use crate::packs::refs::{self, PackRef, Target};
+use crate::packs::{content_hash, RequirementReport};
 use anyhow::{bail, Result};
 use graph_config::pack::{LayerKind, LockEntry, PackEntry, PACKS_DIR};
 use graph_core::packs::{check_installed_name, layer_label};
@@ -232,7 +232,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
             return Ok(outcome);
         }
     }
-    let hash = match fetched.verify(
+    let (hash, loaded) = match fetched.verify(
         &name,
         target.tag.as_deref(),
         layer,
@@ -290,6 +290,8 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         layer_label(layer.kind)
     )];
     lines.extend(warnings.iter().cloned());
+    let requirements = RequirementReport::of(&loaded, &state.mcp_servers);
+    lines.extend(requirements.lines(&name));
     Ok(Outcome::ok(json!({
         "ok": true,
         "name": name,
@@ -301,6 +303,8 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         "hash": hash,
         "savedTo": copy.display().to_string(),
         "warnings": warnings,
+        "unmet": requirements.unmet,
+        "mcpSnippets": requirements.snippets,
     }))
     .with_note(lines.join("\n  ")))
 }
@@ -373,7 +377,11 @@ fn wanted_ref(entry: &PackEntry, lock: &LockEntry) -> Option<PackRef> {
 }
 
 enum Update {
-    Moved { from: String, to: String },
+    Moved {
+        from: String,
+        to: String,
+        requirements: RequirementReport,
+    },
     Current(String),
     Pinned(String),
     Refused(String, Vec<String>),
@@ -414,12 +422,12 @@ pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
             }
         };
         let (status, line, problems) = match &result {
-            Update::Moved { from, to } if from == to => (
+            Update::Moved { from, to, .. } if from == to => (
                 "reinstalled",
                 format!("{name}: reinstalled {to}, discarding local edits"),
                 Vec::new(),
             ),
-            Update::Moved { from, to } => {
+            Update::Moved { from, to, .. } => {
                 ("updated", format!("{name}: {from} -> {to}"), Vec::new())
             }
             Update::Current(at) => ("current", format!("{name}: up to date at {at}"), Vec::new()),
@@ -438,12 +446,19 @@ pub fn update(layer: &Layer, names: &[String], force: bool) -> Result<Outcome> {
         if let Some(note) = &held_back {
             lines.push(note.clone());
         }
+        let requirements = match &result {
+            Update::Moved { requirements, .. } => requirements.clone(),
+            _ => RequirementReport::default(),
+        };
+        lines.extend(requirements.lines(name));
         results.push(json!({
             "name": name,
             "status": status,
             "summary": line,
             "problems": problems,
             "heldBack": held_back,
+            "unmet": requirements.unmet,
+            "mcpSnippets": requirements.snippets,
             "from": match &result { Update::Moved { from, .. } => Some(from.clone()), _ => None },
             "to": match &result { Update::Moved { to, .. } => Some(to.clone()), _ => None },
         }));
@@ -536,7 +551,7 @@ fn update_one(
         Ok(fetched) => fetched,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
-    let hash = match fetched.verify(
+    let (hash, loaded) = match fetched.verify(
         name,
         target.tag.as_deref(),
         layer,
@@ -568,7 +583,11 @@ fn update_one(
         swap.undo();
         return Err(error);
     }
-    Ok(Update::Moved { from, to })
+    Ok(Update::Moved {
+        from,
+        to,
+        requirements: RequirementReport::of(&loaded, &state.mcp_servers),
+    })
 }
 
 pub fn remove(layer: &Layer, name: &str) -> Result<Outcome> {

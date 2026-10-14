@@ -100,12 +100,12 @@ fn starter_config() -> Result<String> {
     ))
 }
 
-pub fn run(command: ConfigCommand) -> Result<()> {
+pub async fn run(command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::Show { json } => report(show()?, json),
         ConfigCommand::Path { json } => report(path(), json),
         ConfigCommand::Init { global, force, .. } => report(init(global, force)?, false),
-        ConfigCommand::Check { json } => report(check(), json),
+        ConfigCommand::Check { json } => report(check().await, json),
         ConfigCommand::Migrate { global, json } => report(migrate(global)?, json),
     }
 }
@@ -183,7 +183,7 @@ fn path() -> Outcome {
 /// Each file's format on its own terms, then whether the merged whole loads.
 /// A file this binary cannot read, or a merged config that fails the schema,
 /// is a rejection: the body still carries every file's verdict.
-fn check() -> Outcome {
+async fn check() -> Outcome {
     let mut files = Vec::new();
     let mut problems = Vec::new();
     let mut text = String::new();
@@ -247,9 +247,13 @@ fn check() -> Outcome {
             Err(error) => problems.push(format!("{error:#}")),
             Ok(loaded) => match crate::packs::InstalledPacks::for_config(&loaded) {
                 Ok(installed) => {
-                    text.push_str(&installed.check_text());
-                    packs = installed.check_json();
+                    let manager = graph_mcp::McpManager::new(loaded.config.mcp.clone());
+                    let unmet = installed.unmet(&manager).await;
+                    manager.shutdown().await;
+                    text.push_str(&installed.check_text(&unmet));
+                    packs = installed.check_json(&unmet);
                     warnings = installed.warnings;
+                    warnings.extend(graph_core::packs::requirements::describe_unmet(&unmet));
                 }
                 Err(error) => problems.push(format!("{error:#}")),
             },

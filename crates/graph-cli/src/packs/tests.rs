@@ -73,7 +73,10 @@ fn an_installed_pack_loads_with_its_lock_tag() {
     );
     let set = installed.pack_set();
     assert!(set.item("example__tool__echo").is_some());
-    assert_eq!(installed.check_json()[0]["modified"], false);
+    assert_eq!(
+        installed.check_json(&Default::default())[0]["modified"],
+        false
+    );
 }
 
 #[test]
@@ -135,7 +138,9 @@ fn an_edited_copy_loads_with_a_warning() {
     assert!(installed.packs[0].modified());
     assert_eq!(installed.warnings.len(), 1);
     assert!(installed.warnings[0].contains("local edits"));
-    assert!(installed.check_text().contains("local edits"));
+    assert!(installed
+        .check_text(&Default::default())
+        .contains("local edits"));
 }
 
 #[test]
@@ -159,7 +164,7 @@ fn a_project_entry_shadows_the_global_one_whole() {
     assert_eq!(installed.shadowed[0].layer, LayerKind::Global);
     assert_eq!(installed.shadowed[0].by, LayerKind::Project);
     assert!(installed
-        .check_text()
+        .check_text(&Default::default())
         .contains("shadowed by the project layer"));
 
     std::fs::remove_dir_all(global.path().join("packs/example")).unwrap();

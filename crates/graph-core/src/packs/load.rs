@@ -1,5 +1,7 @@
+use super::requirements::{evaluate, Machine, McpNeed, McpUse, PackNeeds};
 use super::{apply_interface, catalog_name, ItemKind, PackItem, PackSource};
 use crate::agent::doc::{global_fragments, load_agent_file, AgentDoc, AgentSource};
+use crate::pipeline::catalog::{agent_tool_patterns, step_calls};
 use crate::pipeline::doc::{parse_plan_doc, validate_doc, PlanDoc};
 use crate::user_tools::{load_user_tool, UserToolDoc};
 use graph_config::pack::{
@@ -16,6 +18,7 @@ pub struct LoadedPack {
     pub plans: Vec<PlanDoc>,
     pub agents: Vec<AgentDoc>,
     pub items: Vec<PackItem>,
+    pub needs: PackNeeds,
 }
 
 pub fn check_installed_name(name: &str, mcp_servers: &BTreeSet<String>) -> Result<(), String> {
@@ -103,6 +106,12 @@ pub fn load_pack(
         ));
     }
 
+    let evaluation = manifest
+        .as_ref()
+        .map(|manifest| evaluate(&manifest.requires, &Machine::current()))
+        .unwrap_or_default();
+    problems.extend(evaluation.refused);
+
     let manifest = match manifest {
         Some(manifest) if problems.is_empty() => manifest,
         _ => {
@@ -113,6 +122,21 @@ pub fn load_pack(
         }
     };
     apply_interface(&mut items, include, exclude);
+    let needs = PackNeeds {
+        unmet: evaluation.unmet,
+        mcp: manifest
+            .requires
+            .mcp
+            .iter()
+            .map(|(prefix, requirement)| {
+                let need = McpNeed {
+                    requirement: requirement.clone(),
+                    uses: mcp_uses(prefix, &plans, &agents),
+                };
+                (prefix.clone(), need)
+            })
+            .collect(),
+    };
     Ok(LoadedPack {
         source,
         manifest,
@@ -120,7 +144,55 @@ pub fn load_pack(
         plans,
         agents,
         items,
+        needs,
     })
+}
+
+fn mcp_uses(prefix: &str, plans: &[PlanDoc], agents: &[AgentDoc]) -> Vec<McpUse> {
+    let server_tool = |name: &str| {
+        name.strip_prefix(prefix)
+            .and_then(|rest| rest.strip_prefix(super::KIND_SEPARATOR))
+            .is_some_and(|tool| !tool.is_empty() && !name.contains('*'))
+    };
+    let mut uses: Vec<McpUse> = Vec::new();
+    let mut add = |found: McpUse| {
+        let known = uses
+            .iter()
+            .any(|seen| seen.tool == found.tool && seen.input == found.input);
+        if !known {
+            uses.push(found);
+        }
+    };
+    for plan in plans {
+        for (step, tool, input) in step_calls(&plan.steps) {
+            if server_tool(&tool) {
+                add(McpUse {
+                    site: format!("plan '{}' step {step}", plan.identifier),
+                    tool,
+                    input: Some(input),
+                });
+            }
+        }
+        for (step, pattern) in agent_tool_patterns(&plan.steps) {
+            if server_tool(&pattern) {
+                add(McpUse {
+                    site: format!("plan '{}' step {step} tools", plan.identifier),
+                    tool: pattern,
+                    input: None,
+                });
+            }
+        }
+    }
+    for agent in agents {
+        for tool in agent.tools.iter().filter(|tool| server_tool(tool)) {
+            add(McpUse {
+                site: format!("agent '{}' tools", agent.name),
+                tool: tool.clone(),
+                input: None,
+            });
+        }
+    }
+    uses
 }
 
 fn load_dir<T>(

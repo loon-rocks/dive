@@ -29,6 +29,13 @@ impl ToolRegistry for RecordingRegistry {
         self.inner.servers().await
     }
 
+    async fn server_identity(
+        &self,
+        server: &str,
+    ) -> Option<Result<graph_core::ServerIdentity, String>> {
+        self.inner.server_identity(server).await
+    }
+
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {
         let outcome = self.inner.invoke(name, input).await?;
         if !outcome.is_error {

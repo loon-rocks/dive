@@ -132,25 +132,68 @@ pub fn resolve_plan_tools_deep(
     catalog: &ToolCatalog,
 ) -> CatalogCheck {
     let mut check = resolve_plan_tools(doc, catalog);
-    let mut visited: BTreeSet<&str> = BTreeSet::from([doc.identifier.as_str()]);
-    let mut queue: Vec<&str> = plan_refs(&doc.steps, &catalog.packs);
-    while let Some(identifier) = queue.pop() {
-        if !visited.insert(identifier) {
-            continue;
-        }
-        // Unknown identifiers were already reported as errors above.
-        let Some(sub) = all_docs.iter().find(|d| d.identifier == identifier) else {
-            continue;
-        };
+    for sub in reachable_plans(&doc.steps, Some(&doc.identifier), all_docs, &catalog.packs) {
         let sub_check = resolve_plan_tools(sub, catalog);
-        let prefix = |p: String| format!("plan '{identifier}': {p}");
+        let prefix = |p: String| format!("plan '{}': {p}", sub.identifier);
         check
             .errors
             .extend(sub_check.errors.into_iter().map(prefix));
         check.notes.extend(sub_check.notes.into_iter().map(prefix));
-        queue.extend(plan_refs(&sub.steps, &catalog.packs));
     }
     check
+}
+
+pub fn reachable_plans<'a>(
+    steps: &'a Plan,
+    own: Option<&'a str>,
+    all_docs: &'a [PlanDoc],
+    packs: &crate::packs::PackSet,
+) -> Vec<&'a PlanDoc> {
+    let mut visited: BTreeSet<&str> = own.into_iter().collect();
+    let mut reached = Vec::new();
+    let mut queue: Vec<&str> = plan_refs(steps, packs);
+    while let Some(identifier) = queue.pop() {
+        if !visited.insert(identifier) {
+            continue;
+        }
+        let Some(sub) = all_docs.iter().find(|d| d.identifier == identifier) else {
+            continue;
+        };
+        queue.extend(plan_refs(&sub.steps, packs));
+        reached.push(sub);
+    }
+    reached
+}
+
+pub fn reachable_packs(
+    steps: &Plan,
+    own: Option<&str>,
+    all_docs: &[PlanDoc],
+    packs: &crate::packs::PackSet,
+) -> BTreeSet<String> {
+    let docs = reachable_plans(steps, None, all_docs, packs);
+    let mut reached: BTreeSet<String> = own
+        .map(str::to_string)
+        .into_iter()
+        .chain(
+            docs.iter()
+                .filter_map(|doc| Some(doc.pack.as_ref()?.name.clone())),
+        )
+        .collect();
+    for plan in std::iter::once(steps).chain(docs.iter().map(|doc| &doc.steps)) {
+        let tools = step_tools(plan).into_iter().map(|(_, tool)| tool);
+        let patterns = agent_tool_patterns(plan)
+            .into_iter()
+            .map(|(_, pattern)| pattern);
+        for name in tools.chain(patterns) {
+            if let Some((pack, _)) = name.split_once(crate::packs::KIND_SEPARATOR) {
+                if packs.is_installed(pack) {
+                    reached.insert(pack.to_string());
+                }
+            }
+        }
+    }
+    reached
 }
 
 /// Resolve bare steps (no document context) — the pre-execution guard in
@@ -395,7 +438,7 @@ pub(crate) fn step_tools(plan: &Plan) -> Vec<(String, String)> {
         .collect()
 }
 
-fn step_calls(plan: &Plan) -> Vec<(String, String, Map<String, Value>)> {
+pub(crate) fn step_calls(plan: &Plan) -> Vec<(String, String, Map<String, Value>)> {
     let mut calls = Vec::new();
     for step in plan {
         calls.push((step.id.clone(), step.tool_name.clone(), step.input.clone()));
@@ -429,25 +472,34 @@ fn check_input(
     let Some(schema) = catalog.input_schemas.get(tool) else {
         return;
     };
+    check.errors.extend(
+        input_problems(tool, input, schema)
+            .into_iter()
+            .map(|problem| format!("step {step_id}: {problem}")),
+    );
+}
+
+pub(crate) fn input_problems(tool: &str, input: Map<String, Value>, schema: &Value) -> Vec<String> {
     let Ok(validator) = jsonschema::validator_for(schema) else {
-        return;
+        return Vec::new();
     };
     let mut input = Value::Object(input);
     super::doc::apply_schema_defaults(schema, &mut input);
-    for error in validator.iter_errors(&input) {
-        let path = error.instance_path.to_string();
-        if templated_along(&input, &path) {
-            continue;
-        }
-        let at = if path.is_empty() {
-            String::new()
-        } else {
-            format!(" at {path}")
-        };
-        check
-            .errors
-            .push(format!("step {step_id}: input for {tool}{at}: {error}"));
-    }
+    validator
+        .iter_errors(&input)
+        .filter_map(|error| {
+            let path = error.instance_path.to_string();
+            if templated_along(&input, &path) {
+                return None;
+            }
+            let at = if path.is_empty() {
+                String::new()
+            } else {
+                format!(" at {path}")
+            };
+            Some(format!("input for {tool}{at}: {error}"))
+        })
+        .collect()
 }
 
 fn templated_along(input: &Value, path: &str) -> bool {

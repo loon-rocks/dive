@@ -588,3 +588,136 @@ fn remove_deletes_the_pack_and_lists_files_that_still_call_it() {
     let refusal = error(&remove(layer, "example").unwrap());
     assert!(refusal.contains("not installed"), "{refusal}");
 }
+
+impl Upstream {
+    fn release_requiring(&self, requires: &str, tag: &str) {
+        write(
+            &self.work,
+            "pack.toml",
+            &format!(
+                "version = 1\nname = \"example\"\ndescription = \"{tag}\"\n\n[requires]\n{requires}\n"
+            ),
+        );
+        git(&self.work, &["add", "-A"]);
+        git(&self.work, &["commit", "-q", "-m", tag]);
+        git(&self.work, &["tag", tag]);
+    }
+}
+
+fn other_os() -> &'static str {
+    if std::env::consts::OS == "linux" {
+        "macos"
+    } else {
+        "linux"
+    }
+}
+
+#[test]
+fn add_refuses_a_release_needing_a_newer_graph_and_installs_nothing() {
+    let upstream = upstream();
+    upstream.release_requiring("graph = \">=99\"", "v4.0.0");
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    let refusal = error(&add(layer, &request(&upstream.url, None, None)).unwrap());
+    assert!(
+        refusal.contains(&format!(
+            "requires.graph: needs graph >=99; this is graph {}",
+            env!("CARGO_PKG_VERSION")
+        )),
+        "{refusal}"
+    );
+    assert!(!layer.copy_dir("example").exists());
+    assert_eq!(config(layer), CONFIG);
+    assert!(lock(layer).packs.is_empty());
+    assert!(staging_left(layer).is_empty());
+}
+
+#[test]
+fn update_refuses_a_release_for_another_os_and_keeps_the_installed_one() {
+    let upstream = upstream();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    assert!(
+        !add(layer, &request(&upstream.url, Some("v1"), None))
+            .unwrap()
+            .rejected
+    );
+    upstream.release_requiring(&format!("os = [\"{}\"]", other_os()), "v1.2.0");
+    let refusal = error(&update(layer, &[], false).unwrap());
+    assert!(
+        refusal.contains(&format!(
+            "requires.os: needs {}; this machine runs {}",
+            other_os(),
+            std::env::consts::OS
+        )),
+        "{refusal}"
+    );
+    assert_eq!(lock(layer).packs["example"].tag.as_deref(), Some("v1.1.0"));
+}
+
+const MCP_CONFIG: &str = "version = 4\n\n[mcp.everything]\ncommand = \"true\"\n";
+
+const UNMET: &str = r#"binaries = ["graph-pack-no-such-binary"]
+env = ["GRAPH_PACK_TEST_NEVER_SET"]
+
+[requires.mcp.everything]
+server = "mcp-servers/everything"
+
+[requires.mcp.linear]
+url = "https://mcp.linear.app/mcp"
+"#;
+
+#[test]
+fn add_reports_missing_binaries_env_and_unconfigured_mcp_servers_with_a_snippet() {
+    let upstream = upstream();
+    upstream.release_requiring(UNMET, "v4.0.0");
+    let project = scratch(MCP_CONFIG);
+    let layer = &project.layer;
+    let outcome = add(layer, &request(&upstream.url, None, None)).unwrap();
+    assert!(!outcome.rejected, "{}", outcome.body);
+    assert_eq!(
+        outcome.body["unmet"],
+        json!([
+            "requires.binaries: graph-pack-no-such-binary not found on PATH",
+            "requires.env: GRAPH_PACK_TEST_NEVER_SET not set (or empty)",
+            "requires.mcp.linear: no MCP server is configured under [mcp.linear] (url = \"https://mcp.linear.app/mcp\")",
+        ])
+    );
+    assert_eq!(
+        outcome.body["mcpSnippets"],
+        json!(["[mcp.linear]\nurl = \"https://mcp.linear.app/mcp\""])
+    );
+    let note = outcome.body["note"].as_str().unwrap();
+    assert!(
+        note.contains(
+            "example: unmet requires.binaries: graph-pack-no-such-binary not found on PATH"
+        ),
+        "{note}"
+    );
+    assert!(
+        note.contains("  [mcp.linear]\n    url = \"https://mcp.linear.app/mcp\""),
+        "{note}"
+    );
+    assert!(!config(layer).contains("[mcp.linear]"));
+    assert!(layer.copy_dir("example").is_dir());
+}
+
+#[test]
+fn update_reports_what_the_new_release_needs() {
+    let upstream = upstream();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    assert!(
+        !add(layer, &request(&upstream.url, Some("v1"), None))
+            .unwrap()
+            .rejected
+    );
+    upstream.release_requiring("binaries = [\"graph-pack-no-such-binary\"]", "v1.2.0");
+    let outcome = update(layer, &[], false).unwrap();
+    assert!(!outcome.rejected, "{}", outcome.body);
+    assert_eq!(
+        outcome.body["packs"][0]["unmet"],
+        json!(["requires.binaries: graph-pack-no-such-binary not found on PATH"])
+    );
+    assert_eq!(lock(layer).packs["example"].tag.as_deref(), Some("v1.2.0"));
+}

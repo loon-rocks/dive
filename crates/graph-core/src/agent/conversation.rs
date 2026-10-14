@@ -666,6 +666,13 @@ impl ToolRegistry for ConversationTools {
     async fn servers(&self) -> Vec<ToolServer> {
         self.base.servers().await
     }
+
+    async fn server_identity(
+        &self,
+        server: &str,
+    ) -> Option<Result<crate::tools::ServerIdentity, String>> {
+        self.base.server_identity(server).await
+    }
 }
 
 #[cfg(test)]
