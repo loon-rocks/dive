@@ -1011,6 +1011,7 @@ pub(super) mod tests {
             agent_depth: 0,
             always_loaded: Default::default(),
             drafted: Default::default(),
+            packs: Default::default(),
         })
     }
 
@@ -1965,6 +1966,7 @@ steps:
             agent_depth: 0,
             always_loaded: Default::default(),
             drafted: Default::default(),
+            packs: Default::default(),
         });
         (pipeline, provider)
     }

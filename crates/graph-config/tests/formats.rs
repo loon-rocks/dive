@@ -146,3 +146,19 @@ fn always_loaded_tools_parse_as_names_and_globs() {
         ["builtin__infer", "builtin__reshape", "linear__get_*"]
     );
 }
+
+#[test]
+fn pack_entries_read_every_field() {
+    let path = fixture_dir(CONFIG_FORMAT).join("packs.toml");
+    let loaded = load_from(std::slice::from_ref(&path)).unwrap();
+    let example = &loaded.config.packs["example"];
+    assert_eq!(example.git, "github.com/acme/graph-pack-example");
+    assert_eq!(example.reference.as_deref(), Some("v2"));
+    assert_eq!(example.include, ["plan__*"]);
+    assert_eq!(example.exclude, ["tool__file_info"]);
+    assert_eq!(loaded.config.packs["bare"].reference, None);
+    assert_eq!(
+        loaded.pack_layers[0].packs.keys().collect::<Vec<_>>(),
+        ["bare", "example", "pinned"]
+    );
+}

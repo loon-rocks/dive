@@ -840,6 +840,7 @@ version = "0.15.0"
 dependencies = [
  "anyhow",
  "dirs",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",

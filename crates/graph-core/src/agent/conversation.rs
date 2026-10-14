@@ -798,6 +798,7 @@ mod tests {
             agent_depth: 0,
             always_loaded: Default::default(),
             drafted: Default::default(),
+            packs: Default::default(),
         });
         let conversation = Conversation {
             agents,

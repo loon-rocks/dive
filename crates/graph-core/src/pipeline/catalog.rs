@@ -73,6 +73,7 @@ pub struct ToolCatalog {
     pub mcp_servers: BTreeSet<String>,
     pub agents: BTreeSet<String>,
     pub input_schemas: BTreeMap<String, Value>,
+    pub packs: crate::packs::PackSet,
 }
 
 /// The outcome of resolving a plan's tool names against a catalog.

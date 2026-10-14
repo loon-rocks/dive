@@ -1,0 +1,12 @@
+version = 1
+
+[packs.example]
+git = "github.com/acme/graph-pack-example"
+tag = "v2.0.0"
+sha = "a8303d2c0f5e4d1b9a7c6e5f4d3c2b1a09876543"
+hash = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+
+[packs.tracking]
+git = "ssh://git@example.com/acme/graph-pack-tracking.git"
+sha = "0123456789abcdef0123456789abcdef01234567"
+hash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

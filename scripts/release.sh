@@ -47,7 +47,9 @@ format_table() {
     "plan crates/graph-core/src/format.rs PLAN_FORMAT" \
     "tool crates/graph-core/src/format.rs TOOL_FORMAT" \
     "agent crates/graph-core/src/format.rs AGENT_FORMAT" \
-    "store crates/graph-store/src/file.rs STORE_FORMAT"; do
+    "store crates/graph-store/src/file.rs STORE_FORMAT" \
+    "pack crates/graph-config/src/pack.rs PACK_FORMAT" \
+    "lock crates/graph-config/src/pack.rs LOCK_FORMAT"; do
     set -- $spec
     source=$(git show "$ref:$2" 2>/dev/null || true)
     version=$(printf '%s\n' "$source" | sed -n "s/^pub const $3: u32 = \([0-9]*\);.*/\1/p" | head -1)

@@ -201,6 +201,7 @@ mod tests {
             agent_depth: 0,
             always_loaded: Default::default(),
             drafted: Default::default(),
+            packs: Default::default(),
         });
         (AgentToolbox::new(base.clone(), pipeline, vec![doc]), base)
     }

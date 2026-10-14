@@ -24,7 +24,7 @@ exactly the release's files for you to read and edit.
 
 Snippets live one directory per changelog entry, `<module>/<version>/`:
 `graph/v0.14.0/` for the binary, `config/v2/` (or `plan/`, `tool/`,
-`store/`) for a file version the release bumps. `changelog_entry` only
+`agent/`, `store/`, `pack/`, `lock/`) for a file version the release bumps. `changelog_entry` only
 ever writes the `graph/` directory; when the release bumps a file version,
 move the inferred migration prompt (and a summary, if you write one) into
 that kind's directory during the review, and the page renders it under
@@ -101,14 +101,14 @@ refused too.
 The changelog is a flat list of entries, one per **module version**, newest
 first. Cutting a binary release produces a `Graph v0.13.0` entry; a release
 that also bumps a file version produces one more entry per bumped kind —
-`Config v2`, `Plan v2`, `Tool v2`, `Agent v2`, `Store v2` — each with its own heading and
+`Config v2`, `Plan v2`, `Tool v2`, `Agent v2`, `Store v2`, `Pack v2`, `Lock v2` — each with its own heading and
 the same date (on the docs page, each `<Update>` card is also tagged with
 its module name, so readers can filter to one). Nothing is nested: a reader looking for what changed in the
 config schema finds a `Config v2` entry, not a subsection of the binary's.
 
 Which commits go where:
 
-- a **breaking commit scoped `config`, `plan`, `tool`, `agent`, or `store`** is that
+- a **breaking commit scoped `config`, `plan`, `tool`, `agent`, `store`, `pack`, or `lock`** is that
   kind's entry, when the release bumps that kind;
 - everything else is the `Graph` entry;
 - a kind whose version is new in this release (its first constant) gets an
@@ -121,10 +121,10 @@ the `cliff_context` tool — read the bumps from the tag message's
 which `release.sh` writes. The tag stays the source of truth: a regeneration
 produces the same entries.
 
-The five scopes are therefore reserved: they mean "this commit bumps that
+The seven scopes are therefore reserved: they mean "this commit bumps that
 file kind's version", nothing else. `check-commit-subject.sh` rejects a
 reserved scope without `!` (an ordinary change to the crate that reads those
-files takes another scope: `graph-config`, `plans`, `tools`, `agents`, `storage`, or
+files takes another scope: `graph-config`, `plans`, `tools`, `agents`, `packs`, `storage`, or
 none), and `release.sh` checks the other direction before cutting: a moved
 constant needs a `(kind)!` commit whose `BREAKING CHANGE:` footer names the
 new version, and a `(kind)!` commit needs a moved constant.
@@ -137,7 +137,8 @@ hiding one.
 
 ## Version bumps
 
-`config.toml`, plan documents, tool documents, agent documents, and the data directory each
+`config.toml`, plan documents, tool documents, agent documents, the data directory,
+pack manifests (`pack.toml`), and pack lockfiles (`packs.lock`) each
 carry an integer file version, independent of the binary version
 (`docs/reference/file-versions.mdx` is the user-facing contract). **Every** schema
 change to one of those files — a new optional key just as much as a
@@ -147,14 +148,17 @@ reads a window of generations (`*_FORMAT_OLDEST..=*_FORMAT`) that narrows
 only at a major release. A bump ships as one PR containing all of:
 
 1. The constant raised: `CONFIG_FORMAT` (`crates/graph-config/src/format.rs`),
-   `PLAN_FORMAT` / `TOOL_FORMAT` / `AGENT_FORMAT` (`crates/graph-core/src/format.rs`), or
-   `STORE_FORMAT` (`crates/graph-store/src/file.rs`).
+   `PLAN_FORMAT` / `TOOL_FORMAT` / `AGENT_FORMAT` (`crates/graph-core/src/format.rs`),
+   `STORE_FORMAT` (`crates/graph-store/src/file.rs`), or `PACK_FORMAT` /
+   `LOCK_FORMAT` (`crates/graph-config/src/pack.rs`).
 2. A migration appended to that file kind's chain — a forward-only function
    from version N to N+1 over the raw document, returning notes for anything
    it could not carry over. An additive change appends a no-op step.
 3. A frozen fixture pair: the version N file stays under
    `tests/fixtures/v<N>/`, its version N+1 twin lands under `v<N+1>/` with the
    same file name, and the golden-pair test proves they load identically.
+   Pack manifests and lockfiles keep theirs under
+   `crates/graph-config/tests/fixtures/pack/v<N>/` and `lock/v<N>/`.
    Fixtures for every version in the window must keep loading.
 4. A breaking commit scoped to the file kind (`feat(config)!: …`) whose
    footer names the new version — `BREAKING CHANGE: config version 2 (graph
@@ -166,7 +170,7 @@ only at a major release. A bump ships as one PR containing all of:
 The `format_drift` check (`.graph/plans/format_drift.yaml`, run by
 `graph-checks.yaml`) fails a PR that changes a model file's schema without
 step 1; the fixture tests catch a removed or renamed key mechanically. At
-release time the script diffs the five constants between the last tag and
+release time the script diffs the seven constants between the last tag and
 `HEAD`, checks step 4 both ways, writes the result into the
 tag message (`file versions: config 2 (from 1), plan 1, tool 1, store 1` —
 the tag is the source of truth, so the changelog reads it from there on
