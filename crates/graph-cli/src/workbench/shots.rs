@@ -56,7 +56,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 const UPDATE_ENV: &str = "GRAPH_UPDATE_SHOTS";
-const SHOT_GITHUB_PACK: &str ="crates/graph-core/tests/fixtures/packs/github";
+const SHOT_GITHUB_PACK: &str = "crates/graph-core/tests/fixtures/packs/github";
 
 // ── Scenario spec ────────────────────────────────────────────────────────
 
