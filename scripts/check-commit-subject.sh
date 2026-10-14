@@ -28,14 +28,14 @@ fi
 # such bump is breaking for older binaries, so the `!` marker is mandatory —
 # a reserved scope without it is either a misfiled crate change (pick another
 # scope: graph-config, plans, tools, agents, storage) or a bump missing its marker.
-if [[ $subject =~ ^($types)\((config|plan|tool|agent|store)\):\ .+ ]]; then
+if [[ $subject =~ ^($types)\((config|plan|tool|agent|store|pack|lock)\):\ .+ ]]; then
   scope=${BASH_REMATCH[2]}
   cat >&2 <<EOF
 Commit subject uses the reserved scope "$scope" without the breaking marker:
 
     $subject
 
-The scopes config, plan, tool, agent, and store are reserved for file-version bumps
+The scopes config, plan, tool, agent, store, pack, and lock are reserved for file-version bumps
 and require \`!\`, e.g.
 
     feat($scope)!: <what changed in the file's schema>
@@ -43,7 +43,7 @@ and require \`!\`, e.g.
     BREAKING CHANGE: $scope version <N> (graph $scope migrate)
 
 For an ordinary change to the crate that reads those files, use a different
-scope (graph-config, plans, tools, storage) or none. See RELEASING.md >
+scope (graph-config, plans, tools, packs, storage) or none. See RELEASING.md >
 "Version bumps".
 EOF
   exit 1
