@@ -81,7 +81,10 @@ impl Pipeline {
             None => input["prompt"].as_str().unwrap_or_default().to_string(),
             Some(_) => serde_json::to_string_pretty(&input).unwrap_or_default(),
         };
-        let tools = self.agent_tools(&doc).await;
+        let mut child = self.clone();
+        child.agent_depth += 1;
+        child.origin = crate::packs::Origin::of(doc.source.pack());
+        let tools = child.agent_tools(&doc).await;
         let allowed: BTreeSet<String> = tools.iter().map(|tool| tool.name.clone()).collect();
         let spec = TaskSpec {
             model: doc.model.clone(),
@@ -91,8 +94,6 @@ impl Pipeline {
             max_iterations: doc.max_iterations.or(Some(self.max_agent_iterations)),
             output_schema: doc.output_schema.clone(),
         };
-        let mut child = self.clone();
-        child.agent_depth += 1;
         let agent_path = path.nested(&doc.tool_name(), None);
         let empty = Map::new();
         let tools = AgentTools {
@@ -133,6 +134,7 @@ impl Pipeline {
         let mut candidates = self.registry.tools().await.unwrap_or_default();
         candidates.extend(native_tool_defs());
         candidates.extend(self.callable_plan_defs());
+        self.packs.retain_shown(&self.origin, &mut candidates);
         let mut specs: Vec<ToolSpec> = candidates
             .into_iter()
             .filter(|tool| tool.name != PLANNER_TOOL)
@@ -147,6 +149,7 @@ impl Pipeline {
             doc.subagents
                 .iter()
                 .filter_map(|target| self.agents.get(target))
+                .filter(|target| self.packs.shows(&self.origin, &target.name))
                 .map(|target| to_spec(named_agent_tool_def(&target))),
         );
         specs

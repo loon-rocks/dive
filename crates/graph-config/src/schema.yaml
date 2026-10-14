@@ -197,12 +197,12 @@ properties:
           type: array
           items:
             type: string
-          description: Pack items to expose. Not applied yet.
+          description: Glob patterns over `<kind>__<item>`, such as `plan__*`, naming the items callable from outside the pack. Everything when empty.
         exclude:
           type: array
           items:
             type: string
-          description: Pack items to hide. Not applied yet.
+          description: Glob patterns over `<kind>__<item>` for items only the pack's own plans and agents can call.
   storage:
     type: object
     description: Where graph keeps state.

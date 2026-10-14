@@ -11,9 +11,9 @@
 </ParamField>
 
 <ParamField body="packs.<name>.include" type="string[]">
-  Pack items to expose. Not applied yet.
+  Glob patterns over `<kind>__<item>`, such as `plan__*`, naming the items callable from outside the pack. Everything when empty.
 </ParamField>
 
 <ParamField body="packs.<name>.exclude" type="string[]">
-  Pack items to hide. Not applied yet.
+  Glob patterns over `<kind>__<item>` for items only the pack's own plans and agents can call.
 </ParamField>

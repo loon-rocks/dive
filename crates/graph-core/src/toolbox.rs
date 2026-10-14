@@ -7,6 +7,7 @@
 //! [`Pipeline::call_plan`]/[`Pipeline::call_planner`]; this registry is a
 //! thin adapter for the agent loop.
 
+use crate::packs::Origin;
 use crate::pipeline::{doc::PlanDoc, Pipeline};
 use crate::tools::{ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use serde_json::{json, Value};
@@ -29,6 +30,10 @@ impl AgentToolbox {
             pipeline,
             plans,
         }
+    }
+
+    pub fn refusal(&self, name: &str) -> Option<String> {
+        self.pipeline.packs.refusal(&Origin::Outside, name)
     }
 
     fn plan_and_execute_def(&self) -> ToolDef {
@@ -73,10 +78,19 @@ impl ToolRegistry for AgentToolbox {
         }
         defs.push(self.plan_and_execute_def());
         defs.extend(crate::pipeline::drafter_tool_defs());
+        self.pipeline
+            .packs
+            .retain_shown(&Origin::Outside, &mut defs);
         Ok(defs)
     }
 
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {
+        if let Some(message) = self.refusal(name) {
+            return Ok(ToolOutcome {
+                result: json!({ "error": message }),
+                is_error: true,
+            });
+        }
         if let Some(outcome) = self.pipeline.call_drafter_tool(name, input.clone()).await {
             return Ok(outcome);
         }
@@ -95,6 +109,21 @@ impl ToolRegistry for AgentToolbox {
                     is_error: call.is_error,
                 });
             }
+        }
+        if let Some((_, crate::packs::ItemKind::Agent, _)) = self.pipeline.packs.routed(name) {
+            let path = crate::pipeline::StepPath::top(name);
+            let outcome = match self.pipeline.run_subagent(&path, name, input).await {
+                Ok(run) => run.outcome,
+                Err(crate::pipeline::DispatchError::Failed(message)) => ToolOutcome {
+                    result: json!({ "error": message }),
+                    is_error: true,
+                },
+                Err(crate::pipeline::DispatchError::Aborted { error }) => ToolOutcome {
+                    result: json!({ "error": format!("agent '{name}' aborted"), "cause": error }),
+                    is_error: true,
+                },
+            };
+            return Ok(outcome);
         }
         self.base.invoke(name, input).await
     }
@@ -202,6 +231,7 @@ mod tests {
             always_loaded: Default::default(),
             drafted: Default::default(),
             packs: Default::default(),
+            origin: Default::default(),
         });
         (AgentToolbox::new(base.clone(), pipeline, vec![doc]), base)
     }

@@ -181,6 +181,14 @@ impl InstalledPacks {
         self.packs.iter().flat_map(|pack| pack.loaded.agents.iter())
     }
 
+    pub fn public_agents(&self) -> Vec<AgentDoc> {
+        let set = self.pack_set();
+        self.agents()
+            .filter(|doc| set.shows(&graph_core::packs::Origin::Outside, &doc.name))
+            .cloned()
+            .collect()
+    }
+
     pub fn check_text(&self) -> String {
         let mut text = String::new();
         for pack in &self.packs {

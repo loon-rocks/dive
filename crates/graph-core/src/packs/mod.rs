@@ -1,3 +1,5 @@
+pub mod visibility;
+
 use graph_config::pack::LayerKind;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -121,6 +123,15 @@ pub enum Origin {
     Pack(String),
 }
 
+impl Origin {
+    pub fn of(pack: Option<&PackSource>) -> Origin {
+        match pack {
+            Some(source) => Origin::Pack(source.name.clone()),
+            None => Origin::Outside,
+        }
+    }
+}
+
 pub fn visible(caller: &Origin, target: &PackItem) -> bool {
     match caller {
         Origin::Pack(pack) if *pack == target.pack => true,
@@ -129,7 +140,9 @@ pub fn visible(caller: &Origin, target: &PackItem) -> bool {
 }
 
 pub fn apply_interface(items: &mut [PackItem], include: &[String], exclude: &[String]) {
-    let _ = (items, include, exclude);
+    for item in items {
+        item.public = visibility::is_public(item, include, exclude);
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

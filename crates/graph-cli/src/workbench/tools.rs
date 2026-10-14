@@ -464,7 +464,12 @@ impl WorkbenchTools {
         let Some(name) = input.get("name").and_then(Value::as_str) else {
             return error_outcome("describe_tool requires a 'name' string");
         };
-        if let Some(identifier) = self.pipeline.packs.plan_target(name) {
+        if let Some(identifier) = self
+            .pipeline
+            .packs
+            .plan_target(name)
+            .filter(|_| self.pipeline.packs.shows(&self.pipeline.origin, name))
+        {
             if let Some(doc) = self
                 .pipeline
                 .plans
@@ -1017,6 +1022,7 @@ pub(super) mod tests {
             always_loaded: Default::default(),
             drafted: Default::default(),
             packs: Default::default(),
+            origin: Default::default(),
         })
     }
 
@@ -1972,6 +1978,7 @@ steps:
             always_loaded: Default::default(),
             drafted: Default::default(),
             packs: Default::default(),
+            origin: Default::default(),
         });
         (pipeline, provider)
     }

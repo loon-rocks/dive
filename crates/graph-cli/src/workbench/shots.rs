@@ -416,6 +416,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
         always_loaded: Default::default(),
         drafted: Default::default(),
         packs: Default::default(),
+        origin: Default::default(),
     });
 
     let debug = Arc::new(DebugControls::default());

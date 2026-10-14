@@ -4,6 +4,7 @@ use crate::cli::ToolsCommand;
 use crate::commands::outcome::{report, Outcome};
 use crate::runtime::Runtime;
 use anyhow::{bail, Result};
+use graph_core::toolbox::AgentToolbox;
 use graph_core::ToolRegistry;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -27,7 +28,7 @@ pub async fn run(command: ToolsCommand) -> Result<()> {
 }
 
 async fn dispatch(
-    registry: &(dyn ToolRegistry + Send + Sync),
+    registry: &AgentToolbox,
     command: ToolsCommand,
     docs: &graph_core::user_tools::ToolDocs,
 ) -> Result<(Outcome, bool)> {
@@ -172,11 +173,14 @@ pub(crate) async fn show(
 }
 
 pub(crate) async fn test(
-    registry: &(dyn ToolRegistry + Send + Sync),
+    registry: &AgentToolbox,
     name: &str,
     input: Option<&str>,
     inputs: &[String],
 ) -> Result<Outcome> {
+    if let Some(message) = registry.refusal(name) {
+        bail!(message);
+    }
     // A control step has a description and a schema, so it looks testable
     // in a listing. It is not: the executor evaluates it, and dispatching
     // the bare name would fail deep in the registry with an unhelpful

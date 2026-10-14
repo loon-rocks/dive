@@ -26,6 +26,8 @@ pub mod interlocutor;
 pub mod iterate;
 mod named_agents;
 mod native_tools;
+#[cfg(test)]
+mod pack_tests;
 pub mod plan;
 mod prompts;
 pub mod route;
@@ -118,6 +120,7 @@ pub struct Pipeline {
     pub always_loaded: Arc<Vec<String>>,
     pub drafted: Arc<drafter::Drafted>,
     pub packs: Arc<crate::packs::PackSet>,
+    pub origin: crate::packs::Origin,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -426,6 +429,21 @@ impl Pipeline {
         input: Option<Value>,
         pack: Option<&crate::packs::PackSource>,
     ) -> Result<PipelineOutcome, PipelineError> {
+        let mut scoped = self.clone();
+        scoped.origin = crate::packs::Origin::of(pack);
+        scoped
+            .execute_explicit(query, plan, finish, input, pack)
+            .await
+    }
+
+    async fn execute_explicit(
+        &self,
+        query: &str,
+        plan: Plan,
+        finish: Finish,
+        input: Option<Value>,
+        pack: Option<&crate::packs::PackSource>,
+    ) -> Result<PipelineOutcome, PipelineError> {
         let mut state = RunState {
             query: query.to_string(),
             plan,
@@ -450,6 +468,7 @@ impl Pipeline {
         if let Some(catalog) = &self.catalog {
             problems.extend(catalog::resolve_step_tools(&state.plan, catalog));
         }
+        problems.extend(self.packs.plan_problems(&self.origin, &state.plan));
         if !problems.is_empty() {
             return Err(PipelineError::InvalidPlan(problems.join("; ")));
         }
@@ -490,6 +509,7 @@ impl Pipeline {
             child.call_stack.push(identifier.to_string());
         } else {
             child.call_stack.push("plan_and_execute".to_string());
+            child.origin = crate::packs::Origin::Outside;
         }
         child
     }
@@ -711,6 +731,7 @@ impl Pipeline {
         let mut tools = self.registry.tools().await.unwrap_or_default();
         tools.extend(self.callable_plan_defs());
         tools.extend(self.agent_tool_defs());
+        self.packs.retain_shown(&self.origin, &mut tools);
         tools
     }
 
@@ -1065,7 +1086,9 @@ impl Pipeline {
             .step_started(&self.call_stack, &path_text, tool_name, &rendered);
         self.events.tool_started(tool_name, &rendered);
         let started = std::time::Instant::now();
-        let outcome = if let Some(identifier) = self.packs.plan_target(tool_name) {
+        let outcome = if let Some(message) = self.packs.refusal(&self.origin, tool_name) {
+            native_tools::tool_error(message)
+        } else if let Some(identifier) = self.packs.plan_target(tool_name) {
             let call = self.call_plan(identifier, rendered).await;
             if call.aborted {
                 // A nested abort is already a gate decision — never re-ask.

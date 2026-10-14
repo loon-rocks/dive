@@ -360,6 +360,7 @@ fn pipeline_over(
             always_loaded: Default::default(),
             drafted: Default::default(),
             packs: Arc::new(set),
+            origin: Default::default(),
         },
         provider,
     )
@@ -529,4 +530,128 @@ fn the_deep_check_follows_pack_plan_calls() {
     let check = resolve_plan_tools_deep(outer, &broken.plans, &catalog);
     assert_eq!(check.errors.len(), 1, "{:?}", check.errors);
     assert!(check.errors[0].starts_with("plan 'example__plan__whoami': step a: unknown tool"));
+}
+
+fn loaded_excluding(exclude: &[&str]) -> (tempfile::TempDir, LoadedPack) {
+    let dir = tempfile::tempdir().unwrap();
+    example_pack(dir.path());
+    let exclude: Vec<String> = exclude.iter().map(|name| name.to_string()).collect();
+    let pack = load_pack(source("example", dir.path()), &[], &exclude).unwrap();
+    (dir, pack)
+}
+
+#[test]
+fn the_entry_exclude_list_narrows_the_loaded_interface() {
+    let (_dir, pack) = loaded_excluding(&["tool__echo", "agent__*"]);
+    let public: Vec<String> = pack
+        .items
+        .iter()
+        .filter(|item| item.public)
+        .map(PackItem::catalog_name)
+        .collect();
+    assert_eq!(public, ["example__plan__outer", "example__plan__whoami"]);
+}
+
+#[test]
+fn the_static_check_takes_the_origin_from_the_plan_file() {
+    let (_dir, pack) = loaded_excluding(&["tool__echo"]);
+    let catalog = catalog_for(&pack);
+    let whoami = pack
+        .plans
+        .iter()
+        .find(|doc| doc.identifier == "example__plan__whoami")
+        .unwrap();
+    let own = crate::pipeline::catalog::resolve_plan_tools(whoami, &catalog);
+    assert!(own.is_ok(), "{:?}", own.errors);
+
+    let mut user = whoami.clone();
+    user.identifier = "snoop".to_string();
+    user.pack = None;
+    let outside = crate::pipeline::catalog::resolve_plan_tools(&user, &catalog);
+    assert!(
+        outside
+            .errors
+            .iter()
+            .any(|error| error.contains("example__tool__echo") && error.contains("pack 'example'")),
+        "{:?}",
+        outside.errors
+    );
+}
+
+#[tokio::test]
+async fn an_excluded_tool_is_refused_to_user_plans_and_open_to_its_pack() {
+    let (_dir, pack) = loaded_excluding(&["tool__echo"]);
+    let (pipeline, _) = pipeline_over(&[pack], Vec::new(), Vec::new());
+    let refused = pipeline
+        .run_explicit(
+            "run",
+            steps(json!([{"id": "a", "toolName": "example__tool__echo", "input": {"name": "x"}}])),
+            crate::pipeline::Finish::Silent,
+            None,
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("pack 'example'"), "{refused}");
+
+    let call = pipeline.call_plan("example__plan__outer", json!({})).await;
+    assert!(!call.is_error, "{}", call.result);
+    assert_eq!(call.result, json!({"name": "example"}));
+
+    let whoami = pipeline
+        .plans
+        .iter()
+        .find(|doc| doc.identifier == "example__plan__whoami")
+        .unwrap()
+        .clone();
+    let direct = pipeline
+        .run_explicit_in(
+            "run",
+            whoami.steps.clone(),
+            whoami.finish.clone(),
+            Some(json!({})),
+            whoami.pack.as_ref(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(direct.structured.unwrap()["name"], "example");
+}
+
+#[tokio::test]
+async fn the_agent_toolbox_routes_pack_items_behind_the_visibility_check() {
+    let (_dir, pack) = loaded_excluding(&["plan__outer"]);
+    let plans = pack.plans.clone();
+    let (pipeline, _) = pipeline_over(&[pack], Vec::new(), vec![answer("helped")]);
+    let pipeline = Arc::new(pipeline);
+    let toolbox =
+        crate::toolbox::AgentToolbox::new(pipeline.registry.clone(), pipeline.clone(), plans);
+    let names: Vec<String> = toolbox
+        .tools()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|def| def.name)
+        .collect();
+    assert!(names.contains(&"example__plan__whoami".to_string()));
+    assert!(!names.contains(&"example__plan__outer".to_string()));
+
+    let plan = toolbox
+        .invoke("example__plan__whoami", json!({}))
+        .await
+        .unwrap();
+    assert!(!plan.is_error, "{}", plan.result);
+    assert_eq!(plan.result["name"], "example");
+
+    let agent = toolbox
+        .invoke("example__agent__helper", json!({"prompt": "help"}))
+        .await
+        .unwrap();
+    assert!(!agent.is_error, "{}", agent.result);
+
+    let hidden = toolbox
+        .invoke("example__plan__outer", json!({}))
+        .await
+        .unwrap();
+    assert!(hidden.is_error);
+    assert!(hidden.result.to_string().contains("pack 'example'"));
 }

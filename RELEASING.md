@@ -33,7 +33,10 @@ headings; the commit groups the page renders below them are `####`.
 
 **Publish** commits the tree exactly as reviewed as `chore(release): vX.Y.Z`,
 tags `vX.Y.Z`, and pushes. It regenerates nothing: what you reviewed is what
-ships. Editing a snippet's text needs no further step, because the page
+ships. The docs site goes live with the release too: once the GitHub
+release exists, the release workflow moves the `docs-live` branch, which
+Mintlify deploys from, to the tag. Docs merged to `main` between releases
+stay unpublished until then. Editing a snippet's text needs no further step, because the page
 imports the snippet. Adding, removing, or moving a snippet file changes the
 page's imports, so after that re-run
 `GRAPH_STORAGE=memory graph plan run compose_changelog --input tag=vX.Y.Z`

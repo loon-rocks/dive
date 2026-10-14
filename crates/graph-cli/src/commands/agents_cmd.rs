@@ -14,7 +14,7 @@ pub fn run(command: AgentsCommand) -> Result<()> {
     let installed = crate::runtime::load_packs(&crate::runtime::load_config()?)?;
     let packs: Vec<AgentDoc> = installed.agents().cloned().collect();
     match command {
-        AgentsCommand::List { json } => report(list(&dirs, &packs), json),
+        AgentsCommand::List { json } => report(list(&dirs, &installed.public_agents()), json),
         AgentsCommand::Show { name, json } => report(show(&dirs, &packs, &name)?, json),
         AgentsCommand::Validate { path, json } => {
             report(validate(&dirs, &packs, path.as_deref())?, json)
