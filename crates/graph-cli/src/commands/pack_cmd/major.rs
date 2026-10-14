@@ -15,10 +15,11 @@ use graph_core::packs::PackSource;
 use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor, StepPath};
 use graph_core::EventSink;
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub const GUIDE_FILE: &str = "MIGRATING.md";
+const GUIDE_FILE: &str = "MIGRATING.md";
 
 pub struct Consent {
     pub yes: bool,
@@ -197,7 +198,7 @@ impl Crossed {
     }
 }
 
-const MIGRATING: &str = "plans/migrations";
+const MIGRATIONS_DIR: &str = "plans/migrations";
 
 struct Run<'a> {
     layer: &'a Layer,
@@ -271,18 +272,15 @@ async fn cross_majors(
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
     let releases = refs::releases(&remote);
-    let mut targets: Vec<&Release> = Vec::new();
-    for release in releases
+    let newer: BTreeSet<u64> = releases
         .iter()
-        .filter(|release| release.version.major > line)
-    {
-        if !targets
-            .iter()
-            .any(|target| target.version.major == release.version.major)
-        {
-            targets.extend(refs::newest_in(&releases, release.version.major));
-        }
-    }
+        .map(|release| release.version.major)
+        .filter(|major| *major > line)
+        .collect();
+    let targets: Vec<&Release> = newer
+        .into_iter()
+        .filter_map(|major| refs::newest_in(&releases, major))
+        .collect();
     if targets.is_empty() {
         return update_one(
             run.layer, run.state, entry, name, run.force, lock, held_back,
@@ -503,7 +501,7 @@ fn changed_paths(files: &[Value]) -> Vec<String> {
         .collect()
 }
 
-pub fn render(output: &Value) -> String {
+fn render(output: &Value) -> String {
     if !output.get("files").is_some_and(Value::is_array) {
         return serde_json::to_string_pretty(output).unwrap_or_else(|_| output.to_string());
     }
@@ -524,7 +522,7 @@ pub fn render(output: &Value) -> String {
         .join("\n\n")
 }
 
-pub fn guide(dir: &Path, major: u64) -> Option<String> {
+fn guide(dir: &Path, major: u64) -> Option<String> {
     let text = std::fs::read_to_string(dir.join(GUIDE_FILE)).ok()?;
     let heading = format!("## v{} to v{major}", major.saturating_sub(1));
     let mut lines = text.lines().skip_while(|line| line.trim_end() != heading);
@@ -539,10 +537,10 @@ fn guide_prompt(title: &str, plan: &str, major: u64, guide: Option<&str>) -> Str
     let heading = format!("## v{} to v{major}", major.saturating_sub(1));
     match guide {
         Some(guide) => format!(
-            "{title}: the new major has no {MIGRATING}/{plan}.yaml, so your files are not migrated. Its {GUIDE_FILE}, {heading}:\n\n{guide}\n\nInstall the new major and update your files by hand?"
+            "{title}: the new major has no {MIGRATIONS_DIR}/{plan}.yaml, so your files are not migrated. Its {GUIDE_FILE}, {heading}:\n\n{guide}\n\nInstall the new major and update your files by hand?"
         ),
         None => format!(
-            "{title}: the new major has no {MIGRATING}/{plan}.yaml, and its {GUIDE_FILE} has no {heading} section, so there is no guide to what changed.\n\nInstall the new major anyway?"
+            "{title}: the new major has no {MIGRATIONS_DIR}/{plan}.yaml, and its {GUIDE_FILE} has no {heading} section, so there is no guide to what changed.\n\nInstall the new major anyway?"
         ),
     }
 }
