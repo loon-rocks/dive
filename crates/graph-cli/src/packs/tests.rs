@@ -33,7 +33,7 @@ fn install(layer_dir: &Path, name: &str, tag: &str, lock: bool) -> String {
         let path = layer_dir.join("packs.lock");
         let mut text = std::fs::read_to_string(&path).unwrap_or_else(|_| "version = 1\n".into());
         text.push_str(&format!(
-            "\n[packs.{name}]\ngit = \"github.com/acme/graph-pack-example\"\ntag = \"{tag}\"\nsha = \"abc123\"\nhash = \"{hash}\"\n"
+            "\n[packs.{name}]\ngit = \"github.com/acme/graph-pack-example\"\ntag = \"{tag}\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"
         ));
         std::fs::write(path, text).unwrap();
     }
