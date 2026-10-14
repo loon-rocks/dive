@@ -112,6 +112,7 @@ jobs:
   # token the plan's resolve/decline transitions silently no-op.
   graph-review-9000:
     if: >-
+      false &&
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
