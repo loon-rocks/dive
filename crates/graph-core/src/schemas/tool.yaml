@@ -1,11 +1,11 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 title: Tool file
-description: One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the pack tool it names instead.
+description: One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the built-in tool it names instead.
 x-format: YAML
 x-locations:
   - "`./.graph/tools/<name>.yaml` (project)"
   - "`~/.config/graph/tools/<name>.yaml` (global)"
-  - "`<tools dir>/builtin/<name>.yaml` (replaces a pack tool)"
+  - "`<tools dir>/builtin/<name>.yaml` (replaces a built-in tool)"
 type: object
 required: [name, description, kind]
 properties:

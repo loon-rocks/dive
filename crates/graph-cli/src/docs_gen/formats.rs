@@ -39,6 +39,11 @@ const FORMATS: &[Format] = &[
         slug: "config",
         page: CONFIG_PAGE,
     },
+    Format {
+        source: graph_config::PACK_SCHEMA,
+        slug: "pack",
+        page: "packs/reference/pack-file",
+    },
 ];
 
 pub fn sections() -> Vec<Section> {
@@ -171,7 +176,7 @@ fn example_block(format: &Format, example: &Yaml) -> (&'static str, String) {
 }
 
 fn text_kind(format: &Format) -> &'static str {
-    if format.slug == "config" {
+    if matches!(format.slug, "config" | "pack") {
         "TOML"
     } else {
         "YAML"

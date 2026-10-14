@@ -19,7 +19,7 @@ Every command reports success or failure through its exit code. Scripts and CI j
 | `3` | `graph plan run` was missing an input, or an input didn't match the plan's `input_schema`. The schema is printed to stderr. |
 | `4` | A plan's `exit` step ended the run with `status: error`. |
 
-A tool that reports an error during `graph tools test --json` still exits `0`: the call completed, and the result's `isError` field says the tool failed.
+A tool that reports an error during `graph tool test --json` still exits `0`: the call completed, and the result's `isError` field says the tool failed.
 
 ## Output streams
 

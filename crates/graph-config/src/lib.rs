@@ -25,3 +25,4 @@ pub use model::{
 };
 
 pub const SCHEMA: &str = include_str!("schema.yaml");
+pub const PACK_SCHEMA: &str = include_str!("pack_schema.yaml");

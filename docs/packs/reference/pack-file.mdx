@@ -1,0 +1,85 @@
+---
+title: "pack.toml"
+description: "A pack's manifest, at the root of the pack's directory, naming the pack and the systems, programs, variables and MCP servers it needs."
+playground: "none"
+keywords: ["pack.toml", "schema", "TOML"]
+---
+
+| File type | Location |
+| --- | --- |
+| TOML | `<pack dir>/pack.toml`, such as `github/pack.toml` in a packs repository |
+
+## Fields
+
+<ParamField body="version" type="integer">
+  The file version the manifest is written in. Omitted means 1.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  The pack's name, which installs it as `[packs.<name>]` and prefixes its items as `<name>__<kind>__<item>`. Lowercase letters, digits and single underscores, starting with a letter, at most 20 characters. `user`, `plan`, `agent`, `builtin`, `workbench` and `pack` are reserved.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  What the pack does, in one sentence. Must not be empty.
+</ParamField>
+
+<ParamField body="license" type="string">
+  The pack's license, such as `MIT`.
+</ParamField>
+
+<ParamField body="homepage" type="string">
+  Where to read about the pack, such as its directory in the repository.
+</ParamField>
+
+<ParamField body="requires" type="object" required>
+  What the pack needs to run. `graph` and `os` are checked when the pack is installed or loaded, and a mismatch refuses it. `binaries`, `env` and `mcp` are reported by `graph config check`, and a plan run that reaches the pack fails before its first step when one is missing.
+</ParamField>
+
+<ParamField body="requires.graph" type="string">
+  The graph versions the pack works with, as a semver requirement such as `">=0.15"`.
+</ParamField>
+
+<ParamField body="requires.os" type="enum<string>[]" required>
+  The systems the pack runs on, `macos`, `linux` or both. `graph pack check` refuses a pack that leaves it empty.
+</ParamField>
+
+<ParamField body="requires.binaries" type="string[]">
+  Programs the pack's tools run, which must be on `PATH`.
+</ParamField>
+
+<ParamField body="requires.env" type="string[]">
+  Environment variables the pack's tools read, which must be set and not empty.
+</ParamField>
+
+<ParamField body="requires.mcp" type="object">
+  MCP servers the pack's plans and agents call, as `[requires.mcp.<name>]`, where `<name>` is the `[mcp.<name>]` server their calls use, as in `<name>__<tool>`. `graph pack check` checks each call against the server when one is configured under that name.
+</ParamField>
+
+<ParamField body="requires.mcp.<name>.server" type="string">
+  The name the server reports for itself.
+</ParamField>
+
+<ParamField body="requires.mcp.<name>.version" type="string">
+  The server versions the pack works with, as a semver requirement.
+</ParamField>
+
+<ParamField body="requires.mcp.<name>.url" type="string">
+  The server's URL, shown in the error when no `[mcp.<name>]` is configured.
+</ParamField>
+
+<RequestExample>
+
+```toml Example
+description = "Read and comment on pull requests, releases and git history."
+homepage = "https://github.com/tylerdavis/graph-packs/tree/main/github"
+license = "MIT"
+name = "github"
+version = 1
+
+[requires]
+binaries = ["bash", "git", "gh", "jq"]
+graph = ">=0.15"
+os = ["macos", "linux"]
+```
+
+</RequestExample>

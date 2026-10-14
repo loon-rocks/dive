@@ -1,0 +1,71 @@
+---
+title: "Packs"
+sidebarTitle: "Overview"
+description: "Shareable sets of tools, plans and agents, installed from git as plain copies you commit."
+keywords: ["packs", "install", "pack.toml", "packs.lock", "releases"]
+---
+
+A pack is a directory of [tools](/tools/overview), [plans](/plans/overview) and [agents](/agents/overview) with a [`pack.toml`](/packs/reference/pack-file), published in a git repository. `graph pack add` copies it into a config layer, and its items join the catalog under the pack's name.
+
+## Install a pack
+
+```bash
+graph pack add github
+```
+
+A bare name installs that directory of [tylerdavis/graph-packs](https://github.com/tylerdavis/graph-packs), which holds the official packs. A git URL installs from any repository.
+
+graph copies the pack into `./.graph/packs/github/`, adds a `[packs.github]` entry to `config.toml` and records the release in `./.graph/packs.lock`. Commit all three, and everyone who clones the project gets the same pack without installing anything. `--global` installs into `~/.config/graph/` instead.
+
+## Names
+
+A pack's items are called as `<pack>__<kind>__<item>`:
+
+| Kind | Called as | Example |
+| --- | --- | --- |
+| Tool | `<pack>__tool__<name>` | `github__tool__git_log` |
+| Plan | `<pack>__plan__<identifier>` | `files__plan__count_words` |
+| Agent | `<pack>__agent__<name>` | `files__agent__word_counter` |
+
+`--as <name>` installs a pack under another name, when two packs share one.
+
+A pack in the project layer shadows a pack with the same name in the global layer.
+
+## Versions
+
+A pack's releases are git tags named after its directory, such as `github/v1.2.0`. The `ref` in its config entry says which releases it follows:
+
+| `ref` | Follows |
+| --- | --- |
+| `v1` | The newest `v1.x.y` release. `graph pack add` writes this by default. |
+| `v1.2.0` | That release only. |
+| A branch name | The branch's latest commit. |
+
+`graph pack update` moves a pack to the newest release its `ref` allows. A new major release is never installed until you run `graph pack update --major`, which runs the pack's migration over your files and asks before applying it.
+
+## Releases never change
+
+`packs.lock` records the commit and a content hash for every installed release. graph refuses to install or update a pack whose release tag now points at a different commit, and `graph pack list` reports the moved tag. Packs that follow a branch are exempt.
+
+The official packs' tags are protected from moving or deletion, and each release on GitHub lists the content hash that `packs.lock` should record.
+
+## Change a pack
+
+The installed pack is a plain copy, so you can edit its files. `graph pack list` reports a copy that differs from `packs.lock`, and `graph pack update` refuses to overwrite it unless you pass `--force`.
+
+To hide items from your own plans and agents, list glob patterns over `<kind>__<item>` in the entry's [`include`](/reference/configuration#param-packs-name-include) or [`exclude`](/reference/configuration#param-packs-name-exclude). The pack's own plans and agents can still call everything.
+
+## Requirements
+
+A pack's `pack.toml` lists what it needs: a graph version, operating systems, programs on `PATH`, environment variables and MCP servers. graph refuses to install or load a pack for another graph version or system. `graph config check` reports anything else that's missing, and a plan run that reaches the pack fails before its first step. See [`requires`](/packs/reference/pack-file#param-requires).
+
+## Guides
+
+<CardGroup cols={2}>
+  <Card title="Install and update packs" icon="download" href="/packs/guides/install-packs">
+    Add a pack, keep it current and remove it.
+  </Card>
+  <Card title="Write a pack" icon="box" href="/packs/guides/write-a-pack">
+    Scaffold, test and release a pack from your own repository.
+  </Card>
+</CardGroup>

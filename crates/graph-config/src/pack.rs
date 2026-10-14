@@ -57,7 +57,7 @@ impl PackLayer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackManifest {
     pub version: u32,
@@ -71,7 +71,7 @@ pub struct PackManifest {
     pub requires: PackRequires,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackRequires {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,7 +86,7 @@ pub struct PackRequires {
     pub mcp: BTreeMap<String, McpRequirement>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct McpRequirement {
     #[serde(default, skip_serializing_if = "Option::is_none")]

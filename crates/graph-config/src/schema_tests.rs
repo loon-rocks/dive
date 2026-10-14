@@ -1,4 +1,5 @@
-use crate::{Config, SCHEMA};
+use crate::pack::PackManifest;
+use crate::{Config, PACK_SCHEMA, SCHEMA};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -71,5 +72,25 @@ fn the_config_schema_example_loads() {
         example.as_object_mut().unwrap().remove("version");
         let toml = toml::to_string(&example).unwrap();
         toml::from_str::<Config>(&toml).unwrap();
+    }
+}
+
+#[test]
+fn the_pack_schema_documents_exactly_the_keys_the_manifest_accepts() {
+    let documented: Value = serde_yaml::from_str(PACK_SCHEMA).unwrap();
+    let mut documented_paths = BTreeSet::new();
+    paths(&documented, &documented, "", &mut documented_paths);
+    let actual = serde_json::to_value(schemars::schema_for!(PackManifest)).unwrap();
+    let mut actual_paths = BTreeSet::new();
+    paths(&actual, &actual, "", &mut actual_paths);
+    assert_eq!(documented_paths, actual_paths);
+}
+
+#[test]
+fn the_pack_schema_example_passes_the_manifest_checks() {
+    let documented: Value = serde_yaml::from_str(PACK_SCHEMA).unwrap();
+    for example in documented["examples"].as_array().unwrap() {
+        let toml = toml::to_string(example).unwrap();
+        crate::pack::parse_manifest(&toml).unwrap();
     }
 }

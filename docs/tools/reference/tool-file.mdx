@@ -1,13 +1,13 @@
 ---
 title: "Tool file"
-description: "One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the pack tool it names instead."
+description: "One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the built-in tool it names instead."
 playground: "none"
 keywords: ["Tool file", "schema", "YAML"]
 ---
 
 | File type | Location |
 | --- | --- |
-| YAML | `./.graph/tools/<name>.yaml` (project)<br />`~/.config/graph/tools/<name>.yaml` (global)<br />`<tools dir>/builtin/<name>.yaml` (replaces a pack tool) |
+| YAML | `./.graph/tools/<name>.yaml` (project)<br />`~/.config/graph/tools/<name>.yaml` (global)<br />`<tools dir>/builtin/<name>.yaml` (replaces a built-in tool) |
 
 Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/tylerdavis/graph/main/docs/schemas/tool.schema.json`.
 

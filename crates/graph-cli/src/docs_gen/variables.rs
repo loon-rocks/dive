@@ -8,6 +8,8 @@ fn values() -> Vec<(&'static str, u32)> {
         ("tool_file_version", graph_core::format::TOOL_FORMAT),
         ("agent_file_version", graph_core::format::AGENT_FORMAT),
         ("data_directory_version", graph_store::STORE_FORMAT),
+        ("pack_file_version", graph_config::pack::PACK_FORMAT),
+        ("pack_lock_version", graph_config::pack::LOCK_FORMAT),
     ]
 }
 
