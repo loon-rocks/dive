@@ -206,8 +206,8 @@ pub fn pack_of(tool: &str) -> Option<&'static str> {
 /// missing tools at plan time.
 pub fn load_pack_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> {
     let mut docs: Vec<UserToolDoc> = Vec::new();
-    for pack in packs {
-        if FOLDED_PACKS.contains(&pack.as_str()) {
+    for (index, pack) in packs.iter().enumerate() {
+        if FOLDED_PACKS.contains(&pack.as_str()) || packs[..index].contains(pack) {
             continue;
         }
         let Some((_, sources)) = PACKS.iter().find(|(name, _)| name == pack) else {
@@ -235,13 +235,7 @@ pub fn load_builtin_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> 
         validate_tool(&doc)?;
         docs.push(doc);
     }
-    let mut unique: Vec<String> = Vec::new();
-    for pack in packs {
-        if !unique.contains(pack) {
-            unique.push(pack.clone());
-        }
-    }
-    for doc in load_pack_tools(&unique)? {
+    for doc in load_pack_tools(packs)? {
         if docs.iter().any(|d| d.name == doc.name) {
             return Err(format!("duplicate built-in tool name '{}'", doc.name));
         }
