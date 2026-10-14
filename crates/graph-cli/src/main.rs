@@ -75,8 +75,8 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
             command: cli::McpCommand::Serve { dir },
         } => mcp_server::serve(dir).await,
         Command::Mcp { command } => commands::mcp_cmd::run(command).await,
-        Command::Tools { command } => commands::tools_cmd::run(command).await,
-        Command::Agents { command } => commands::agents_cmd::run(command),
+        Command::Tool { command } => commands::tool_cmd::run(command).await,
+        Command::Agent { command } => commands::agent_cmd::run(command),
         Command::Ask {
             message,
             agent,
@@ -94,8 +94,8 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
             .await
         }
         Command::Chat { agent, thread } => commands::chat_cmd::run(agent, thread).await,
-        Command::Threads { command } => commands::threads_cmd::run(command).await,
-        Command::Shapes { command } => commands::shapes_cmd::run(command).await,
+        Command::Thread { command } => commands::thread_cmd::run(command).await,
+        Command::Shape { command } => commands::shape_cmd::run(command).await,
         Command::Plan { command } => commands::plan_cmd::run(command).await,
         Command::Workbench { command } => workbench::run(command, verbose).await,
         Command::Version { json } => commands::version_cmd::run(json),

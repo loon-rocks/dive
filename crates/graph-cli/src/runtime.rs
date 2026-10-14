@@ -544,7 +544,7 @@ pub async fn resolve_thread(
             let meta = store
                 .get_thread(&id)
                 .await?
-                .with_context(|| format!("no thread with id {id} (see `graph threads list`)"))?;
+                .with_context(|| format!("no thread with id {id} (see `graph thread list`)"))?;
             Ok(Some(meta))
         }
         Some(None) => Ok(store.latest_thread().await?),
@@ -566,7 +566,7 @@ pub fn deprecated_prompt<'a>(
         return None;
     }
     tracing::warn!(
-        "[prompts].{field} is deprecated: run `graph agents show {agent}`, save it as \
+        "[prompts].{field} is deprecated: run `graph agent show {agent}`, save it as \
          ./.graph/agents/{agent}.yaml, and edit its system_prompt instead"
     );
     Some(value)

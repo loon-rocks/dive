@@ -1,17 +1,15 @@
 ---
-title: "graph agents migrate"
-sidebarTitle: "migrate"
-description: "Rewrite an agent file to the current agent format"
+title: "graph shape show"
+sidebarTitle: "show"
+description: "Show one tool's cached schema and example"
 playground: "none"
-keywords: ["graph agents migrate"]
+keywords: ["graph shape show"]
 ---
-
-Rewrites one agent file to the current agent file version.
 
 ## Arguments
 
-<ParamField path="PATH" type="string" required>
-  Path to the agent file
+<ParamField path="TOOL" type="string" required>
+  The tool's namespaced name
 </ParamField>
 
 ## Options
@@ -29,11 +27,11 @@ Rewrites one agent file to the current agent file version.
 <RequestExample>
 
 ```bash Usage
-graph agents migrate [OPTIONS] <PATH>
+graph shape show [OPTIONS] <TOOL>
 ```
 
 ```bash Example
-graph agents migrate .graph/agents/release_notes.yaml
+graph shape show linear__list_issues
 ```
 
 </RequestExample>

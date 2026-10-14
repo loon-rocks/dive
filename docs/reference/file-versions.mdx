@@ -44,8 +44,8 @@ graph config check
 graph config migrate
 graph config migrate --global
 graph plan migrate .graph/plans/weekly_changes.yaml
-graph tools migrate .graph/tools/summarize.yaml
-graph agents migrate .graph/agents/release_notes.yaml
+graph tool migrate .graph/tools/summarize.yaml
+graph agent migrate .graph/agents/release_notes.yaml
 ```
 
 - **config.toml.** `graph config check` reports each config file's version as `current`, `migrate`, `too new` or `too old`. `graph config migrate` keeps comments and layout. graph upgrades the global and project files separately, so they can be at different versions. In a terminal, graph prints a reminder to migrate when it loads an older config file.
@@ -55,7 +55,7 @@ graph agents migrate .graph/agents/release_notes.yaml
 
 - A plan file graph can't read is left out of the catalog. `graph plan list --json` lists it under `skipped`, and running it by name reports the version problem.
 - A tool file graph can't read fails tool loading with the file's name.
-- An agent file graph can't read is reported with its path by `graph agents list` and `graph agents validate`.
+- An agent file graph can't read is reported with its path by `graph agent list` and `graph agent validate`.
 
 ## Data directory upgrades
 

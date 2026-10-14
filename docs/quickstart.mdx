@@ -96,15 +96,15 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         graph mcp test linear
         # ok: 'linear' initialized in 1.7s — 57 tools (0 declare output schemas)
         
-        graph tools list
+        graph tool list
         ```
       </Step>
       <Step title="Probe the tools you'll build on">
         Before writing a step, see each tool's input schema and _actual_ output shape:
 
         ```bash
-        graph tools show linear__list_issues
-        graph tools test linear__list_issues '{"priority":1,"limit":5}'
+        graph tool show linear__list_issues
+        graph tool test linear__list_issues '{"priority":1,"limit":5}'
         ```
 
         Every probe also teaches graph what the tool returns (its [shape](/tools/guides/tool-shapes)), so the references you write next are grounded in real output — and the workbench's drafting agent gets smarter too.

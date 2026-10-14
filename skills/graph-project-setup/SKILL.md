@@ -97,7 +97,7 @@ This is the interactive heart of the setup. graph reaches external systems throu
 
 5. **Test each server individually by name** — `graph mcp test <name>`. Per-server tests are isolated: a server that isn't installed yet fails only its own test and does **not** block the others. Config for an un-installed server is inert until something connects to it, so leaving its block in place (with install instructions handed off) is safe — the user finishes the install later and re-runs just that one test.
 
-6. **Confirm the catalog last** — `graph tools list`. Run this **after** the pending servers are either installed or explicitly noted as expected-to-fail: unlike per-server tests, `graph tools list` enumerates *every* server, so one un-installed stdio block will surface as an error there and make the whole catalog look broken. This step gives you the real tool names the next step builds `{{...}}` paths from.
+6. **Confirm the catalog last** — `graph tool list`. Run this **after** the pending servers are either installed or explicitly noted as expected-to-fail: unlike per-server tests, `graph tool list` enumerates *every* server, so one un-installed stdio block will surface as an error there and make the whole catalog look broken. This step gives you the real tool names the next step builds `{{...}}` paths from.
 
 **graph connects to MCP servers; it does not install them.** For `npx`/`uvx` servers the launcher handles fetching on first run; everything else is the user's install to run. Say so — never claim graph installs a server.
 
@@ -142,7 +142,7 @@ Ask: just locally, or also on cron / in CI later?
 
 **graph connects, it doesn't install.** An `[mcp.<name>]` block is a connection, not an installation. `npx`/`uvx` servers self-fetch on first launch; anything else the user installs. A block for an un-installed server is inert until connected to.
 
-**Per-server tests are isolated; the catalog is not.** `graph mcp test <name>` touches only that server — a broken block fails only its own test. `graph tools list` and any full-catalog load (a `graph ask`, a plan run) enumerate every server, so a pending stdio block surfaces there. Test individually while setting up; confirm the whole catalog last.
+**Per-server tests are isolated; the catalog is not.** `graph mcp test <name>` touches only that server — a broken block fails only its own test. `graph tool list` and any full-catalog load (a `graph ask`, a plan run) enumerate every server, so a pending stdio block surfaces there. Test individually while setting up; confirm the whole catalog last.
 
 **Secrets are `${ENV}` references, always.** They fail loudly when the variable is missing — a misconfigured secret never silently sends an empty string. Never write a live token into `config.toml`.
 
@@ -155,7 +155,7 @@ Ask: just locally, or also on cron / in CI later?
 - [ ] `./.graph/config.toml` has a provider, `[models] default`, and secrets as `${ENV}` references
 - [ ] Each chosen MCP server has an `[mcp.<name>]` block and passes `graph mcp test <name>` (or has install instructions handed to the user)
 - [ ] Permission requested before the first `npx`/`uvx` server test
-- [ ] `graph tools list` run last, after pending installs — shows the real tool catalog
+- [ ] `graph tool list` run last, after pending installs — shows the real tool catalog
 - [ ] Tools probed with `graph ask` to seed the shape cache before authoring
 - [ ] One plan under `./.graph/plans/`, matching the chosen finish mode, passes `graph plan validate`
 - [ ] `graph plan run <name>` returns exit 0 against real input

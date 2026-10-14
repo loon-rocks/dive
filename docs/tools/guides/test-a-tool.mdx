@@ -1,7 +1,7 @@
 ---
 title: "Test a tool"
 description: "Call a tool with input and read its result or error."
-keywords: ["graph tools test", "testing", "debug"]
+keywords: ["graph tool test", "testing", "debug"]
 ---
 
 `commits_by_author` counts the commits each author made since a git ref.
@@ -40,10 +40,10 @@ input_schema:
 
 ## Call the tool
 
-Pass the tool's name, as `graph tools list` prints it, and set its input with `--input`:
+Pass the tool's name, as `graph tool list` prints it, and set its input with `--input`:
 
 ```bash
-graph tools test user__commits_by_author \
+graph tool test user__commits_by_author \
   --input base=v0.14.0
 ```
 
@@ -63,7 +63,7 @@ graph calls the tool and prints its result:
 Give it a ref that doesn't exist, and add `--json` to see whether the call failed:
 
 ```bash
-graph tools test user__commits_by_author \
+graph tool test user__commits_by_author \
   --input base=v9.9.9 --json
 ```
 

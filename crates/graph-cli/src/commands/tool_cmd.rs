@@ -1,6 +1,6 @@
-//! `graph tools` — inspect the tool catalog.
+//! `graph tool` — inspect the tool catalog.
 
-use crate::cli::ToolsCommand;
+use crate::cli::ToolCommand;
 use crate::commands::outcome::{report, Outcome};
 use crate::runtime::Runtime;
 use anyhow::{bail, Result};
@@ -9,8 +9,8 @@ use graph_core::ToolRegistry;
 use serde_json::json;
 use std::collections::BTreeMap;
 
-pub async fn run(command: ToolsCommand) -> Result<()> {
-    if let ToolsCommand::Migrate { path, json } = command {
+pub async fn run(command: ToolCommand) -> Result<()> {
+    if let ToolCommand::Migrate { path, json } = command {
         return report(migrate(&path)?, json);
     }
     let runtime = Runtime::init()?;
@@ -29,15 +29,13 @@ pub async fn run(command: ToolsCommand) -> Result<()> {
 
 async fn dispatch(
     registry: &AgentToolbox,
-    command: ToolsCommand,
+    command: ToolCommand,
     docs: &graph_core::user_tools::ToolDocs,
 ) -> Result<(Outcome, bool)> {
     match command {
-        ToolsCommand::List { json } => {
-            Ok((list_labeled(registry, &pack_labels(docs)).await?, json))
-        }
-        ToolsCommand::Show { name, json } => Ok((show(registry, docs, &name).await?, json)),
-        ToolsCommand::Test {
+        ToolCommand::List { json } => Ok((list_labeled(registry, &pack_labels(docs)).await?, json)),
+        ToolCommand::Show { name, json } => Ok((show(registry, docs, &name).await?, json)),
+        ToolCommand::Test {
             name,
             input,
             inputs,
@@ -46,7 +44,7 @@ async fn dispatch(
             test(registry, &name, input.as_deref(), &inputs).await?,
             json,
         )),
-        ToolsCommand::Migrate { .. } => unreachable!("handled before the runtime starts"),
+        ToolCommand::Migrate { .. } => unreachable!("handled before the runtime starts"),
     }
 }
 
@@ -66,7 +64,7 @@ fn tool_source(docs: &graph_core::user_tools::ToolDocs, name: &str) -> Option<St
     })
 }
 
-/// `graph tools migrate <path>` — rewrite one tool file to the current tool
+/// `graph tool migrate <path>` — rewrite one tool file to the current tool
 /// format. Takes a path, not a catalog name: a file the catalog refuses is
 /// the one most likely to need it.
 fn migrate(path: &std::path::Path) -> Result<Outcome> {
@@ -186,7 +184,7 @@ pub(crate) async fn test(
         bail!(
             "'{name}' is a control step, not an invokable tool — it is evaluated \
              by the plan executor. Add it to a plan (graph plan step add) and run \
-             the plan; `graph tools show {name}` describes its input."
+             the plan; `graph tool show {name}` describes its input."
         );
     }
     let input = crate::commands::input::resolve_input(input, inputs)?;

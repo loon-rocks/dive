@@ -1,4 +1,4 @@
-pub mod agents_cmd;
+pub mod agent_cmd;
 pub mod ask;
 pub mod chat_cmd;
 pub mod config_cmd;
@@ -9,7 +9,7 @@ pub mod outcome;
 pub mod pack_cmd;
 pub mod plan_cmd;
 pub mod plan_edit;
-pub mod shapes_cmd;
-pub mod threads_cmd;
-pub mod tools_cmd;
+pub mod shape_cmd;
+pub mod thread_cmd;
+pub mod tool_cmd;
 pub mod version_cmd;

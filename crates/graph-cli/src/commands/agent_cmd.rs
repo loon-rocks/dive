@@ -1,4 +1,4 @@
-use crate::cli::AgentsCommand;
+use crate::cli::AgentCommand;
 use crate::commands::outcome::{report, Outcome};
 use anyhow::{bail, Result};
 use graph_core::agent::doc::{agent_dirs, global_fragments, load_agent_file, AgentDoc, AgentSet};
@@ -6,20 +6,20 @@ use graph_core::format::{migrate_file, stamp, Kind};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-pub fn run(command: AgentsCommand) -> Result<()> {
+pub fn run(command: AgentCommand) -> Result<()> {
     let dirs = agent_dirs();
-    if let AgentsCommand::Migrate { path, json } = command {
+    if let AgentCommand::Migrate { path, json } = command {
         return report(migrate(&path)?, json);
     }
     let installed = crate::runtime::load_packs(&crate::runtime::load_config()?)?;
     let packs: Vec<AgentDoc> = installed.agents().cloned().collect();
     match command {
-        AgentsCommand::List { json } => report(list(&dirs, &installed.public_agents()), json),
-        AgentsCommand::Show { name, json } => report(show(&dirs, &packs, &name)?, json),
-        AgentsCommand::Validate { path, json } => {
+        AgentCommand::List { json } => report(list(&dirs, &installed.public_agents()), json),
+        AgentCommand::Show { name, json } => report(show(&dirs, &packs, &name)?, json),
+        AgentCommand::Validate { path, json } => {
             report(validate(&dirs, &packs, path.as_deref())?, json)
         }
-        AgentsCommand::Migrate { .. } => unreachable!("handled before packs load"),
+        AgentCommand::Migrate { .. } => unreachable!("handled before packs load"),
     }
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
         outcome
     } else {
         outcome.with_note(format!(
-            "{} agent file(s) failed to load — run `graph agents validate`",
+            "{} agent file(s) failed to load — run `graph agent validate`",
             errors.len()
         ))
     }

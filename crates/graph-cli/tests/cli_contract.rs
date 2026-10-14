@@ -185,7 +185,7 @@ fn an_unknown_tool_is_an_ordinary_error_not_an_envelope() {
     // A bad argument, not a domain rejection: message on stderr, exit 1, and
     // deliberately no envelope even though --json was passed.
     scratch
-        .graph(&["tools", "show", "nope__missing", "--json"])
+        .graph(&["tool", "show", "nope__missing", "--json"])
         .code_is(1)
         .stdout_empty()
         .stderr_contains("unknown tool");
@@ -289,7 +289,7 @@ fn the_tool_catalog_envelope_is_addressable_without_probing() {
     let scratch = Scratch::new();
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph(&["tools", "list", "--json"]);
+    let run = scratch.graph(&["tool", "list", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     let tools = envelope["tools"].as_array().expect("tools array");
@@ -323,7 +323,7 @@ fn the_catalog_serves_the_control_steps_an_author_has_to_write() {
     // exactly what they did before these were listed.
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["tools", "list", "--json"]);
+    let run = scratch.graph(&["tool", "list", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     let tools = envelope["tools"].as_array().expect("tools array");
@@ -342,7 +342,7 @@ fn the_catalog_serves_the_control_steps_an_author_has_to_write() {
 
     // And each is fully described, schema included — a name alone is not
     // enough to write the step's input.
-    let run = scratch.graph(&["tools", "show", "ask", "--json"]);
+    let run = scratch.graph(&["tool", "show", "ask", "--json"]);
     run.code_is(0);
     let shown = run.json();
     assert_eq!(shown["name"], serde_json::json!("ask"));
@@ -361,7 +361,7 @@ fn a_control_step_refuses_to_be_tested_as_a_tool() {
     // refusal has to say what it is instead of failing in the registry.
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["tools", "test", "ask", "--input", "prompt=hi"]);
+    let run = scratch.graph(&["tool", "test", "ask", "--input", "prompt=hi"]);
     run.code_is(1);
     assert!(
         run.stderr.contains("control step"),
@@ -374,7 +374,7 @@ fn a_control_step_refuses_to_be_tested_as_a_tool() {
 fn tools_show_always_includes_every_schema_key() {
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["tools", "show", "builtin__reshape", "--json"]);
+    let run = scratch.graph(&["tool", "show", "builtin__reshape", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     assert_eq!(envelope["name"], serde_json::json!("builtin__reshape"));
@@ -497,9 +497,9 @@ fn every_listing_command_answers_json_with_a_counted_envelope() {
     // driving these should not have to learn five envelope shapes.
     for (args, key) in [
         (vec!["plan", "list", "--json"], "plans"),
-        (vec!["tools", "list", "--json"], "tools"),
-        (vec!["threads", "list", "--json"], "threads"),
-        (vec!["shapes", "list", "--json"], "shapes"),
+        (vec!["tool", "list", "--json"], "tools"),
+        (vec!["thread", "list", "--json"], "threads"),
+        (vec!["shape", "list", "--json"], "shapes"),
         (vec!["mcp", "list", "--json"], "servers"),
     ] {
         let run = scratch.graph(&args);
@@ -526,7 +526,7 @@ fn an_empty_listing_is_an_envelope_with_a_note_not_stderr_advice() {
 
     // Under --json the hint is data, so stderr stays completely silent: a
     // machine caller gets one parseable thing and nothing to scrape.
-    let run = scratch.graph(&["threads", "list", "--json"]);
+    let run = scratch.graph(&["thread", "list", "--json"]);
     run.code_is(0);
     assert_eq!(
         run.stderr, "",
@@ -539,7 +539,7 @@ fn an_empty_listing_is_an_envelope_with_a_note_not_stderr_advice() {
     // Without --json the same hint is the only thing the human gets, and it
     // is a diagnostic, so stdout stays empty rather than carrying prose.
     scratch
-        .graph(&["threads", "list"])
+        .graph(&["thread", "list"])
         .code_is(0)
         .stdout_empty()
         .stderr_contains("no threads yet");
@@ -553,7 +553,7 @@ fn tools_test_reports_a_failing_tool_without_failing_the_command() {
     // and its payload is the result worth reading. `isError` carries the
     // distinction that the exit code deliberately does not.
     let run = scratch.graph(&[
-        "tools",
+        "tool",
         "test",
         "builtin__reshape",
         r#"{"shape":{"a":"1"}}"#,
@@ -566,12 +566,7 @@ fn tools_test_reports_a_failing_tool_without_failing_the_command() {
     assert_eq!(envelope["result"], serde_json::json!({"a": "1"}));
 
     // Without --json the tool's own result is the deliverable, unwrapped.
-    let plain = scratch.graph(&[
-        "tools",
-        "test",
-        "builtin__reshape",
-        r#"{"shape":{"a":"1"}}"#,
-    ]);
+    let plain = scratch.graph(&["tool", "test", "builtin__reshape", r#"{"shape":{"a":"1"}}"#]);
     plain.code_is(0);
     assert_eq!(plain.json(), serde_json::json!({"a": "1"}));
 }

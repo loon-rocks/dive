@@ -8,4 +8,4 @@ summary: Lists every name a plan step's `tool` can use on this machine.
 - Control steps, under the `(control)` source
 - No schemas; use `graph_tools_show` for one entry
 
-Mirrors `graph tools list`.
+Mirrors `graph tool list`.
