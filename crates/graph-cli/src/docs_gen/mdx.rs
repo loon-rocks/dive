@@ -159,12 +159,7 @@ fn nested_schema(property: &Yaml) -> Option<(&'static str, &Yaml)> {
             return Some((".[].", items));
         }
     }
-    if let Some(values) = property.get("additionalProperties") {
-        if values.get("properties").is_some() {
-            return Some((".<name>.", values));
-        }
-    }
-    None
+    named_values(property).map(|values| (".<name>.", values))
 }
 
 pub fn type_label(schema: &Yaml) -> String {
