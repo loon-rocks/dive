@@ -113,7 +113,7 @@
 <text x="412.8" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="229.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="454.8" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">·</text>
-<text x="471.6" y="229.5" textLength="176.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">github__tool__git_log</text>
+<text x="471.6" y="229.5" textLength="134.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">builtin__git_log</text>
 <text x="1009.2" y="229.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="247.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="412.8" y="247.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
@@ -180,21 +180,21 @@
 <text x="18.0" y="373.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="412.8" y="373.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="373.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
-<text x="454.8" y="373.5" textLength="184.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">github__tool__git_log,</text>
-<text x="648.0" y="373.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">group</text>
-<text x="698.4" y="373.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">them</text>
-<text x="740.4" y="373.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">into</text>
-<text x="782.4" y="373.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">features</text>
-<text x="858.0" y="373.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">and</text>
-<text x="891.6" y="373.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">fixes,</text>
-<text x="950.4" y="373.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">and</text>
+<text x="454.8" y="373.5" textLength="142.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">builtin__git_log,</text>
+<text x="606.0" y="373.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">group</text>
+<text x="656.4" y="373.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">them</text>
+<text x="698.4" y="373.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">into</text>
+<text x="740.4" y="373.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">features</text>
+<text x="816.0" y="373.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">and</text>
+<text x="849.6" y="373.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">fixes,</text>
+<text x="908.4" y="373.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">and</text>
+<text x="942.0" y="373.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">write</text>
 <text x="1009.2" y="373.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="391.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="412.8" y="391.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="391.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
-<text x="438.0" y="391.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">write</text>
-<text x="488.4" y="391.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">short,</text>
-<text x="547.2" y="391.5" textLength="126.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">customer-facing</text>
+<text x="438.0" y="391.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">short,</text>
+<text x="496.8" y="391.5" textLength="126.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">customer-facing</text>
 <text x="1009.2" y="391.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="409.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="412.8" y="409.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
