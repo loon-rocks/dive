@@ -18,10 +18,12 @@ pub const FILES: &[(&str, &str)] = &[
     ("README.md", include_str!("scaffold/README.md")),
     ("CHANGELOG.md", include_str!("scaffold/CHANGELOG.md")),
     ("MIGRATING.md", include_str!("scaffold/MIGRATING.md")),
-    (
-        ".github/workflows/test.yaml",
-        include_str!("scaffold/workflow.yaml"),
-    ),
+];
+
+pub const WORKFLOW: &str = ".github/workflows/packs.yaml";
+
+pub const REPO_FILES: &[(&str, &str)] = &[
+    (WORKFLOW, include_str!("scaffold/workflow.yaml")),
     (".gitignore", include_str!("scaffold/gitignore")),
 ];
 
@@ -38,14 +40,31 @@ pub fn render(text: &str, name: &str) -> String {
         .replace("@VERSION@", GRAPH_VERSION)
 }
 
+fn write_file(target: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(target, text)
+}
+
 pub fn write(dir: &Path, name: &str) -> std::io::Result<Vec<PathBuf>> {
     let mut written = Vec::new();
     for (path, text) in FILES {
         let target = dir.join(path);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
+        write_file(&target, &render(text, name))?;
+        written.push(target);
+    }
+    Ok(written)
+}
+
+pub fn write_repo(root: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut written = Vec::new();
+    for (path, text) in REPO_FILES {
+        let target = root.join(path);
+        if target.exists() {
+            continue;
         }
-        std::fs::write(&target, render(text, name))?;
+        write_file(&target, &render(text, ""))?;
         written.push(target);
     }
     Ok(written)

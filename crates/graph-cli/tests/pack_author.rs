@@ -192,7 +192,7 @@ fn has(problems: &[String], needle: &str) {
 #[test]
 fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() {
     let scratch = Scratch::new();
-    graph(&scratch, &["pack", "new", "demo", "demo"]).code_is(0);
+    graph(&scratch, &["pack", "new", "demo", "repo"]).code_is(0);
     for file in [
         "pack.toml",
         "tools/word_count.yaml",
@@ -201,20 +201,75 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
         "README.md",
         "CHANGELOG.md",
         "MIGRATING.md",
-        ".github/workflows/test.yaml",
-        ".gitignore",
     ] {
-        assert!(scratch.exists(&format!("demo/{file}")), "missing {file}");
+        assert!(
+            scratch.exists(&format!("repo/demo/{file}")),
+            "missing {file}"
+        );
     }
-    let manifest = scratch.read("demo/pack.toml");
+    assert!(!scratch.exists("repo/demo/.github"));
+    assert!(!scratch.exists("repo/demo/.gitignore"));
+    let manifest = scratch.read("repo/demo/pack.toml");
     assert!(manifest.contains("name = \"demo\""), "{manifest}");
     assert!(manifest.contains("graph = \">="), "{manifest}");
-    assert!(scratch
-        .read("demo/.github/workflows/test.yaml")
-        .contains("graph pack test"));
+    let workflow = scratch.read("repo/.github/workflows/packs.yaml");
+    assert!(workflow.contains("run: graph pack test\n"), "{workflow}");
+    assert!(
+        workflow.contains(&format!(
+            "ghcr.io/tylerdavis/graph:v{}",
+            env!("CARGO_PKG_VERSION")
+        )),
+        "{workflow}"
+    );
+    assert!(scratch.read("repo/.gitignore").contains(".graph/"));
+    let readme = scratch.read("repo/demo/README.md");
+    assert!(readme.contains("--path demo"), "{readme}");
+    assert!(readme.contains("patch> demo`"), "{readme}");
+    assert!(readme.contains("`demo/vX.Y.Z`"), "{readme}");
 
-    graph(&scratch, &["pack", "check", "demo"]).code_is(0);
-    graph(&scratch, &["pack", "test", "demo"]).code_is(0);
+    std::fs::write(
+        scratch.path().join("repo/.github/workflows/packs.yaml"),
+        "mine\n",
+    )
+    .unwrap();
+    graph(&scratch, &["pack", "new", "other", "repo"]).code_is(0);
+    assert!(scratch.exists("repo/other/pack.toml"));
+    assert_eq!(scratch.read("repo/.github/workflows/packs.yaml"), "mine\n");
+
+    let run = graph(&scratch, &["pack", "check", "repo", "--json"]);
+    run.code_is(0);
+    let packs = run.json()["packs"].as_array().unwrap().clone();
+    let names: Vec<&str> = packs
+        .iter()
+        .map(|pack| pack["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["demo", "other"]);
+    graph(&scratch, &["pack", "test", "repo"]).code_is(0);
+
+    write(
+        &scratch.path().join("repo"),
+        "other/plans/broken.yaml",
+        "version: 2\n",
+    );
+    let run = graph(&scratch, &["pack", "test", "repo", "--json"]);
+    run.code_is(1);
+    assert!(
+        run.json()["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("1 of 2 packs in repo fail"),
+        "{}",
+        run.json()
+    );
+    has(&problems(&run), "other: ");
+    std::fs::remove_file(scratch.path().join("repo/other/plans/broken.yaml")).unwrap();
+
+    graph(&scratch, &["pack", "check", "repo/.github"])
+        .code_is(1)
+        .stderr_contains("none of its subdirectories has one");
+
+    graph(&scratch, &["pack", "check", "repo/demo"]).code_is(0);
+    graph(&scratch, &["pack", "test", "repo/demo"]).code_is(0);
     let run = graph(
         &scratch,
         &[
@@ -222,16 +277,16 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
             "run",
             "plan__count_words",
             "--input",
-            "file=demo/README.md",
+            "file=repo/demo/README.md",
             "--path",
-            "demo",
+            "repo/demo",
         ],
     );
     run.code_is(0);
     let output: Value = serde_json::from_str(&run.stdout).unwrap();
     assert!(output["words"].as_i64().unwrap() > 10, "{output}");
 
-    graph(&scratch, &["pack", "new", "other", "demo"])
+    graph(&scratch, &["pack", "new", "other", "repo"])
         .code_is(1)
         .stderr_contains("is not empty");
     graph(&scratch, &["pack", "new", "Bad__Name", "fresh"])
@@ -539,6 +594,79 @@ fn release_gates_the_bump_on_the_interface_and_tags_without_pushing() {
 
     let tags = git(&pack, &["tag", "--list"]);
     assert_eq!(tags, "v1.0.0\nv2.0.0\nv2.1.0");
+}
+
+#[test]
+fn release_in_a_packs_repository_works_within_the_packs_own_directory_and_tags() {
+    let scratch = Scratch::new();
+    let repo = scratch.path().join("repo");
+    for dir in ["a", "b"] {
+        write(
+            &repo,
+            &format!("{dir}/pack.toml"),
+            &MANIFEST.replace("example", dir),
+        );
+        write(&repo, &format!("{dir}/tools/echo.yaml"), ECHO_TOOL);
+        write(&repo, &format!("{dir}/plans/greet.yaml"), GREET_PLAN);
+    }
+    git(&repo, &["init", "-q"]);
+    commit(&repo, "first");
+    git(&repo, &["tag", "a/v1.0.0"]);
+    git(&repo, &["tag", "-a", "a/v1.1.0", "-m", "a v1.1.0"]);
+    git(&repo, &["tag", "b/v2.0.0"]);
+    git(&repo, &["tag", "v9.0.0"]);
+
+    graph(&scratch, &["pack", "release", "patch", "repo"])
+        .code_is(1)
+        .stderr_contains("has no pack.toml");
+
+    write(&repo, "b/notes.txt", "uncommitted");
+    let run = graph(&scratch, &["pack", "release", "patch", "repo/a", "--json"]);
+    run.code_is(0);
+    assert_eq!(run.json()["tag"], "a/v1.1.1");
+    assert_eq!(run.json()["previous"], "a/v1.1.0");
+    assert_eq!(run.json()["version"], "v1.1.1");
+
+    write(
+        &repo,
+        "a/plans/hello.yaml",
+        &GREET_PLAN.replace("identifier: greet", "identifier: hello"),
+    );
+    git(&repo, &["add", "a"]);
+    git(&repo, &["commit", "-q", "-m", "hello"]);
+    let run = graph(&scratch, &["pack", "release", "patch", "repo/a", "--json"]);
+    run.code_is(1);
+    has(&problems(&run), "plan__hello added (minor)");
+    let run = graph(&scratch, &["pack", "release", "minor", "repo/a", "--json"]);
+    run.code_is(0);
+    assert_eq!(run.json()["tag"], "a/v1.2.0");
+    assert_eq!(run.json()["previous"], "a/v1.1.1");
+    assert_eq!(git(&repo, &["cat-file", "-t", "a/v1.2.0"]), "tag");
+    assert!(
+        run.json()["note"]
+            .as_str()
+            .unwrap()
+            .contains("git push origin a/v1.2.0"),
+        "{}",
+        run.json()
+    );
+
+    write(&repo, "a/notes.txt", "uncommitted");
+    graph(&scratch, &["pack", "release", "patch", "repo/a"])
+        .code_is(1)
+        .stderr_contains("uncommitted changes");
+    std::fs::remove_file(repo.join("a/notes.txt")).unwrap();
+
+    let run = graph(&scratch, &["pack", "release", "major", "repo/b", "--json"]);
+    run.code_is(1);
+    assert!(
+        run.json()["error"]
+            .as_str()
+            .unwrap()
+            .contains("uncommitted changes"),
+        "{}",
+        run.json()
+    );
 }
 
 #[test]

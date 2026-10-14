@@ -14,7 +14,7 @@ pub const LOCK_FORMAT_OLDEST: u32 = 1;
 pub const MANIFEST_FILE: &str = "pack.toml";
 pub const LOCK_FILE: &str = "packs.lock";
 pub const PACKS_DIR: &str = "packs";
-pub const DEFAULT_HOST: &str = "github.com/tylerdavis/graph-pack-";
+pub const DEFAULT_REPO: &str = "github.com/tylerdavis/graph-packs";
 
 pub const MAX_PACK_NAME: usize = 20;
 pub const MAX_CATALOG_NAME: usize = 64;
@@ -24,6 +24,8 @@ pub const RESERVED_NAMES: &[&str] = &["user", "plan", "agent", "builtin", "workb
 #[serde(deny_unknown_fields)]
 pub struct PackEntry {
     pub git: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
     #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -116,6 +118,8 @@ impl Default for PackLock {
 #[serde(deny_unknown_fields)]
 pub struct LockEntry {
     pub git: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
     pub sha: String,
@@ -234,6 +238,9 @@ impl LockEntry {
         if self.git.trim().is_empty() {
             problems.push(format!("{}: must not be empty", field("git")));
         }
+        if let Err(e) = check_pack_path(&self.path) {
+            problems.push(format!("{}: {e}", field("path")));
+        }
         let sha_ok =
             matches!(self.sha.len(), 40 | 64) && self.sha.chars().all(|c| c.is_ascii_hexdigit());
         if !sha_ok {
@@ -326,6 +333,26 @@ pub fn write_lock(path: &Path, lock: &PackLock) -> Result<(), String> {
         let _ = std::fs::remove_file(&staged);
         format!("writing {}: {e}", path.display())
     })
+}
+
+pub fn check_pack_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Ok(());
+    }
+    if path.starts_with('/') || path.ends_with('/') {
+        return Err(format!(
+            "'{path}' must be a directory inside the repository, without a leading or trailing '/'"
+        ));
+    }
+    if path
+        .split('/')
+        .any(|part| matches!(part, "" | "." | "..") || part.contains('\\'))
+    {
+        return Err(format!(
+            "'{path}' must be a normalized relative directory, with no empty, '.' or '..' parts"
+        ));
+    }
+    Ok(())
 }
 
 pub fn check_pack_name(name: &str) -> Result<(), String> {

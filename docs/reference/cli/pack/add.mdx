@@ -9,10 +9,16 @@ keywords: ["graph pack add"]
 ## Arguments
 
 <ParamField path="NAME|URL" type="string" required>
-  A bare name (github.com/tylerdavis/graph-pack-&lt;name&gt;) or a git URL; a name already in [packs] installs that entry
+  A bare name (the &lt;name&gt; directory of github.com/tylerdavis/graph-packs) or a git URL; a name already in [packs] installs that entry
 </ParamField>
 
 ## Options
+
+<ParamField query="--path" type="string">
+  The pack's directory inside the repository, whose releases are the tags &lt;DIR&gt;/vX.Y.Z; default: the repository root (a bare name's own directory)
+
+  Format: `DIR`.
+</ParamField>
 
 <ParamField query="--as" type="string">
   Install under this name instead of the manifest's
@@ -21,7 +27,7 @@ keywords: ["graph pack add"]
 </ParamField>
 
 <ParamField query="--ref" type="string">
-  A major line (v2), an exact tag (v2.1.0, pinned) or a branch; default: the newest release
+  A major line (v2), an exact release (v2.1.0, pinned) or a branch; default: the newest release
 
   Format: `REF`.
 </ParamField>

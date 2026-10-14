@@ -5,8 +5,10 @@ A [graph](https://github.com/tylerdavis/graph) pack. Say here what it does and w
 ## Install
 
 ```bash
-graph pack add <this repo's git URL>
+graph pack add <this repo's git URL> --path @NAME@
 ```
+
+The pack lives in the `@NAME@/` directory of its repository, next to any other packs there, and its releases are the repository's `@NAME@/vX.Y.Z` tags.
 
 ## Contents
 
@@ -30,9 +32,11 @@ Pack files refer to their own items as `$pack__<kind>__<name>` in a step's `tool
 
 ## Develop
 
+Run these from the repository root.
+
 | Command | What it does |
 |---|---|
-| `graph pack check` | loads the pack the way an install would and reports every problem |
-| `graph pack run tool__word_count --input file=README.md` | runs any item, private and migration ones included |
-| `graph pack test` | runs `check`, then each migration over its sample files |
-| `graph pack release <major\|minor\|patch>` | compares the public interface with the previous tag and creates the next tag; pushing it is up to you |
+| `graph pack check @NAME@` | loads the pack the way an install would and reports every problem |
+| `graph pack run tool__word_count --input file=@NAME@/README.md --path @NAME@` | runs any item, private and migration ones included |
+| `graph pack test @NAME@` | runs `check`, then each migration over its sample files; without a directory, tests every pack in the repository |
+| `graph pack release <major\|minor\|patch> @NAME@` | compares the public interface with the previous `@NAME@/vX.Y.Z` tag and creates the next one; pushing it is up to you |

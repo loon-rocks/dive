@@ -2,7 +2,7 @@
 
 use crate::format::{self, LayerInfo};
 use crate::model::Config;
-use crate::pack::{check_pack_name, LayerKind, PackEntry, PackLayer};
+use crate::pack::{check_pack_name, check_pack_path, LayerKind, PackEntry, PackLayer};
 use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -156,6 +156,9 @@ fn read_pack_entries(
                 "[packs.{name}] in {}: git must not be empty",
                 path.display()
             );
+        }
+        if let Err(e) = check_pack_path(&entry.path) {
+            anyhow::bail!("[packs.{name}] in {}: path {e}", path.display());
         }
         packs.insert(name, entry);
     }
@@ -802,8 +805,9 @@ fallbacks = [
         let loaded = load_from(&[path]).unwrap();
         assert_eq!(
             loaded.config.packs["github"].git,
-            "github.com/tylerdavis/graph-pack-github"
+            "github.com/tylerdavis/graph-packs"
         );
+        assert_eq!(loaded.config.packs["github"].path, "github");
         assert_eq!(loaded.config.tools.paths.len(), 2);
     }
 
@@ -1043,6 +1047,30 @@ git = "github.com/fork/graph-pack-example"
         assert!(err.contains("[packs.linear]"), "{err}");
         assert!(err.contains("[mcp.linear]"), "{err}");
         assert!(err.contains(&project.display().to_string()), "{err}");
+    }
+
+    #[test]
+    fn a_pack_path_must_be_a_normalized_directory_inside_the_repository() {
+        let dir = tempfile::tempdir().unwrap();
+        for bad in ["../x", "/x", "x/", "x//y", "./x", "x/../y"] {
+            let path = write(
+                dir.path(),
+                "config.toml",
+                &format!("[packs.x]\ngit = \"github.com/acme/graph-packs\"\npath = \"{bad}\"\n"),
+            );
+            let err = format!("{:#}", load_from(&[path]).unwrap_err());
+            assert!(err.contains("[packs.x]"), "{err}");
+            assert!(err.contains(&format!("path '{bad}'")), "{err}");
+        }
+        let path = write(
+            dir.path(),
+            "config.toml",
+            "[packs.x]\ngit = \"github.com/acme/graph-packs\"\npath = \"tools/x\"\n",
+        );
+        assert_eq!(
+            load_from(&[path]).unwrap().config.packs["x"].path,
+            "tools/x"
+        );
     }
 
     #[test]

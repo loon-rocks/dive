@@ -6,12 +6,12 @@ playground: "none"
 keywords: ["graph pack check"]
 ---
 
-Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. Exits 1 when there is any problem.
+Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.
 
 ## Arguments
 
 <ParamField path="PATH" type="string" default=".">
-  The pack's directory, holding pack.toml
+  The pack's directory, holding pack.toml, or a packs repository whose subdirectories hold packs
 </ParamField>
 
 ## Options
@@ -37,7 +37,7 @@ graph pack check
 ```
 
 ```bash Example 2
-graph pack check ../graph-pack-files --json
+graph pack check files --json
 ```
 
 </RequestExample>

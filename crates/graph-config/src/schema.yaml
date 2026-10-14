@@ -185,9 +185,12 @@ properties:
         git:
           type: string
           description: The git repository the pack is installed from.
+        path:
+          type: string
+          description: The pack's directory inside the repository, such as `github`. Its releases are the tags `<path>/vX.Y.Z`. The repository root when absent.
         ref:
           type: string
-          description: The git ref to install.
+          description: The release line (`v1`), exact release (`v1.2.0`) or branch to install. Release refs name the pack's own version; graph adds the `<path>/` tag prefix.
         include:
           type: array
           items:
@@ -364,5 +367,6 @@ examples:
           Authorization: Bearer ${LINEAR_API_KEY}
     packs:
       github:
-        git: github.com/tylerdavis/graph-pack-github
+        git: github.com/tylerdavis/graph-packs
+        path: github
         ref: v1

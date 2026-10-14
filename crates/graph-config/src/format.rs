@@ -111,10 +111,8 @@ fn config_version_4_additions(doc: &mut DocumentMut) -> Result<Vec<String>, Stri
             continue;
         }
         let mut entry = toml_edit::Table::new();
-        entry.insert(
-            "git",
-            toml_edit::value(format!("{}{name}", crate::pack::DEFAULT_HOST)),
-        );
+        entry.insert("git", toml_edit::value("github.com/tylerdavis/graph-packs"));
+        entry.insert("path", toml_edit::value(name.as_str()));
         entry.insert("ref", toml_edit::value("v1"));
         packs.insert(&name, Item::Table(entry));
         notes.push(format!(
@@ -728,7 +726,7 @@ input = 1.0
         );
         assert_eq!(
             doc.to_string(),
-            "version = 3\n\n[tools]\nalways_loaded = []\n\n[packs.github]\ngit = \"github.com/tylerdavis/graph-pack-github\"\nref = \"v1\"\n"
+            "version = 3\n\n[tools]\nalways_loaded = []\n\n[packs.github]\ngit = \"github.com/tylerdavis/graph-packs\"\npath = \"github\"\nref = \"v1\"\n"
         );
     }
 
