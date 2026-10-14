@@ -180,14 +180,18 @@ mod tests {
 
     #[test]
     fn tool_source_names_the_overriding_file_or_the_pack() {
-        let builtins = graph_core::user_tools::load_pack_tools(&["data".to_string()]).unwrap();
+        let builtins = graph_core::user_tools::load_builtin_tools(&["github".to_string()]).unwrap();
         let docs = graph_core::user_tools::ToolDocs {
             builtins: builtins.clone(),
             user: Vec::new(),
         };
         assert_eq!(
             tool_source(&docs, "builtin__reshape").as_deref(),
-            Some("built-in (data pack)")
+            Some("built-in")
+        );
+        assert_eq!(
+            tool_source(&docs, "builtin__gh_pr_meta").as_deref(),
+            Some("built-in (github pack)")
         );
         let mut mine = builtins
             .iter()

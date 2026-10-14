@@ -166,24 +166,18 @@ const PACKS: &[(&str, &[&str])] = &[
         ],
     ),
     (
-        "llm",
-        &[
-            include_str!("packs/llm/infer.yaml"),
-            include_str!("packs/llm/decide.yaml"),
-        ],
-    ),
-    ("data", &[include_str!("packs/data/reshape.yaml")]),
-    (
         "slack",
         &[include_str!("packs/slack/slack_post_message.yaml")],
     ),
 ];
 
-/// Packs loaded whether or not `[tools].packs` names them — core
-/// capabilities every catalog should have: `llm` (`builtin__infer`, a
-/// generic string-or-structured LLM step) and `data` (`builtin__reshape`,
-/// a pure JSON shape projection).
-pub const DEFAULT_PACKS: &[&str] = &["llm", "data"];
+const BUILTIN_TOOLS: &[&str] = &[
+    include_str!("builtins/infer.yaml"),
+    include_str!("builtins/decide.yaml"),
+    include_str!("builtins/reshape.yaml"),
+];
+
+const FOLDED_PACKS: &[&str] = &["llm", "data"];
 
 pub fn available_packs() -> Vec<&'static str> {
     PACKS.iter().map(|(name, _)| *name).collect()
@@ -213,6 +207,9 @@ pub fn pack_of(tool: &str) -> Option<&'static str> {
 pub fn load_pack_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> {
     let mut docs: Vec<UserToolDoc> = Vec::new();
     for pack in packs {
+        if FOLDED_PACKS.contains(&pack.as_str()) {
+            continue;
+        }
         let Some((_, sources)) = PACKS.iter().find(|(name, _)| name == pack) else {
             return Err(format!(
                 "unknown tool pack '{pack}' (available: {})",
@@ -227,6 +224,28 @@ pub fn load_pack_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> {
             }
             docs.push(doc);
         }
+    }
+    Ok(docs)
+}
+
+pub fn load_builtin_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> {
+    let mut docs = Vec::new();
+    for raw in BUILTIN_TOOLS {
+        let doc = parse_tool_source(raw)?;
+        validate_tool(&doc)?;
+        docs.push(doc);
+    }
+    let mut unique: Vec<String> = Vec::new();
+    for pack in packs {
+        if !unique.contains(pack) {
+            unique.push(pack.clone());
+        }
+    }
+    for doc in load_pack_tools(&unique)? {
+        if docs.iter().any(|d| d.name == doc.name) {
+            return Err(format!("duplicate built-in tool name '{}'", doc.name));
+        }
+        docs.push(doc);
     }
     Ok(docs)
 }

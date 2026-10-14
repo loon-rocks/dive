@@ -37,7 +37,9 @@ use graph_config::{ModelChoice, ModelRoles};
 use graph_core::agent::conversation::Conversation;
 use graph_core::pipeline::doc::load_plan_doc;
 use graph_core::pipeline::{Pipeline, ToolCatalog};
-use graph_core::user_tools::{available_packs, load_pack_tools, load_user_tools, UserToolRegistry};
+use graph_core::user_tools::{
+    available_packs, load_builtin_tools, load_user_tools, UserToolRegistry,
+};
 use graph_core::{CompositeRegistry, Store, ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use graph_llm::types::{
     ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
@@ -334,7 +336,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
 
     // The real catalog: every pack plus the repo's user tools.
     let packs: Vec<String> = available_packs().iter().map(|s| s.to_string()).collect();
-    let pack_docs = load_pack_tools(&packs).map_err(anyhow::Error::msg)?;
+    let pack_docs = load_builtin_tools(&packs).map_err(anyhow::Error::msg)?;
     let user_docs = load_user_tools(&[root.join(".graph/tools")]).map_err(anyhow::Error::msg)?;
     let builtin_defs = UserToolRegistry::builtins(pack_docs, router.clone())
         .tools()
@@ -386,8 +388,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<PathBuf> {
     });
 
     let store: Arc<dyn Store> = Arc::new(MemoryStore::new());
-    let llm =
-        graph_core::user_tools::load_pack_tools(&["llm".to_string(), "data".to_string()]).unwrap();
+    let llm = graph_core::user_tools::load_builtin_tools(&[]).unwrap();
     let pipeline = Arc::new(Pipeline {
         registry: Arc::new(graph_core::CompositeRegistry::new(vec![
             Arc::new(graph_core::user_tools::UserToolRegistry::builtins(
