@@ -1,8 +1,11 @@
+use super::major::{Consent, Majors};
 use super::*;
 use crate::packs::InstalledPacks;
 use graph_config::pack::{load_lock, PackLock};
+use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor};
 use std::collections::BTreeSet;
 use std::process::Command;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 const TOOL: &str = r#"version: 2
@@ -720,4 +723,487 @@ fn update_reports_what_the_new_release_needs() {
         json!(["requires.binaries: graph-pack-no-such-binary not found on PATH"])
     );
     assert_eq!(lock(layer).packs["example"].tag.as_deref(), Some("v1.2.0"));
+}
+
+const RENAME_TOOL: &str = r#"version: 2
+name: migrate_vMAJOR_rewrite
+description: Renames the FROM tool to TO in the user's plans
+kind: exec
+command: sh
+args:
+  - "-c"
+  - |-
+    cd "$1"
+    files=""
+    for f in plans/*.yaml; do
+      [ -f "$f" ] || continue
+      grep -q "$2__tool__FROM" "$f" || continue
+      files="$files $f"
+      if [ "$3" = true ]; then
+        sed -i.bak "s/$2__tool__FROM/$2__tool__TO/g" "$f"
+        rm -f "$f.bak"
+      fi
+    done
+    FAIL
+    printf '{"files": ['
+    sep=""
+    for f in $files; do
+      printf '%s{"path": "%s", "changed": true, "applied": %s, "diff": "-%s__tool__FROM +%s__tool__TO"}' "$sep" "$f" "$3" "$2" "$2"
+      sep=","
+    done
+    printf ']}'
+  - rewrite
+  - "{{input.root}}"
+  - "{{input.pack}}"
+  - "{{input.apply}}"
+output: json
+input_schema:
+  type: object
+  required: [root, pack, apply]
+  properties:
+    root: { type: string }
+    pack: { type: string }
+    apply: { type: boolean }
+"#;
+
+const MIGRATION_PLAN: &str = r#"version: 2
+identifier: migrate_vMAJOR
+name: Migrate to vMAJOR
+description: Renames FROM to TO in the user's plans
+input_schema:
+  type: object
+  required: [root]
+  properties:
+    root: { type: string }
+    apply: { type: boolean, default: false }
+steps:
+  - id: rewrite
+    tool_name: $pack__tool__migrate_vMAJOR_rewrite
+    input:
+      root: "{{input.root}}"
+      pack: "{{pack.name}}"
+      apply: "{{input.apply}}"
+finish:
+  output:
+    applied: "{{input.apply}}"
+    files: "{{rewrite.files}}"
+"#;
+
+const USER_PLAN: &str = r#"version: 2
+identifier: report
+name: Report
+description: Calls the pack's v1 tool
+steps:
+  - id: a
+    tool_name: example__tool__file_stats
+    input:
+      name: README.md
+finish:
+  output:
+    name: "{{a.name}}"
+"#;
+
+#[derive(Clone, Copy, PartialEq)]
+enum Third {
+    Migration,
+    Failing,
+    Guide,
+    Bare,
+}
+
+fn named_tool(name: &str) -> String {
+    TOOL.replace("name: echo", &format!("name: {name}"))
+}
+
+fn migration(work: &Path, major: u64, from: &str, to: &str, fail: bool) {
+    let fill = |text: &str| {
+        text.replace("MAJOR", &major.to_string())
+            .replace("FROM", from)
+            .replace("TO", to)
+            .replace(
+                "FAIL",
+                if fail {
+                    "[ \"$3\" != true ] || { echo 'disk full' >&2; exit 1; }"
+                } else {
+                    ""
+                },
+            )
+    };
+    write(
+        work,
+        &format!("plans/migrations/migrate_v{major}.yaml"),
+        &fill(MIGRATION_PLAN),
+    );
+    write(
+        work,
+        &format!("tools/migrations/migrate_v{major}_rewrite.yaml"),
+        &fill(RENAME_TOOL),
+    );
+}
+
+fn majors_upstream(third: Third) -> Upstream {
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    git(&work, &["init", "-q"]);
+    write(&work, "tools/file_stats.yaml", &named_tool("file_stats"));
+    let upstream = Upstream {
+        url: format!("file://{}", work.display()),
+        work,
+        _dir: dir,
+    };
+    upstream.release("one", "v1.0.0");
+    upstream.release("one point one", "v1.1.0");
+    let work = &upstream.work;
+    std::fs::remove_file(work.join("tools/file_stats.yaml")).unwrap();
+    write(work, "tools/file_info.yaml", &named_tool("file_info"));
+    migration(work, 2, "file_stats", "file_info", false);
+    upstream.release("two", "v2.0.0");
+    std::fs::remove_file(work.join("tools/file_info.yaml")).unwrap();
+    write(work, "tools/file_meta.yaml", &named_tool("file_meta"));
+    match third {
+        Third::Migration => migration(work, 3, "file_info", "file_meta", false),
+        Third::Failing => migration(work, 3, "file_info", "file_meta", true),
+        Third::Guide => write(
+            work,
+            "MIGRATING.md",
+            "# Migrating\n\n## v1 to v2\n\nRun the migration.\n\n## v2 to v3\n\n- `tool__file_info` is renamed `tool__file_meta`.\n\n## v3 to v4\n\nLater.\n",
+        ),
+        Third::Bare => write(work, "MIGRATING.md", "# Migrating\n\n## v1 to v2\n\nRun it.\n"),
+    }
+    upstream.release("three", "v3.0.0");
+    upstream
+}
+
+struct Asker {
+    answers: std::sync::Mutex<Vec<bool>>,
+    asked: std::sync::Mutex<Vec<(String, String)>>,
+    watched: PathBuf,
+}
+
+#[async_trait::async_trait]
+impl Interlocutor for Asker {
+    async fn ask(&self, request: AskRequest) -> AskOutcome {
+        let seen = std::fs::read_to_string(&self.watched).unwrap_or_default();
+        self.asked.lock().unwrap().push((request.prompt, seen));
+        let mut answers = self.answers.lock().unwrap();
+        if answers.is_empty() {
+            return AskOutcome::Unavailable("no more answers".to_string());
+        }
+        AskOutcome::Answered(json!({"proceed": answers.remove(0)}))
+    }
+}
+
+struct Installed {
+    project: Project,
+    _upstream: Upstream,
+}
+
+impl Installed {
+    fn layer(&self) -> &Layer {
+        &self.project.layer
+    }
+
+    fn user_plan(&self) -> String {
+        std::fs::read_to_string(self.layer().dir.join("plans/report.yaml")).unwrap()
+    }
+
+    fn asker(&self, answers: &[bool]) -> Arc<Asker> {
+        Arc::new(Asker {
+            answers: std::sync::Mutex::new(answers.to_vec()),
+            asked: std::sync::Mutex::new(Vec::new()),
+            watched: self.layer().dir.join("plans/report.yaml"),
+        })
+    }
+
+    async fn cross(&self, consent: Consent, names: &[&str]) -> Outcome {
+        let mut config = graph_config::Config::default();
+        config.storage.backend = graph_config::StorageBackend::Memory;
+        let majors = Majors {
+            consent: &consent,
+            config: &config,
+            events: Arc::new(graph_core::NullSink),
+        };
+        let names: Vec<String> = names.iter().map(|name| name.to_string()).collect();
+        major::update(self.layer(), &names, false, &majors)
+            .await
+            .unwrap()
+    }
+}
+
+fn installed_at(third: Third, reference: &str) -> Installed {
+    let upstream = majors_upstream(third);
+    let project = scratch(&format!(
+        "{CONFIG}\n[packs.example]\ngit = \"{}\"\nref = \"{reference}\"   # the line\n",
+        upstream.url
+    ));
+    let layer = &project.layer;
+    let added = add(layer, &request("example", None, None)).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    write(&layer.dir, "plans/report.yaml", USER_PLAN);
+    Installed {
+        project,
+        _upstream: upstream,
+    }
+}
+
+fn yes() -> Consent {
+    Consent {
+        yes: true,
+        asker: None,
+    }
+}
+
+fn asking(asker: &Arc<Asker>) -> Consent {
+    Consent {
+        yes: false,
+        asker: Some(asker.clone() as Arc<dyn Interlocutor>),
+    }
+}
+
+fn assert_at(installed: &Installed, tag: &str, reference: &str) {
+    let layer = installed.layer();
+    let locked = &lock(layer).packs["example"];
+    assert_eq!(locked.tag.as_deref(), Some(tag));
+    assert_eq!(
+        locked.hash,
+        content_hash(&layer.copy_dir("example")).unwrap()
+    );
+    assert!(
+        config(layer).contains(&format!("ref = \"{reference}\"   # the line")),
+        "{}",
+        config(layer)
+    );
+    assert!(staging_left(layer).is_empty(), "{:?}", staging_left(layer));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn major_with_yes_crosses_each_major_in_turn_running_its_migration() {
+    let installed = installed_at(Third::Migration, "v1");
+    let outcome = installed.cross(yes(), &[]).await;
+    assert!(!outcome.rejected, "{}", outcome.body);
+    let row = &outcome.body["packs"][0];
+    assert_eq!(row["status"], "updated");
+    assert_eq!(
+        (row["from"].as_str(), row["to"].as_str()),
+        (Some("v1.1.0"), Some("v3.0.0"))
+    );
+    let crossed = row["crossed"].as_array().unwrap();
+    assert_eq!(crossed[0]["migration"], "migrate_v2");
+    assert_eq!(crossed[1]["migration"], "migrate_v3");
+    assert_eq!(crossed[0]["files"][0]["path"], "plans/report.yaml");
+    assert_eq!(crossed[1]["files"][0]["applied"], true);
+    assert!(
+        installed.user_plan().contains("example__tool__file_meta"),
+        "{}",
+        installed.user_plan()
+    );
+    assert!(!installed.user_plan().contains("file_info"));
+    assert_at(&installed, "v3.0.0", "v3");
+    assert!(installed
+        .layer()
+        .copy_dir("example")
+        .join("tools/file_meta.yaml")
+        .is_file());
+    let note = outcome.body["note"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        note.contains(&format!(
+            "v2.0.0 -> v3.0.0: migrate_v3 rewrote 1 file(s): {}",
+            installed.layer().dir.join("plans/report.yaml").display()
+        )),
+        "{note}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn each_migration_is_shown_as_a_dry_run_before_it_is_applied() {
+    let installed = installed_at(Third::Migration, "v1");
+    let asker = installed.asker(&[true, true]);
+    let outcome = installed.cross(asking(&asker), &["example"]).await;
+    assert!(!outcome.rejected, "{}", outcome.body);
+    let asked = asker.asked.lock().unwrap().clone();
+    assert_eq!(asked.len(), 2);
+    assert!(
+        asked[0]
+            .0
+            .contains("example v1.1.0 -> v2.0.0: migrate_v2 proposes"),
+        "{}",
+        asked[0].0
+    );
+    assert!(
+        asked[0]
+            .0
+            .contains("-example__tool__file_stats +example__tool__file_info"),
+        "{}",
+        asked[0].0
+    );
+    assert!(asked[0].1.contains("example__tool__file_stats"));
+    assert!(
+        asked[1]
+            .0
+            .contains("-example__tool__file_info +example__tool__file_meta"),
+        "{}",
+        asked[1].0
+    );
+    assert!(asked[1].1.contains("example__tool__file_info"));
+    assert_at(&installed, "v3.0.0", "v3");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_major_without_a_migration_shows_its_migrating_section_and_asks() {
+    let installed = installed_at(Third::Guide, "v1");
+    let asker = installed.asker(&[true, true]);
+    let outcome = installed.cross(asking(&asker), &[]).await;
+    assert!(!outcome.rejected, "{}", outcome.body);
+    let asked = asker.asked.lock().unwrap().clone();
+    assert!(
+        asked[1]
+            .0
+            .contains("has no plans/migrations/migrate_v3.yaml"),
+        "{}",
+        asked[1].0
+    );
+    assert!(
+        asked[1].0.contains(
+            "## v2 to v3:\n\n- `tool__file_info` is renamed `tool__file_meta`.\n\nInstall"
+        ),
+        "{}",
+        asked[1].0
+    );
+    assert!(!asked[1].0.contains("Later."));
+    let row = &outcome.body["packs"][0];
+    assert_eq!(row["crossed"][1]["migration"], Value::Null);
+    assert_eq!(
+        row["crossed"][1]["guide"],
+        "- `tool__file_info` is renamed `tool__file_meta`."
+    );
+    assert!(installed.user_plan().contains("example__tool__file_info"));
+    assert_at(&installed, "v3.0.0", "v3");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_major_with_no_migration_and_no_section_says_so() {
+    let installed = installed_at(Third::Bare, "v1");
+    let asker = installed.asker(&[true, true]);
+    let outcome = installed.cross(asking(&asker), &[]).await;
+    assert!(!outcome.rejected, "{}", outcome.body);
+    let asked = asker.asked.lock().unwrap().clone();
+    assert!(
+        asked[1]
+            .0
+            .contains("its MIGRATING.md has no ## v2 to v3 section"),
+        "{}",
+        asked[1].0
+    );
+    let note = outcome.body["note"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        note.contains("MIGRATING.md has no section for this major"),
+        "{note}"
+    );
+    assert_at(&installed, "v3.0.0", "v3");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_terminal_or_yes_nothing_changes() {
+    let installed = installed_at(Third::Migration, "v1");
+    let config_before = config(installed.layer());
+    let lock_before = std::fs::read_to_string(installed.layer().lock_path()).unwrap();
+    let outcome = installed
+        .cross(
+            Consent {
+                yes: false,
+                asker: None,
+            },
+            &[],
+        )
+        .await;
+    assert!(error(&outcome).contains("there is no terminal to ask on; nothing was changed"));
+    assert_eq!(config(installed.layer()), config_before);
+    assert_eq!(
+        std::fs::read_to_string(installed.layer().lock_path()).unwrap(),
+        lock_before
+    );
+    assert_eq!(installed.user_plan(), USER_PLAN);
+    assert!(installed
+        .layer()
+        .copy_dir("example")
+        .join("tools/file_stats.yaml")
+        .is_file());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failing_migration_leaves_the_pack_at_the_last_completed_major() {
+    let installed = installed_at(Third::Failing, "v1");
+    let outcome = installed.cross(yes(), &[]).await;
+    let body = error(&outcome);
+    let row = &outcome.body["packs"][0];
+    assert_eq!(row["status"], "refused");
+    assert_eq!(row["stoppedAt"], "v2.0.0");
+    assert_eq!(row["left"], json!(["v3.0.0"]));
+    assert!(body.contains("migrate_v3 failed"), "{body}");
+    assert!(
+        body.contains("continue with `graph pack update example --major`"),
+        "{body}"
+    );
+    assert!(
+        installed.user_plan().contains("example__tool__file_info"),
+        "{}",
+        installed.user_plan()
+    );
+    assert!(installed
+        .layer()
+        .copy_dir("example")
+        .join("tools/file_info.yaml")
+        .is_file());
+    assert_at(&installed, "v2.0.0", "v2");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn declining_stops_cleanly_at_the_last_completed_major() {
+    let installed = installed_at(Third::Migration, "v1");
+    let asker = installed.asker(&[true, false]);
+    let outcome = installed.cross(asking(&asker), &[]).await;
+    assert!(!outcome.rejected, "{}", outcome.body);
+    let row = &outcome.body["packs"][0];
+    assert_eq!(row["status"], "declined");
+    assert_eq!(row["stoppedAt"], "v2.0.0");
+    assert!(
+        row["summary"].as_str().unwrap().contains("v3.0.0 declined"),
+        "{row}"
+    );
+    assert!(installed.user_plan().contains("example__tool__file_info"));
+    assert_at(&installed, "v2.0.0", "v2");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn major_skips_a_pinned_tag_and_names_a_branch_as_having_no_majors() {
+    let pinned = installed_at(Third::Migration, "v1.0.0");
+    let outcome = pinned.cross(yes(), &[]).await;
+    assert_eq!(outcome.body["packs"][0]["status"], "pinned");
+    assert_eq!(pinned.user_plan(), USER_PLAN);
+
+    let branch = installed_at(Third::Migration, "main");
+    let outcome = branch.cross(yes(), &[]).await;
+    let row = &outcome.body["packs"][0];
+    assert_eq!(row["status"], "branch");
+    assert!(
+        row["summary"]
+            .as_str()
+            .unwrap()
+            .contains("tracks branch 'main', which has no majors to cross"),
+        "{row}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn major_on_the_newest_major_updates_within_it() {
+    let installed = installed_at(Third::Migration, "v3");
+    let outcome = installed.cross(yes(), &[]).await;
+    assert_eq!(outcome.body["packs"][0]["status"], "current");
 }
