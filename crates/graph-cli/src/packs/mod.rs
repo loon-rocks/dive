@@ -1,4 +1,7 @@
+pub mod git;
 pub mod hash;
+pub mod layer;
+pub mod refs;
 
 pub use hash::content_hash;
 

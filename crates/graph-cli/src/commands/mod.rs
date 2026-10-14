@@ -6,6 +6,7 @@ pub mod input;
 pub mod listing;
 pub mod mcp_cmd;
 pub mod outcome;
+pub mod pack_cmd;
 pub mod plan_cmd;
 pub mod plan_edit;
 pub mod shapes_cmd;
