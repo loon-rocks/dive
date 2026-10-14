@@ -7,6 +7,7 @@ pub struct Content {
     pub summary: String,
     pub body: String,
     pub fields: BTreeMap<String, FieldDoc>,
+    pub output: Option<Yaml>,
 }
 
 pub struct FieldDoc {
@@ -100,6 +101,7 @@ fn parse(raw: &str) -> Content {
         summary,
         body: mdx_body(body.trim()),
         fields,
+        output: meta.get("output").cloned(),
     }
 }
 
