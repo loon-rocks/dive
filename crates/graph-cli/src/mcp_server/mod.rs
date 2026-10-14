@@ -123,7 +123,9 @@ impl GraphServer {
 /// Every entry point goes through here rather than `Runtime::init`, so the
 /// project layer cannot sneak in via a call site that forgot.
 pub(crate) fn runtime() -> Result<Runtime> {
-    Runtime::with_config(project::config()?)
+    let loaded = project::config()?;
+    let packs = crate::runtime::load_packs(&loaded)?;
+    Runtime::with_packs(loaded.config, packs)
 }
 
 /// Turn an [`Outcome`] into a tool result.
@@ -210,9 +212,7 @@ impl GraphServer {
     fn tools(&self) -> Vec<rmcp::model::Tool> {
         let mut tools = catalog::authoring_tools();
         if let Ok(runtime) = runtime() {
-            for doc in &served_plans(&runtime) {
-                tools.push(catalog::plan_tool(doc));
-            }
+            tools.extend(served_plans(&runtime));
         }
         tools
     }
@@ -234,7 +234,7 @@ impl GraphServer {
         };
 
         // Execution tools first: a plan named after a verb is still a plan.
-        if let Some(identifier) = name.strip_prefix(catalog::PLAN_PREFIX) {
+        if let Some(identifier) = catalog::served_plan_identifier(&name) {
             let input = Value::Object(args);
             // Progress is opt-in: MCP only permits notifying against a token
             // the client supplied. Without one the run is silent.
@@ -426,13 +426,8 @@ impl ServerHandler for GraphServer {
     }
 }
 
-fn served_plans(runtime: &Runtime) -> Vec<graph_core::pipeline::doc::PlanDoc> {
-    runtime
-        .plan_docs()
-        .docs
-        .into_iter()
-        .filter(|doc| doc.path.is_some())
-        .collect()
+fn served_plans(runtime: &Runtime) -> Vec<rmcp::model::Tool> {
+    catalog::served_plan_tools(&runtime.packs.pack_set(), &runtime.plan_docs().docs)
 }
 
 #[cfg(test)]

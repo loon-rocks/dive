@@ -233,7 +233,9 @@ fn control_icon(tool: &str) -> Option<(&'static str, Color)> {
         // Yellow: the one control step that spends inference per round.
         AGENT_TOOL => Some(("✻", Color::Yellow)),
         "plan_and_execute" => Some(("ƒ", Color::White)),
-        tool if tool.starts_with("plan__") => Some(("ƒ", Color::White)),
+        tool if tool.starts_with("plan__") || graph_core::packs::is_plan_name(tool) => {
+            Some(("ƒ", Color::White))
+        }
         _ => None,
     }
 }
@@ -1620,10 +1622,22 @@ fn draw_artifact(frame: &mut Frame, app: &App, view: &super::artifact::ArtifactV
 
 #[cfg(test)]
 mod tests {
-    use super::{branch_color, wrap_input};
+    use super::{branch_color, control_icon, wrap_input};
 
     fn s(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn pack_plan_calls_get_the_plan_icon() {
+        for tool in ["plan__sprint_report", "example__plan__describe_file"] {
+            assert_eq!(
+                control_icon(tool).map(|(icon, _)| icon),
+                Some("ƒ"),
+                "{tool}"
+            );
+        }
+        assert_eq!(control_icon("example__tool__file_info"), None);
     }
 
     #[test]

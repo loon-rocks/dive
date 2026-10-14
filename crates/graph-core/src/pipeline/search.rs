@@ -182,6 +182,7 @@ impl Pipeline {
                 .any(|plan| tool.name == format!("plan__{plan}"))
         }));
         tools.extend(self.agent_tool_defs());
+        self.packs.retain_shown(&self.origin, &mut tools);
         tools
     }
 

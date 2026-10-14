@@ -52,10 +52,6 @@ impl Runtime {
     ///
     /// The MCP server uses this to serve a *deliberately narrowed* config —
     /// see `mcp_server::project`.
-    pub fn with_config(config: graph_config::Config) -> Result<Self> {
-        Self::with_packs(config, crate::packs::InstalledPacks::default())
-    }
-
     pub fn with_packs(
         config: graph_config::Config,
         packs: crate::packs::InstalledPacks,
@@ -413,6 +409,7 @@ impl Runtime {
             always_loaded: Arc::new(self.config.tools.always_loaded.clone()),
             drafted: self.drafted.clone(),
             packs: Arc::new(self.packs.pack_set()),
+            origin: Default::default(),
         }))
     }
 

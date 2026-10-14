@@ -303,6 +303,10 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     // loadable catalog before anything runs or connects. At run time a
     // declared-but-unconfigured server is as fatal as an undeclared one.
     let catalog = runtime.tool_catalog(&loaded.docs)?;
+    if let Err(error) = callable_from_outside(&catalog.packs, name) {
+        annotate(&error.to_string());
+        return Err(error);
+    }
     let mut check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &catalog);
     check.errors.append(&mut check.notes);
     if !check.errors.is_empty() {
@@ -448,4 +452,49 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
         return Err(SilentExit::code(EXIT_PLAN_ASSERTED));
     }
     Ok(())
+}
+
+pub(crate) fn callable_from_outside(packs: &graph_core::packs::PackSet, name: &str) -> Result<()> {
+    match packs.refusal(&graph_core::packs::Origin::Outside, name) {
+        Some(message) => bail!(message),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graph_core::packs::{ItemKind, PackItem, PackSet};
+
+    fn packs() -> PackSet {
+        let mut set = PackSet::default();
+        for (kind, name, public) in [
+            (ItemKind::Plan, "describe_file", true),
+            (ItemKind::Plan, "scan", false),
+            (ItemKind::Tool, "file_info", false),
+        ] {
+            set.insert(PackItem {
+                pack: "example".to_string(),
+                kind,
+                name: name.to_string(),
+                public,
+            });
+        }
+        set
+    }
+
+    #[test]
+    fn plan_run_refuses_a_private_pack_plan_naming_its_pack() {
+        let error = callable_from_outside(&packs(), "example__plan__scan")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("'example__plan__scan'"), "{error}");
+        assert!(error.contains("pack 'example'"), "{error}");
+    }
+
+    #[test]
+    fn plan_run_accepts_public_pack_plans_and_user_plans() {
+        assert!(callable_from_outside(&packs(), "example__plan__describe_file").is_ok());
+        assert!(callable_from_outside(&packs(), "sprint_report").is_ok());
+    }
 }

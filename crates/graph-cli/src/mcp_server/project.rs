@@ -25,7 +25,7 @@
 //! `--dir .` is the one-token way to say "this directory, I mean it".
 
 use anyhow::Result;
-use graph_config::Config;
+use graph_config::LoadedConfig;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -47,20 +47,22 @@ pub fn is_pinned() -> bool {
 /// Unpinned: the global file only, with every relative plan and tool path
 /// dropped — because those resolve against the client's working directory,
 /// which is exactly what must not be trusted here.
-pub fn config() -> Result<Config> {
+pub fn config() -> Result<LoadedConfig> {
     if is_pinned() {
-        return Ok(crate::runtime::load_config()?.config);
+        return crate::runtime::load_config();
     }
-    let mut config = graph_config::load_from(&[graph_config::global_config_path()])?.config;
-    config
+    let mut loaded = graph_config::load_from(&[graph_config::global_config_path()])?;
+    loaded
+        .config
         .plans
         .paths
         .retain(|path| is_absolute(path.as_path()));
-    config
+    loaded
+        .config
         .tools
         .paths
         .retain(|path| is_absolute(path.as_path()));
-    Ok(config)
+    Ok(loaded)
 }
 
 /// Absolute *after* `~` expansion — `~/.config/graph/plans` is anchored to

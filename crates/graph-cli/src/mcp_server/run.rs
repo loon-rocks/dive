@@ -197,6 +197,12 @@ pub async fn run_plan(
 
     // Fail fast, before anything runs or connects.
     let tool_catalog = runtime.tool_catalog(&loaded.docs)?;
+    if let Err(error) =
+        crate::commands::plan_cmd::callable_from_outside(&tool_catalog.packs, identifier)
+    {
+        runtime.shutdown().await;
+        return Err(error);
+    }
     let mut check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &tool_catalog);
     check.errors.append(&mut check.notes);
     if !check.errors.is_empty() {
@@ -243,7 +249,13 @@ pub async fn run_plan(
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
     let result = pipeline
-        .run_explicit(&query, doc.steps.clone(), finish, Some(input))
+        .run_explicit_in(
+            &query,
+            doc.steps.clone(),
+            finish,
+            Some(input),
+            doc.pack.as_ref(),
+        )
         .await;
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);

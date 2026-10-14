@@ -13,6 +13,7 @@
 //! The `graph_` prefix on the authoring half is what keeps a plan named
 //! `tools_list` from colliding with the verb of the same name.
 
+use graph_core::packs::{ItemKind, Origin, PackSet};
 use graph_core::pipeline::doc::PlanDoc;
 use rmcp::model::Tool;
 use serde_json::{json, Map, Value};
@@ -253,6 +254,30 @@ pub fn authoring_tools() -> Vec<Tool> {
 /// that is exactly what graph itself routes on when an agent picks a plan —
 /// the calling agent deserves the same signal.
 pub fn plan_tool(doc: &PlanDoc) -> Tool {
+    plan_tool_named(format!("{PLAN_PREFIX}{}", doc.identifier), doc)
+}
+
+pub fn served_plan_tools(packs: &PackSet, docs: &[PlanDoc]) -> Vec<Tool> {
+    docs.iter()
+        .filter_map(|doc| {
+            if packs.routed(&doc.identifier).is_none() {
+                return doc.path.is_some().then(|| plan_tool(doc));
+            }
+            packs
+                .shows(&Origin::Outside, &doc.identifier)
+                .then(|| plan_tool_named(doc.identifier.clone(), doc))
+        })
+        .collect()
+}
+
+pub fn served_plan_identifier(name: &str) -> Option<&str> {
+    match graph_core::packs::split_catalog_name(name) {
+        Some((_, ItemKind::Plan, _)) => Some(name),
+        _ => name.strip_prefix(PLAN_PREFIX),
+    }
+}
+
+fn plan_tool_named(name: String, doc: &PlanDoc) -> Tool {
     let mut description = doc.description.clone();
     if !doc.exemplars.is_empty() {
         description.push_str("\n\nHandles requests like:");
@@ -264,12 +289,8 @@ pub fn plan_tool(doc: &PlanDoc) -> Tool {
         .input_schema
         .clone()
         .unwrap_or_else(|| json!({"type": "object", "properties": {}}));
-    Tool::new(
-        Cow::Owned(format!("{PLAN_PREFIX}{}", doc.identifier)),
-        Cow::Owned(description),
-        object(schema),
-    )
-    .with_title(doc.name.clone())
+    Tool::new(Cow::Owned(name), Cow::Owned(description), object(schema))
+        .with_title(doc.name.clone())
 }
 
 #[cfg(test)]
@@ -326,6 +347,59 @@ steps:
         doc.input_schema = None;
         let tool = plan_tool(&doc);
         assert_eq!(tool.input_schema["type"], json!("object"));
+    }
+
+    fn pack_doc(identifier: &str) -> PlanDoc {
+        let mut doc = doc();
+        doc.identifier = identifier.to_string();
+        doc.path = None;
+        doc
+    }
+
+    fn example_packs() -> PackSet {
+        let mut set = PackSet::default();
+        for (name, public) in [("describe_file", true), ("scan", false)] {
+            set.insert(graph_core::packs::PackItem {
+                pack: "example".to_string(),
+                kind: ItemKind::Plan,
+                name: name.to_string(),
+                public,
+            });
+        }
+        set
+    }
+
+    #[test]
+    fn user_plans_and_public_pack_plans_are_served_and_private_ones_never() {
+        let mut user = doc();
+        user.path = Some(std::path::PathBuf::from("/plans/sprint_report.yaml"));
+        let docs = vec![
+            user,
+            pack_doc("example__plan__describe_file"),
+            pack_doc("example__plan__scan"),
+            pack_doc("compose_plan"),
+        ];
+        let names: Vec<String> = served_plan_tools(&example_packs(), &docs)
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        assert_eq!(
+            names,
+            ["plan_sprint_report", "example__plan__describe_file"]
+        );
+    }
+
+    #[test]
+    fn served_names_resolve_back_to_plan_identifiers() {
+        assert_eq!(
+            served_plan_identifier("example__plan__describe_file"),
+            Some("example__plan__describe_file")
+        );
+        assert_eq!(
+            served_plan_identifier("plan_sprint_report"),
+            Some("sprint_report")
+        );
+        assert_eq!(served_plan_identifier("graph_plan_list"), None);
     }
 
     #[test]

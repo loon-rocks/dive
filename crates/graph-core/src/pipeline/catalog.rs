@@ -114,6 +114,11 @@ pub fn resolve_plan_tools(doc: &PlanDoc, catalog: &ToolCatalog) -> CatalogCheck 
             &mut check,
         );
     }
+    check.errors.extend(
+        catalog
+            .packs
+            .plan_problems(&crate::packs::Origin::of(doc.pack.as_ref()), &doc.steps),
+    );
     check
 }
 
@@ -168,7 +173,7 @@ pub fn resolve_step_tools(plan: &Plan, catalog: &ToolCatalog) -> Vec<String> {
 /// Every `(step id, pattern)` pair from `agent` steps' `tools:` lists,
 /// control-step bodies included. These are tool *references* even though
 /// they live in input data, so they get resolved like any step tool name.
-fn agent_tool_patterns(plan: &Plan) -> Vec<(String, String)> {
+pub(crate) fn agent_tool_patterns(plan: &Plan) -> Vec<(String, String)> {
     let mut found = Vec::new();
     let mut collect = |id: String, input: &serde_json::Map<String, serde_json::Value>| {
         let Some(serde_json::Value::Array(items)) = input.get("tools") else {
@@ -383,7 +388,7 @@ fn check_pack_item(step_id: &str, tool: &str, catalog: &ToolCatalog, check: &mut
 /// Every `(step id, tool name)` pair in a plan, control-step bodies
 /// included. Bodies that fail to parse are skipped — the static layer
 /// reports those.
-fn step_tools(plan: &Plan) -> Vec<(String, String)> {
+pub(crate) fn step_tools(plan: &Plan) -> Vec<(String, String)> {
     step_calls(plan)
         .into_iter()
         .map(|(id, tool, _)| (id, tool))
