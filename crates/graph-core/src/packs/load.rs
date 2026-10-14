@@ -106,12 +106,11 @@ pub fn load_pack(
         ));
     }
 
-    let mut unmet = Vec::new();
-    if let Some(manifest) = &manifest {
-        let evaluation = evaluate(&manifest.requires, &Machine::current());
-        problems.extend(evaluation.refused);
-        unmet = evaluation.unmet;
-    }
+    let evaluation = manifest
+        .as_ref()
+        .map(|manifest| evaluate(&manifest.requires, &Machine::current()))
+        .unwrap_or_default();
+    problems.extend(evaluation.refused);
 
     let manifest = match manifest {
         Some(manifest) if problems.is_empty() => manifest,
@@ -124,7 +123,7 @@ pub fn load_pack(
     };
     apply_interface(&mut items, include, exclude);
     let needs = PackNeeds {
-        unmet,
+        unmet: evaluation.unmet,
         mcp: manifest
             .requires
             .mcp

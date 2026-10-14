@@ -194,10 +194,7 @@ impl InstalledPacks {
             .collect()
     }
 
-    pub async fn unmet(
-        &self,
-        registry: &dyn graph_core::ToolRegistry,
-    ) -> std::collections::BTreeMap<String, Vec<String>> {
+    pub async fn unmet(&self, registry: &dyn graph_core::ToolRegistry) -> requirements::Unmet {
         requirements::unmet(
             &self.pack_set(),
             self.packs.iter().map(InstalledPack::name),
@@ -206,7 +203,7 @@ impl InstalledPacks {
         .await
     }
 
-    pub fn check_text(&self, unmet: &std::collections::BTreeMap<String, Vec<String>>) -> String {
+    pub fn check_text(&self, unmet: &requirements::Unmet) -> String {
         let mut text = String::new();
         for pack in &self.packs {
             text.push_str(&format!(
@@ -235,10 +232,7 @@ impl InstalledPacks {
         text
     }
 
-    pub fn check_json(
-        &self,
-        unmet: &std::collections::BTreeMap<String, Vec<String>>,
-    ) -> serde_json::Value {
+    pub fn check_json(&self, unmet: &requirements::Unmet) -> serde_json::Value {
         let mut entries: Vec<serde_json::Value> = self
             .packs
             .iter()

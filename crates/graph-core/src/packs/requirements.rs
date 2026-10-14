@@ -76,24 +76,14 @@ pub fn evaluate(requires: &PackRequires, machine: &Machine) -> Evaluation {
             machine.os
         ));
     }
-    let missing: Vec<&str> = requires
-        .binaries
-        .iter()
-        .filter(|binary| !machine.has_binary(binary))
-        .map(String::as_str)
-        .collect();
+    let missing = absent(&requires.binaries, |binary| machine.has_binary(binary));
     if !missing.is_empty() {
         evaluation.unmet.push(format!(
             "requires.binaries: {} not found on PATH",
             missing.join(", ")
         ));
     }
-    let unset: Vec<&str> = requires
-        .env
-        .iter()
-        .filter(|name| !machine.has_env(name))
-        .map(String::as_str)
-        .collect();
+    let unset = absent(&requires.env, |name| machine.has_env(name));
     if !unset.is_empty() {
         evaluation.unmet.push(format!(
             "requires.env: {} not set (or empty)",
@@ -103,10 +93,24 @@ pub fn evaluate(requires: &PackRequires, machine: &Machine) -> Evaluation {
     evaluation
 }
 
+fn absent(names: &[String], present: impl Fn(&str) -> bool) -> Vec<&str> {
+    names
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !present(name))
+        .collect()
+}
+
+fn meets(wanted: &str, version: &str) -> bool {
+    let Ok(requirement) = VersionReq::parse(wanted) else {
+        return true;
+    };
+    Version::parse(version).is_ok_and(|version| requirement.matches(&version))
+}
+
 fn graph_problem(wanted: &str, running: &str) -> Option<String> {
-    let requirement = VersionReq::parse(wanted).ok()?;
-    let met = Version::parse(running).is_ok_and(|version| requirement.matches(&version));
-    (!met).then(|| format!("requires.graph: needs graph {wanted}; this is graph {running}"))
+    (!meets(wanted, running))
+        .then(|| format!("requires.graph: needs graph {wanted}; this is graph {running}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,15 +171,11 @@ pub fn mcp_problems(
         }
     }
     if let Some(wanted) = &need.requirement.version {
-        if let Ok(requirement) = VersionReq::parse(wanted) {
-            let met = Version::parse(&identity.version)
-                .is_ok_and(|version| requirement.matches(&version));
-            if !met {
-                problems.push(format!(
-                    "{field}: [mcp.{prefix}] reports version '{}', the pack needs {wanted}",
-                    identity.version
-                ));
-            }
+        if !meets(wanted, &identity.version) {
+            problems.push(format!(
+                "{field}: [mcp.{prefix}] reports version '{}', the pack needs {wanted}",
+                identity.version
+            ));
         }
     }
     for found in &need.uses {
@@ -201,11 +201,13 @@ pub fn mcp_problems(
     problems
 }
 
+pub type Unmet = BTreeMap<String, Vec<String>>;
+
 pub async fn unmet<'a>(
     packs: &PackSet,
     names: impl IntoIterator<Item = &'a str>,
     registry: &dyn ToolRegistry,
-) -> BTreeMap<String, Vec<String>> {
+) -> Unmet {
     let mut found = BTreeMap::new();
     for name in names {
         let Some(needs) = packs.needs.get(name) else {
@@ -223,7 +225,7 @@ pub async fn unmet<'a>(
     found
 }
 
-pub fn describe_unmet(unmet: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+pub fn describe_unmet(unmet: &Unmet) -> Vec<String> {
     unmet
         .iter()
         .map(|(pack, problems)| {
