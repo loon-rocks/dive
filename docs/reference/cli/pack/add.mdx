@@ -6,6 +6,8 @@ playground: "none"
 keywords: ["graph pack add"]
 ---
 
+packs.lock records the commit each release tag pointed at when it was installed. A published release must never move: when the repository's copy of a recorded tag now points elsewhere, or a clone checks out a different commit than git ls-remote reported, the install is refused and nothing changes. Branch-tracking packs are exempt.
+
 ## Arguments
 
 <ParamField path="NAME|URL" type="string" required>

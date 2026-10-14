@@ -1459,3 +1459,137 @@ fn a_pack_at_the_repository_root_ignores_tags_under_directories() {
     assert!(!config(&project.layer).contains("path ="));
     assert_eq!(lock(&project.layer).packs["example"].path, "");
 }
+
+fn moved_b(repo: &PacksRepo) -> String {
+    repo.describe("b", "tampered");
+    repo.commit("b tampered");
+    git(&repo.work, &["tag", "-f", "b/v1.0.0"]);
+    git(&repo.work, &["rev-parse", "HEAD"])
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_release_tag_that_moved_since_install_is_refused() {
+    let repo = packs_repo();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    for path in ["a", "b"] {
+        let added = add(layer, &request_at(&repo.url, path, Some("v1"))).unwrap();
+        assert!(!added.rejected, "{}", added.body);
+    }
+    let installed = lock(layer).packs["b"].sha.clone();
+    git(&repo.work, &["tag", "-f", "a/v1.0.0", "HEAD"]);
+    let moved = moved_b(&repo);
+    assert_ne!(moved, installed);
+    let config_before = config(layer);
+    let lock_before = lock(layer);
+    let description_before = description(layer, "b");
+    let unchanged = || {
+        assert_eq!(config(layer), config_before);
+        assert_eq!(lock(layer), lock_before);
+        assert_eq!(description(layer, "b"), description_before);
+        assert!(staging_left(layer).is_empty());
+    };
+    let expected = format!(
+        "the tag b/v1.0.0 in {} now points at {moved} but was installed from {installed}; a published release must never move, so graph won't install it; contact the pack's maintainers",
+        repo.url
+    );
+
+    let outcome = update(layer, &[], false).unwrap();
+    let text = error(&outcome);
+    let rows = outcome.body["packs"].as_array().unwrap();
+    assert_eq!(rows[0]["status"], "current", "{text}");
+    assert_eq!(rows[1]["status"], "refused", "{text}");
+    assert_eq!(rows[1]["summary"], format!("b: {expected}"));
+    unchanged();
+
+    let mut settings = graph_config::Config::default();
+    settings.storage.backend = graph_config::StorageBackend::Memory;
+    let consent = yes();
+    let majors = Majors {
+        consent: &consent,
+        config: &settings,
+        events: Arc::new(graph_core::NullSink),
+    };
+    let crossed = major::update(layer, &["b".to_string()], false, &majors)
+        .await
+        .unwrap();
+    assert!(error(&crossed).contains(&expected));
+    unchanged();
+
+    let listed = list(std::slice::from_ref(layer), false).unwrap();
+    assert!(!listed.rejected, "{}", listed.body);
+    let rows = listed.body["packs"].as_array().unwrap();
+    assert_eq!(rows[0]["tagMoved"], Value::Null);
+    assert_eq!(rows[1]["tagMoved"], expected);
+    assert!(listed
+        .raw
+        .as_deref()
+        .unwrap()
+        .contains("release tag moved since install"));
+
+    let again = add(layer, &request_at(&repo.url, "b", Some("v1"))).unwrap();
+    assert!(error(&again).contains(&expected));
+    let renamed = add(
+        layer,
+        &AddRequest {
+            as_name: Some("other".to_string()),
+            ..request_at(&repo.url, "b", Some("v1"))
+        },
+    )
+    .unwrap();
+    assert!(error(&renamed).contains(&expected));
+    unchanged();
+    std::fs::remove_dir_all(layer.copy_dir("b")).unwrap();
+    let reinstall = add(layer, &request("b", None, None)).unwrap();
+    assert!(error(&reinstall).contains(&expected));
+    assert!(!layer.copy_dir("b").exists());
+    assert!(!layer.copy_dir("other").exists());
+    assert_eq!(config(layer), config_before);
+    assert_eq!(lock(layer), lock_before);
+}
+
+#[test]
+fn a_moved_tag_the_lock_never_recorded_is_not_refused() {
+    let repo = packs_repo();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    let added = add(layer, &request_at(&repo.url, "a", Some("v1"))).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    repo.describe("a", "one point two");
+    repo.commit("a one point two");
+    git(&repo.work, &["tag", "a/v1.2.0"]);
+    repo.describe("a", "one point two again");
+    repo.commit("a one point two again");
+    git(&repo.work, &["tag", "-f", "a/v1.2.0"]);
+    git(&repo.work, &["tag", "-f", "a/v1.0.0"]);
+    let outcome = update(layer, &[], false).unwrap();
+    assert!(!outcome.rejected, "{}", outcome.body);
+    assert_eq!(outcome.body["packs"][0]["status"], "updated");
+    assert_eq!(lock(layer).packs["a"].tag.as_deref(), Some("a/v1.2.0"));
+    assert!(description(layer, "a").contains("one point two again"));
+}
+
+#[test]
+fn a_branch_tracking_pack_whose_branch_is_rewritten_still_updates() {
+    let repo = packs_repo();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    repo.describe("a", "ahead");
+    repo.commit("a ahead");
+    let added = add(layer, &request_at(&repo.url, "a", Some("main"))).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    git(&repo.work, &["reset", "-q", "--hard", "HEAD~1"]);
+    repo.describe("a", "rewritten");
+    repo.commit("a rewritten");
+
+    let listed = list(std::slice::from_ref(layer), false).unwrap();
+    assert_eq!(listed.body["packs"][0]["tagMoved"], Value::Null);
+    let outcome = update(layer, &[], false).unwrap();
+    assert!(!outcome.rejected, "{}", outcome.body);
+    assert_eq!(outcome.body["packs"][0]["status"], "updated");
+    assert_eq!(
+        lock(layer).packs["a"].sha,
+        git(&repo.work, &["rev-parse", "HEAD"])
+    );
+    assert!(description(layer, "a").contains("rewritten"));
+}
