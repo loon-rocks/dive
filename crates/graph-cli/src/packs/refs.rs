@@ -1,4 +1,5 @@
-use super::git::RemoteRefs;
+use super::git::{remote_url, RemoteRefs};
+use graph_config::pack::LockEntry;
 use semver::Version;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,6 +167,28 @@ pub fn resolve(
     }
 }
 
+pub fn moved_tag(remote: &RemoteRefs, git: &str, path: &str, locked: &LockEntry) -> Option<String> {
+    let tag = locked.tag.as_deref()?;
+    release_version(path, tag)?;
+    let now = remote.tags.get(tag)?;
+    let url = remote_url(git);
+    let same_pack = locked.path == path && remote_url(&locked.git) == url;
+    (same_pack && *now != locked.sha)
+        .then(|| moved_message(tag, &url, now, &locked.sha, "was installed from"))
+}
+
+pub fn clone_moved(target: &Target, url: &str, head: &str) -> Option<String> {
+    let tag = target.tag.as_deref()?;
+    (head != target.sha)
+        .then(|| moved_message(tag, url, head, &target.sha, "git ls-remote reported"))
+}
+
+fn moved_message(tag: &str, url: &str, now: &str, before: &str, how: &str) -> String {
+    format!(
+        "the tag {tag} in {url} now points at {now} but {how} {before}; a published release must never move, so graph won't install it; contact the pack's maintainers"
+    )
+}
+
 fn available(releases: &[Release]) -> String {
     if releases.is_empty() {
         return String::new();
@@ -270,6 +293,50 @@ mod tests {
         let error = resolve(&refs, &PackRef::Major(3), "u", "").unwrap_err();
         assert!(error.contains("no v3.*.* release tag"), "{error}");
         assert!(error.contains("v2.0.0"), "{error}");
+    }
+
+    #[test]
+    fn only_a_locked_release_tag_of_the_same_pack_can_have_moved() {
+        let refs = refs(&["pk/v1.0.0", "v1.0.0"]);
+        let locked = |git: &str, path: &str, tag: Option<&str>, sha: &str| LockEntry {
+            git: git.to_string(),
+            path: path.to_string(),
+            tag: tag.map(str::to_string),
+            sha: sha.to_string(),
+            hash: String::new(),
+        };
+        let moved = moved_tag(
+            &refs,
+            "/r",
+            "pk",
+            &locked("/r", "pk", Some("pk/v1.0.0"), "old"),
+        )
+        .unwrap();
+        assert_eq!(
+            moved,
+            "the tag pk/v1.0.0 in /r now points at sha0 but was installed from old; a published release must never move, so graph won't install it; contact the pack's maintainers"
+        );
+        for (git, path, entry) in [
+            ("/r", "pk", locked("/r", "pk", Some("pk/v1.0.0"), "sha0")),
+            ("/r", "pk", locked("/r", "pk", None, "old")),
+            ("/r", "pk", locked("/r", "pk", Some("pk/v2.0.0"), "old")),
+            ("/r", "", locked("/r", "pk", Some("pk/v1.0.0"), "old")),
+            ("/other", "pk", locked("/r", "pk", Some("pk/v1.0.0"), "old")),
+            ("/r", "", locked("/r", "", Some("main"), "old")),
+        ] {
+            assert_eq!(moved_tag(&refs, git, path, &entry), None, "{entry:?}");
+        }
+        let tag = resolve(&refs, &PackRef::Major(1), "/r", "pk").unwrap();
+        assert_eq!(clone_moved(&tag, "/r", "sha0"), None);
+        let moved = clone_moved(&tag, "/r", "other").unwrap();
+        assert!(
+            moved.starts_with(
+                "the tag pk/v1.0.0 in /r now points at other but git ls-remote reported sha0;"
+            ),
+            "{moved}"
+        );
+        let branch = resolve(&refs, &PackRef::parse("main"), "/r", "").unwrap();
+        assert_eq!(clone_moved(&branch, "/r", "other"), None);
     }
 
     #[test]
