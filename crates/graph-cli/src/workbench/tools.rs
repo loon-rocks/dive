@@ -366,11 +366,12 @@ impl WorkbenchTools {
         }
         let query = format!("Run the '{}' plan", doc.name);
         let result = pipeline
-            .run_explicit(
+            .run_explicit_in(
                 &query,
                 doc.steps.clone(),
                 doc.finish.clone(),
                 Some(run_input),
+                doc.pack.as_ref(),
             )
             .await;
         let report = super::runner::report(result);
@@ -463,7 +464,7 @@ impl WorkbenchTools {
         let Some(name) = input.get("name").and_then(Value::as_str) else {
             return error_outcome("describe_tool requires a 'name' string");
         };
-        if let Some(identifier) = name.strip_prefix("plan__") {
+        if let Some(identifier) = self.pipeline.packs.plan_target(name) {
             if let Some(doc) = self
                 .pipeline
                 .plans

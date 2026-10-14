@@ -128,7 +128,7 @@ pub fn resolve_plan_tools_deep(
 ) -> CatalogCheck {
     let mut check = resolve_plan_tools(doc, catalog);
     let mut visited: BTreeSet<&str> = BTreeSet::from([doc.identifier.as_str()]);
-    let mut queue: Vec<&str> = plan_refs(&doc.steps);
+    let mut queue: Vec<&str> = plan_refs(&doc.steps, &catalog.packs);
     while let Some(identifier) = queue.pop() {
         if !visited.insert(identifier) {
             continue;
@@ -143,7 +143,7 @@ pub fn resolve_plan_tools_deep(
             .errors
             .extend(sub_check.errors.into_iter().map(prefix));
         check.notes.extend(sub_check.notes.into_iter().map(prefix));
-        queue.extend(plan_refs(&sub.steps));
+        queue.extend(plan_refs(&sub.steps, &catalog.packs));
     }
     check
 }
@@ -237,6 +237,14 @@ fn check_pattern(
     if namespace.contains('*') {
         return;
     }
+    if catalog.packs.is_installed(namespace) {
+        if catalog.packs.matching(pattern).next().is_none() {
+            check.errors.push(format!(
+                "step {step_id}: `tools` pattern '{pattern}' matches nothing in pack '{namespace}'"
+            ));
+        }
+        return;
+    }
 
     let local: Option<(&BTreeSet<String>, &str)> = match namespace {
         "builtin" => Some((&catalog.builtin_tools, "builtin tool")),
@@ -299,6 +307,7 @@ fn check_tool(
                 super::plan::workbench_tool_problem(tool).unwrap()
             ));
         }
+        _ if catalog.packs.routed(tool).is_some() => check_pack_item(step_id, tool, catalog, check),
         _ if tool.starts_with("plan__") => {
             let identifier = &tool["plan__".len()..];
             if !catalog.plans.contains(identifier) {
@@ -356,6 +365,18 @@ fn check_tool(
                 check.errors.push(message);
             }
         }
+    }
+}
+
+fn check_pack_item(step_id: &str, tool: &str, catalog: &ToolCatalog, check: &mut CatalogCheck) {
+    let Some((pack, kind, name)) = catalog.packs.routed(tool) else {
+        return;
+    };
+    if catalog.packs.item(tool).is_none() {
+        check.errors.push(format!(
+            "step {step_id}: unknown {kind} '{tool}' — pack '{pack}' has no {kind} named '{name}'",
+            kind = kind.as_str()
+        ));
     }
 }
 
@@ -443,20 +464,24 @@ fn templated_along(input: &Value, path: &str) -> bool {
 
 /// The distinct `plan__*` identifiers a plan's steps (bodies included)
 /// reference.
-fn plan_refs(plan: &Plan) -> Vec<&str> {
+fn plan_refs<'a>(plan: &'a Plan, packs: &crate::packs::PackSet) -> Vec<&'a str> {
     let mut refs = Vec::new();
     for step in plan {
-        if let Some(identifier) = step.tool_name.strip_prefix("plan__") {
+        if let Some(identifier) = packs.plan_target(&step.tool_name) {
             refs.push(identifier);
         }
         for (_, raw) in control_bodies(&step.tool_name, &step.input) {
-            collect_plan_refs(raw, &mut refs);
+            collect_plan_refs(raw, packs, &mut refs);
         }
     }
     refs
 }
 
-fn collect_plan_refs<'a>(raw: &'a serde_json::Value, refs: &mut Vec<&'a str>) {
+fn collect_plan_refs<'a>(
+    raw: &'a serde_json::Value,
+    packs: &crate::packs::PackSet,
+    refs: &mut Vec<&'a str>,
+) {
     let tool_of = |value: &'a serde_json::Value| {
         value
             .get("toolName")
@@ -465,13 +490,13 @@ fn collect_plan_refs<'a>(raw: &'a serde_json::Value, refs: &mut Vec<&'a str>) {
     };
     match raw {
         serde_json::Value::Object(_) => {
-            if let Some(identifier) = tool_of(raw).and_then(|t| t.strip_prefix("plan__")) {
+            if let Some(identifier) = tool_of(raw).and_then(|t| packs.plan_target(t)) {
                 refs.push(identifier);
             }
         }
         serde_json::Value::Array(items) => {
             for item in items {
-                if let Some(identifier) = tool_of(item).and_then(|t| t.strip_prefix("plan__")) {
+                if let Some(identifier) = tool_of(item).and_then(|t| packs.plan_target(t)) {
                     refs.push(identifier);
                 }
             }

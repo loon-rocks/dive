@@ -536,6 +536,7 @@ fn is_control(tool: &str) -> bool {
         tool,
         "exit" | "route" | "filter" | "map" | "reduce" | "ask" | "plan_and_execute"
     ) || tool.starts_with(graph_core::toolbox::PLAN_TOOL_PREFIX)
+        || graph_core::packs::is_plan_name(tool)
 }
 
 fn is_bare_control(tool: &str) -> bool {

@@ -41,6 +41,13 @@ fn edit(
     mutate: impl FnOnce(&mut PlanDoc) -> Result<Value, Value>,
 ) -> Result<Outcome> {
     let (doc, _loaded) = resolve_target(runtime, target)?;
+    if let Some(pack) = &doc.pack {
+        bail!(
+            "'{}' comes from {}; pack plans can't be edited in place — change the pack's source and update it",
+            doc.identifier,
+            pack.describe()
+        );
+    }
     let source = doc.path.clone();
     match authoring::apply_edit(&doc, mutate) {
         Ok(accepted) => {
@@ -116,6 +123,7 @@ pub fn new_plan(
         steps: Vec::new(),
         finish: Finish::Silent,
         path: output,
+        pack: None,
     };
     let plans_dir = runtime.plans_dir();
     let path = authoring::target_path(&doc, plans_dir.as_deref())?;
@@ -493,6 +501,7 @@ pub fn list_as_json(loaded: &graph_core::pipeline::doc::LoadedPlans) -> Value {
             "description": doc.description,
             "steps": doc.steps.len(),
             "path": doc.path.as_ref().map(|p| p.display().to_string()),
+            "source": doc.source_label(),
         })).collect::<Vec<_>>(),
         "skipped": loaded.skipped.iter().map(|error| json!({
             "path": error.path(),

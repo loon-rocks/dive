@@ -415,6 +415,17 @@ impl Pipeline {
         finish: Finish,
         input: Option<Value>,
     ) -> Result<PipelineOutcome, PipelineError> {
+        self.run_explicit_in(query, plan, finish, input, None).await
+    }
+
+    pub async fn run_explicit_in(
+        &self,
+        query: &str,
+        plan: Plan,
+        finish: Finish,
+        input: Option<Value>,
+        pack: Option<&crate::packs::PackSource>,
+    ) -> Result<PipelineOutcome, PipelineError> {
         let mut state = RunState {
             query: query.to_string(),
             plan,
@@ -426,8 +437,14 @@ impl Pipeline {
         if let Some(input) = input {
             state.results.insert("input".to_string(), input);
         }
+        if let Some(pack) = pack {
+            state
+                .results
+                .insert(crate::packs::PACK_ROOT.to_string(), pack.template_root());
+        }
 
-        let mut problems = self.validate(&state).err().unwrap_or_default();
+        let mut problems =
+            authoring::validate_steps_in(&state.plan, &crate::packs::template_roots(pack));
         // Second layer: catalog-aware tool resolution, so an unresolvable
         // tool fails here — before any step spends tool calls or LLM money.
         if let Some(catalog) = &self.catalog {
@@ -529,11 +546,12 @@ impl Pipeline {
             let nested = self.nested(Some(identifier));
             let query = format!("Run the '{}' plan", plan_doc.name);
             match nested
-                .run_explicit(
+                .run_explicit_in(
                     &query,
                     plan_doc.steps.clone(),
                     plan_doc.finish.clone(),
                     Some(input),
+                    plan_doc.pack.as_ref(),
                 )
                 .await
             {
@@ -727,7 +745,7 @@ impl Pipeline {
             .iter()
             .filter(|plan_doc| !self.call_stack.iter().any(|f| f == &plan_doc.identifier))
             .map(|plan_doc| crate::tools::ToolDef {
-                name: format!("plan__{}", plan_doc.identifier),
+                name: plan_doc.tool_name(),
                 description: plan_doc.tool_description(),
                 input_schema: plan_doc.tool_input_schema(),
                 output_schema: Some(plan_doc.result_schema()),
@@ -1047,7 +1065,7 @@ impl Pipeline {
             .step_started(&self.call_stack, &path_text, tool_name, &rendered);
         self.events.tool_started(tool_name, &rendered);
         let started = std::time::Instant::now();
-        let outcome = if let Some(identifier) = tool_name.strip_prefix("plan__") {
+        let outcome = if let Some(identifier) = self.packs.plan_target(tool_name) {
             let call = self.call_plan(identifier, rendered).await;
             if call.aborted {
                 // A nested abort is already a gate decision — never re-ask.
@@ -1059,7 +1077,7 @@ impl Pipeline {
                 result: call.result,
                 is_error: call.is_error,
             }
-        } else if let Some(name) = tool_name.strip_prefix(AGENT_TOOL_PREFIX) {
+        } else if let Some(name) = self.packs.agent_target(tool_name) {
             self.call_agent(path, name, rendered).await?
         } else if is_native_tool(tool_name) {
             CallSite::role("planner")

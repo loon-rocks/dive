@@ -3,6 +3,7 @@ mod commands;
 mod interlocutor;
 mod mcp_server;
 mod output;
+mod packs;
 mod runtime;
 mod telemetry;
 mod workbench;

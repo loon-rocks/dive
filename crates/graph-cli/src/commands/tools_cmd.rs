@@ -6,6 +6,7 @@ use crate::runtime::Runtime;
 use anyhow::{bail, Result};
 use graph_core::ToolRegistry;
 use serde_json::json;
+use std::collections::BTreeMap;
 
 pub async fn run(command: ToolsCommand) -> Result<()> {
     if let ToolsCommand::Migrate { path, json } = command {
@@ -31,7 +32,9 @@ async fn dispatch(
     docs: &graph_core::user_tools::ToolDocs,
 ) -> Result<(Outcome, bool)> {
     match command {
-        ToolsCommand::List { json } => Ok((list(registry).await?, json)),
+        ToolsCommand::List { json } => {
+            Ok((list_labeled(registry, &pack_labels(docs)).await?, json))
+        }
         ToolsCommand::Show { name, json } => Ok((show(registry, docs, &name).await?, json)),
         ToolsCommand::Test {
             name,
@@ -47,6 +50,9 @@ async fn dispatch(
 }
 
 fn tool_source(docs: &graph_core::user_tools::ToolDocs, name: &str) -> Option<String> {
+    if let Some(source) = docs.pack_source(name) {
+        return Some(source.describe());
+    }
     let (list, bare) = match name.split_once("__")? {
         ("builtin", bare) => (&docs.builtins, bare),
         ("user", bare) => (&docs.user, bare),
@@ -94,17 +100,42 @@ pub(crate) async fn catalog(
 }
 
 pub(crate) async fn list(registry: &(dyn ToolRegistry + Send + Sync)) -> Result<Outcome> {
+    list_labeled(registry, &BTreeMap::new()).await
+}
+
+fn pack_labels(docs: &graph_core::user_tools::ToolDocs) -> BTreeMap<String, String> {
+    docs.packs
+        .iter()
+        .map(|(source, _)| (source.name.clone(), source.describe()))
+        .collect()
+}
+
+pub(crate) async fn list_labeled(
+    registry: &(dyn ToolRegistry + Send + Sync),
+    labels: &BTreeMap<String, String>,
+) -> Result<Outcome> {
     let defs = catalog(registry).await?;
     // An empty catalog is a valid answer, not an error: the envelope still
     // parses, so a caller branches on `count`.
-    let body = super::listing::tool_listing_as_json(&defs);
+    let mut body = super::listing::tool_listing_as_json(&defs);
+    for key in ["tools", "sources"] {
+        for entry in body[key].as_array_mut().into_iter().flatten() {
+            if let Some(label) = entry["source"]
+                .as_str()
+                .and_then(|source| labels.get(source))
+            {
+                entry["pack"] = json!(label);
+            }
+        }
+    }
     if defs.is_empty() {
         return Ok(Outcome::raw(String::new(), body)
             .with_note("no tools available — configure [mcp.*] servers"));
     }
-    let text = super::listing::render_tool_listing(
+    let text = super::listing::render_tool_listing_labeled(
         &defs,
         std::io::IsTerminal::is_terminal(&std::io::stdout()),
+        labels,
     );
     Ok(Outcome::raw(text, body))
 }
@@ -181,10 +212,28 @@ mod tests {
     #[test]
     fn tool_source_names_the_overriding_file_or_the_pack() {
         let builtins = graph_core::user_tools::load_builtin_tools(&["github".to_string()]).unwrap();
+        let pack_tool = graph_core::user_tools::parse_tool_source(
+            "name: file_info\ndescription: d\nkind: exec\ncommand: wc\n",
+        )
+        .unwrap();
         let docs = graph_core::user_tools::ToolDocs {
             builtins: builtins.clone(),
             user: Vec::new(),
+            packs: vec![(
+                graph_core::packs::PackSource {
+                    name: "example".to_string(),
+                    tag: Some("v1.0.0".to_string()),
+                    layer: graph_config::pack::LayerKind::Project,
+                    dir: std::path::PathBuf::from(".graph/packs/example"),
+                },
+                vec![pack_tool],
+            )],
         };
+        assert_eq!(
+            tool_source(&docs, "example__tool__file_info").as_deref(),
+            Some("pack example v1.0.0 (project)")
+        );
+        assert_eq!(tool_source(&docs, "example__tool__missing"), None);
         assert_eq!(
             tool_source(&docs, "builtin__reshape").as_deref(),
             Some("built-in")
@@ -202,6 +251,7 @@ mod tests {
         let overridden = graph_core::user_tools::ToolDocs {
             builtins: graph_core::user_tools::apply_tool_overrides(builtins, vec![mine]).unwrap(),
             user: Vec::new(),
+            packs: Vec::new(),
         };
         assert_eq!(
             tool_source(&overridden, "builtin__reshape").as_deref(),

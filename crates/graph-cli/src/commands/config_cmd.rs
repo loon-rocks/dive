@@ -240,9 +240,19 @@ fn check() -> Outcome {
             }
         }
     }
+    let mut packs = json!([]);
+    let mut warnings = Vec::new();
     if problems.is_empty() {
-        if let Err(error) = graph_config::load() {
-            problems.push(format!("{error:#}"));
+        match graph_config::load() {
+            Err(error) => problems.push(format!("{error:#}")),
+            Ok(loaded) => match crate::packs::InstalledPacks::for_config(&loaded) {
+                Ok(installed) => {
+                    text.push_str(&installed.check_text());
+                    packs = installed.check_json();
+                    warnings = installed.warnings;
+                }
+                Err(error) => problems.push(format!("{error:#}")),
+            },
         }
     }
     let ok = problems.is_empty();
@@ -251,6 +261,8 @@ fn check() -> Outcome {
         "version": CONFIG_FORMAT,
         "files": files,
         "problems": problems,
+        "packs": packs,
+        "warnings": warnings,
     });
     if ok {
         Outcome::raw(text, body)

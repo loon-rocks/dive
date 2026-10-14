@@ -32,6 +32,8 @@ pub struct PlanDoc {
     /// Source file, set by the loader.
     #[serde(skip)]
     pub path: Option<PathBuf>,
+    #[serde(skip)]
+    pub pack: Option<crate::packs::PackSource>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -359,7 +361,7 @@ pub fn validate_doc(doc: &PlanDoc) -> Result<(), String> {
         return Err("plan has no steps".to_string());
     }
     let all_ids: Vec<&str> = doc.steps.iter().map(|s| s.id.as_str()).collect();
-    let mut seen: Vec<&str> = vec!["input"];
+    let mut seen: Vec<&str> = doc.template_roots();
     for step in &doc.steps {
         check_step_id(&step.id)?;
         if seen.contains(&step.id.as_str()) {
@@ -741,6 +743,25 @@ impl std::str::FromStr for PlanDoc {
 }
 
 impl PlanDoc {
+    pub fn tool_name(&self) -> String {
+        match &self.pack {
+            Some(_) => self.identifier.clone(),
+            None => format!("{}{}", crate::toolbox::PLAN_TOOL_PREFIX, self.identifier),
+        }
+    }
+
+    pub fn template_roots(&self) -> Vec<&'static str> {
+        crate::packs::template_roots(self.pack.as_ref())
+    }
+
+    pub fn source_label(&self) -> String {
+        match (&self.pack, &self.path) {
+            (Some(source), _) => source.describe(),
+            (None, Some(path)) => path.display().to_string(),
+            (None, None) => "built-in".to_string(),
+        }
+    }
+
     pub fn solver(&self) -> Option<&super::SolverData> {
         match &self.finish {
             Finish::Solver(solver) => Some(solver),

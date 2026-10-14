@@ -47,6 +47,10 @@ pub enum AgentSource {
     #[default]
     Builtin,
     File(PathBuf),
+    Pack {
+        source: crate::packs::PackSource,
+        path: PathBuf,
+    },
 }
 
 impl AgentSource {
@@ -54,6 +58,14 @@ impl AgentSource {
         match self {
             AgentSource::Builtin => "built-in".to_string(),
             AgentSource::File(path) => path.display().to_string(),
+            AgentSource::Pack { source, .. } => source.describe(),
+        }
+    }
+
+    pub fn pack(&self) -> Option<&crate::packs::PackSource> {
+        match self {
+            AgentSource::Pack { source, .. } => Some(source),
+            _ => None,
         }
     }
 }
@@ -81,6 +93,13 @@ pub struct AgentDoc {
 }
 
 impl AgentDoc {
+    pub fn tool_name(&self) -> String {
+        match self.source.pack() {
+            Some(_) => self.name.clone(),
+            None => format!("{}{}", crate::pipeline::AGENT_TOOL_PREFIX, self.name),
+        }
+    }
+
     pub fn subagent_input_schema(&self) -> Value {
         self.input_schema.clone().unwrap_or_else(|| {
             json!({
@@ -239,6 +258,13 @@ impl AgentSet {
         }
     }
 
+    pub fn with_packs(mut self, docs: impl IntoIterator<Item = AgentDoc>) -> Self {
+        for doc in docs {
+            self.agents.insert(doc.name.clone(), doc);
+        }
+        self
+    }
+
     pub fn with_drafted(
         mut self,
         drafted: std::sync::Arc<std::sync::RwLock<Vec<AgentDoc>>>,
@@ -386,11 +412,19 @@ fn cycle_problem(cycle: &[String]) -> String {
     )
 }
 
-fn template_scope(rules: Map<String, Value>, session: Map<String, Value>) -> Map<String, Value> {
-    Map::from_iter([
+fn template_scope(
+    rules: Map<String, Value>,
+    session: Map<String, Value>,
+    pack: Option<&crate::packs::PackSource>,
+) -> Map<String, Value> {
+    let mut scope = Map::from_iter([
         ("rules".to_string(), Value::Object(rules)),
         ("session".to_string(), Value::Object(session)),
-    ])
+    ]);
+    if let Some(pack) = pack {
+        scope.insert(crate::packs::PACK_ROOT.to_string(), pack.template_root());
+    }
+    scope
 }
 
 pub fn validate_doc(doc: &AgentDoc, fragments: &[&str]) -> Vec<String> {
@@ -433,7 +467,11 @@ pub fn validate_doc(doc: &AgentDoc, fragments: &[&str]) -> Vec<String> {
             problems.push("output_schema must be an object schema (type: object)".to_string());
         }
     }
-    problems.extend(prompt_problems(&doc.system_prompt, fragments));
+    problems.extend(prompt_problems(
+        &doc.system_prompt,
+        fragments,
+        doc.source.pack(),
+    ));
     problems
 }
 
@@ -484,14 +522,22 @@ fn input_schema_problems(schema: &Value) -> Vec<String> {
         .collect()
 }
 
-fn prompt_problems(prompt: &str, fragments: &[&str]) -> Vec<String> {
+fn prompt_problems(
+    prompt: &str,
+    fragments: &[&str],
+    pack: Option<&crate::packs::PackSource>,
+) -> Vec<String> {
+    let mut allowed: Vec<&str> = TEMPLATE_ROOTS.to_vec();
+    if pack.is_some() {
+        allowed.push(crate::packs::PACK_ROOT);
+    }
     let roots = match referenced_roots(prompt) {
         Ok(roots) => roots,
         Err(error) => return vec![format!("system_prompt is not a valid template: {error}")],
     };
     let unknown: Vec<String> = roots
         .into_iter()
-        .filter(|root| !TEMPLATE_ROOTS.contains(&root.as_str()))
+        .filter(|root| !allowed.contains(&root.as_str()))
         .collect();
     if !unknown.is_empty() {
         return vec![format!(
@@ -501,7 +547,7 @@ fn prompt_problems(prompt: &str, fragments: &[&str]) -> Vec<String> {
                 .map(|root| format!("`{root}`"))
                 .collect::<Vec<_>>()
                 .join(", "),
-            TEMPLATE_ROOTS
+            allowed
                 .iter()
                 .map(|root| format!("`{root}.*`"))
                 .collect::<Vec<_>>()
@@ -516,7 +562,7 @@ fn prompt_problems(prompt: &str, fragments: &[&str]) -> Vec<String> {
         .iter()
         .map(|key| (key.to_string(), Value::String(String::new())))
         .collect();
-    let scope = template_scope(rules, session);
+    let scope = template_scope(rules, session, pack);
     match render_str(prompt, &Roots::new(&scope)) {
         Ok(_) => Vec::new(),
         Err(error) => vec![format!(
@@ -558,7 +604,7 @@ pub fn render_system_prompt(
         .iter()
         .map(|(key, value)| (key.to_string(), Value::String(value.clone())))
         .collect();
-    let scope = template_scope(rules, session);
+    let scope = template_scope(rules, session, doc.source.pack());
     render_str(&doc.system_prompt, &Roots::new(&scope))
         .map_err(|error| format!("agent '{}': system_prompt: {error}", doc.name))
 }

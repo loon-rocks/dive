@@ -1,6 +1,18 @@
+use graph_config::pack::LayerKind;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+mod load;
+mod resolve;
+
+#[cfg(test)]
+mod load_tests;
+
+pub use load::{check_installed_name, load_pack, LoadedPack};
+pub use resolve::{resolve_agent, resolve_name, resolve_plan_steps, SELF_PREFIX};
 
 pub const KIND_SEPARATOR: &str = "__";
+pub const PACK_ROOT: &str = "pack";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ItemKind {
@@ -41,6 +53,47 @@ pub fn split_catalog_name(full: &str) -> Option<(&str, ItemKind, &str)> {
         return None;
     }
     Some((pack, kind, name))
+}
+
+pub fn is_plan_name(name: &str) -> bool {
+    matches!(split_catalog_name(name), Some((_, ItemKind::Plan, _)))
+}
+
+pub fn layer_label(layer: LayerKind) -> &'static str {
+    match layer {
+        LayerKind::Global => "global",
+        LayerKind::Project => "project",
+    }
+}
+
+pub fn template_roots(pack: Option<&PackSource>) -> Vec<&'static str> {
+    match pack {
+        Some(_) => vec!["input", PACK_ROOT],
+        None => vec!["input"],
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackSource {
+    pub name: String,
+    pub tag: Option<String>,
+    pub layer: LayerKind,
+    pub dir: PathBuf,
+}
+
+impl PackSource {
+    pub fn describe(&self) -> String {
+        format!(
+            "pack {} {} ({})",
+            self.name,
+            self.tag.as_deref().unwrap_or("untagged"),
+            layer_label(self.layer)
+        )
+    }
+
+    pub fn template_root(&self) -> serde_json::Value {
+        serde_json::json!({ "name": self.name })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,11 +155,47 @@ impl PackSet {
         split_catalog_name(full).filter(|(pack, _, _)| self.is_installed(pack))
     }
 
-    pub fn insert(&mut self, item: PackItem) {
-        if !self.is_installed(&item.pack) {
-            self.installed.push(item.pack.clone());
+    pub fn install(&mut self, pack: &str) {
+        if !self.is_installed(pack) {
+            self.installed.push(pack.to_string());
         }
+    }
+
+    pub fn insert(&mut self, item: PackItem) {
+        self.install(&item.pack);
         self.items.insert(item.catalog_name(), item);
+    }
+
+    pub fn add(&mut self, pack: &LoadedPack) {
+        self.install(&pack.source.name);
+        for item in &pack.items {
+            self.insert(item.clone());
+        }
+    }
+
+    pub fn plan_target<'a>(&self, tool: &'a str) -> Option<&'a str> {
+        self.target(tool, ItemKind::Plan, crate::toolbox::PLAN_TOOL_PREFIX)
+    }
+
+    pub fn agent_target<'a>(&self, tool: &'a str) -> Option<&'a str> {
+        self.target(tool, ItemKind::Agent, crate::pipeline::AGENT_TOOL_PREFIX)
+    }
+
+    fn target<'a>(&self, tool: &'a str, kind: ItemKind, prefix: &str) -> Option<&'a str> {
+        match self.routed(tool) {
+            Some((_, routed, _)) if routed == kind => Some(tool),
+            Some(_) => None,
+            None => tool
+                .strip_prefix(prefix)
+                .filter(|name| self.routed(name).is_none()),
+        }
+    }
+
+    pub fn matching<'a>(&'a self, pattern: &'a str) -> impl Iterator<Item = &'a PackItem> + 'a {
+        self.items
+            .iter()
+            .filter(move |(name, _)| crate::pipeline::catalog::glob_matches(pattern, name))
+            .map(|(_, item)| item)
     }
 }
 

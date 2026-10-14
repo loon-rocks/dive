@@ -247,6 +247,20 @@ pub fn load_builtin_tools(packs: &[String]) -> Result<Vec<UserToolDoc>, String> 
 pub struct ToolDocs {
     pub builtins: Vec<UserToolDoc>,
     pub user: Vec<UserToolDoc>,
+    pub packs: Vec<(crate::packs::PackSource, Vec<UserToolDoc>)>,
+}
+
+impl ToolDocs {
+    pub fn pack_source(&self, name: &str) -> Option<&crate::packs::PackSource> {
+        let (pack, kind, bare) = crate::packs::split_catalog_name(name)?;
+        if kind != crate::packs::ItemKind::Tool {
+            return None;
+        }
+        self.packs
+            .iter()
+            .find(|(source, tools)| source.name == pack && tools.iter().any(|doc| doc.name == bare))
+            .map(|(source, _)| source)
+    }
 }
 
 pub const BUILTIN_OVERRIDE_DIR: &str = "builtin";
@@ -513,7 +527,7 @@ fn check_shape_templates(
 pub struct UserToolRegistry {
     tools: Vec<UserToolDoc>,
     router: Arc<ModelRouter>,
-    prefix: &'static str,
+    prefix: String,
 }
 
 impl UserToolRegistry {
@@ -521,7 +535,7 @@ impl UserToolRegistry {
         Self {
             tools,
             router,
-            prefix: USER_TOOL_PREFIX,
+            prefix: USER_TOOL_PREFIX.to_string(),
         }
     }
 
@@ -530,7 +544,15 @@ impl UserToolRegistry {
         Self {
             tools,
             router,
-            prefix: BUILTIN_TOOL_PREFIX,
+            prefix: BUILTIN_TOOL_PREFIX.to_string(),
+        }
+    }
+
+    pub fn pack(pack: &str, tools: Vec<UserToolDoc>, router: Arc<ModelRouter>) -> Self {
+        Self {
+            tools,
+            router,
+            prefix: crate::packs::catalog_name(pack, crate::packs::ItemKind::Tool, ""),
         }
     }
 
@@ -1267,7 +1289,7 @@ impl ToolRegistry for UserToolRegistry {
     }
 
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {
-        let Some(bare) = name.strip_prefix(self.prefix) else {
+        let Some(bare) = name.strip_prefix(self.prefix.as_str()) else {
             return Err(ToolError::Unknown(name.to_string()));
         };
         let Some(doc) = self.tools.iter().find(|d| d.name == bare) else {

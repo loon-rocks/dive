@@ -34,6 +34,7 @@ pub struct Runtime {
     /// components (pipeline, toolbox, commands) each load the catalog.
     plans_warned: std::sync::atomic::AtomicBool,
     drafted: Arc<graph_core::pipeline::Drafted>,
+    pub packs: Arc<crate::packs::InstalledPacks>,
 }
 
 impl Runtime {
@@ -42,7 +43,9 @@ impl Runtime {
     }
 
     pub fn init() -> Result<Self> {
-        Self::with_config(load_config()?.config)
+        let loaded = load_config()?;
+        let packs = load_packs(&loaded)?;
+        Self::with_packs(loaded.config, packs)
     }
 
     /// Build a runtime over an already-resolved config.
@@ -50,6 +53,13 @@ impl Runtime {
     /// The MCP server uses this to serve a *deliberately narrowed* config —
     /// see `mcp_server::project`.
     pub fn with_config(config: graph_config::Config) -> Result<Self> {
+        Self::with_packs(config, crate::packs::InstalledPacks::default())
+    }
+
+    pub fn with_packs(
+        config: graph_config::Config,
+        packs: crate::packs::InstalledPacks,
+    ) -> Result<Self> {
         let loaded = graph_config::LoadedConfig {
             config,
             sources: Vec::new(),
@@ -92,6 +102,7 @@ impl Runtime {
             usage,
             plans_warned: std::sync::atomic::AtomicBool::new(false),
             drafted,
+            packs: Arc::new(packs),
         })
     }
 
@@ -111,7 +122,7 @@ impl Runtime {
     /// tools), wrapped with shape recording.
     pub fn recording_registry(&self, store: &Arc<dyn Store>) -> Result<Arc<dyn ToolRegistry>> {
         let docs = self.tool_docs()?;
-        let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(vec![
+        let mut sources: Vec<Arc<dyn ToolRegistry>> = vec![
             Arc::new(graph_core::pipeline::DraftedTools::new(
                 self.drafted.clone(),
                 self.router.clone(),
@@ -122,7 +133,15 @@ impl Runtime {
                 self.router.clone(),
             )),
             Arc::new(UserToolRegistry::new(docs.user, self.router.clone())),
-        ]));
+        ];
+        for (source, tools) in docs.packs {
+            sources.push(Arc::new(UserToolRegistry::pack(
+                &source.name,
+                tools,
+                self.router.clone(),
+            )));
+        }
+        let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
         Ok(Arc::new(RecordingRegistry::new(base, store.clone())))
     }
 
@@ -149,6 +168,7 @@ impl Runtime {
             builtins: graph_core::user_tools::apply_tool_overrides(builtins, overrides)
                 .map_err(anyhow::Error::msg)?,
             user,
+            packs: self.packs.tool_docs(),
         })
     }
 
@@ -175,32 +195,38 @@ impl Runtime {
         };
         let builtin_tools = named(graph_core::user_tools::BUILTIN_TOOL_PREFIX, docs.builtins);
         let user_tools = named(graph_core::user_tools::USER_TOOL_PREFIX, docs.user);
+        for (source, tools) in docs.packs {
+            let prefix = graph_core::packs::catalog_name(
+                &source.name,
+                graph_core::packs::ItemKind::Tool,
+                "",
+            );
+            named(&prefix, tools);
+        }
         for doc in plan_docs {
             if let Some(schema) = &doc.input_schema {
-                input_schemas.insert(
-                    format!(
-                        "{}{}",
-                        graph_core::toolbox::PLAN_TOOL_PREFIX,
-                        doc.identifier
-                    ),
-                    schema.clone(),
-                );
+                input_schemas.insert(doc.tool_name(), schema.clone());
             }
         }
         for doc in agent_set.iter() {
-            input_schemas.insert(
-                format!("{}{}", graph_core::pipeline::AGENT_TOOL_PREFIX, doc.name),
-                doc.subagent_input_schema(),
-            );
+            input_schemas.insert(doc.tool_name(), doc.subagent_input_schema());
         }
         Ok(ToolCatalog {
             builtin_tools,
             user_tools,
-            plans: plan_docs.iter().map(|d| d.identifier.clone()).collect(),
+            plans: plan_docs
+                .iter()
+                .filter(|doc| doc.pack.is_none())
+                .map(|d| d.identifier.clone())
+                .collect(),
             mcp_servers: self.config.mcp.keys().cloned().collect(),
-            agents: agent_set.iter().map(|doc| doc.name.clone()).collect(),
+            agents: agent_set
+                .iter()
+                .filter(|doc| doc.source.pack().is_none())
+                .map(|doc| doc.name.clone())
+                .collect(),
             input_schemas,
-            packs: Default::default(),
+            packs: self.packs.pack_set(),
         })
     }
 
@@ -212,7 +238,8 @@ impl Runtime {
         for error in errors {
             tracing::warn!("skipping agent file — {error}");
         }
-        set.with_drafted(self.drafted.agents())
+        set.with_packs(self.packs.agents().cloned())
+            .with_drafted(self.drafted.agents())
     }
 
     pub fn drafted(&self) -> Arc<graph_core::pipeline::Drafted> {
@@ -295,6 +322,18 @@ impl Runtime {
             &mut loaded,
             graph_core::pipeline::doc::BUILTIN_PLANS,
         );
+        for doc in self.packs.plans() {
+            if loaded.docs.iter().any(|d| d.identifier == doc.identifier) {
+                loaded
+                    .skipped
+                    .push(graph_core::pipeline::doc::DocError::Duplicate {
+                        path: doc.source_label(),
+                        identifier: doc.identifier.clone(),
+                    });
+            } else {
+                loaded.docs.push(doc.clone());
+            }
+        }
         if !self
             .plans_warned
             .swap(true, std::sync::atomic::Ordering::Relaxed)
@@ -373,7 +412,7 @@ impl Runtime {
             agent_depth: 0,
             always_loaded: Arc::new(self.config.tools.always_loaded.clone()),
             drafted: self.drafted.clone(),
-            packs: Default::default(),
+            packs: Arc::new(self.packs.pack_set()),
         }))
     }
 
@@ -612,6 +651,12 @@ pub fn title_from(message: &str) -> String {
         title = "untitled".to_string();
     }
     title
+}
+
+pub fn load_packs(loaded: &graph_config::LoadedConfig) -> Result<crate::packs::InstalledPacks> {
+    let packs = crate::packs::InstalledPacks::for_config(loaded)?;
+    packs.warn();
+    Ok(packs)
 }
 
 pub fn load_config() -> Result<graph_config::LoadedConfig> {

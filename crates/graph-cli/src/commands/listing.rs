@@ -76,6 +76,14 @@ pub fn tool_listing_as_json(defs: &[ToolDef]) -> Value {
 /// sections, not entries. Bare names (`plan_and_execute`) group under
 /// "(core)".
 pub fn render_tool_listing(defs: &[ToolDef], color: bool) -> String {
+    render_tool_listing_labeled(defs, color, &std::collections::BTreeMap::new())
+}
+
+pub fn render_tool_listing_labeled(
+    defs: &[ToolDef],
+    color: bool,
+    labels: &std::collections::BTreeMap<String, String>,
+) -> String {
     let header = |s: &str| {
         if color {
             format!("\x1b[1;4m{s}\x1b[0m")
@@ -117,7 +125,10 @@ pub fn render_tool_listing(defs: &[ToolDef], color: bool) -> String {
         out.push_str(&format!(
             "{} {}\n",
             header(source),
-            dim(&format!("— {} {noun}", tools.len()))
+            dim(&match labels.get(*source) {
+                Some(label) => format!("— {} {noun} · {label}", tools.len()),
+                None => format!("— {} {noun}", tools.len()),
+            })
         ));
         for def in tools {
             let bare = def
