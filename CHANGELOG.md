@@ -2,6 +2,102 @@
 
 All notable changes to graph. Generated from conventional commits by git-cliff.
 
+## Graph v0.16.0 — 2026-10-14
+
+### Breaking
+
+- rename llm_call events to model_call and tag each with its model kind
+- workbench agents work on plans through the same artifact tools as agents and tools, with 17 workbench tools folded into 7 (#146)
+- plans state how they finish with a required finish key, success exits return the plan's result shape, and failed plan calls return one standard error — plan version 2 files need `finish`; plan-tool results for exited runs and empty-data failures changed shape.
+- the github and slack tools leave the binary for installable packs, and [tools].packs becomes [packs.<name>] entries (#163) — the github and slack tools are no longer part of graph.
+
+### Added
+
+- config version 4 adds the systemone provider type, the decider role, and context_window
+- a systemone decision provider speaking the Jev wire API, routed to decision roles with startup kind checks, failover, context_window, and decision traces
+- named agent files with graph agents list, show, validate and migrate
+- one override model: built-in plans and pack tools are replaced by files that name them, and show reports the source
+- plan drafting runs as built-in plans you can override, plan steps can call named agents, and decide and exit steps work inside any body
+- threads keep every agent's history as authored entries, with an owner and an active agent
+- graph chat [agent] and graph ask --agent run named agents that hand off and delegate
+- the workbench runs a network of agents that draft, load and edit plans with you
+- drafting offers only the tools a plan needs, found by a built-in search_tools plan that asks a decision model when one is configured
+- compose_plan drafts a whole plan in one call from the tools search finds, stops when no tool can do part of the goal, and fixes only the steps that fail validation
+- builtin__reshape accepts a single template string and returns that value, and compose_plan rejects references to fields a tool's declared or observed output doesn't have
+- map steps take onError: skip, leaving failed items out of results and listing them in failed instead of failing the plan
+- the workbench answers an ask step in a form generated from its answer schema, with a question per field, and an ask step's output_schema can be built from earlier results
+- graph plan draft, MCP graph_plan_draft and the workbench draft new plans with compose_plan, which asks about guessed values in one form and can ask for tools it wasn't shown; the step-by-step drafting overlay and its draft_* progress events are gone
+- built-in tool_drafter and agent_drafter write tools and agents with you, test-running a tool before it is saved, and drafting one in the workbench is a mode with the draft in the pane
+- graph wb opens the workbench at a front desk, graph wb plan|agent|tool go straight to a mode, orchestrator is renamed plan_drafter, and tool env values take ${VAR:-default}
+- plan validate and plan run check literal step inputs against the called tool's input schema
+- infer, decide and reshape are plain built-in tools instead of the always-on llm and data packs (#149)
+- installed packs load per config layer and serve their tools, plans and agents under <pack>__<kind>__<name> names (#152)
+- pack include/exclude narrow a pack's public interface, so only the pack's own plans and agents can call excluded items (#153)
+- graph pack add, list, update and remove install and manage packs from git as plain copies per config layer (#156)
+- packs declare graph, OS, binary, env and MCP server requirements that install, load, config check and runs enforce (#160)
+- graph pack new, check, run, test and release let authors scaffold, validate, try, migration-test and semver-tag a pack (#161)
+- graph pack update --major crosses majors one at a time, running each major's migration as a dry run, then applying it once confirmed (#162)
+- CLI commands use singular nouns (graph tool, agent, thread, shape), with plural spellings kept as hidden aliases (#165)
+- packs live in subdirectories of a repo with per-pack tags, and bare names install from tylerdavis/graph-packs (#166)
+- graph pack add, update and list refuse a release tag that moved since it was installed (#168)
+- graph pack check requires pack.toml to declare the systems a pack runs on (#170)
+
+### Changed
+
+- share one task-agent loop between the agent step and named agents; add stop tools, call sites and allowlisted registries
+- pack remove restores a set-aside copy through one type, and refusals without problems use one helper (#159)
+
+### Documentation
+
+- rebuild the docs around agents, plans and tools, with reference pages generated from the code and fuller --help text (#154)
+- the workbench screenshots show the github pack's tool names, and a stale screenshot fails the tests (#169)
+- examples call the github pack's tools as github__tool__<name>, and this repo's checks run on the installed pack (#171)
+- a Packs section explains installing, updating and writing packs, with a pack.toml reference generated from its schema (#172)
+
+### Fixed
+
+- builtin__infer runs as a non-interactive plan step, reporting empty data instead of asking for it
+- gh_pr_ticket no longer reads prose such as "every 2" as a ticket, matching uppercase keys in titles and bodies and skipping standard names like UTF-8
+- graph pack commands have help text for every argument and pages in the generated CLI reference (#158)
+
+## Config v4 — 2026-10-14
+
+### Breaking
+
+- draft outlines from a coarse outliner role and a sectioned catalog; MCP servers take a description (config version 4) — config version 4 (graph config migrate)
+
+## Plan v2 — 2026-10-14
+
+### Breaking
+
+- decide gates on exit, route and filter steps, and route steps with named cases chosen by a decision model; version 1 decide steps migrate to route — plan version 2 (graph plan migrate)
+
+## Tool v2 — 2026-10-14
+
+### Breaking
+
+- decision tools and builtin__decide, answered by a decision model — tool version 2 (graph tools migrate)
+
+## Agent v1 — 2026-10-14
+
+- Introduced with graph v0.16.0.
+
+## Store v2 — 2026-10-14
+
+### Breaking
+
+- opening a data directory written before agents converts its threads to entry logs in place, and older graph versions then refuse it — store version 2
+
+## Pack v1 — 2026-10-14
+
+### Breaking
+
+- pack.toml and packs.lock are versioned file formats, and config accepts [packs.<name>] entries (#150) — pack version 1 and lock version 1 are new file formats
+
+## Lock v1 — 2026-10-14
+
+- Introduced with graph v0.16.0.
+
 ## Graph v0.15.0 — 2026-09-24
 
 ### Added

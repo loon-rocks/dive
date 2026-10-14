@@ -834,7 +834,7 @@ dependencies = [
 
 [[package]]
 name = "graph-cli"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -878,7 +878,7 @@ dependencies = [
 
 [[package]]
 name = "graph-config"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -895,7 +895,7 @@ dependencies = [
 
 [[package]]
 name = "graph-core"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "graph-llm"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -936,7 +936,7 @@ dependencies = [
 
 [[package]]
 name = "graph-mcp"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "graph-store"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",

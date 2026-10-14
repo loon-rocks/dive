@@ -1,0 +1,16 @@
+````markdown
+This repository's graph config needs a change for graph v0.16.0 if any config file lists `github` or `slack` in `[tools].packs`. If none does, report that and change nothing: graph reads older config files as they are.
+
+**What changed:** The `github` and `slack` tools are no longer built into graph. They install as packs, and config version 4 replaces `[tools].packs = [...]` with one `[packs.<name>]` entry per installed pack. graph refuses to load a config whose pack entry isn't installed, and names the pack.
+
+**Steps:**
+
+1. Run `graph config check` to see each config file's version.
+2. Run `graph config migrate`, and `graph config migrate --global` if a global config exists. Do not hand-edit the result. Read the notes it prints.
+3. For every `[packs.<name>]` entry the migration wrote, run `graph pack add <name>`, adding `--global` for an entry in the global config.
+4. Commit `.graph/config.toml`, `.graph/packs/` and `.graph/packs.lock`. If `.gitignore` ignores `.graph/`, let `.graph/packs/` and `.graph/packs.lock` through.
+5. Run `graph config check` again and confirm it loads and lists each pack as matching `packs.lock`.
+6. If a CI workflow pins `ghcr.io/tylerdavis/graph:vX.Y.Z`, move the pin to `v0.16.0` in the same change. Older images refuse config version 4.
+
+**Report back:** which config files you migrated, the notes `graph config migrate` printed, which packs you installed, and whether any image pin moved.
+````

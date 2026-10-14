@@ -1,0 +1,55 @@
+This is a big release. It's been in progress for months, and it's something I'm very proud of. As graph matures, it's becoming clearer what role it can and should play.
+
+Graph's goal is to make it fast, cheap and easy to build robust agent networks, measure them and improve them. Improving doesn't just mean less hallucination. It means optimizing token usage, speed and accuracy. It means building systems you can run your business on.
+
+This release is the first major step toward making that real and there's a lot more to come.
+
+### Agents are first-class
+
+Agents now have their own file format, with its own version, and with it a set of new capabilities for building agent networks that scale.
+
+#### Handoffs and subagents
+
+An agent can now list the agents it may hand the whole thread to. A handoff passes the context and message history to the new agent.
+
+Subagents work like pure functions: they have isolated context and take only a prompt. They're great for well-scoped, non-deterministic work where a specific outcome is expected. Think of a deep research assistant that has search and crawl tools and does nothing but return its findings.
+
+### A taste of our own medicine
+
+The first versions of the graph CLI and workbench shipped built-in agents implemented in Rust. As the system matured, it became clear that those agents should use the same files every other agent, plan and tool uses. The result is a smaller, better-defined binary that focuses on the runtime, and built-in agents that run on the same runtime as everything else.
+
+### New tool_drafter and agent_drafter agents
+
+So many agents. The workbench now covers the entire authoring process. Ask it to create an agent, and it works through building the agent and identifying the tools and plans it needs. If something is missing, it offers to write the missing tools too.
+
+### Override built-in agents
+
+We spent a lot of time running the new drafting agents through an iterative test harness focused on speed and cost, and thanks to that, they work really well. If you need something the built-ins don't do, you can override one with your own version. Need a tool for searching your internal wiki? Have the workbench write the tool, then copy the drafting agent and add the tool to it.
+
+### Packs
+
+With standard formats for agents, plans and tools, graph now has packs. A pack is any combination of agent, plan and tool files, installed straight from [the official packs repository](https://github.com/tylerdavis/graph-packs) or from your own. Want to write your own? Start from [the pack template](https://github.com/tylerdavis/graph-pack-template).
+
+### Deferred tool loading
+
+Plan drafting now loads tools as they're needed. Instead of carrying the whole catalog in its context, it searches for the tools each part of the goal needs, so a large catalog no longer costs context window. That makes context use more efficient and makes smaller models more productive. I'll soon be adding this capability to all agents.
+
+### Decision models
+
+The new System One model paradigm fits many graph workloads, and decision models are now supported through a dedicated `decider` role.
+
+#### Decide gates
+
+Gates have a new `decide` kind that asks the `decider` role for a well-defined decision. Decide gates are available on `exit`, `route` and `filter` steps.
+
+#### builtin__decide
+
+The new `builtin__decide` tool takes some state and a set of typed questions, and returns a calibrated answer to each one.
+
+#### Tool search
+
+When a decision model is configured, tool search uses it to choose tools, both for plan drafting and for the drafter agents. In our testing, this was significantly more accurate than the keyword lookup it replaces.
+
+#### `decide` is now `route`
+
+The `decide` step is renamed `route`, and it now supports routing to any number of branches.

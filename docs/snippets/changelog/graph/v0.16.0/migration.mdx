@@ -1,0 +1,16 @@
+````markdown
+Update this repository for the breaking changes in graph v0.16.0. Older plan, tool and data files keep working as they are, so don't run any `migrate` command for this. Make only the changes below, and only where they apply.
+
+1. **GitHub and Slack tool names.** These tools moved from graph into the `github` and `slack` packs. Search plans, agents, tools and scripts for the old names and rename every call:
+   - `builtin__gh_<name>` becomes `github__tool__gh_<name>`.
+   - `builtin__git_<name>` becomes `github__tool__git_<name>`.
+   - `builtin__slack_post_message` becomes `slack__tool__slack_post_message`.
+
+   Install each pack you now call with `graph pack add github` or `graph pack add slack`, unless the config already lists it under `[packs.<name>]` (see this release's Config v4 entry).
+2. **Overrides of those tools.** A file under a tools directory's `builtin/` subdirectory that overrides one of the tools above now fails to load, because graph no longer ships the tool it names. Move the change into the installed copy at `.graph/packs/<pack>/tools/<name>.yaml`, then delete the override file.
+3. **Run events.** A script that reads `GRAPH_EVENTS=jsonl` output and matches `llm_call` events must match `model_call` instead.
+4. **Results of nested plan calls.** A `plan__<identifier>` step whose plan ends at a success `exit` now returns that plan's result shape. A failed call now returns one standard error shape. Check any template that reads fields from such a step's result, and run `graph plan validate` on each plan that calls another plan.
+5. Run `graph plan validate` on every plan you changed.
+
+**Report back:** each file you changed and why, the packs you installed, and anything you found but left alone.
+````
