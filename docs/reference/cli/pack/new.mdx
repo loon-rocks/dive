@@ -1,21 +1,21 @@
 ---
 title: "graph pack new"
 sidebarTitle: "new"
-description: "Scaffold a pack: manifest, one tool, plan and agent, README, CHANGELOG, MIGRATING.md and a CI workflow"
+description: "Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md"
 playground: "none"
 keywords: ["graph pack new"]
 ---
 
-Writes the files from a scaffold built into graph, so it works offline. The target directory is created when missing and refused when it holds anything. The scaffold passes `graph pack check` and `graph pack test` as written.
+Writes the files from a scaffold built into graph, so it works offline, into &lt;PATH&gt;/&lt;NAME&gt;/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `graph pack test` over every pack, and a `.gitignore` for `.graph/` when it has none. The scaffold passes `graph pack check` and `graph pack test` as written.
 
 ## Arguments
 
 <ParamField path="NAME" type="string" required>
-  The pack's name, written into pack.toml: lowercase letters, digits and underscores, at most 20 characters
+  The pack's name, written into pack.toml and used as its directory: lowercase letters, digits and underscores, at most 20 characters
 </ParamField>
 
 <ParamField path="PATH" type="string" default=".">
-  The directory to scaffold into; created when missing, refused when not empty
+  The packs repository's root; the pack goes in &lt;PATH&gt;/&lt;NAME&gt;/
 </ParamField>
 
 ## Options
@@ -41,7 +41,7 @@ graph pack new files
 ```
 
 ```bash Example 2
-graph pack new files ../graph-pack-files
+graph pack new files ../graph-packs
 ```
 
 </RequestExample>

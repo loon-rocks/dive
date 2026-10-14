@@ -1,6 +1,6 @@
 use super::{
-    local_edits, not_configured, refusal, short, update_names, update_one, update_outcome,
-    wanted_ref, Update,
+    installed_version, local_edits, not_configured, refusal, update_names, update_one,
+    update_outcome, wanted_ref, Update,
 };
 use crate::commands::outcome::Outcome;
 use crate::packs::author::{self, PackSession, MIGRATION_PREFIX};
@@ -271,7 +271,7 @@ async fn cross_majors(
         Ok(remote) => remote,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
-    let releases = refs::releases(&remote);
+    let releases = refs::releases(&remote, &entry.path);
     let newer: BTreeSet<u64> = releases
         .iter()
         .map(|release| release.version.major)
@@ -287,7 +287,7 @@ async fn cross_majors(
         );
     }
     let mut crossed = Crossed {
-        from: locked.tag.clone().unwrap_or_else(|| short(&locked.sha)),
+        from: installed_version(&locked),
         crossings: Vec::new(),
         halt: None,
         left: Vec::new(),
@@ -303,7 +303,7 @@ async fn cross_majors(
                 crossed.halt = Some(halt);
                 crossed.left = targets[index..]
                     .iter()
-                    .map(|release| release.tag.clone())
+                    .map(|release| release.label())
                     .collect();
                 break;
             }
@@ -321,8 +321,14 @@ async fn cross(
     from: &str,
 ) -> Result<(Crossing, RequirementReport), Halt> {
     let major = release.version.major;
-    let to = release.tag.clone();
-    let fetched = layer::fetch(run.layer, &remote_url(&entry.git), &to).map_err(Halt::failed)?;
+    let to = release.label();
+    let fetched = layer::fetch(
+        run.layer,
+        &remote_url(&entry.git),
+        &release.tag,
+        &entry.path,
+    )
+    .map_err(Halt::failed)?;
     let (hash, loaded) = fetched
         .verify(
             name,
@@ -379,7 +385,14 @@ async fn cross(
             .await?;
         None
     };
-    let installed = install(run.layer, name, lock, &fetched, &to, hash, major);
+    let locked = LockEntry {
+        git: entry.git.clone(),
+        path: entry.path.clone(),
+        tag: Some(release.tag.clone()),
+        sha: fetched.sha.clone(),
+        hash,
+    };
+    let installed = install(run.layer, name, lock, &fetched, locked, major);
     if let Err(error) = installed {
         if let Some(backup) = backup {
             backup.restore();
@@ -431,8 +444,7 @@ fn install(
     name: &str,
     lock: &mut PackLock,
     fetched: &Fetched,
-    tag: &str,
-    hash: String,
+    locked: LockEntry,
     major: u64,
 ) -> Result<()> {
     let swap = fetched.install(&layer.copy_dir(name))?;
@@ -443,20 +455,7 @@ fn install(
         swap.undo();
         return Err(error);
     }
-    let git = lock
-        .packs
-        .get(name)
-        .map(|locked| locked.git.clone())
-        .unwrap_or_default();
-    let previous = lock.packs.insert(
-        name.to_string(),
-        LockEntry {
-            git,
-            tag: Some(tag.to_string()),
-            sha: fetched.sha.clone(),
-            hash,
-        },
-    );
+    let previous = lock.packs.insert(name.to_string(), locked);
     if let Err(error) = layer.write_lock(lock) {
         if let Some(previous) = previous {
             lock.packs.insert(name.to_string(), previous);

@@ -5,7 +5,7 @@ use crate::packs::layer::{self, Layer};
 use crate::packs::refs::{self, PackRef, Target};
 use crate::packs::{content_hash, RequirementReport};
 use anyhow::{bail, Result};
-use graph_config::pack::{LayerKind, LockEntry, PackEntry, PACKS_DIR};
+use graph_config::pack::{check_pack_path, LayerKind, LockEntry, PackEntry, PACKS_DIR};
 use graph_core::packs::{check_installed_name, layer_label};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -19,6 +19,7 @@ pub async fn run(command: PackCommand) -> Result<()> {
             source,
             as_name,
             reference,
+            path,
             layer,
             json,
         } => {
@@ -26,6 +27,7 @@ pub async fn run(command: PackCommand) -> Result<()> {
                 source,
                 as_name,
                 reference,
+                path,
             };
             report(add(&target(&layer)?, &request)?, json)
         }
@@ -188,11 +190,13 @@ pub struct AddRequest {
     pub source: String,
     pub as_name: Option<String>,
     pub reference: Option<String>,
+    pub path: Option<String>,
 }
 
 struct Install {
     name: Option<String>,
     source: String,
+    path: String,
     reference: Option<String>,
     entry: Option<PackEntry>,
 }
@@ -226,20 +230,38 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
                         )));
                 }
             }
+            if let Some(wanted) = &request.path {
+                if *wanted != entry.path {
+                    return Ok(refusal(format!(
+                            "pack '{name}' is configured in {} with path '{}'; edit [packs.{name}] there to change it, then run `{}`",
+                            layer.config_path().display(),
+                            entry.path,
+                            layer.command("add", &name)
+                        )));
+                }
+            }
             Install {
                 name: Some(name),
                 source: entry.git.clone(),
+                path: entry.path.clone(),
                 reference: entry.reference.clone(),
                 entry: Some(entry.clone()),
             }
         }
-        None => Install {
-            name: request.as_name.clone(),
-            source: source_of(&request.source),
-            reference: request.reference.clone(),
-            entry: None,
-        },
+        None => {
+            let (source, path) = source_of(&request.source, request.path.as_deref());
+            Install {
+                name: request.as_name.clone(),
+                source,
+                path,
+                reference: request.reference.clone(),
+                entry: None,
+            }
+        }
     };
+    if let Err(problem) = check_pack_path(&install.path) {
+        return Ok(refusal(format!("path {problem}")));
+    }
     if let (None, Some(name)) = (&install.entry, &install.name) {
         if let Some(outcome) = name_refusal(layer, &state, name) {
             return Ok(outcome);
@@ -247,22 +269,31 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     }
 
     let url = remote_url(&install.source);
+    let at = refs::pack_at(&url, &install.path);
     let remote = git::ls_remote(&url).map_err(anyhow::Error::msg)?;
     let mut warnings = Vec::new();
-    let (target, reference) =
-        match add_target(&remote, install.reference.as_deref(), &url, &mut warnings) {
-            Ok(resolved) => resolved,
-            Err(problem) => return Ok(refusal(problem)),
-        };
+    let (target, reference) = match add_target(
+        &remote,
+        install.reference.as_deref(),
+        &url,
+        &install.path,
+        &mut warnings,
+    ) {
+        Ok(resolved) => resolved,
+        Err(problem) => return Ok(refusal(problem)),
+    };
 
-    let fetched = layer::fetch(layer, &url, &target.reference).map_err(anyhow::Error::msg)?;
+    let fetched = match layer::fetch(layer, &url, &target.reference, &install.path) {
+        Ok(fetched) => fetched,
+        Err(problem) => return Ok(refusal(problem)),
+    };
     let name = match install.name {
         Some(name) => name,
         None => match fetched.manifest_name() {
             Ok(name) => name,
             Err(problem) => {
                 return Ok(refused(
-                    format!("{url} at {} is not a pack", target.reference),
+                    format!("{at} at {} is not a pack", target.reference),
                     vec![problem],
                 ))
             }
@@ -273,9 +304,10 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
             return Ok(outcome);
         }
     }
+    let release = refs::label(&install.path, target.tag.as_deref());
     let (hash, loaded) = match fetched.verify(
         &name,
-        target.tag.as_deref(),
+        release.as_deref(),
         layer,
         install.entry.as_ref(),
         &state.mcp_servers,
@@ -284,7 +316,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         Err(problems) => {
             return Ok(refused(
                 format!(
-                    "pack '{name}' does not load from {url} at {}",
+                    "pack '{name}' does not load from {at} at {}",
                     target.reference
                 ),
                 problems,
@@ -297,8 +329,14 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     let config_before = layer.read_config()?;
     let config_existed = layer.config_path().exists();
     if install.entry.is_none() {
-        let written = layer::with_pack_entry(&config_before, &name, &install.source, &reference)
-            .and_then(|text| layer.write_config(&text));
+        let written = layer::with_pack_entry(
+            &config_before,
+            &name,
+            &install.source,
+            &install.path,
+            &reference,
+        )
+        .and_then(|text| layer.write_config(&text));
         if let Err(error) = written {
             swap.undo();
             return Err(error);
@@ -306,6 +344,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     }
     let locked = LockEntry {
         git: install.source.clone(),
+        path: install.path.clone(),
         tag: target.tag.clone(),
         sha: fetched.sha.clone(),
         hash: hash.clone(),
@@ -324,10 +363,10 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         return Err(error);
     }
 
-    let installed = target.tag.clone().unwrap_or_else(|| short(&fetched.sha));
+    let installed = release.unwrap_or_else(|| short(&fetched.sha));
     let mut lines = vec![format!(
         "installed {name} {installed} from {} ({} layer, ref {reference})",
-        install.source,
+        refs::pack_at(&install.source, &install.path),
         layer_label(layer.kind)
     )];
     lines.extend(warnings.iter().cloned());
@@ -338,6 +377,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         "name": name,
         "layer": layer_label(layer.kind),
         "git": install.source,
+        "path": install.path,
         "ref": reference,
         "tag": target.tag,
         "sha": fetched.sha,
@@ -354,27 +394,30 @@ fn add_target(
     remote: &git::RemoteRefs,
     reference: Option<&str>,
     url: &str,
+    path: &str,
     warnings: &mut Vec<String>,
 ) -> Result<(Target, String), String> {
     if let Some(text) = reference {
-        let target = refs::resolve(remote, &PackRef::parse(text), url)?;
+        let target = refs::resolve(remote, &PackRef::parse(text), url, path)?;
         if target.tag.is_none() {
             warnings.push(branch_warning(text));
         }
         return Ok((target, text.to_string()));
     }
-    if let Some(release) = refs::newest(&refs::releases(remote)) {
+    if let Some(release) = refs::newest(&refs::releases(remote, path)) {
         return Ok((release.target(), format!("v{}", release.version.major)));
     }
+    let at = refs::pack_at(url, path);
+    let tags = format!("{}vX.Y.Z", refs::tag_prefix(path));
     let branch = remote
         .default_branch
         .clone()
-        .ok_or_else(|| format!("{url} has no vX.Y.Z release tags and no default branch"))?;
+        .ok_or_else(|| format!("{at} has no {tags} release tags and no default branch"))?;
     warnings.push(format!(
-        "{url} has no vX.Y.Z release tags; installing the head of its default branch '{branch}'"
+        "{at} has no {tags} release tags; installing the head of its default branch '{branch}'"
     ));
     warnings.push(branch_warning(&branch));
-    let target = refs::resolve(remote, &PackRef::Branch(branch.clone()), url)?;
+    let target = refs::resolve(remote, &PackRef::Branch(branch.clone()), url, path)?;
     Ok((target, branch))
 }
 
@@ -406,13 +449,17 @@ fn short(sha: &str) -> String {
     sha.chars().take(7).collect()
 }
 
+fn installed_version(locked: &LockEntry) -> String {
+    refs::label(&locked.path, locked.tag.as_deref()).unwrap_or_else(|| short(&locked.sha))
+}
+
 fn wanted_ref(entry: &PackEntry, lock: &LockEntry) -> Option<PackRef> {
     match &entry.reference {
         Some(text) => Some(PackRef::parse(text)),
         None => lock
             .tag
             .as_deref()
-            .and_then(refs::release_version)
+            .and_then(|tag| refs::release_version(&lock.path, tag))
             .map(|version| PackRef::Major(version.major)),
     }
 }
@@ -645,32 +692,37 @@ fn update_one(
             }
         },
     };
-    let releases = refs::releases(&remote);
+    let releases = refs::releases(&remote, &entry.path);
     if let (Some(line), Some(newest)) = (wanted.major_line(), refs::newest(&releases)) {
         if newest.version.major > line {
             *held_back = Some(format!(
                 "{} available: {} --major",
-                newest.tag,
+                newest.label(),
                 layer.command("update", name)
             ));
         }
     }
-    let target = match refs::resolve(&remote, &wanted, &url) {
+    let target = match refs::resolve(&remote, &wanted, &url, &entry.path) {
         Ok(target) => target,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
-    let from = locked.tag.clone().unwrap_or_else(|| short(&locked.sha));
-    let to = target.tag.clone().unwrap_or_else(|| short(&target.sha));
-    if target.sha == locked.sha && target.tag == locked.tag && !modified {
+    let from = installed_version(&locked);
+    let release = refs::label(&entry.path, target.tag.as_deref());
+    let to = release.clone().unwrap_or_else(|| short(&target.sha));
+    let unchanged = target.tag == locked.tag && entry.path == locked.path && !modified;
+    if unchanged && target.sha == locked.sha {
         return Ok(Update::Current(from));
     }
-    let fetched = match layer::fetch(layer, &url, &target.reference) {
+    let fetched = match layer::fetch(layer, &url, &target.reference, &entry.path) {
         Ok(fetched) => fetched,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
+    if unchanged && content_hash(&fetched.path)? == locked.hash {
+        return Ok(Update::Current(from));
+    }
     let (hash, loaded) = match fetched.verify(
         name,
-        target.tag.as_deref(),
+        release.as_deref(),
         layer,
         Some(entry),
         &state.mcp_servers,
@@ -687,7 +739,8 @@ fn update_one(
     let previous = lock.packs.insert(
         name.to_string(),
         LockEntry {
-            git: locked.git.clone(),
+            git: entry.git.clone(),
+            path: entry.path.clone(),
             tag: target.tag.clone(),
             sha: fetched.sha.clone(),
             hash,
@@ -791,9 +844,10 @@ pub fn list(layers: &[Layer], offline: bool) -> Result<Outcome> {
                 "layer": layer_label(layer.kind),
                 "dir": copy.display().to_string(),
                 "git": entry.git,
+                "path": entry.path,
                 "ref": entry.reference,
                 "installed": installed,
-                "tag": locked.and_then(|locked| locked.tag.clone()),
+                "tag": locked.and_then(|locked| refs::label(&locked.path, locked.tag.as_deref())),
                 "sha": locked.map(|locked| locked.sha.clone()),
                 "modified": modified,
                 "shadowed": shadowed_by.is_some(),
@@ -828,8 +882,8 @@ fn remote_columns(row: &mut Value, entry: &PackEntry, locked: Option<&LockEntry>
             return;
         }
     };
-    let releases = refs::releases(&remote);
-    row["newest"] = json!(refs::newest(&releases).map(|release| release.tag.clone()));
+    let releases = refs::releases(&remote, &entry.path);
+    row["newest"] = json!(refs::newest(&releases).map(refs::Release::label));
     let wanted = match locked {
         Some(locked) => wanted_ref(entry, locked),
         None => entry.reference.as_deref().map(PackRef::parse),
@@ -842,7 +896,7 @@ fn remote_columns(row: &mut Value, entry: &PackEntry, locked: Option<&LockEntry>
         Some(wanted) => json!(wanted
             .major_line()
             .and_then(|major| refs::newest_in(&releases, major))
-            .map(|release| release.tag.clone())),
+            .map(refs::Release::label)),
         None => Value::Null,
     };
 }

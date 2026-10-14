@@ -260,9 +260,9 @@ pub fn migrating_section(dir: &Path, major: u64) -> bool {
         .is_ok_and(|text| text.lines().any(|line| line.trim() == heading))
 }
 
-pub fn previous_release(tags: &[String]) -> Option<(String, Version)> {
+pub fn previous_release(tags: &[String], path: &str) -> Option<(String, Version)> {
     tags.iter()
-        .filter_map(|tag| Some((tag.clone(), super::refs::release_version(tag)?)))
+        .filter_map(|tag| Some((tag.clone(), super::refs::release_version(path, tag)?)))
         .max_by(|a, b| a.1.cmp(&b.1))
 }
 
@@ -356,7 +356,18 @@ mod tests {
         assert_eq!(Bump::Major.next(None), Version::new(1, 0, 0));
         assert_eq!(Bump::Minor.next(None), Version::new(0, 1, 0));
         assert_eq!(Bump::Patch.next(None), Version::new(0, 0, 1));
-        let tags = ["v1.0.0", "v1.10.0", "v1.9.0", "v2.0.0-rc.1", "latest"].map(String::from);
-        assert_eq!(previous_release(&tags).unwrap().0, "v1.10.0");
+        let tags = [
+            "v1.0.0",
+            "v1.10.0",
+            "v1.9.0",
+            "v2.0.0-rc.1",
+            "latest",
+            "a/v3.0.0",
+            "a/v2.1.0",
+        ]
+        .map(String::from);
+        assert_eq!(previous_release(&tags, "").unwrap().0, "v1.10.0");
+        assert_eq!(previous_release(&tags, "a").unwrap().0, "a/v3.0.0");
+        assert_eq!(previous_release(&tags, "b"), None);
     }
 }

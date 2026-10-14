@@ -656,9 +656,15 @@ pub enum PackCommand {
     Add {
         #[arg(
             value_name = "NAME|URL",
-            help = "A bare name (github.com/tylerdavis/graph-pack-<name>) or a git URL; a name already in [packs] installs that entry"
+            help = "A bare name (the <name> directory of github.com/tylerdavis/graph-packs) or a git URL; a name already in [packs] installs that entry"
         )]
         source: String,
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = "The pack's directory inside the repository, whose releases are the tags <DIR>/vX.Y.Z; default: the repository root (a bare name's own directory)"
+        )]
+        path: Option<String>,
         #[arg(
             long = "as",
             value_name = "NAME",
@@ -668,7 +674,7 @@ pub enum PackCommand {
         #[arg(
             long = "ref",
             value_name = "REF",
-            help = "A major line (v2), an exact tag (v2.1.0, pinned) or a branch; default: the newest release"
+            help = "A major line (v2), an exact release (v2.1.0, pinned) or a branch; default: the newest release"
         )]
         reference: Option<String>,
         #[command(flatten)]
@@ -729,19 +735,19 @@ pub enum PackCommand {
         json: bool,
     },
     #[command(
-        about = "Scaffold a pack: manifest, one tool, plan and agent, README, CHANGELOG, MIGRATING.md and a CI workflow",
-        after_long_help = "Writes the files from a scaffold built into graph, so it works offline. The target directory is created when missing and refused when it holds anything. The scaffold passes `graph pack check` and `graph pack test` as written.\n\nExamples:\n  graph pack new files\n  graph pack new files ../graph-pack-files"
+        about = "Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md",
+        after_long_help = "Writes the files from a scaffold built into graph, so it works offline, into <PATH>/<NAME>/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `graph pack test` over every pack, and a `.gitignore` for `.graph/` when it has none. The scaffold passes `graph pack check` and `graph pack test` as written.\n\nExamples:\n  graph pack new files\n  graph pack new files ../graph-packs"
     )]
     New {
         #[arg(
             value_name = "NAME",
-            help = "The pack's name, written into pack.toml: lowercase letters, digits and underscores, at most 20 characters"
+            help = "The pack's name, written into pack.toml and used as its directory: lowercase letters, digits and underscores, at most 20 characters"
         )]
         name: String,
         #[arg(
             value_name = "PATH",
             default_value = ".",
-            help = "The directory to scaffold into; created when missing, refused when not empty"
+            help = "The packs repository's root; the pack goes in <PATH>/<NAME>/"
         )]
         path: PathBuf,
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -749,13 +755,13 @@ pub enum PackCommand {
     },
     #[command(
         about = "Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements",
-        after_long_help = "Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. Exits 1 when there is any problem.\n\nExamples:\n  graph pack check\n  graph pack check ../graph-pack-files --json"
+        after_long_help = "Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.\n\nExamples:\n  graph pack check\n  graph pack check files --json"
     )]
     Check {
         #[arg(
             value_name = "PATH",
             default_value = ".",
-            help = "The pack's directory, holding pack.toml"
+            help = "The pack's directory, holding pack.toml, or a packs repository whose subdirectories hold packs"
         )]
         path: PathBuf,
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -763,7 +769,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Run one of a pack's items, private and migration ones included, under its manifest name",
-        after_long_help = "Runs a tool, plan or agent of the pack at --path, the way the pack's own plans call it, so items outside the public interface and migration items run too. This is the only direct way to run them. The result is printed to stdout as JSON.\n\nExamples:\n  graph pack run tool__word_count --input file=README.md\n  graph pack run plan__migrate_v2 '{\"root\": \".graph\", \"apply\": false}' --path ../graph-pack-files"
+        after_long_help = "Runs a tool, plan or agent of the pack at --path, the way the pack's own plans call it, so items outside the public interface and migration items run too. This is the only direct way to run them. The result is printed to stdout as JSON.\n\nExamples:\n  graph pack run tool__word_count --input file=README.md\n  graph pack run plan__migrate_v2 '{\"root\": \".graph\", \"apply\": false}' --path files"
     )]
     Run {
         #[arg(
@@ -794,13 +800,13 @@ pub enum PackCommand {
     },
     #[command(
         about = "Run check, then every migration over its sample files in tests/migrations/v<N>/ and validate the result",
-        after_long_help = "For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file.\n\nExamples:\n  graph pack test\n  graph pack test ../graph-pack-files --json"
+        after_long_help = "For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is tested, so a repository's CI is `graph pack test` at its root.\n\nExamples:\n  graph pack test\n  graph pack test files --json"
     )]
     Test {
         #[arg(
             value_name = "PATH",
             default_value = ".",
-            help = "The pack's directory, holding pack.toml"
+            help = "The pack's directory, holding pack.toml, or a packs repository whose subdirectories hold packs"
         )]
         path: PathBuf,
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -808,7 +814,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Compare the public interface with the previous release tag and create the next annotated tag, without pushing",
-        after_long_help = "Refuses a git tree with uncommitted changes, then compares every public item's name, input schema and output schema with the newest vX.Y.Z tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `graph pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.\n\nExamples:\n  graph pack release minor\n  graph pack release major ../graph-pack-files"
+        after_long_help = "A pack's releases are the tags `<DIR>/vX.Y.Z`, where <DIR> is the pack's directory relative to the repository root (plain `vX.Y.Z` for a pack at the root). Refuses uncommitted changes inside the pack's directory, then compares every public item's name, input schema and output schema with the pack's newest release tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `graph pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.\n\nExamples:\n  graph pack release minor files\n  graph pack release major ../graph-packs/files"
     )]
     Release {
         #[arg(value_name = "BUMP", help = "Which part of the version to raise")]
@@ -816,7 +822,7 @@ pub enum PackCommand {
         #[arg(
             value_name = "PATH",
             default_value = ".",
-            help = "The pack's directory: the root of its git repository"
+            help = "The pack's directory, anywhere inside its git repository"
         )]
         path: PathBuf,
         #[arg(long, help = "Print a JSON envelope instead of text")]

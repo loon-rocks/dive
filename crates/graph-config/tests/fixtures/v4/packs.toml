@@ -4,7 +4,8 @@ version = 4
 url = "https://mcp.linear.app/mcp"
 
 [packs.example]
-git = "github.com/acme/graph-pack-example"
+git = "github.com/acme/graph-packs"
+path = "example"
 ref = "v2"
 include = ["plan__*"]
 exclude = ["tool__file_info"]

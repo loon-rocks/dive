@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["graph pack release"]
 ---
 
-Refuses a git tree with uncommitted changes, then compares every public item's name, input schema and output schema with the newest vX.Y.Z tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `graph pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.
+A pack's releases are the tags `<DIR>/vX.Y.Z`, where &lt;DIR&gt; is the pack's directory relative to the repository root (plain `vX.Y.Z` for a pack at the root). Refuses uncommitted changes inside the pack's directory, then compares every public item's name, input schema and output schema with the pack's newest release tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `graph pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.
 
 ## Arguments
 
@@ -17,7 +17,7 @@ Refuses a git tree with uncommitted changes, then compares every public item's n
 </ParamField>
 
 <ParamField path="PATH" type="string" default=".">
-  The pack's directory: the root of its git repository
+  The pack's directory, anywhere inside its git repository
 </ParamField>
 
 ## Options
@@ -39,11 +39,11 @@ graph pack release [OPTIONS] <BUMP> [PATH]
 ```
 
 ```bash Example 1
-graph pack release minor
+graph pack release minor files
 ```
 
 ```bash Example 2
-graph pack release major ../graph-pack-files
+graph pack release major ../graph-packs/files
 ```
 
 </RequestExample>

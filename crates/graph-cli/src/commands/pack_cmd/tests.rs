@@ -143,6 +143,7 @@ fn request(source: &str, reference: Option<&str>, as_name: Option<&str>) -> AddR
         source: source.to_string(),
         as_name: as_name.map(str::to_string),
         reference: reference.map(str::to_string),
+        path: None,
     }
 }
 
@@ -1206,4 +1207,255 @@ async fn major_on_the_newest_major_updates_within_it() {
     let installed = installed_at(Third::Migration, "v3");
     let outcome = installed.cross(yes(), &[]).await;
     assert_eq!(outcome.body["packs"][0]["status"], "current");
+}
+
+struct PacksRepo {
+    _dir: TempDir,
+    work: PathBuf,
+    url: String,
+}
+
+impl PacksRepo {
+    fn describe(&self, pack: &str, description: &str) {
+        write(
+            &self.work,
+            &format!("{pack}/pack.toml"),
+            &format!("version = 1\nname = \"{pack}\"\ndescription = \"{description}\"\n"),
+        );
+    }
+
+    fn commit(&self, message: &str) {
+        git(&self.work, &["add", "-A"]);
+        git(&self.work, &["commit", "-q", "-m", message]);
+    }
+}
+
+fn packs_repo() -> PacksRepo {
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    git(&work, &["init", "-q"]);
+    let repo = PacksRepo {
+        url: format!("file://{}", work.display()),
+        work,
+        _dir: dir,
+    };
+    for pack in ["a", "b"] {
+        write(&repo.work, &format!("{pack}/tools/echo.yaml"), TOOL);
+        write(&repo.work, &format!("{pack}/plans/whoami.yaml"), PLAN);
+        repo.describe(pack, "one");
+    }
+    write(&repo.work, "README.md", "# packs\n");
+    repo.commit("one");
+    git(&repo.work, &["tag", "a/v1.0.0"]);
+    git(&repo.work, &["tag", "b/v1.0.0"]);
+    repo.describe("a", "one point one");
+    repo.commit("a one point one");
+    git(&repo.work, &["tag", "-a", "a/v1.1.0", "-m", "a/v1.1.0"]);
+    repo.describe("b", "two");
+    repo.commit("b two");
+    git(&repo.work, &["tag", "b/v2.0.0"]);
+    git(&repo.work, &["tag", "v9.0.0"]);
+    repo
+}
+
+fn request_at(source: &str, path: &str, reference: Option<&str>) -> AddRequest {
+    AddRequest {
+        path: Some(path.to_string()),
+        ..request(source, reference, None)
+    }
+}
+
+fn description(layer: &Layer, name: &str) -> String {
+    std::fs::read_to_string(layer.copy_dir(name).join("pack.toml")).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn packs_in_one_repository_each_follow_their_own_tags() {
+    let repo = packs_repo();
+    let project = scratch(&format!(
+        "{CONFIG}\n[packs.b]\ngit = \"{}\"\npath = \"b\"\nref = \"v1\"\n",
+        repo.url
+    ));
+    let layer = &project.layer;
+
+    let added = add(layer, &request_at(&repo.url, "a", None)).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    assert_eq!(added.body["tag"], "a/v1.1.0");
+    assert_eq!(added.body["ref"], "v1");
+    let note = added.body["note"].as_str().unwrap();
+    assert!(
+        note.starts_with(&format!("installed a v1.1.0 from a/ in {}", repo.url)),
+        "{note}"
+    );
+    assert!(
+        config(layer).contains(&format!(
+            "[packs.a]\ngit = \"{}\"\npath = \"a\"\nref = \"v1\"\n",
+            repo.url
+        )),
+        "{}",
+        config(layer)
+    );
+    assert!(description(layer, "a").contains("one point one"));
+    assert!(!layer.copy_dir("a").join("a").exists());
+    assert!(!layer.copy_dir("a").join("README.md").exists());
+
+    let added = add(layer, &request("b", None, None)).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    assert_eq!(added.body["tag"], "b/v1.0.0");
+    let locked = lock(layer);
+    assert_eq!(
+        (
+            locked.packs["a"].path.as_str(),
+            locked.packs["a"].tag.as_deref()
+        ),
+        ("a", Some("a/v1.1.0"))
+    );
+    assert_eq!(
+        (
+            locked.packs["b"].path.as_str(),
+            locked.packs["b"].tag.as_deref()
+        ),
+        ("b", Some("b/v1.0.0"))
+    );
+    let installed = load(&[layer]).unwrap();
+    let described: Vec<String> = installed
+        .packs
+        .iter()
+        .map(|pack| pack.loaded.source.describe())
+        .collect();
+    assert_eq!(
+        described,
+        ["pack a v1.1.0 (project)", "pack b v1.0.0 (project)"]
+    );
+
+    let listed = list(std::slice::from_ref(layer), false).unwrap();
+    let rows = listed.body["packs"].as_array().unwrap();
+    assert_eq!(
+        (&rows[0]["tag"], &rows[0]["newestInRef"], &rows[0]["newest"]),
+        (&json!("v1.1.0"), &json!("v1.1.0"), &json!("v1.1.0"))
+    );
+    assert_eq!(
+        (&rows[1]["tag"], &rows[1]["newestInRef"], &rows[1]["newest"]),
+        (&json!("v1.0.0"), &json!("v1.0.0"), &json!("v2.0.0"))
+    );
+
+    let outcome = update(layer, &[], false).unwrap();
+    let rows = outcome.body["packs"].as_array().unwrap();
+    assert_eq!(rows[0]["status"], "current");
+    assert_eq!(rows[1]["status"], "current");
+    assert_eq!(
+        rows[1]["heldBack"],
+        "v2.0.0 available: graph pack update b --major"
+    );
+
+    repo.describe("a", "one point two");
+    repo.commit("a one point two");
+    git(&repo.work, &["tag", "a/v1.2.0"]);
+    let outcome = update(layer, &[], false).unwrap();
+    let rows = outcome.body["packs"].as_array().unwrap();
+    assert_eq!(rows[0]["status"], "updated", "{}", outcome.body);
+    assert_eq!(
+        (rows[0]["from"].as_str(), rows[0]["to"].as_str()),
+        (Some("v1.1.0"), Some("v1.2.0"))
+    );
+    assert_eq!(rows[1]["status"], "current");
+    assert_eq!(lock(layer).packs["a"].tag.as_deref(), Some("a/v1.2.0"));
+    assert!(description(layer, "a").contains("one point two"));
+
+    let mut settings = graph_config::Config::default();
+    settings.storage.backend = graph_config::StorageBackend::Memory;
+    let consent = yes();
+    let majors = Majors {
+        consent: &consent,
+        config: &settings,
+        events: Arc::new(graph_core::NullSink),
+    };
+    let outcome = major::update(layer, &[], false, &majors).await.unwrap();
+    assert!(!outcome.rejected, "{}", outcome.body);
+    let rows = outcome.body["packs"].as_array().unwrap();
+    assert_eq!(rows[0]["status"], "current", "{}", outcome.body);
+    assert_eq!(rows[1]["status"], "updated", "{}", outcome.body);
+    assert_eq!(
+        (rows[1]["from"].as_str(), rows[1]["to"].as_str()),
+        (Some("v1.0.0"), Some("v2.0.0"))
+    );
+    assert_eq!(lock(layer).packs["b"].tag.as_deref(), Some("b/v2.0.0"));
+    assert!(description(layer, "b").contains("two"));
+    assert!(config(layer).contains("path = \"b\"\nref = \"v2\"\n"));
+    assert!(staging_left(layer).is_empty());
+}
+
+#[test]
+fn a_path_without_a_pack_or_outside_the_repository_is_refused() {
+    let repo = packs_repo();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    let missing = add(layer, &request_at(&repo.url, "c", Some("main"))).unwrap();
+    let text = error(&missing);
+    assert!(text.contains("at main has no directory c"), "{text}");
+    let bare = add(layer, &request_at(&repo.url, "", Some("main"))).unwrap();
+    let text = error(&bare);
+    assert!(text.contains("has no pack.toml at its root"), "{text}");
+    for path in ["../a", "/a", "a/", "a//b", "./a"] {
+        let outcome = add(layer, &request_at(&repo.url, path, None)).unwrap();
+        assert!(error(&outcome).contains("path"), "{path}");
+    }
+    let releases = add(layer, &request_at(&repo.url, "a", Some("v2"))).unwrap();
+    let text = error(&releases);
+    assert!(
+        text.contains("a/ in file://")
+            && text.contains("has no v2.*.* release tag (release tags: v1.0.0, v1.1.0)"),
+        "{text}"
+    );
+    assert!(!layer.copy_dir("a").exists());
+    assert!(staging_left(layer).is_empty());
+}
+
+#[test]
+fn a_branch_tracking_pack_moves_only_when_its_own_directory_changes() {
+    let repo = packs_repo();
+    let project = scratch(CONFIG);
+    let layer = &project.layer;
+    let added = add(layer, &request_at(&repo.url, "a", Some("main"))).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    let sha = lock(layer).packs["a"].sha.clone();
+
+    repo.describe("b", "elsewhere");
+    repo.commit("b only");
+    let outcome = update(layer, &[], false).unwrap();
+    assert_eq!(
+        outcome.body["packs"][0]["status"], "current",
+        "{}",
+        outcome.body
+    );
+    assert_eq!(lock(layer).packs["a"].sha, sha);
+    assert!(staging_left(layer).is_empty());
+
+    repo.describe("a", "moved");
+    repo.commit("a moved");
+    let outcome = update(layer, &[], false).unwrap();
+    assert_eq!(
+        outcome.body["packs"][0]["status"], "updated",
+        "{}",
+        outcome.body
+    );
+    assert_eq!(
+        lock(layer).packs["a"].sha,
+        git(&repo.work, &["rev-parse", "HEAD"])
+    );
+    assert!(description(layer, "a").contains("moved"));
+}
+
+#[test]
+fn a_pack_at_the_repository_root_ignores_tags_under_directories() {
+    let upstream = upstream();
+    git(&upstream.work, &["tag", "sub/v7.0.0"]);
+    let project = scratch(CONFIG);
+    let added = add(&project.layer, &request(&upstream.url, None, None)).unwrap();
+    assert!(!added.rejected, "{}", added.body);
+    assert_eq!(added.body["tag"], "v2.0.0");
+    assert_eq!(added.body["path"], "");
+    assert!(!config(&project.layer).contains("path ="));
+    assert_eq!(lock(&project.layer).packs["example"].path, "");
 }

@@ -237,6 +237,7 @@ fn the_lock_writer_is_sorted_stable_and_round_trips() {
         "zeta".to_string(),
         LockEntry {
             git: "github.com/acme/graph-pack-zeta".into(),
+            path: String::new(),
             tag: None,
             sha: SHA.into(),
             hash: HASH.into(),
@@ -245,8 +246,9 @@ fn the_lock_writer_is_sorted_stable_and_round_trips() {
     packs.insert(
         "alpha".to_string(),
         LockEntry {
-            git: "github.com/acme/graph-pack-alpha".into(),
-            tag: Some("v1.2.0".into()),
+            git: "github.com/acme/graph-packs".into(),
+            path: "alpha".into(),
+            tag: Some("alpha/v1.2.0".into()),
             sha: SHA.into(),
             hash: HASH.into(),
         },
@@ -259,7 +261,7 @@ fn the_lock_writer_is_sorted_stable_and_round_trips() {
     assert_eq!(
         text,
         format!(
-            "version = {LOCK_FORMAT}\n\n[packs.alpha]\ngit = \"github.com/acme/graph-pack-alpha\"\ntag = \"v1.2.0\"\nsha = \"{SHA}\"\nhash = \"{HASH}\"\n\n[packs.zeta]\ngit = \"github.com/acme/graph-pack-zeta\"\nsha = \"{SHA}\"\nhash = \"{HASH}\"\n"
+            "version = {LOCK_FORMAT}\n\n[packs.alpha]\ngit = \"github.com/acme/graph-packs\"\npath = \"alpha\"\ntag = \"alpha/v1.2.0\"\nsha = \"{SHA}\"\nhash = \"{HASH}\"\n\n[packs.zeta]\ngit = \"github.com/acme/graph-pack-zeta\"\nsha = \"{SHA}\"\nhash = \"{HASH}\"\n"
         )
     );
     assert_eq!(parse_lock(&text).unwrap(), lock);

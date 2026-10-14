@@ -23,7 +23,8 @@
       },
       "packs": {
         "github": {
-          "git": "github.com/tylerdavis/graph-pack-github",
+          "git": "github.com/tylerdavis/graph-packs",
+          "path": "github",
           "ref": "v1"
         }
       },
@@ -197,8 +198,12 @@
             },
             "type": "array"
           },
+          "path": {
+            "description": "The pack's directory inside the repository, such as `github`. Its releases are the tags `<path>/vX.Y.Z`. The repository root when absent.",
+            "type": "string"
+          },
           "ref": {
-            "description": "The git ref to install.",
+            "description": "The release line (`v1`), exact release (`v1.2.0`) or branch to install. Release refs name the pack's own version; graph adds the `<path>/` tag prefix.",
             "type": "string"
           }
         },

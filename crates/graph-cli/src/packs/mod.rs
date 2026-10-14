@@ -145,7 +145,7 @@ impl InstalledPacks {
                 }
                 let source = PackSource {
                     name: name.clone(),
-                    tag: locked.tag.clone(),
+                    tag: refs::label(&locked.path, locked.tag.as_deref()),
                     layer: layer.kind,
                     dir: dir.clone(),
                 };
@@ -172,12 +172,14 @@ impl InstalledPacks {
             packs: vec![InstalledPack {
                 entry: PackEntry {
                     git: git.clone(),
+                    path: String::new(),
                     reference: None,
                     include: Vec::new(),
                     exclude: Vec::new(),
                 },
                 lock: LockEntry {
                     git,
+                    path: String::new(),
                     tag: loaded.source.tag.clone(),
                     sha: String::new(),
                     hash: String::new(),
@@ -269,6 +271,7 @@ impl InstalledPacks {
                     "dir": pack.loaded.source.dir.display().to_string(),
                     "git": pack.entry.git,
                     "ref": pack.entry.reference,
+                    "path": pack.entry.path,
                     "tag": pack.lock.tag,
                     "sha": pack.lock.sha,
                     "hash": pack.hash,
@@ -285,6 +288,7 @@ impl InstalledPacks {
                 "layer": graph_core::packs::layer_label(shadowed.layer),
                 "dir": shadowed.dir.display().to_string(),
                 "git": shadowed.entry.git,
+                "path": shadowed.entry.path,
                 "ref": shadowed.entry.reference,
                 "shadowed": true,
                 "shadowedBy": graph_core::packs::layer_label(shadowed.by),

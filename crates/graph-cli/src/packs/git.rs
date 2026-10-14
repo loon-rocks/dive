@@ -1,4 +1,4 @@
-use graph_config::pack::DEFAULT_HOST;
+use graph_config::pack::DEFAULT_REPO;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -10,11 +10,11 @@ pub fn is_bare_name(text: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-pub fn source_of(typed: &str) -> String {
+pub fn source_of(typed: &str, path: Option<&str>) -> (String, String) {
     if is_bare_name(typed) {
-        format!("{DEFAULT_HOST}{typed}")
+        (DEFAULT_REPO.to_string(), path.unwrap_or(typed).to_string())
     } else {
-        typed.to_string()
+        (typed.to_string(), path.unwrap_or_default().to_string())
     }
 }
 
@@ -105,7 +105,7 @@ pub fn toplevel(dir: &Path) -> Result<std::path::PathBuf, String> {
 }
 
 pub fn uncommitted(dir: &Path) -> Result<Vec<String>, String> {
-    let output = git(Some(dir), &["status", "--porcelain"])?;
+    let output = git(Some(dir), &["status", "--porcelain", "--", "."])?;
     Ok(output.lines().map(str::to_string).collect())
 }
 
@@ -114,13 +114,18 @@ pub fn local_tags(dir: &Path) -> Result<Vec<String>, String> {
     Ok(output.lines().map(str::to_string).collect())
 }
 
-pub fn export(dir: &Path, reference: &str, dest: &Path) -> Result<(), String> {
+pub fn export(dir: &Path, reference: &str, path: &str, dest: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dest).map_err(|e| format!("creating {}: {e}", dest.display()))?;
     let archive = dest.join(".export.tar");
     let archive_text = archive.display().to_string();
+    let tree = if path.is_empty() {
+        reference.to_string()
+    } else {
+        format!("{reference}:{path}")
+    };
     git(
         Some(dir),
-        &["archive", "--format=tar", "-o", &archive_text, reference],
+        &["archive", "--format=tar", "-o", &archive_text, &tree],
     )?;
     let output = Command::new("tar")
         .args(["-xf", &archive_text, "-C"])
@@ -168,13 +173,18 @@ mod tests {
 
     #[test]
     fn sources_resolve_to_urls() {
+        let official = (
+            "github.com/tylerdavis/graph-packs".to_string(),
+            "example".to_string(),
+        );
+        assert_eq!(source_of("example", None), official);
         assert_eq!(
-            source_of("example"),
-            "github.com/tylerdavis/graph-pack-example"
+            remote_url(&source_of("example", None).0),
+            "https://github.com/tylerdavis/graph-packs"
         );
         assert_eq!(
-            remote_url(&source_of("example")),
-            "https://github.com/tylerdavis/graph-pack-example"
+            source_of("example", Some("tools/example")).1,
+            "tools/example"
         );
         assert_eq!(remote_url("github.com/o/r"), "https://github.com/o/r");
         for given in [
@@ -185,7 +195,8 @@ mod tests {
             "/tmp/r",
             "./r",
         ] {
-            assert_eq!(source_of(given), given);
+            assert_eq!(source_of(given, None), (given.to_string(), String::new()));
+            assert_eq!(source_of(given, Some("a")).1, "a");
             assert_eq!(remote_url(given), given);
         }
     }

@@ -92,7 +92,13 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
     })
 }
 
-pub fn with_pack_entry(config: &str, name: &str, source: &str, reference: &str) -> Result<String> {
+pub fn with_pack_entry(
+    config: &str,
+    name: &str,
+    source: &str,
+    path: &str,
+    reference: &str,
+) -> Result<String> {
     let mut doc: toml_edit::DocumentMut = config.parse().context("parsing config.toml")?;
     if doc.get("packs").is_none() {
         let mut packs = toml_edit::Table::new();
@@ -101,6 +107,9 @@ pub fn with_pack_entry(config: &str, name: &str, source: &str, reference: &str) 
     }
     let mut entry = toml_edit::Table::new();
     entry.insert("git", toml_edit::value(source));
+    if !path.is_empty() {
+        entry.insert("path", toml_edit::value(path));
+    }
     entry.insert("ref", toml_edit::value(reference));
     match doc.get_mut("packs") {
         Some(toml_edit::Item::Table(packs)) => {
@@ -162,12 +171,36 @@ pub struct Fetched {
     pub sha: String,
 }
 
-pub fn fetch(layer: &Layer, url: &str, reference: &str) -> Result<Fetched, String> {
+pub fn fetch(layer: &Layer, url: &str, reference: &str, dir: &str) -> Result<Fetched, String> {
     let staging = layer.staging().map_err(|e| format!("{e:#}"))?;
     let path = staging.path().join("new");
-    let sha = git::clone_at(url, reference, &path)?;
-    std::fs::remove_dir_all(path.join(".git"))
-        .map_err(|e| format!("removing .git from the staged copy: {e}"))?;
+    let clone = if dir.is_empty() {
+        path.clone()
+    } else {
+        staging.path().join("clone")
+    };
+    let sha = git::clone_at(url, reference, &clone)?;
+    let root = clone.join(dir);
+    if !root.is_dir() {
+        return Err(format!("{url} at {reference} has no directory {dir}"));
+    }
+    if !root.join(MANIFEST_FILE).is_file() {
+        let place = if dir.is_empty() {
+            "at its root".to_string()
+        } else {
+            format!("in {dir}/")
+        };
+        return Err(format!(
+            "{url} at {reference} has no {MANIFEST_FILE} {place}; is it a pack?"
+        ));
+    }
+    if dir.is_empty() {
+        std::fs::remove_dir_all(path.join(".git"))
+            .map_err(|e| format!("removing .git from the staged copy: {e}"))?;
+    } else {
+        std::fs::rename(&root, &path).map_err(|e| format!("staging {dir}/ of the clone: {e}"))?;
+        std::fs::remove_dir_all(&clone).map_err(|e| format!("removing the clone: {e}"))?;
+    }
     Ok(Fetched { staging, path, sha })
 }
 
@@ -340,11 +373,18 @@ mod tests {
     #[test]
     fn pack_entries_are_added_and_removed_keeping_formatting_and_comments() {
         let config = "version = 4\n\n# my models\n[models.default]\nprovider = \"anthropic\"   # keep\nmodel = \"x\"\n";
-        let added = with_pack_entry(config, "example", "github.com/o/r", "v2").unwrap();
+        let added = with_pack_entry(config, "example", "github.com/o/r", "", "v2").unwrap();
         assert!(added.starts_with(config), "{added}");
         assert!(
             added.contains("[packs.example]\ngit = \"github.com/o/r\"\nref = \"v2\"\n"),
             "{added}"
+        );
+        let nested = with_pack_entry(config, "example", "github.com/o/r", "ex", "v2").unwrap();
+        assert!(
+            nested.contains(
+                "[packs.example]\ngit = \"github.com/o/r\"\npath = \"ex\"\nref = \"v2\"\n"
+            ),
+            "{nested}"
         );
         assert!(!added.contains("[packs]\n"), "{added}");
         let removed = without_pack_entry(&added, "example").unwrap();

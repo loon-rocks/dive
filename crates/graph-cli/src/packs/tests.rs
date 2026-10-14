@@ -13,7 +13,8 @@ fn write(dir: &Path, path: &str, content: &str) {
 
 fn entry() -> PackEntry {
     PackEntry {
-        git: "github.com/acme/graph-pack-example".to_string(),
+        git: "github.com/acme/graph-packs".to_string(),
+        path: "example".to_string(),
         reference: Some("v1".to_string()),
         include: Vec::new(),
         exclude: Vec::new(),
@@ -33,7 +34,7 @@ fn install(layer_dir: &Path, name: &str, tag: &str, lock: bool) -> String {
         let path = layer_dir.join("packs.lock");
         let mut text = std::fs::read_to_string(&path).unwrap_or_else(|_| "version = 1\n".into());
         text.push_str(&format!(
-            "\n[packs.{name}]\ngit = \"github.com/acme/graph-pack-example\"\ntag = \"{tag}\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"
+            "\n[packs.{name}]\ngit = \"github.com/acme/graph-packs\"\npath = \"example\"\ntag = \"example/{tag}\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"
         ));
         std::fs::write(path, text).unwrap();
     }
@@ -159,7 +160,14 @@ fn a_project_entry_shadows_the_global_one_whole() {
     .unwrap();
     assert_eq!(installed.packs.len(), 1);
     assert_eq!(installed.packs[0].loaded.source.layer, LayerKind::Project);
-    assert_eq!(installed.packs[0].lock.tag.as_deref(), Some("v2.0.0"));
+    assert_eq!(
+        installed.packs[0].lock.tag.as_deref(),
+        Some("example/v2.0.0")
+    );
+    assert_eq!(
+        installed.packs[0].loaded.source.tag.as_deref(),
+        Some("v2.0.0")
+    );
     assert_eq!(installed.shadowed.len(), 1);
     assert_eq!(installed.shadowed[0].layer, LayerKind::Global);
     assert_eq!(installed.shadowed[0].by, LayerKind::Project);
