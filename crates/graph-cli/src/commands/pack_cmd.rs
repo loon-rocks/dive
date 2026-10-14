@@ -271,6 +271,14 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     let url = remote_url(&install.source);
     let at = refs::pack_at(&url, &install.path);
     let remote = git::ls_remote(&url).map_err(anyhow::Error::msg)?;
+    if let Some(moved) = state
+        .lock
+        .packs
+        .values()
+        .find_map(|locked| refs::moved_tag(&remote, &install.source, &install.path, locked))
+    {
+        return Ok(refusal(moved));
+    }
     let mut warnings = Vec::new();
     let (target, reference) = match add_target(
         &remote,
@@ -283,7 +291,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         Err(problem) => return Ok(refusal(problem)),
     };
 
-    let fetched = match layer::fetch(layer, &url, &target.reference, &install.path) {
+    let fetched = match layer::fetch(layer, &url, &target, &install.path) {
         Ok(fetched) => fetched,
         Err(problem) => return Ok(refusal(problem)),
     };
@@ -680,6 +688,9 @@ fn update_one(
         Ok(remote) => remote,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
+    if let Some(moved) = refs::moved_tag(&remote, &entry.git, &entry.path, &locked) {
+        return Ok(Update::Refused(moved, Vec::new()));
+    }
     let wanted = match wanted {
         Some(wanted) => wanted,
         None => match &remote.default_branch {
@@ -713,7 +724,7 @@ fn update_one(
     if unchanged && target.sha == locked.sha {
         return Ok(Update::Current(from));
     }
-    let fetched = match layer::fetch(layer, &url, &target.reference, &entry.path) {
+    let fetched = match layer::fetch(layer, &url, &target, &entry.path) {
         Ok(fetched) => fetched,
         Err(problem) => return Ok(Update::Refused(problem, Vec::new())),
     };
@@ -882,6 +893,8 @@ fn remote_columns(row: &mut Value, entry: &PackEntry, locked: Option<&LockEntry>
             return;
         }
     };
+    row["tagMoved"] =
+        json!(locked.and_then(|locked| refs::moved_tag(&remote, &entry.git, &entry.path, locked)));
     let releases = refs::releases(&remote, &entry.path);
     row["newest"] = json!(refs::newest(&releases).map(refs::Release::label));
     let wanted = match locked {
@@ -928,6 +941,9 @@ fn list_line(row: &Value, offline: bool) -> String {
     }
     if let Some(by) = row["shadowedBy"].as_str() {
         flags.push(format!("shadowed by the {by} layer"));
+    }
+    if row["tagMoved"].is_string() {
+        flags.push("release tag moved since install; graph won't install it".to_string());
     }
     if !flags.is_empty() {
         columns.push(flags.join(", "));

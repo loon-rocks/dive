@@ -651,7 +651,8 @@ pub struct LayerArgs {
 #[derive(Subcommand)]
 pub enum PackCommand {
     #[command(
-        about = "Install a pack from git as a plain copy in the project, global or given graph directory"
+        about = "Install a pack from git as a plain copy in the project, global or given graph directory",
+        after_long_help = "packs.lock records the commit each release tag pointed at when it was installed. A published release must never move: when the repository's copy of a recorded tag now points elsewhere, or a clone checks out a different commit than git ls-remote reported, the install is refused and nothing changes. Branch-tracking packs are exempt."
     )]
     Add {
         #[arg(
@@ -683,7 +684,7 @@ pub enum PackCommand {
         json: bool,
     },
     #[command(
-        about = "List installed packs with their tags, newer releases, local edits and shadowing"
+        about = "List installed packs with their tags, newer releases, local edits, shadowing and moved release tags"
     )]
     List {
         #[command(flatten)]
@@ -697,7 +698,8 @@ pub enum PackCommand {
         json: bool,
     },
     #[command(
-        about = "Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each"
+        about = "Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each",
+        after_long_help = "A pack whose installed release tag now points at a different commit than packs.lock recorded is refused and left as installed: a published release must never move. The same holds when a clone checks out a different commit than git ls-remote reported. Branch-tracking packs are exempt, and a pinned pack is skipped without contacting the remote."
     )]
     Update {
         #[arg(
