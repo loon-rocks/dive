@@ -229,14 +229,30 @@ impl Swap {
     }
 }
 
-pub fn set_aside(layer: &Layer, copy: &Path) -> Result<Option<(TempDir, PathBuf)>> {
+pub struct Aside {
+    _staging: TempDir,
+    path: PathBuf,
+    copy: PathBuf,
+}
+
+impl Aside {
+    pub fn restore(self) {
+        let _ = std::fs::rename(&self.path, &self.copy);
+    }
+}
+
+pub fn set_aside(layer: &Layer, copy: &Path) -> Result<Option<Aside>> {
     if !copy.exists() {
         return Ok(None);
     }
     let staging = layer.staging()?;
-    let aside = staging.path().join("old");
-    std::fs::rename(copy, &aside).with_context(|| format!("moving {} aside", copy.display()))?;
-    Ok(Some((staging, aside)))
+    let path = staging.path().join("old");
+    std::fs::rename(copy, &path).with_context(|| format!("moving {} aside", copy.display()))?;
+    Ok(Some(Aside {
+        _staging: staging,
+        path,
+        copy: copy.to_path_buf(),
+    }))
 }
 
 pub fn caller_dirs(layer: &Layer) -> Vec<PathBuf> {

@@ -139,6 +139,10 @@ fn refused(error: impl Into<String>, problems: Vec<String>) -> Outcome {
     }))
 }
 
+fn refusal(error: impl Into<String>) -> Outcome {
+    refused(error, Vec::new())
+}
+
 pub struct AddRequest {
     pub source: String,
     pub as_name: Option<String>,
@@ -165,23 +169,20 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         Some(entry) => {
             let name = request.source.clone();
             if layer.copy_dir(&name).exists() {
-                return Ok(refused(
-                    format!(
-                        "pack '{name}' is already installed at {}; move it with `{}`",
-                        layer.copy_dir(&name).display(),
-                        layer.command("update", &name)
-                    ),
-                    Vec::new(),
-                ));
+                return Ok(refusal(format!(
+                    "pack '{name}' is already installed at {}; move it with `{}`",
+                    layer.copy_dir(&name).display(),
+                    layer.command("update", &name)
+                )));
             }
             if let Some(wanted) = &request.reference {
                 if Some(wanted) != entry.reference.as_ref() {
-                    return Ok(refused(format!(
+                    return Ok(refusal(format!(
                             "pack '{name}' is configured in {} with ref {}; edit [packs.{name}] there to change it, then run `{}`",
                             layer.config_path().display(),
                             entry.reference.as_deref().unwrap_or("(none)"),
                             layer.command("add", &name)
-                        ), Vec::new()));
+                        )));
                 }
             }
             Install {
@@ -199,8 +200,8 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         },
     };
     if let (None, Some(name)) = (&install.entry, &install.name) {
-        if let Some(refusal) = name_refusal(layer, &state, name) {
-            return Ok(refusal);
+        if let Some(outcome) = name_refusal(layer, &state, name) {
+            return Ok(outcome);
         }
     }
 
@@ -210,7 +211,7 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
     let (target, reference) =
         match add_target(&remote, install.reference.as_deref(), &url, &mut warnings) {
             Ok(resolved) => resolved,
-            Err(problem) => return Ok(refused(problem, Vec::new())),
+            Err(problem) => return Ok(refusal(problem)),
         };
 
     let fetched = layer::fetch(layer, &url, &target.reference).map_err(anyhow::Error::msg)?;
@@ -227,8 +228,8 @@ pub fn add(layer: &Layer, request: &AddRequest) -> Result<Outcome> {
         },
     };
     if install.entry.is_none() && request.as_name.is_none() {
-        if let Some(refusal) = name_refusal(layer, &state, &name) {
-            return Ok(refusal);
+        if let Some(outcome) = name_refusal(layer, &state, &name) {
+            return Ok(outcome);
         }
     }
     let hash = match fetched.verify(
@@ -334,20 +335,20 @@ fn add_target(
 
 fn name_refusal(layer: &Layer, state: &layer::LayerState, name: &str) -> Option<Outcome> {
     if let Err(problem) = check_installed_name(name, &state.mcp_servers) {
-        return Some(refused(problem, Vec::new()));
+        return Some(refusal(problem));
     }
     if state.packs.contains_key(name) {
-        return Some(refused(format!(
+        return Some(refusal(format!(
                 "a pack named '{name}' is already configured in {}; install this one under another name with --as, or remove it first with `{}`",
                 layer.config_path().display(),
                 layer.command("remove", name)
-            ), Vec::new()));
+            )));
     }
     if layer.copy_dir(name).exists() {
-        return Some(refused(format!(
+        return Some(refusal(format!(
                 "{} already exists but is not configured; delete it or install under another name with --as",
                 layer.copy_dir(name).display()
-            ), Vec::new()));
+            )));
     }
     None
 }
@@ -576,23 +577,20 @@ pub fn remove(layer: &Layer, name: &str) -> Result<Outcome> {
     let configured = state.packs.contains_key(name);
     let locked = state.lock.packs.contains_key(name);
     if !configured && !locked && !copy.exists() {
-        return Ok(refused(
-            format!("pack '{name}' is not installed in {}", layer.dir.display()),
-            Vec::new(),
-        ));
+        return Ok(refusal(format!(
+            "pack '{name}' is not installed in {}",
+            layer.dir.display()
+        )));
     }
     let aside = layer::set_aside(layer, &copy)?;
-    let restore_copy = |aside: &Option<(tempfile::TempDir, PathBuf)>| {
-        if let Some((_, path)) = aside {
-            let _ = std::fs::rename(path, &copy);
-        }
-    };
     let config_before = layer.read_config()?;
     if configured {
         let written = layer::without_pack_entry(&config_before, name)
             .and_then(|text| layer.write_config(&text));
         if let Err(error) = written {
-            restore_copy(&aside);
+            if let Some(aside) = aside {
+                aside.restore();
+            }
             return Err(error);
         }
     }
@@ -603,7 +601,9 @@ pub fn remove(layer: &Layer, name: &str) -> Result<Outcome> {
             if configured {
                 let _ = layer.write_config(&config_before);
             }
-            restore_copy(&aside);
+            if let Some(aside) = aside {
+                aside.restore();
+            }
             return Err(error);
         }
     }
