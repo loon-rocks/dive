@@ -1,7 +1,7 @@
 use super::InstalledPacks;
 use crate::runtime::Runtime;
 use anyhow::Result;
-use graph_config::pack::{load_manifest, LayerKind, MANIFEST_FILE};
+use graph_config::pack::{load_manifest, LayerKind, MANIFEST_FILE, SUPPORTED_OS};
 use graph_config::Config;
 use graph_core::agent::doc::{AgentDoc, AgentSet, AgentSource, BUILTINS};
 use graph_core::packs::{
@@ -319,6 +319,13 @@ fn migration_problems(loaded: &LoadedPack) -> Vec<String> {
     problems
 }
 
+fn os_problem(dir: &Path) -> Option<String> {
+    let manifest = load_manifest(&dir.join(MANIFEST_FILE)).ok()?;
+    manifest.requires.os.is_empty().then(|| {
+        format!("{MANIFEST_FILE}: requires.os is not set; list the systems this pack runs on, such as os = {SUPPORTED_OS:?}")
+    })
+}
+
 pub async fn check(config: &Config, dir: &Path) -> Result<(LoadedPack, Report)> {
     if !dir.is_dir() {
         anyhow::bail!("{} is not a directory", dir.display());
@@ -326,6 +333,7 @@ pub async fn check(config: &Config, dir: &Path) -> Result<(LoadedPack, Report)> 
     let source = source_at(dir);
     let (loaded, mut problems) = inspect(source.clone());
     let mut notes = Vec::new();
+    problems.extend(os_problem(dir));
     problems.extend(
         loaded
             .needs

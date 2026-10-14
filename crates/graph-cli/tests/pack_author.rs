@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 use support::{Run, Scratch};
 
-const MANIFEST: &str = "version = 1\nname = \"example\"\ndescription = \"Example\"\n";
+const MANIFEST: &str = "version = 1\nname = \"example\"\ndescription = \"Example\"\n\n[requires]\nos = [\"macos\", \"linux\"]\n";
 
 const ECHO_TOOL: &str = r#"version: 2
 name: echo
@@ -301,7 +301,7 @@ fn check_reports_every_problem_class_at_once() {
     write(
         &pack,
         "pack.toml",
-        &format!("{MANIFEST}\n[requires]\nbinaries = [\"graph-pack-no-such-binary\"]\n"),
+        &format!("{MANIFEST}binaries = [\"graph-pack-no-such-binary\"]\n"),
     );
     write(&pack, "tools/echo.yaml", ECHO_TOOL);
     let long = "a".repeat(50);
@@ -374,11 +374,7 @@ fn check_reports_every_problem_class_at_once() {
 fn check_refuses_unmet_graph_and_os_requirements_instead_of_stopping() {
     let scratch = Scratch::new();
     let pack = scratch.path().join("pack");
-    write(
-        &pack,
-        "pack.toml",
-        &format!("{MANIFEST}\n[requires]\ngraph = \">=99\"\n"),
-    );
+    write(&pack, "pack.toml", &format!("{MANIFEST}graph = \">=99\"\n"));
     write(&pack, "tools/echo.yaml", ECHO_TOOL);
     write(
         &pack,
@@ -390,6 +386,38 @@ fn check_refuses_unmet_graph_and_os_requirements_instead_of_stopping() {
     let found = problems(&run);
     has(&found, "requires.graph: needs graph >=99");
     has(&found, "unknown tool 'example__tool__missing'");
+}
+
+#[test]
+fn check_requires_the_manifest_to_name_the_systems_the_pack_runs_on() {
+    let scratch = Scratch::new();
+    let pack = scratch.path().join("pack");
+    write(&pack, "tools/echo.yaml", ECHO_TOOL);
+    write(&pack, "plans/greet.yaml", GREET_PLAN);
+    let bare = MANIFEST.replace("os = [\"macos\", \"linux\"]\n", "");
+    let missing = "pack.toml: requires.os is not set; list the systems this pack runs on, such as os = [\"macos\", \"linux\"]";
+
+    for manifest in [bare.clone(), format!("{bare}os = []\n")] {
+        write(&pack, "pack.toml", &manifest);
+        let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+        run.code_is(1);
+        assert_eq!(problems(&run), vec![missing.to_string()]);
+    }
+
+    write(&pack, "pack.toml", &format!("{bare}os = [\"plan9\"]\n"));
+    let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+    run.code_is(1);
+    has(
+        &problems(&run),
+        "requires.os: 'plan9' is not a supported OS; use macos or linux",
+    );
+
+    write(&pack, "pack.toml", MANIFEST);
+    graph(&scratch, &["pack", "check", "pack", "--json"]).code_is(0);
+    graph(&scratch, &["pack", "test", "pack"]).code_is(0);
+
+    write(&pack, "pack.toml", &bare);
+    graph(&scratch, &["pack", "test", "pack"]).code_is(1);
 }
 
 #[test]

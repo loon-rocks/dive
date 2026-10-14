@@ -770,7 +770,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements",
-        after_long_help = "Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.\n\nExamples:\n  graph pack check\n  graph pack check files --json"
+        after_long_help = "Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. pack.toml must list the systems the pack runs on in `requires.os` (`macos`, `linux`). Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.\n\nExamples:\n  graph pack check\n  graph pack check files --json"
     )]
     Check {
         #[arg(

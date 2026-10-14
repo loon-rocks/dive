@@ -637,6 +637,22 @@ fn add_refuses_a_release_needing_a_newer_graph_and_installs_nothing() {
 }
 
 #[test]
+fn add_installs_a_release_whose_manifest_names_no_os() {
+    for requires in [None, Some("os = []")] {
+        let upstream = upstream();
+        if let Some(requires) = requires {
+            upstream.release_requiring(requires, "v4.0.0");
+        }
+        let project = scratch(CONFIG);
+        let layer = &project.layer;
+        let outcome = add(layer, &request(&upstream.url, None, None)).unwrap();
+        assert!(!outcome.rejected, "{}", outcome.body);
+        assert!(layer.copy_dir("example").is_dir());
+        assert!(lock(layer).packs.contains_key("example"));
+    }
+}
+
+#[test]
 fn update_refuses_a_release_for_another_os_and_keeps_the_installed_one() {
     let upstream = upstream();
     let project = scratch(CONFIG);
