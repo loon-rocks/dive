@@ -1,4 +1,4 @@
-use super::{refusal, refused};
+use super::{refusal, refused, same_dir};
 use crate::commands::outcome::Outcome;
 use crate::packs::author::{self, PackSession, Report};
 use crate::packs::release::{self, Bump};
@@ -148,6 +148,13 @@ pub async fn run_item(path: &Path, item: &str, input: Value, json: bool) -> Resu
     })
 }
 
+fn ran(case: &author::CaseRun) -> Vec<String> {
+    case.ran
+        .iter()
+        .map(|major| format!("{}{major}", author::MIGRATION_PREFIX))
+        .collect()
+}
+
 struct Tested {
     loaded: LoadedPack,
     check: Report,
@@ -170,7 +177,7 @@ impl Tested {
             .iter()
             .map(|case| json!({
                 "case": case.case,
-                "ran": case.ran.iter().map(|major| format!("{}{major}", author::MIGRATION_PREFIX)).collect::<Vec<_>>(),
+                "ran": ran(case),
                 "problems": case.problems,
             }))
             .collect::<Vec<_>>())
@@ -191,15 +198,10 @@ impl Tested {
             ));
         }
         for case in &self.cases {
-            let ran: Vec<String> = case
-                .ran
-                .iter()
-                .map(|major| format!("{}{major}", author::MIGRATION_PREFIX))
-                .collect();
             lines.push(format!(
                 "{}: ran {}; the migrated files validate",
                 case.case,
-                ran.join(", ")
+                ran(case).join(", ")
             ));
         }
         lines
@@ -273,13 +275,6 @@ fn previous_interface(
         dir: tree,
     });
     Ok(release::interface(&loaded))
-}
-
-fn same_dir(a: &Path, b: &Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => false,
-    }
 }
 
 pub async fn release(path: &Path, bump: Bump, json: bool) -> Result<Outcome> {

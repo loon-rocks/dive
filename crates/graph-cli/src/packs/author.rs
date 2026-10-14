@@ -24,7 +24,10 @@ pub const MIGRATION_INPUTS: [&str; 2] = ["root", "apply"];
 pub const MIGRATION_TESTS: &str = "tests/migrations";
 
 pub fn migration_major(name: &str) -> Option<u64> {
-    let digits = name.strip_prefix(MIGRATION_PREFIX)?;
+    major_number(name.strip_prefix(MIGRATION_PREFIX)?)
+}
+
+fn major_number(digits: &str) -> Option<u64> {
     let canonical = !digits.is_empty()
         && !digits.starts_with('0')
         && digits.chars().all(|c| c.is_ascii_digit());
@@ -398,7 +401,7 @@ pub fn migration_cases(dir: &Path) -> Vec<(u64, PathBuf)> {
         .filter(|path| path.is_dir())
         .filter_map(|path| {
             let name = path.file_name()?.to_str()?;
-            let major = migration_major(&format!("{MIGRATION_PREFIX}{}", name.strip_prefix('v')?))?;
+            let major = major_number(name.strip_prefix('v')?)?;
             Some((major, path))
         })
         .collect();
