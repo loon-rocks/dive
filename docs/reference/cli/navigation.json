@@ -92,7 +92,12 @@
       "reference/cli/pack/add",
       "reference/cli/pack/list",
       "reference/cli/pack/update",
-      "reference/cli/pack/remove"
+      "reference/cli/pack/remove",
+      "reference/cli/pack/new",
+      "reference/cli/pack/check",
+      "reference/cli/pack/run",
+      "reference/cli/pack/test",
+      "reference/cli/pack/release"
     ],
     "root": "reference/cli/pack"
   },

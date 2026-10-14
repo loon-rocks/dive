@@ -913,3 +913,130 @@ async fn a_run_reaching_a_pack_whose_mcp_server_is_not_configured_fails_naming_i
         "pack 'example' has unmet requirements: requires.mcp.everything: no MCP server is configured under [mcp.everything] (url = \"https://example.com/mcp\")"
     );
 }
+
+const MIGRATE_PLAN: &str = r#"version: 2
+identifier: migrate_v2
+name: Migrate
+description: Calls the pack's migration tool
+input_schema:
+  type: object
+  properties:
+    root: { type: string }
+    apply: { type: boolean }
+steps:
+  - id: a
+    tool_name: $pack__tool__rewrite
+    input:
+      name: "{{input.root}}"
+finish:
+  output:
+    name: "{{a.name}}"
+"#;
+
+#[test]
+fn migrations_load_only_on_request_as_private_items_under_the_installed_name() {
+    let dir = tempfile::tempdir().unwrap();
+    example_pack(dir.path());
+    write(dir.path(), "plans/migrations/migrate_v2.yaml", MIGRATE_PLAN);
+    std::fs::remove_file(dir.path().join("tools/migrations/migrate_v2_scan.yaml")).unwrap();
+    write(
+        dir.path(),
+        "tools/migrations/rewrite.yaml",
+        &ECHO_TOOL.replace("name: echo", "name: rewrite"),
+    );
+    let mut pack = load_pack(source("files", dir.path()), &[], &[]).unwrap();
+    assert!(pack.migrations.is_empty());
+    assert!(!pack.items.iter().any(|item| item.name == "rewrite"));
+
+    assert!(pack.load_migrations().is_empty());
+    assert_eq!(
+        pack.migrations,
+        ["files__tool__rewrite", "files__plan__migrate_v2"]
+    );
+    assert!(pack.is_migration("files__plan__migrate_v2"));
+    assert!(!pack.is_migration("files__plan__whoami"));
+    let migration = pack
+        .items
+        .iter()
+        .find(|item| item.catalog_name() == "files__plan__migrate_v2")
+        .unwrap();
+    assert!(!migration.public);
+    let plan = pack
+        .plans
+        .iter()
+        .find(|doc| doc.identifier == "files__plan__migrate_v2")
+        .unwrap();
+    assert_eq!(plan.steps[0].tool_name, "files__tool__rewrite");
+
+    write(dir.path(), "tools/migrations/echo.yaml", ECHO_TOOL);
+    let mut pack = load_pack(source("files", dir.path()), &[], &[]).unwrap();
+    let problems = pack.load_migrations();
+    assert!(
+        problems[0].contains("migration tool 'echo' has the same name as a tool in tools/"),
+        "{problems:?}"
+    );
+}
+
+#[test]
+fn inspecting_a_broken_pack_keeps_what_loaded_and_lists_every_problem() {
+    let dir = tempfile::tempdir().unwrap();
+    example_pack(dir.path());
+    write(dir.path(), "pack.toml", "version = 1\nname = \"example\"\n");
+    write(
+        dir.path(),
+        "plans/bad.yaml",
+        &SELF_PLAN
+            .replace("identifier: whoami", "identifier: bad")
+            .replace("$pack__tool__echo", "$pack__widget__echo"),
+    );
+    let (pack, problems) = inspect_pack(source("example", dir.path()), &[], &[]);
+    assert_eq!(problems.len(), 2, "{problems:?}");
+    assert!(problems[0].contains("description"), "{problems:?}");
+    assert!(problems[1].contains("$pack__widget__echo"), "{problems:?}");
+    assert_eq!(pack.items.len(), 4);
+    assert_eq!(pack.manifest.name, "example");
+}
+
+#[test]
+fn literal_self_names_are_found_in_plans_migrations_and_agent_lists_but_not_in_prose() {
+    let dir = tempfile::tempdir().unwrap();
+    example_pack(dir.path());
+    write(
+        dir.path(),
+        "plans/literal.yaml",
+        &OUTER_PLAN
+            .replace("identifier: outer", "identifier: literal")
+            .replace("$pack__plan__whoami", "example__plan__whoami"),
+    );
+    write(
+        dir.path(),
+        "plans/migrations/migrate_v2.yaml",
+        &MIGRATE_PLAN.replace("$pack__tool__rewrite", "example__tool__rewrite"),
+    );
+    write(
+        dir.path(),
+        "agents/literal.yaml",
+        &HELPER_AGENT
+            .replace("name: helper", "name: literal")
+            .replace("$pack__tool__echo", "example__tool__echo"),
+    );
+    let problems = literal_self_names(dir.path(), "example");
+    assert_eq!(problems.len(), 3, "{problems:?}");
+    assert!(
+        problems[0].contains(
+            "literal.yaml: step inner: names its own pack literally as 'example__plan__whoami'; write '$pack__plan__whoami'"
+        ),
+        "{problems:?}"
+    );
+    assert!(
+        problems[1].contains("migrate_v2.yaml: step a:"),
+        "{problems:?}"
+    );
+    assert!(
+        problems[2].contains(
+            "agents/literal.yaml: tools: names its own pack literally as 'example__tool__echo'"
+        ),
+        "{problems:?}"
+    );
+    assert!(literal_self_names(dir.path(), "files").is_empty());
+}

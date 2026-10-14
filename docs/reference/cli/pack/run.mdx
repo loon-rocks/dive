@@ -1,0 +1,59 @@
+---
+title: "graph pack run"
+sidebarTitle: "run"
+description: "Run one of a pack's items, private and migration ones included, under its manifest name"
+playground: "none"
+keywords: ["graph pack run"]
+---
+
+Runs a tool, plan or agent of the pack at --path, the way the pack's own plans call it, so items outside the public interface and migration items run too. This is the only direct way to run them. The result is printed to stdout as JSON.
+
+## Arguments
+
+<ParamField path="ITEM" type="string" required>
+  The item as &lt;tool|plan|agent&gt;__&lt;name&gt;, its full catalog name, $pack__&lt;kind&gt;__&lt;name&gt;, or a bare name when only one item has it
+</ParamField>
+
+<ParamField path="JSON|@FILE|-" type="string">
+  Inputs as a JSON object: inline ('&#123;"a":1&#125;'), @file.json, or - for stdin
+</ParamField>
+
+## Options
+
+<ParamField query="--input" type="string[]">
+  Override individual input keys (applied on top of the JSON document)
+
+  Format: `KEY=VALUE`.
+</ParamField>
+
+<ParamField query="--path" type="string" default=".">
+  The pack's directory, holding pack.toml
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack run [OPTIONS] <ITEM> [JSON|@FILE|-]
+```
+
+```bash Example 1
+graph pack run tool__word_count --input file=README.md
+```
+
+```bash Example 2
+graph pack run plan__migrate_v2 '{"root": ".graph", "apply": false}' --path ../graph-pack-files
+```
+
+</RequestExample>

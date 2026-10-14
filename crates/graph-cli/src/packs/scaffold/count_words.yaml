@@ -1,0 +1,26 @@
+version: 2
+identifier: count_words
+name: Count words
+description: Returns a file's path and how many words it holds.
+input_schema:
+  type: object
+  required: [file]
+  properties:
+    file:
+      type: string
+      description: Path to the file, absolute or relative to the working directory
+output_schema:
+  type: object
+  required: [file, words]
+  properties:
+    file: { type: string }
+    words: { type: integer }
+steps:
+  - id: count
+    tool_name: $pack__tool__word_count
+    input:
+      file: "{{input.file}}"
+finish:
+  output:
+    file: "{{input.file}}"
+    words: "{{count.words}}"

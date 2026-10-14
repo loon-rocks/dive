@@ -1,0 +1,43 @@
+---
+title: "graph pack check"
+sidebarTitle: "check"
+description: "Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements"
+playground: "none"
+keywords: ["graph pack check"]
+---
+
+Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. Exits 1 when there is any problem.
+
+## Arguments
+
+<ParamField path="PATH" type="string" default=".">
+  The pack's directory, holding pack.toml
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph pack check [OPTIONS] [PATH]
+```
+
+```bash Example 1
+graph pack check
+```
+
+```bash Example 2
+graph pack check ../graph-pack-files --json
+```
+
+</RequestExample>

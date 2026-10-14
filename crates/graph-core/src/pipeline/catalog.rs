@@ -431,7 +431,7 @@ fn check_pack_item(step_id: &str, tool: &str, catalog: &ToolCatalog, check: &mut
 /// Every `(step id, tool name)` pair in a plan, control-step bodies
 /// included. Bodies that fail to parse are skipped — the static layer
 /// reports those.
-pub(crate) fn step_tools(plan: &Plan) -> Vec<(String, String)> {
+pub fn step_tools(plan: &Plan) -> Vec<(String, String)> {
     step_calls(plan)
         .into_iter()
         .map(|(id, tool, _)| (id, tool))
