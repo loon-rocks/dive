@@ -1,0 +1,117 @@
+---
+title: "Write a pack"
+description: "Scaffold a pack in a packs repository, check and test it, and release it as a tag."
+keywords: ["graph pack new", "graph pack check", "graph pack test", "graph pack release", "pack.toml"]
+---
+
+A packs repository holds one pack per directory, so one repository can publish all of your packs. Each pack is released as tags named after its directory, such as `files/v1.0.0`.
+
+## Scaffold the pack
+
+From the repository's root:
+
+```bash
+graph pack new files
+```
+
+graph writes a pack that passes its own checks as written:
+
+```text
+files/
+├── pack.toml
+├── README.md
+├── CHANGELOG.md
+├── MIGRATING.md
+├── tools/word_count.yaml
+├── plans/count_words.yaml
+└── agents/word_counter.yaml
+```
+
+When the repository has no `.github/workflows/packs.yaml`, graph also writes one that runs `graph pack test` on every push and pull request.
+
+Replace the sample tool, plan and agent with your own, in the same formats as [tool](/tools/reference/tool-file), [plan](/plans/reference/plan-file) and [agent](/agents/reference/agent-file) files. Then fill in [`pack.toml`](/packs/reference/pack-file), including the systems the pack runs on in `requires.os`:
+
+```toml files/pack.toml
+version = 1
+name = "files"
+description = "Count and summarize the files in a directory."
+
+[requires]
+graph = ">=0.15"
+os = ["macos", "linux"]
+binaries = ["sh", "wc", "tr"]
+```
+
+## Try an item
+
+`graph pack run` runs one of the pack's items without installing it:
+
+```bash
+graph pack run tool__word_count --input file=files/README.md --path files
+```
+
+```json
+{
+  "words": 321
+}
+```
+
+## Check and test
+
+```bash
+graph pack test
+```
+
+```text
+✓ ok
+  note: ./files: pack 'files' passes check: 3 items, 0 migration items
+    no tests/migrations/v<N>/ sample files to migrate
+```
+
+`graph pack test` first runs `graph pack check`, which loads the pack the way an install would and checks every plan and agent against it. Then it runs each major's migration over the sample files in `tests/migrations/v<N>/`. Run at the repository's root, it covers every pack.
+
+## Release
+
+Commit your changes, then create the release tag:
+
+```bash
+graph pack release major files
+```
+
+```text
+✓ ok
+  note: tagged files/v1.0.0 at 293cb16 (major release, the first)
+  nothing was pushed; publish it with `git push origin files/v1.0.0`
+```
+
+Push the tag to publish the release:
+
+```bash
+git push origin files/v1.0.0
+```
+
+For later releases, `graph pack release` compares every public item's name, input schema and output schema with the previous release, and refuses a bump too small for the changes:
+
+```text
+✗ a minor release can't carry these changes since files/v1.0.1; they need a major
+  problems:
+    - tool__word_count: output property 'words' removed (major)
+    - tool__word_count: output property 'count' added (minor)
+```
+
+A major release also needs a `## v1 to v2` section in `MIGRATING.md` or a migration plan in `plans/migrations/migrate_v2.yaml`. `graph pack update --major` runs that plan over your users' files.
+
+<Warning>
+graph refuses to install or update a release whose tag has moved. Never move or delete a pushed release tag; release a new version instead. Protect release tags in your repository's settings so they can't be changed.
+</Warning>
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Install and update packs" icon="download" href="/packs/guides/install-packs">
+    Add a pack, keep it current and remove it.
+  </Card>
+  <Card title="Create a tool in the workbench" icon="wand-magic-sparkles" href="/tools/guides/create-in-workbench">
+    Draft, test-run and save a tool with the tool drafter.
+  </Card>
+</CardGroup>

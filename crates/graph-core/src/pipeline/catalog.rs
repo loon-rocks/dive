@@ -63,7 +63,7 @@ pub fn glob_matches(pattern: &str, name: &str) -> bool {
 /// connecting to anything. Built from config by the CLI runtime.
 #[derive(Debug, Default, Clone)]
 pub struct ToolCatalog {
-    /// Full namespaced names of the enabled pack tools (`builtin__x`).
+    /// Full namespaced names of the built-in tools (`builtin__x`).
     pub builtin_tools: BTreeSet<String>,
     /// Full namespaced names of the loadable user tools (`user__x`).
     pub user_tools: BTreeSet<String>,

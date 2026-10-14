@@ -13,6 +13,8 @@ Each kind of file graph reads carries its own version number, separate from grap
 | Tool file | {{tool_file_version}} |
 | Agent file | {{agent_file_version}} |
 | [Data directory](/reference/data-directory) | {{data_directory_version}} |
+| [pack.toml](/packs/reference/pack-file) | {{pack_file_version}} |
+| packs.lock | {{pack_lock_version}} |
 
 ## Check which versions your graph reads
 
@@ -56,6 +58,7 @@ graph agent migrate .graph/agents/release_notes.yaml
 - A plan file graph can't read is left out of the catalog. `graph plan list --json` lists it under `skipped`, and running it by name reports the version problem.
 - A tool file graph can't read fails tool loading with the file's name.
 - An agent file graph can't read is reported with its path by `graph agent list` and `graph agent validate`.
+- A `pack.toml` or `packs.lock` graph can't read stops the pack from installing or loading, with the file's name.
 
 ## Data directory upgrades
 
