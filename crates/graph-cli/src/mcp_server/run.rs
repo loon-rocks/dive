@@ -16,12 +16,14 @@ use serde_json::{json, Map, Value};
 
 pub fn plan_list() -> Result<Outcome> {
     let runtime = runtime()?;
-    Ok(Outcome::ok(plan_edit::list_as_json(&runtime.plan_docs())))
+    Ok(Outcome::ok(serde_json::to_value(
+        graph_runtime::ops::plan::PlanList::from(&runtime.plan_docs()),
+    )?))
 }
 
 pub fn plan_show(target: &str) -> Result<Outcome> {
     let runtime = runtime()?;
-    let (doc, _) = plan_cmd::resolve_target(&runtime, target)?;
+    let (doc, _) = graph_runtime::ops::plan::resolve(&runtime, target)?;
     Ok(Outcome::ok(plan_edit::doc_as_json(&doc)?))
 }
 
