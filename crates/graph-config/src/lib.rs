@@ -16,13 +16,14 @@ pub use format::{
     Upgrade, CONFIG_FORMAT, CONFIG_FORMAT_OLDEST, FORMATS_DOC, FORMAT_KEY,
 };
 pub use load::{
-    expand_tilde, global_config_path, load, load_from, project_config_path, LoadedConfig,
+    ensure_project_id, expand_tilde, global_config_path, load, load_from, project_config_path,
+    project_id, LoadedConfig,
 };
 pub use model::{
     describe_missing_env, Config, FallbackChoice, McpServerConfig, MissingEnv, ModelChoice,
-    ModelKind, ModelPrice, ModelRoles, PlanPaths, PromptConfig, ProviderConfig, ProviderKind, Role,
-    Settings, StorageBackend, StorageConfig, TelemetryConfig, TelemetryProtocol, ToolOverride,
-    ToolPaths, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
+    ModelKind, ModelPrice, ModelRoles, PlanPaths, ProjectConfig, PromptConfig, ProviderConfig,
+    ProviderKind, Role, Settings, StorageBackend, StorageConfig, TelemetryConfig,
+    TelemetryProtocol, ToolOverride, ToolPaths, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
 };
 
 pub const SCHEMA: &str = include_str!("schema.yaml");

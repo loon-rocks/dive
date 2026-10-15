@@ -2,7 +2,7 @@ use crate::cli::SecretCommand;
 use crate::commands::outcome::{report, Outcome};
 use anyhow::{Context, Result};
 use graph_runtime::runtime::Workspace;
-use graph_runtime::secrets::{self as ops, SecretDetail, SecretList, SecretStatus, Secrets};
+use graph_runtime::secrets::{self as ops, Layer, SecretDetail, SecretList, SecretScope, Secrets};
 use serde_json::json;
 use std::io::{IsTerminal, Read};
 
@@ -10,13 +10,39 @@ pub fn run(command: SecretCommand) -> Result<()> {
     let secrets = Secrets::system();
     let workspace = Workspace::current();
     match command {
-        SecretCommand::Set { name, json } => {
+        SecretCommand::Set {
+            name,
+            project,
+            json,
+        } => {
             let value = read_value(&name)?;
-            report(set(&secrets, &name, &value)?, json)
+            report(
+                set(&secrets, &workspace, &name, &value, scope(project))?,
+                json,
+            )
         }
-        SecretCommand::Rm { name, json } => report(rm(&secrets, &name)?, json),
+        SecretCommand::Rm {
+            name,
+            project,
+            json,
+        } => report(rm(&secrets, &workspace, &name, scope(project))?, json),
         SecretCommand::List { json } => report(list(&workspace, &secrets)?, json),
         SecretCommand::Show { name, json } => report(show(&workspace, &secrets, &name)?, json),
+    }
+}
+
+fn scope(project: bool) -> SecretScope {
+    if project {
+        SecretScope::Project
+    } else {
+        SecretScope::Shared
+    }
+}
+
+fn where_stored(scope: SecretScope) -> &'static str {
+    match scope {
+        SecretScope::Project => "for this project",
+        SecretScope::Shared => "for every project",
     }
 }
 
@@ -38,37 +64,87 @@ fn read_value(name: &str) -> Result<String> {
     Ok(value)
 }
 
-pub fn set(secrets: &Secrets, name: &str, value: &str) -> Result<Outcome> {
-    let saved = ops::set(secrets, name, value)?;
-    let mut outcome = Outcome::ok(json!({
+pub fn set(
+    secrets: &Secrets,
+    workspace: &Workspace,
+    name: &str,
+    value: &str,
+    scope: SecretScope,
+) -> Result<Outcome> {
+    let saved = ops::set(secrets, workspace, name, value, scope)?;
+    let note = match saved.shadowed_by {
+        Some(layer) => format!(
+            "stored {name} {}, but the {} value wins",
+            where_stored(scope),
+            describe_layer(layer)
+        ),
+        None => format!(
+            "stored {name} {} in the OS credential store",
+            where_stored(scope)
+        ),
+    };
+    Ok(Outcome::ok(json!({
         "ok": true,
         "name": saved.name,
         "stored": true,
-        "shadowedByEnv": saved.shadowed_by_env,
-    }));
-    if saved.shadowed_by_env {
-        outcome = outcome.with_note(format!(
-            "stored {name}, but the environment also sets it and its value wins"
-        ));
-    } else {
-        outcome = outcome.with_note(format!("stored {name} in the OS credential store"));
-    }
-    Ok(outcome)
+        "scope": saved.scope,
+        "project": saved.project,
+        "shadowedBy": saved.shadowed_by,
+    }))
+    .with_note(note))
 }
 
-pub fn rm(secrets: &Secrets, name: &str) -> Result<Outcome> {
-    let removed = ops::remove(secrets, name)?;
+fn describe_layer(layer: Layer) -> &'static str {
+    match layer {
+        Layer::Env => "environment's",
+        Layer::Project => "project's",
+        Layer::Shared => "shared",
+    }
+}
+
+pub fn rm(
+    secrets: &Secrets,
+    workspace: &Workspace,
+    name: &str,
+    scope: SecretScope,
+) -> Result<Outcome> {
+    let removed = ops::remove(secrets, workspace, name, scope)?;
     if !removed.removed {
+        let error = match scope {
+            SecretScope::Project => format!("no secret named {name} stored for this project"),
+            SecretScope::Shared => format!("no stored secret named {name}"),
+        };
         return Ok(Outcome::rejected(json!({
-            "error": format!("no stored secret named {name}"),
+            "error": error,
             "name": name,
+            "scope": scope,
             "removed": false,
         })));
     }
     Ok(
-        Outcome::ok(json!({"ok": true, "name": name, "removed": true}))
-            .with_note(format!("removed {name} from the OS credential store")),
+        Outcome::ok(json!({"ok": true, "name": name, "scope": scope, "removed": true})).with_note(
+            format!(
+                "removed {name} {} from the OS credential store",
+                where_stored(scope)
+            ),
+        ),
     )
+}
+
+fn source_label(in_use: Option<Layer>, set: impl Fn(Layer) -> bool) -> String {
+    let Some(layer) = in_use else {
+        return "missing".to_string();
+    };
+    let shadowed: Vec<&str> = Layer::ALL
+        .into_iter()
+        .filter(|other| *other > layer && set(*other))
+        .map(Layer::label)
+        .collect();
+    if shadowed.is_empty() {
+        layer.label().to_string()
+    } else {
+        format!("{} (shadows {})", layer.label(), shadowed.join(", "))
+    }
 }
 
 pub fn list(workspace: &Workspace, secrets: &Secrets) -> Result<Outcome> {
@@ -100,9 +176,20 @@ fn render_list(listed: &SecretList) -> String {
         .map(|entry| entry.name.len())
         .max()
         .unwrap_or(0);
-    let status_width = SecretStatus::EnvShadowsStore.label().len();
+    let sources: Vec<String> = listed
+        .secrets
+        .iter()
+        .map(|entry| {
+            source_label(entry.in_use, |layer| match layer {
+                Layer::Env => entry.env_value.is_some(),
+                Layer::Project => entry.project_value.is_some(),
+                Layer::Shared => entry.shared_value.is_some(),
+            })
+        })
+        .collect();
+    let status_width = sources.iter().map(String::len).max().unwrap_or(0);
     let mut text = String::new();
-    for entry in &listed.secrets {
+    for (entry, source) in listed.secrets.iter().zip(&sources) {
         let places: Vec<String> = entry
             .references
             .iter()
@@ -111,7 +198,7 @@ fn render_list(listed: &SecretList) -> String {
         text.push_str(&format!(
             "{:width$}  {:status_width$}  {}\n",
             entry.name,
-            entry.status.label(),
+            source,
             places.join("; "),
         ));
     }
@@ -131,12 +218,22 @@ pub fn show(workspace: &Workspace, secrets: &Secrets, name: &str) -> Result<Outc
 }
 
 fn render_detail(detail: &SecretDetail) -> String {
-    let mut text = format!("{}: {}\n", detail.name, detail.status.label());
-    if let Some(value) = &detail.env_value {
-        text.push_str(&format!("  env:   {value}\n"));
-    }
-    if let Some(value) = &detail.store_value {
-        text.push_str(&format!("  store: {value}\n"));
+    let source = source_label(detail.in_use, |layer| detail.value(layer).is_some());
+    let mut text = format!("{}: {source}\n", detail.name);
+    for layer in Layer::ALL {
+        let marker = if detail.in_use == Some(layer) {
+            "*"
+        } else {
+            " "
+        };
+        let value = match (layer, detail.value(layer)) {
+            (_, Some(value)) => value.clone(),
+            (Layer::Project, None) if detail.project.is_none() => {
+                "not set (no [project] id yet)".to_string()
+            }
+            (_, None) => "not set".to_string(),
+        };
+        text.push_str(&format!("{marker} {:8} {value}\n", layer.label()));
     }
     if detail.references.is_empty() {
         text.push_str("  not referenced by config.toml, user tools or installed packs\n");
@@ -164,10 +261,12 @@ mod tests {
 
     #[test]
     fn removing_an_unknown_name_is_a_rejection_not_an_error() {
-        let outcome = rm(&secrets(), "NEVER_STORED").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(dir.path());
+        let outcome = rm(&secrets(), &workspace, "NEVER_STORED", SecretScope::Shared).unwrap();
         assert!(outcome.rejected);
         assert_eq!(outcome.body["error"], "no stored secret named NEVER_STORED");
-        let outcome = rm(&secrets(), "STORED_KEY").unwrap();
+        let outcome = rm(&secrets(), &workspace, "STORED_KEY", SecretScope::Shared).unwrap();
         assert!(!outcome.rejected);
         assert_eq!(outcome.body["removed"], true);
     }
@@ -177,8 +276,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let outcome = show(&Workspace::new(dir.path()), &secrets(), "STORED_KEY").unwrap();
         let text = outcome.raw.unwrap();
-        assert!(text.starts_with("STORED_KEY: store\n"), "{text}");
-        assert!(text.contains("****6789"));
+        assert!(text.starts_with("STORED_KEY: shared\n"), "{text}");
+        assert!(text.contains("* shared   ****6789"), "{text}");
+        assert!(text.contains("  env      not set"), "{text}");
         assert!(!text.contains("sk-0123456789"));
         assert!(!outcome.body.to_string().contains("sk-0123456789"));
     }
@@ -189,8 +289,46 @@ mod tests {
             Arc::new(MemorySecrets::env().with("BOTH", "env-value")),
             Arc::new(MemorySecrets::store()),
         );
-        let outcome = set(&secrets, "BOTH", "stored-value").unwrap();
-        assert_eq!(outcome.body["shadowedByEnv"], true);
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(dir.path());
+        let outcome = set(
+            &secrets,
+            &workspace,
+            "BOTH",
+            "stored-value",
+            SecretScope::Shared,
+        )
+        .unwrap();
+        assert_eq!(outcome.body["shadowedBy"], "env");
         assert!(outcome.body["note"].as_str().unwrap().contains("wins"));
+    }
+
+    #[test]
+    fn show_lists_every_layer_and_marks_the_project_value_in_use() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+        std::fs::write(
+            dir.path().join(".graph/config.toml"),
+            "version = 5\n[project]\nid = \"p1\"\n",
+        )
+        .unwrap();
+        let secrets = Secrets::new(
+            Arc::new(MemorySecrets::env()),
+            Arc::new(
+                MemorySecrets::store()
+                    .with("SLACK_BOT_TOKEN", "xoxb-shared-1111")
+                    .with_project("SLACK_BOT_TOKEN", "p1", "xoxb-project-2222"),
+            ),
+        );
+        let outcome = show(&Workspace::new(dir.path()), &secrets, "SLACK_BOT_TOKEN").unwrap();
+        let text = outcome.raw.unwrap();
+        assert!(
+            text.starts_with("SLACK_BOT_TOKEN: project (shadows shared)\n"),
+            "{text}"
+        );
+        assert!(text.contains("  env      not set\n"), "{text}");
+        assert!(text.contains("* project  ****2222\n"), "{text}");
+        assert!(text.contains("  shared   ****1111\n"), "{text}");
+        assert_eq!(outcome.body["inUse"], "project");
     }
 }

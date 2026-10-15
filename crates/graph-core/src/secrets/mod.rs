@@ -2,7 +2,9 @@ mod memory;
 pub mod references;
 mod store;
 
-pub use graph_config::secrets::{is_secret_name, EnvSource, Origin, Resolved, SecretSource};
+pub use graph_config::secrets::{
+    is_project_id, is_secret_name, EnvSource, InProject, Origin, Resolved, SecretSource,
+};
 pub use memory::MemorySecrets;
 pub use store::{CredentialStore, SERVICE, STORE_ENV};
 
@@ -14,15 +16,29 @@ pub enum StoreError {
     Unavailable(String),
     #[error("{0} is not a variable name: use letters, digits and underscores, not starting with a digit")]
     InvalidName(String),
+    #[error("{0} is not a project id: use letters, digits and hyphens")]
+    InvalidProject(String),
     #[error("the OS credential store failed: {0}")]
     Failed(String),
 }
 
 pub trait SecretStore: SecretSource {
     fn status(&self) -> Result<(), StoreError>;
-    fn get(&self, name: &str) -> Result<Option<String>, StoreError>;
-    fn set(&self, name: &str, value: &str) -> Result<(), StoreError>;
-    fn remove(&self, name: &str) -> Result<bool, StoreError>;
+    fn get_in(&self, name: &str, project: Option<&str>) -> Result<Option<String>, StoreError>;
+    fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError>;
+    fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError>;
+
+    fn get(&self, name: &str) -> Result<Option<String>, StoreError> {
+        self.get_in(name, None)
+    }
+
+    fn set(&self, name: &str, value: &str) -> Result<(), StoreError> {
+        self.set_in(name, None, value)
+    }
+
+    fn remove(&self, name: &str) -> Result<bool, StoreError> {
+        self.remove_in(name, None)
+    }
 }
 
 impl<T: SecretStore + ?Sized> SecretStore for Arc<T> {
@@ -30,17 +46,29 @@ impl<T: SecretStore + ?Sized> SecretStore for Arc<T> {
         (**self).status()
     }
 
-    fn get(&self, name: &str) -> Result<Option<String>, StoreError> {
-        (**self).get(name)
+    fn get_in(&self, name: &str, project: Option<&str>) -> Result<Option<String>, StoreError> {
+        (**self).get_in(name, project)
     }
 
-    fn set(&self, name: &str, value: &str) -> Result<(), StoreError> {
-        (**self).set(name, value)
+    fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError> {
+        (**self).set_in(name, project, value)
     }
 
-    fn remove(&self, name: &str) -> Result<bool, StoreError> {
-        (**self).remove(name)
+    fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError> {
+        (**self).remove_in(name, project)
     }
+}
+
+pub fn store_account(name: &str, project: Option<&str>) -> Result<String, StoreError> {
+    if !is_secret_name(name) {
+        return Err(StoreError::InvalidName(name.to_string()));
+    }
+    if let Some(id) = project {
+        if !is_project_id(id) {
+            return Err(StoreError::InvalidProject(id.to_string()));
+        }
+    }
+    Ok(graph_config::secrets::store_account(name, project))
 }
 
 #[derive(Clone)]
@@ -64,9 +92,13 @@ impl std::fmt::Debug for ChainedSource {
 
 impl SecretSource for ChainedSource {
     fn resolve(&self, name: &str) -> Option<Resolved> {
+        self.resolve_in(name, None)
+    }
+
+    fn resolve_in(&self, name: &str, project: Option<&str>) -> Option<Resolved> {
         let mut empty = None;
         for source in &self.sources {
-            match source.resolve(name) {
+            match source.resolve_in(name, project) {
                 Some(found) if !found.value.is_empty() => return Some(found),
                 Some(found) => {
                     empty.get_or_insert(found);
@@ -85,11 +117,40 @@ pub fn system() -> ChainedSource {
     ])
 }
 
+pub fn in_project(project: Option<String>) -> InProject<ChainedSource> {
+    InProject::new(system(), project)
+}
+
+pub fn for_config(paths: &[std::path::PathBuf]) -> InProject<ChainedSource> {
+    in_project(graph_config::project_id(paths))
+}
+
 pub fn store_resolve(store: &dyn SecretStore, name: &str) -> Option<Resolved> {
-    store.get(name).ok().flatten().map(|value| Resolved {
-        value,
-        source: Origin::Store,
-    })
+    store_resolve_in(store, name, None)
+}
+
+pub fn store_resolve_in(
+    store: &dyn SecretStore,
+    name: &str,
+    project: Option<&str>,
+) -> Option<Resolved> {
+    if !is_secret_name(name) {
+        return None;
+    }
+    let found = |project| {
+        store
+            .get_in(name, project)
+            .ok()
+            .flatten()
+            .filter(|value| !value.is_empty())
+    };
+    project
+        .and_then(|id| found(Some(id)))
+        .or_else(|| found(None))
+        .map(|value| Resolved {
+            value,
+            source: Origin::Store,
+        })
 }
 
 pub fn env_references(text: &str) -> Vec<EnvReference<'_>> {

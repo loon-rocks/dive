@@ -5,7 +5,7 @@ use graph_core::secrets::references::{self, Reference};
 use graph_core::secrets::{
     is_secret_name, ChainedSource, CredentialStore, EnvSource, SecretSource, SecretStore,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -37,20 +37,19 @@ impl Secrets {
             .filter(|value| !value.is_empty())
     }
 
-    fn store_value(&self, name: &str) -> Option<String> {
+    fn store_value(&self, name: &str, project: Option<&str>) -> Option<String> {
         self.store
-            .get(name)
+            .get_in(name, project)
             .ok()
             .flatten()
             .filter(|value| !value.is_empty())
     }
 
-    fn status(&self, name: &str) -> SecretStatus {
-        match (self.env_value(name), self.store_value(name)) {
-            (Some(_), Some(_)) => SecretStatus::EnvShadowsStore,
-            (Some(_), None) => SecretStatus::Env,
-            (None, Some(_)) => SecretStatus::Store,
-            (None, None) => SecretStatus::Missing,
+    fn values(&self, name: &str, project: Option<&str>) -> Values {
+        Values {
+            env: self.env_value(name),
+            project: project.and_then(|id| self.store_value(name, Some(id))),
+            shared: self.store_value(name, None),
         }
     }
 
@@ -74,6 +73,84 @@ impl std::fmt::Debug for Secrets {
             .field("env", &self.env)
             .field("store", &self.store)
             .finish()
+    }
+}
+
+struct Values {
+    env: Option<String>,
+    project: Option<String>,
+    shared: Option<String>,
+}
+
+impl Values {
+    fn in_use(&self) -> Option<Layer> {
+        if self.env.is_some() {
+            Some(Layer::Env)
+        } else if self.project.is_some() {
+            Some(Layer::Project)
+        } else if self.shared.is_some() {
+            Some(Layer::Shared)
+        } else {
+            None
+        }
+    }
+
+    fn value(&self, layer: Layer) -> Option<&String> {
+        match layer {
+            Layer::Env => self.env.as_ref(),
+            Layer::Project => self.project.as_ref(),
+            Layer::Shared => self.shared.as_ref(),
+        }
+    }
+
+    fn status(&self) -> SecretStatus {
+        let stored = self.project.is_some() || self.shared.is_some();
+        match (self.env.is_some(), stored) {
+            (true, true) => SecretStatus::EnvShadowsStore,
+            (true, false) => SecretStatus::Env,
+            (false, true) => SecretStatus::Store,
+            (false, false) => SecretStatus::Missing,
+        }
+    }
+
+    fn masked(&self, layer: Layer) -> Option<String> {
+        self.value(layer).map(|value| mask(value))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SecretScope {
+    Project,
+    Shared,
+}
+
+impl SecretScope {
+    pub fn layer(self) -> Layer {
+        match self {
+            SecretScope::Project => Layer::Project,
+            SecretScope::Shared => Layer::Shared,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Layer {
+    Env,
+    Project,
+    Shared,
+}
+
+impl Layer {
+    pub const ALL: [Layer; 3] = [Layer::Env, Layer::Project, Layer::Shared];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Layer::Env => "env",
+            Layer::Project => "project",
+            Layer::Shared => "shared",
+        }
     }
 }
 
@@ -105,9 +182,17 @@ pub struct StoreState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SecretEntry {
     pub name: String,
     pub status: SecretStatus,
+    pub in_use: Option<Layer>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shared_value: Option<String>,
     pub references: Vec<Reference>,
 }
 
@@ -115,6 +200,8 @@ pub struct SecretEntry {
 pub struct SecretList {
     pub secrets: Vec<SecretEntry>,
     pub count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
     pub store: StoreState,
     pub problems: Vec<String>,
 }
@@ -124,25 +211,44 @@ pub struct SecretList {
 pub struct SecretDetail {
     pub name: String,
     pub status: SecretStatus,
+    pub in_use: Option<Layer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub store_value: Option<String>,
+    pub project_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shared_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
     pub references: Vec<Reference>,
     pub store: StoreState,
     pub problems: Vec<String>,
+}
+
+impl SecretDetail {
+    pub fn value(&self, layer: Layer) -> Option<&String> {
+        match layer {
+            Layer::Env => self.env_value.as_ref(),
+            Layer::Project => self.project_value.as_ref(),
+            Layer::Shared => self.shared_value.as_ref(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SecretSaved {
     pub name: String,
-    pub shadowed_by_env: bool,
+    pub scope: SecretScope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub shadowed_by: Option<Layer>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SecretRemoved {
     pub name: String,
+    pub scope: SecretScope,
     pub removed: bool,
 }
 
@@ -162,9 +268,18 @@ fn check_name(name: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn project_id(workspace: &Workspace) -> Option<String> {
+    graph_config::project_id(&workspace.config_paths())
+}
+
+fn project_config(workspace: &Workspace) -> PathBuf {
+    workspace.root().join(".graph").join("config.toml")
+}
+
 struct Collected {
     references: BTreeMap<String, Vec<Reference>>,
     problems: Vec<String>,
+    project: Option<String>,
 }
 
 fn resolve_dir(root: &Path, path: &Path) -> PathBuf {
@@ -179,7 +294,6 @@ fn resolve_dir(root: &Path, path: &Path) -> PathBuf {
 fn collect(workspace: &Workspace, secrets: &Secrets) -> Collected {
     collect_layers(&workspace.config_paths(), workspace.root(), secrets)
 }
-
 fn collect_layers(paths: &[PathBuf], root: &Path, secrets: &Secrets) -> Collected {
     let mut found = Vec::new();
     let mut problems = Vec::new();
@@ -250,6 +364,7 @@ fn collect_layers(paths: &[PathBuf], root: &Path, secrets: &Secrets) -> Collecte
     Collected {
         references: grouped,
         problems,
+        project: graph_config::project_id(paths),
     }
 }
 
@@ -258,18 +373,27 @@ pub fn list(workspace: &Workspace, secrets: &Secrets) -> SecretList {
 }
 
 fn listed(collected: Collected, secrets: &Secrets) -> SecretList {
+    let project = collected.project.as_deref();
     let entries: Vec<SecretEntry> = collected
         .references
         .into_iter()
-        .map(|(name, references)| SecretEntry {
-            status: secrets.status(&name),
-            name,
-            references,
+        .map(|(name, references)| {
+            let values = secrets.values(&name, project);
+            SecretEntry {
+                status: values.status(),
+                in_use: values.in_use(),
+                env_value: values.masked(Layer::Env),
+                project_value: values.masked(Layer::Project),
+                shared_value: values.masked(Layer::Shared),
+                name,
+                references,
+            }
         })
         .collect();
     SecretList {
         count: entries.len(),
         secrets: entries,
+        project: collected.project.clone(),
         store: secrets.store_state(),
         problems: collected.problems,
     }
@@ -281,34 +405,76 @@ pub fn show(workspace: &Workspace, secrets: &Secrets, name: &str) -> Result<Secr
 }
 
 fn detail(mut collected: Collected, secrets: &Secrets, name: &str) -> SecretDetail {
+    let values = secrets.values(name, collected.project.as_deref());
     SecretDetail {
         name: name.to_string(),
-        status: secrets.status(name),
-        env_value: secrets.env_value(name).map(|value| mask(&value)),
-        store_value: secrets.store_value(name).map(|value| mask(&value)),
+        status: values.status(),
+        in_use: values.in_use(),
+        env_value: values.masked(Layer::Env),
+        project_value: values.masked(Layer::Project),
+        shared_value: values.masked(Layer::Shared),
+        project: collected.project.take(),
         references: collected.references.remove(name).unwrap_or_default(),
         store: secrets.store_state(),
         problems: collected.problems,
     }
 }
 
-pub fn set(secrets: &Secrets, name: &str, value: &str) -> Result<SecretSaved> {
+pub fn reveal(secrets: &Secrets, workspace: &Workspace, name: &str) -> Option<String> {
+    let values = secrets.values(name, project_id(workspace).as_deref());
+    let layer = values.in_use()?;
+    values.value(layer).cloned()
+}
+
+pub fn set(
+    secrets: &Secrets,
+    workspace: &Workspace,
+    name: &str,
+    value: &str,
+    scope: SecretScope,
+) -> Result<SecretSaved> {
     check_name(name)?;
     if value.is_empty() {
         bail!("no value given for {name}; an empty value is never stored");
     }
-    secrets.store.set(name, value)?;
+    secrets.store.status()?;
+    let project = match scope {
+        SecretScope::Project => Some(graph_config::ensure_project_id(&project_config(workspace))?),
+        SecretScope::Shared => project_id(workspace),
+    };
+    let target = match scope {
+        SecretScope::Project => project.as_deref(),
+        SecretScope::Shared => None,
+    };
+    secrets.store.set_in(name, target, value)?;
+    let values = secrets.values(name, project.as_deref());
+    let shadowed_by = values.in_use().filter(|layer| *layer < scope.layer());
     Ok(SecretSaved {
         name: name.to_string(),
-        shadowed_by_env: secrets.env_value(name).is_some(),
+        scope,
+        project: target.map(str::to_string),
+        shadowed_by,
     })
 }
 
-pub fn remove(secrets: &Secrets, name: &str) -> Result<SecretRemoved> {
+pub fn remove(
+    secrets: &Secrets,
+    workspace: &Workspace,
+    name: &str,
+    scope: SecretScope,
+) -> Result<SecretRemoved> {
     check_name(name)?;
+    let removed = match scope {
+        SecretScope::Shared => secrets.store.remove_in(name, None)?,
+        SecretScope::Project => match project_id(workspace) {
+            Some(id) => secrets.store.remove_in(name, Some(&id))?,
+            None => false,
+        },
+    };
     Ok(SecretRemoved {
         name: name.to_string(),
-        removed: secrets.store.remove(name)?,
+        scope,
+        removed,
     })
 }
 
