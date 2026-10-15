@@ -1,4 +1,4 @@
-use super::app::Msg;
+use super::event::WorkbenchEvent;
 use super::runner::UiInterlocutor;
 use super::tools::SharedDraft;
 use graph_core::agent::conversation::HandoffGuard;
@@ -111,8 +111,10 @@ pub fn view(draft: &SharedDraft, pipeline: &Pipeline) -> Option<ArtifactView> {
     })
 }
 
-fn publish(draft: &SharedDraft, pipeline: &Pipeline, tx: &UnboundedSender<Msg>) {
-    let _ = tx.send(Msg::ArtifactChanged(view(draft, pipeline).map(Box::new)));
+fn publish(draft: &SharedDraft, pipeline: &Pipeline, tx: &UnboundedSender<WorkbenchEvent>) {
+    let _ = tx.send(WorkbenchEvent::ArtifactChanged(
+        view(draft, pipeline).map(Box::new),
+    ));
 }
 
 fn outcome(result: Value, is_error: bool) -> ToolOutcome {
@@ -133,7 +135,7 @@ async fn check(pipeline: &Pipeline, kind: ArtifactKind, yaml: &str) -> Vec<Strin
 pub async fn set_artifact(
     draft: &SharedDraft,
     pipeline: &Pipeline,
-    tx: &UnboundedSender<Msg>,
+    tx: &UnboundedSender<WorkbenchEvent>,
     input: &Value,
 ) -> ToolOutcome {
     let Some(kind) = input["kind"].as_str().and_then(ArtifactKind::parse) else {
@@ -197,7 +199,7 @@ pub async fn set_artifact(
 pub async fn try_artifact(
     draft: &SharedDraft,
     pipeline: &Pipeline,
-    tx: &UnboundedSender<Msg>,
+    tx: &UnboundedSender<WorkbenchEvent>,
     input: &Value,
 ) -> ToolOutcome {
     let yaml = match &draft.lock().unwrap().artifact {
@@ -254,7 +256,7 @@ fn for_the_model(run: Value) -> Value {
 pub async fn save_artifact(
     draft: &SharedDraft,
     pipeline: &Pipeline,
-    tx: &UnboundedSender<Msg>,
+    tx: &UnboundedSender<WorkbenchEvent>,
     overwrite: bool,
     untested: bool,
     confirm: bool,
@@ -382,7 +384,7 @@ pub fn existing(
 pub async fn open_existing(
     draft: &SharedDraft,
     pipeline: &Pipeline,
-    tx: &UnboundedSender<Msg>,
+    tx: &UnboundedSender<WorkbenchEvent>,
     kind: ArtifactKind,
     name: &str,
 ) -> Result<String, String> {
@@ -438,7 +440,7 @@ pub async fn list_tools(pipeline: &Pipeline) -> ToolOutcome {
 pub fn discard_artifact(
     draft: &SharedDraft,
     pipeline: &Pipeline,
-    tx: &UnboundedSender<Msg>,
+    tx: &UnboundedSender<WorkbenchEvent>,
 ) -> Option<String> {
     let discarded = draft.lock().unwrap().artifact.take()?;
     publish(draft, pipeline, tx);
@@ -452,7 +454,7 @@ pub fn discard_artifact(
 pub fn handoff_guard(
     draft: SharedDraft,
     pipeline: Arc<Pipeline>,
-    tx: UnboundedSender<Msg>,
+    tx: UnboundedSender<WorkbenchEvent>,
 ) -> HandoffGuard {
     Arc::new(move |from: &str, to: &str| {
         let mut state = draft.lock().unwrap();

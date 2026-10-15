@@ -4,6 +4,7 @@
 
 use super::edit::{EditTarget, PendingEdit, StepTarget};
 use super::editor::{EditorContext, EditorState, Resume};
+use super::event::{GateKind, WorkbenchEvent};
 use super::form::{Form, FormAction, Verdict};
 use super::plan_ws::{PlanWorkspace, RowKey, WsTab};
 use super::runner::UiDecision;
@@ -12,7 +13,6 @@ use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use graph_core::pipeline::doc::PlanDoc;
-use graph_core::{ToolDef, ToolShape};
 use ratatui::layout::{Position, Rect};
 use serde_json::{Map, Value};
 use std::cell::RefCell;
@@ -24,22 +24,6 @@ use tui_textarea::TextArea;
 pub enum Focus {
     Chat,
     Workspace,
-}
-
-/// Why the debugger paused.
-#[derive(Debug, Clone)]
-pub enum GateKind {
-    /// Before a tool call: step, continue, skip, or abort.
-    BeforeCall,
-    /// The call failed (break-on-exception): replace, let it fail, or abort.
-    OnError { error: Value },
-    /// An `ask` step is putting a question to the user. Not a debugger
-    /// pause: the run is waiting on an answer it declared it needs, so the
-    /// only two replies are an answer (the inject editor) and a decline.
-    Ask {
-        schema: Value,
-        default: Option<Value>,
-    },
 }
 
 /// A pending debugger decision: the run is parked on `reply`.
@@ -273,86 +257,7 @@ pub enum Msg {
     Term(Event),
     /// Animation heartbeat from the event loop, only while work runs.
     Tick,
-    // Chat / agent turn
-    AgentDelta(String),
-    AgentToolStarted(String),
-    AgentToolFinished {
-        name: String,
-        is_error: bool,
-    },
-    /// Ok carries the turn's final assistant text — the completed
-    /// response is canonical; deltas are just its live preview.
-    TurnFinished(Result<String, String>),
-    ActiveAgent {
-        name: String,
-        note: Option<String>,
-    },
-    AgentNotice(String),
-    // Draft changes published by the workbench tools; `dirty` is false
-    // when the draft came straight from disk (load), true for edits.
-    DraftReplaced {
-        doc: Box<PlanDoc>,
-        dirty: bool,
-    },
-    // Plan run
-    /// A run was launched by the agent's `workbench__try_artifact` tool (the
-    /// keyboard path resets the pane directly). `breakpoints` is Some when
-    /// the agent replaced the set.
-    RunStarted {
-        gated: bool,
-        breakpoints: Option<Vec<String>>,
-    },
-    Planning,
-    Synthesizing,
-    /// End-of-run token/cost summary, already formatted.
-    RunUsage(String),
-    StepStarted {
-        path: String,
-        tool: String,
-        input: Value,
-        /// True when the event belongs to the plan being run (empty call
-        /// stack) — body sub-steps included; nested plans excluded.
-        in_plan: bool,
-    },
-    StepFinished {
-        path: String,
-        result: Value,
-        is_error: bool,
-        in_plan: bool,
-    },
-    SolverDelta(String),
-    GateAsk {
-        kind: GateKind,
-        path: String,
-        tool: String,
-        input: Value,
-        call_stack: Vec<String>,
-        scope: Map<String, Value>,
-        reply: oneshot::Sender<UiDecision>,
-    },
-    RunFinished {
-        headline: String,
-        is_error: bool,
-        /// A fired `exit` ended the run early — never-run steps and the
-        /// finish were skipped, not completed.
-        exited: bool,
-        results: Map<String, Value>,
-    },
-    // Effect completions
-    Validated(Vec<String>),
-    ContextLoaded {
-        tools: Vec<ToolDef>,
-        shapes: Vec<ToolShape>,
-    },
-    Saved(Result<String, String>),
-    ArtifactChanged(Option<Box<super::artifact::ArtifactView>>),
-    /// A one-line status from the effect executor (e.g. an undo miss).
-    Status(String),
-    EditOutcome {
-        committed: bool,
-        introduced: Vec<String>,
-        pre_existing: Vec<String>,
-    },
+    Workbench(WorkbenchEvent),
 }
 
 impl Msg {
@@ -361,103 +266,24 @@ impl Msg {
     /// everything meaningful. None for the pure animation heartbeat.
     pub fn log_line(&self) -> Option<(tracing::Level, String)> {
         use tracing::Level;
-        let line = match self {
-            Msg::Tick => return None,
-            Msg::Term(Event::Key(key)) => {
-                return Some((
-                    Level::TRACE,
-                    format!("key {:?} {:?}", key.modifiers, key.code),
-                ))
-            }
+        match self {
+            Msg::Tick => None,
+            Msg::Term(Event::Key(key)) => Some((
+                Level::TRACE,
+                format!("key {:?} {:?}", key.modifiers, key.code),
+            )),
             Msg::Term(Event::Paste(text)) => {
-                return Some((Level::TRACE, format!("paste ({} chars)", text.len())))
+                Some((Level::TRACE, format!("paste ({} chars)", text.len())))
             }
-            Msg::Term(event) => return Some((Level::TRACE, format!("term event {event:?}"))),
-            Msg::AgentDelta(text) => {
-                return Some((Level::TRACE, format!("agent delta ({} chars)", text.len())))
-            }
-            Msg::SolverDelta(text) => {
-                return Some((Level::TRACE, format!("solver delta ({} chars)", text.len())))
-            }
-            Msg::AgentToolStarted(name) => format!("agent tool started: {name}"),
-            Msg::AgentToolFinished { name, is_error } => {
-                format!(
-                    "agent tool finished: {name}{}",
-                    if *is_error { " (error)" } else { "" }
-                )
-            }
-            Msg::TurnFinished(result) => match result {
-                Ok(text) => format!("agent turn finished ({} chars)", text.len()),
-                Err(error) => format!("agent turn failed: {error}"),
-            },
-            Msg::ActiveAgent { name, .. } => format!("active agent: {name}"),
-            Msg::AgentNotice(text) => format!("agent notice: {text}"),
-            Msg::DraftReplaced { doc, dirty } => format!(
-                "draft replaced: '{}' ({} steps, dirty={dirty})",
-                doc.identifier,
-                doc.steps.len()
-            ),
-            Msg::RunStarted { gated, breakpoints } => {
-                format!("agent run started (gated={gated}, breakpoints={breakpoints:?})")
-            }
-            Msg::Planning => "planning…".to_string(),
-            Msg::Synthesizing => "synthesizing…".to_string(),
-            Msg::RunUsage(summary) => format!("usage: {summary}"),
-            Msg::StepStarted { path, tool, .. } => format!("step started: {path} {tool}"),
-            Msg::StepFinished {
-                path,
-                result,
-                is_error,
-                ..
-            } => format!(
-                "step finished: {path}{} ({} result bytes)",
-                if *is_error { " (error)" } else { "" },
-                result.to_string().len()
-            ),
-            Msg::GateAsk {
-                kind,
-                path,
-                tool,
-                call_stack,
-                ..
-            } => format!(
-                "gate ask: {} at {path} ({tool}), call-stack depth {}",
-                match kind {
-                    GateKind::BeforeCall => "before-call",
-                    GateKind::OnError { .. } => "on-error",
-                    GateKind::Ask { .. } => "ask",
-                },
-                call_stack.len()
-            ),
-            Msg::RunFinished {
-                headline, is_error, ..
-            } => format!("run finished (is_error={is_error}): {headline}"),
-            Msg::Validated(problems) => format!("validated: {} problem(s)", problems.len()),
-            Msg::ContextLoaded { tools, shapes } => format!(
-                "context loaded: {} tools, {} shapes",
-                tools.len(),
-                shapes.len()
-            ),
-            Msg::Saved(result) => match result {
-                Ok(path) => format!("saved to {path}"),
-                Err(error) => format!("save failed: {error}"),
-            },
-            Msg::Status(text) => format!("status: {text}"),
-            Msg::ArtifactChanged(view) => match view {
-                Some(view) => format!("artifact: {} draft shown", view.kind.label()),
-                None => "artifact: none".to_string(),
-            },
-            Msg::EditOutcome {
-                committed,
-                introduced,
-                pre_existing,
-            } => format!(
-                "edit outcome: committed={committed}, {} introduced, {} pre-existing",
-                introduced.len(),
-                pre_existing.len()
-            ),
-        };
-        Some((Level::DEBUG, line))
+            Msg::Term(event) => Some((Level::TRACE, format!("term event {event:?}"))),
+            Msg::Workbench(event) => Some(event.log_line()),
+        }
+    }
+}
+
+impl From<WorkbenchEvent> for Msg {
+    fn from(event: WorkbenchEvent) -> Self {
+        Msg::Workbench(event)
     }
 }
 
@@ -513,8 +339,8 @@ impl Effect {
     }
 }
 
-pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
-    match msg {
+pub fn update(app: &mut App, msg: impl Into<Msg>) -> Vec<Effect> {
+    match msg.into() {
         Msg::Term(event) => on_terminal_event(app, event),
 
         Msg::Tick => {
@@ -522,7 +348,13 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             Vec::new()
         }
 
-        Msg::AgentDelta(text) => {
+        Msg::Workbench(event) => on_event(app, event),
+    }
+}
+
+fn on_event(app: &mut App, event: WorkbenchEvent) -> Vec<Effect> {
+    match event {
+        WorkbenchEvent::AgentDelta(text) => {
             if let Some(ChatEntry::Assistant(buffer)) = app.chat.entries.last_mut() {
                 buffer.push_str(&text);
             } else {
@@ -531,13 +363,13 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             app.chat.scroll.set(0);
             Vec::new()
         }
-        Msg::AgentToolStarted(name) => {
+        WorkbenchEvent::AgentToolStarted(name) => {
             app.chat
                 .entries
                 .push(ChatEntry::Activity(format!("→ {name}")));
             Vec::new()
         }
-        Msg::AgentToolFinished { name, is_error } => {
+        WorkbenchEvent::AgentToolFinished { name, is_error } => {
             if is_error {
                 app.chat
                     .entries
@@ -545,18 +377,18 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
-        Msg::ActiveAgent { name, note } => {
+        WorkbenchEvent::ActiveAgent { name, note } => {
             app.agent = name;
             if let Some(note) = note {
                 app.chat.entries.push(ChatEntry::Activity(note));
             }
             Vec::new()
         }
-        Msg::AgentNotice(text) => {
+        WorkbenchEvent::AgentNotice(text) => {
             app.chat.entries.push(ChatEntry::Activity(text));
             Vec::new()
         }
-        Msg::TurnFinished(result) => {
+        WorkbenchEvent::TurnFinished(result) => {
             app.mode = Mode::Idle;
             app.turn_in_flight = false;
             app.in_flight = None;
@@ -571,7 +403,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             Vec::new()
         }
 
-        Msg::DraftReplaced { doc, dirty } => {
+        WorkbenchEvent::DraftReplaced { doc, dirty } => {
             app.status = if dirty {
                 "draft updated".to_string()
             } else {
@@ -582,7 +414,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             vec![Effect::Validate]
         }
 
-        Msg::RunStarted { gated, breakpoints } => {
+        WorkbenchEvent::RunStarted { gated, breakpoints } => {
             if let Some(breakpoints) = breakpoints {
                 app.breakpoints = breakpoints.into_iter().collect();
             }
@@ -594,7 +426,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             };
             Vec::new()
         }
-        Msg::Planning => {
+        WorkbenchEvent::Planning => {
             app.ws.run_log_info("planning…");
             app.in_flight = Some(InFlight {
                 path: "planning".to_string(),
@@ -603,11 +435,11 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             });
             Vec::new()
         }
-        Msg::RunUsage(summary) => {
+        WorkbenchEvent::RunUsage(summary) => {
             app.ws.run_log_info(&summary);
             Vec::new()
         }
-        Msg::Synthesizing => {
+        WorkbenchEvent::Synthesizing => {
             app.ws.run_log_info("synthesizing…");
             app.ws.synthesizing();
             app.in_flight = Some(InFlight {
@@ -617,7 +449,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             });
             Vec::new()
         }
-        Msg::StepStarted {
+        WorkbenchEvent::StepStarted {
             path,
             tool,
             input,
@@ -634,7 +466,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
-        Msg::StepFinished {
+        WorkbenchEvent::StepFinished {
             path,
             result,
             is_error,
@@ -655,11 +487,11 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
-        Msg::SolverDelta(text) => {
+        WorkbenchEvent::SolverDelta(text) => {
             app.ws.solver_text.push_str(&text);
             Vec::new()
         }
-        Msg::GateAsk {
+        WorkbenchEvent::GateAsk {
             kind,
             path,
             tool,
@@ -712,7 +544,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
-        Msg::RunFinished {
+        WorkbenchEvent::RunFinished {
             headline,
             is_error,
             exited,
@@ -729,7 +561,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             Vec::new()
         }
 
-        Msg::Validated(problems) => {
+        WorkbenchEvent::Validated(problems) => {
             let mut status = if problems.is_empty() {
                 "✓ plan is valid".to_string()
             } else {
@@ -742,11 +574,11 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             app.ws.diagnostics = problems;
             Vec::new()
         }
-        Msg::ContextLoaded { tools, shapes } => {
+        WorkbenchEvent::ContextLoaded { tools, shapes } => {
             app.ws.set_context(tools, shapes);
             Vec::new()
         }
-        Msg::Saved(result) => {
+        WorkbenchEvent::Saved(result) => {
             match result {
                 Ok(path) => {
                     app.dirty = false;
@@ -756,11 +588,11 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
-        Msg::Status(text) => {
+        WorkbenchEvent::Status(text) => {
             app.status = text;
             Vec::new()
         }
-        Msg::ArtifactChanged(view) => {
+        WorkbenchEvent::ArtifactChanged(view) => {
             app.discard_armed = false;
             app.artifact = view.map(|view| *view);
             if app.artifact.is_some() {
@@ -768,7 +600,7 @@ pub fn update(app: &mut App, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
-        Msg::EditOutcome {
+        WorkbenchEvent::EditOutcome {
             committed,
             introduced,
             pre_existing,
@@ -1972,10 +1804,10 @@ steps:
 "#)
     }
 
-    fn gate_ask(kind: GateKind, path: &str) -> (Msg, oneshot::Receiver<UiDecision>) {
+    fn gate_ask(kind: GateKind, path: &str) -> (WorkbenchEvent, oneshot::Receiver<UiDecision>) {
         let (reply, receiver) = oneshot::channel();
         (
-            Msg::GateAsk {
+            WorkbenchEvent::GateAsk {
                 kind,
                 path: path.to_string(),
                 tool: "t__search".to_string(),
@@ -1995,7 +1827,7 @@ steps:
         app.ws.tab = WsTab::Run;
         update(
             &mut app,
-            Msg::ArtifactChanged(Some(Box::new(ArtifactView {
+            WorkbenchEvent::ArtifactChanged(Some(Box::new(ArtifactView {
                 kind: ArtifactKind::Agent,
                 yaml: "name: triager\n".to_string(),
                 problems: Vec::new(),
@@ -2017,7 +1849,7 @@ steps:
             vec![Effect::DiscardArtifact]
         );
 
-        update(&mut app, Msg::ArtifactChanged(None));
+        update(&mut app, WorkbenchEvent::ArtifactChanged(None));
         assert!(app.artifact.is_none());
         assert_eq!(update(&mut app, ctrl('s')), vec![Effect::SavePlan]);
     }
@@ -2027,21 +1859,24 @@ steps:
         let mut app = App::new(None);
         app.chat.input.insert_str("draft a plan");
         update(&mut app, key(KeyCode::Enter));
-        update(&mut app, Msg::AgentDelta("Drafted the plan.".to_string()));
         update(
             &mut app,
-            Msg::AgentToolStarted("transfer_to_plan_editor".to_string()),
+            WorkbenchEvent::AgentDelta("Drafted the plan.".to_string()),
         );
         update(
             &mut app,
-            Msg::ActiveAgent {
+            WorkbenchEvent::AgentToolStarted("transfer_to_plan_editor".to_string()),
+        );
+        update(
+            &mut app,
+            WorkbenchEvent::ActiveAgent {
                 name: "plan_editor".to_string(),
                 note: Some("⇢ orchestrator handed off to plan_editor".to_string()),
             },
         );
         update(
             &mut app,
-            Msg::TurnFinished(Ok("Drafted the plan.".to_string())),
+            WorkbenchEvent::TurnFinished(Ok("Drafted the plan.".to_string())),
         );
         let replies = app
             .chat
@@ -2071,7 +1906,10 @@ steps:
         assert!(update(&mut app, key(KeyCode::Enter)).is_empty());
 
         // Turn completion returns to idle.
-        update(&mut app, Msg::TurnFinished(Ok("done".to_string())));
+        update(
+            &mut app,
+            WorkbenchEvent::TurnFinished(Ok("done".to_string())),
+        );
         assert!(matches!(app.mode, Mode::Idle));
         assert!(app.turn_started.is_none());
     }
@@ -2144,23 +1982,32 @@ steps:
     fn turn_finished_renders_unstreamed_text_and_flags_empty_turns() {
         // Nothing streamed: the final text is appended.
         let mut app = App::new(None);
-        update(&mut app, Msg::TurnFinished(Ok("the answer".to_string())));
+        update(
+            &mut app,
+            WorkbenchEvent::TurnFinished(Ok("the answer".to_string())),
+        );
         assert!(
             matches!(app.chat.entries.last(), Some(ChatEntry::Assistant(t)) if t == "the answer")
         );
 
         // Streamed already: no duplicate entry.
         let before = app.chat.entries.len();
-        update(&mut app, Msg::TurnFinished(Ok("the answer".to_string())));
+        update(
+            &mut app,
+            WorkbenchEvent::TurnFinished(Ok("the answer".to_string())),
+        );
         assert_eq!(app.chat.entries.len(), before);
 
         // Deltas drifted: the completed response wins.
-        update(&mut app, Msg::TurnFinished(Ok("revised".to_string())));
+        update(
+            &mut app,
+            WorkbenchEvent::TurnFinished(Ok("revised".to_string())),
+        );
         assert!(matches!(app.chat.entries.last(), Some(ChatEntry::Assistant(t)) if t == "revised"));
 
         // Empty text with nothing streamed: an explicit no-output line.
         let mut app = App::new(None);
-        update(&mut app, Msg::TurnFinished(Ok(String::new())));
+        update(&mut app, WorkbenchEvent::TurnFinished(Ok(String::new())));
         assert!(
             matches!(app.chat.entries.last(), Some(ChatEntry::Activity(t)) if t.contains("no output"))
         );
@@ -2171,7 +2018,7 @@ steps:
         let mut app = App::new(None);
         let effects = update(
             &mut app,
-            Msg::DraftReplaced {
+            WorkbenchEvent::DraftReplaced {
                 doc: Box::new(two_step_doc()),
                 dirty: true,
             },
@@ -2187,7 +2034,7 @@ steps:
         let mut app = App::new(None);
         update(
             &mut app,
-            Msg::DraftReplaced {
+            WorkbenchEvent::DraftReplaced {
                 doc: Box::new(two_step_doc()),
                 dirty: false,
             },
@@ -2214,7 +2061,7 @@ steps:
 
         update(
             &mut app,
-            Msg::StepStarted {
+            WorkbenchEvent::StepStarted {
                 path: "E0".into(),
                 tool: "t__search".into(),
                 input: json!({"query": "x"}),
@@ -2226,7 +2073,7 @@ steps:
 
         update(
             &mut app,
-            Msg::StepFinished {
+            WorkbenchEvent::StepFinished {
                 path: "E0".into(),
                 result: json!({"values": []}),
                 is_error: false,
@@ -2239,7 +2086,7 @@ steps:
 
         update(
             &mut app,
-            Msg::RunFinished {
+            WorkbenchEvent::RunFinished {
                 headline: "done".into(),
                 is_error: false,
                 exited: false,
@@ -2383,7 +2230,7 @@ steps:
         let (reply, mut receiver) = oneshot::channel();
         update(
             &mut app,
-            Msg::GateAsk {
+            WorkbenchEvent::GateAsk {
                 kind: GateKind::Ask {
                     schema: schema.clone(),
                     default: Some(json!({"limit": 5})),
@@ -2555,7 +2402,7 @@ steps:
 
         update(
             &mut app,
-            Msg::StepFinished {
+            WorkbenchEvent::StepFinished {
                 path: "E0".into(),
                 result: json!({"patched": true}),
                 is_error: false,
@@ -2592,7 +2439,7 @@ steps:
 
         update(
             &mut app,
-            Msg::RunStarted {
+            WorkbenchEvent::RunStarted {
                 gated: true,
                 breakpoints: Some(vec!["E1".to_string()]),
             },
@@ -2616,7 +2463,7 @@ steps:
 
         update(
             &mut app,
-            Msg::RunFinished {
+            WorkbenchEvent::RunFinished {
                 headline: "done".into(),
                 is_error: false,
                 exited: false,
@@ -2624,7 +2471,10 @@ steps:
             },
         );
         assert!(matches!(app.mode, Mode::Chatting));
-        update(&mut app, Msg::TurnFinished(Ok("done".to_string())));
+        update(
+            &mut app,
+            WorkbenchEvent::TurnFinished(Ok("done".to_string())),
+        );
         assert!(matches!(app.mode, Mode::Idle));
     }
 
@@ -2637,7 +2487,7 @@ steps:
 
         update(
             &mut app,
-            Msg::StepStarted {
+            WorkbenchEvent::StepStarted {
                 path: "E0".into(),
                 tool: "t__search".into(),
                 input: json!({}),
@@ -2647,7 +2497,7 @@ steps:
         // A finish for a different path must not clear the indicator.
         update(
             &mut app,
-            Msg::StepFinished {
+            WorkbenchEvent::StepFinished {
                 path: "E9".into(),
                 result: json!(null),
                 is_error: false,
@@ -2698,14 +2548,13 @@ steps:
         assert_eq!(level, tracing::Level::TRACE, "keys are trace-level noise");
         assert!(line.contains("Char('n')"), "{line}");
 
-        let (level, line) = Msg::StepStarted {
+        let (level, line) = WorkbenchEvent::StepStarted {
             path: "E3/do.2/E10".into(),
             tool: "user__echo".into(),
             input: json!({}),
             in_plan: false,
         }
-        .log_line()
-        .unwrap();
+        .log_line();
         assert_eq!(level, tracing::Level::DEBUG);
         assert!(
             line.contains("E3/do.2/E10") && line.contains("user__echo"),
@@ -2718,7 +2567,7 @@ steps:
             },
             "E2",
         );
-        let (level, line) = msg.log_line().unwrap();
+        let (level, line) = msg.log_line();
         assert_eq!(level, tracing::Level::DEBUG);
         assert!(line.contains("on-error") && line.contains("E2"), "{line}");
     }
@@ -2915,14 +2764,14 @@ steps:
     }
 
     /// The last link in the chain the unit tests above cover piecewise:
-    /// effects drains the ledger, ChannelSink turns it into `Msg::RunUsage`,
+    /// effects drains the ledger, ChannelSink turns it into `WorkbenchEvent::RunUsage`,
     /// and the reducer has to put it somewhere a human reads.
     #[test]
     fn a_run_usage_message_lands_in_the_run_log() {
         let mut app = App::new(None);
         update(
             &mut app,
-            Msg::RunUsage("6 calls · 8k in / 248 out · $0.01".into()),
+            WorkbenchEvent::RunUsage("6 calls · 8k in / 248 out · $0.01".into()),
         );
         let logged = app.ws.run_log.iter().any(|line| {
             matches!(line, crate::workbench::plan_ws::RunLine::Info(text)
@@ -3031,7 +2880,7 @@ solver:
 
         update(
             &mut app,
-            Msg::EditOutcome {
+            WorkbenchEvent::EditOutcome {
                 committed: false,
                 introduced: vec!["dup".to_string()],
                 pre_existing: Vec::new(),
@@ -3050,7 +2899,7 @@ solver:
         ));
         update(
             &mut app,
-            Msg::EditOutcome {
+            WorkbenchEvent::EditOutcome {
                 committed: false,
                 introduced: Vec::new(),
                 pre_existing: vec!["old".to_string()],
@@ -3064,7 +2913,7 @@ solver:
 
         update(
             &mut app,
-            Msg::EditOutcome {
+            WorkbenchEvent::EditOutcome {
                 committed: true,
                 introduced: Vec::new(),
                 pre_existing: Vec::new(),
@@ -3192,7 +3041,7 @@ solver:
 
         update(
             &mut app,
-            Msg::EditOutcome {
+            WorkbenchEvent::EditOutcome {
                 committed: true,
                 introduced: Vec::new(),
                 pre_existing: Vec::new(),
@@ -3249,14 +3098,14 @@ solver:
         doc.steps[2].tool_name = "t__search".to_string();
         update(
             &mut app,
-            Msg::DraftReplaced {
+            WorkbenchEvent::DraftReplaced {
                 doc: Box::new(doc),
                 dirty: true,
             },
         );
         update(
             &mut app,
-            Msg::EditOutcome {
+            WorkbenchEvent::EditOutcome {
                 committed: true,
                 introduced: Vec::new(),
                 pre_existing: Vec::new(),
@@ -3268,7 +3117,7 @@ solver:
             RowKey::Step("E4".into()),
             "selected by id, not by doc index"
         );
-        update(&mut app, Msg::Validated(Vec::new()));
+        update(&mut app, WorkbenchEvent::Validated(Vec::new()));
         assert!(app.status.contains("unsaved"), "{}", app.status);
     }
 
@@ -3284,7 +3133,7 @@ solver:
         assert!(matches!(app.mode, Mode::Idle));
         update(
             &mut app,
-            Msg::ContextLoaded {
+            WorkbenchEvent::ContextLoaded {
                 tools: Vec::new(),
                 shapes: Vec::new(),
             },

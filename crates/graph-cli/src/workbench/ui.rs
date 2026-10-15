@@ -1,8 +1,9 @@
 //! Rendering: the generic dual-pane shell (chat · workspace · status bar ·
 //! modals) with the plan workspace as the right-pane body.
 
-use super::app::{App, ChatEntry, Focus, GateKind, GatePrompt, Mode};
+use super::app::{App, ChatEntry, Focus, GatePrompt, Mode};
 use super::editor::EditorContext;
+use super::event::GateKind;
 use super::form::{Form, Verdict};
 use super::plan_ws::{PlanWorkspace, RowKey, RunLine, StepRow, StepStatus, WsTab};
 use graph_core::pipeline::{

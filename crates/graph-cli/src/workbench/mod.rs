@@ -10,6 +10,7 @@ mod chat;
 mod edit;
 mod editor;
 mod effects;
+mod event;
 mod form;
 pub(crate) mod fs_tools;
 mod plan_ws;
@@ -33,6 +34,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use effects::WorkbenchContext;
+use event::WorkbenchEvent;
 use futures::StreamExt;
 use graph_core::pipeline::doc::{load_plan_doc, PlanDoc};
 use graph_core::{CompositeRegistry, EventSink, ExcludingRegistry, ToolRegistry};
@@ -142,7 +144,7 @@ async fn run_workbench(
         _ => None,
     };
     let store = runtime.store()?;
-    let (tx, mut rx) = mpsc::unbounded_channel::<Msg>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<WorkbenchEvent>();
 
     // Plan runs report through their own sink; gated runs add a UiGate.
     let user = runtime.config.user.name.as_deref();
@@ -260,9 +262,9 @@ async fn run_workbench(
             .map_err(anyhow::Error::msg)?;
         app.artifact = artifact::view(&context.draft, &context.pipeline);
     }
-    effects::run_effect(app::Effect::LoadContext, &context);
+    run_effect(app::Effect::LoadContext, &context);
     if app.ws.doc.is_some() {
-        effects::run_effect(app::Effect::Validate, &context);
+        run_effect(app::Effect::Validate, &context);
     }
 
     let (mut terminal, enhanced_keys) = setup_terminal()?;
@@ -292,7 +294,7 @@ fn resolve_doc(runtime: &Runtime, name_or_path: &str) -> Result<PlanDoc> {
 async fn event_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut App,
-    rx: &mut mpsc::UnboundedReceiver<Msg>,
+    rx: &mut mpsc::UnboundedReceiver<WorkbenchEvent>,
     context: &Arc<WorkbenchContext>,
 ) -> Result<()> {
     let mut term_events = EventStream::new();
@@ -308,7 +310,7 @@ async fn event_loop(
                 Some(Err(error)) => return Err(error.into()),
                 None => return Ok(()),
             },
-            Some(msg) = rx.recv() => msg,
+            Some(event) = rx.recv() => Msg::Workbench(event),
             _ = ticker.tick(), if app.wants_tick() => Msg::Tick,
         };
         if let Some((level, line)) = msg.log_line() {
@@ -321,7 +323,7 @@ async fn event_loop(
         let status_before = app.status.clone();
         for effect in app::update(app, msg) {
             tracing::debug!(target: "workbench", "effect: {}", effect.label());
-            effects::run_effect(effect, context);
+            run_effect(effect, context);
         }
         if app.mode.label() != mode_before {
             tracing::debug!(
@@ -336,6 +338,31 @@ async fn event_loop(
         if app.should_quit {
             return Ok(());
         }
+    }
+}
+
+fn run_effect(effect: app::Effect, context: &Arc<WorkbenchContext>) {
+    let ctx = context.clone();
+    match effect {
+        app::Effect::RunAgentTurn { message } => {
+            tokio::spawn(async move { ctx.run_agent_turn(message).await });
+        }
+        app::Effect::Agent { name } => ctx.select_agent(name),
+        app::Effect::StartRun { gated, input } => {
+            tokio::spawn(async move { ctx.start_run(gated, input).await });
+        }
+        app::Effect::Validate => ctx.validate(),
+        app::Effect::LoadContext => {
+            tokio::spawn(async move { ctx.load_context().await });
+        }
+        app::Effect::SyncDebug { breakpoints } => ctx.sync_debug(breakpoints),
+        app::Effect::ApplyEdit { edit, commit } => ctx.apply_edit(commit, |doc| edit.apply(doc)),
+        app::Effect::SavePlan => ctx.save_plan(),
+        app::Effect::SaveArtifact => {
+            tokio::spawn(async move { ctx.save_artifact().await });
+        }
+        app::Effect::DiscardArtifact => ctx.discard_artifact(),
+        app::Effect::RestoreDraft => ctx.restore_draft(),
     }
 }
 
