@@ -85,13 +85,13 @@ Run it from a release tag:
 
 ```bash
 graph plan run changes_since \
-  --input base=v0.15.0
+  --input base={{release_version}}
 ```
 
 The condition doesn't hold, so the plan carries on to `summary`:
 
 ```text
-→ exit {"message":"No commits since v0.15.0.",…}
+→ exit {"message":"No commits since {{release_version}}.",…}
 ✓ exit 24.2µs
 → builtin__infer {"instruction":"Summarize these commits in one sentence:…"}
 ✓ builtin__infer 2.1s

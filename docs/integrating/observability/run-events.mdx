@@ -10,7 +10,7 @@ Set `GRAPH_EVENTS=jsonl` and graph writes its progress to stderr as one JSON obj
 
 ```bash
 GRAPH_EVENTS=jsonl graph plan run weekly_changes \
-  --input base=v0.15.0 2> events.jsonl
+  --input base={{release_version}} 2> events.jsonl
 ```
 
 The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event has an `event` field naming its type.
@@ -22,7 +22,7 @@ The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event ha
   "event": "tool_started",
   "tool": "github__tool__git_log",
   "args": {
-    "base": "v0.15.0",
+    "base": "{{release_version}}",
     "head": "HEAD"
   }
 }

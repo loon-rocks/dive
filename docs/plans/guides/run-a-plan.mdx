@@ -66,7 +66,7 @@ Set `base` with `--input`:
 
 ```bash
 graph plan run changes_since \
-  --input base=v0.15.0
+  --input base={{release_version}}
 ```
 
 The plan prints its result as JSON on stdout:
@@ -94,7 +94,7 @@ Progress goes to stderr, so stdout carries only the result and pipes cleanly:
 
 ```bash
 graph plan run changes_since \
-  --input base=v0.15.0 \
+  --input base={{release_version}} \
   | jq -r '.commits[] | "\(.short_sha) \(.subject)"'
 ```
 

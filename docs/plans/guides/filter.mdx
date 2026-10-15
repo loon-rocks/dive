@@ -50,7 +50,7 @@ finish:
 
 ```bash
 graph plan run breaking_changes \
-  --input base=v0.15.0
+  --input base={{release_version}}
 ```
 
 `{{breaking.items}}` holds the 7 commits that passed, in their original order, and `{{breaking.dropped}}` the 21 that didn't:

@@ -43,11 +43,11 @@ graph tool test [OPTIONS] <NAME> [JSON|@FILE|-]
 ```
 
 ```bash Example 1
-graph tool test github__tool__git_log '{"base":"v0.15.0","head":"HEAD"}'
+graph tool test github__tool__git_log '{"base":"{{release_version}}","head":"HEAD"}'
 ```
 
 ```bash Example 2
-graph tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json
+graph tool test github__tool__git_log --input base={{release_version}} --input head=HEAD --json
 ```
 
 </RequestExample>
