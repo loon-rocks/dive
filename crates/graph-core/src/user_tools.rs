@@ -1117,7 +1117,7 @@ pub fn expand_env(value: &str, secrets: &dyn SecretSource) -> Result<String, Str
             (None, Some(default)) => default.to_string(),
             (None, None) => {
                 return Err(format!(
-                    "environment variable {var} referenced by tool env is not set"
+                    "environment variable {var} referenced by tool env is not set; set it, or store it with `graph secret set {var}`"
                 ))
             }
         };

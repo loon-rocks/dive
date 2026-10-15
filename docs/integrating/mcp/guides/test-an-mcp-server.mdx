@@ -73,7 +73,7 @@ A tool that returns an error still exits 0. Use `--json` and check `isError` in 
 - **A missing environment variable.** graph names the variable and the setting that uses it, and connects to your other servers as usual:
 
   ```text
-  mcp server 'tracker' cannot connect: environment variable TRACKER_TOKEN (mcp.tracker.headers.Authorization) is not set
+  mcp server 'tracker' cannot connect: environment variable TRACKER_TOKEN (mcp.tracker.headers.Authorization) is not set; set it, or store it with `graph secret set TRACKER_TOKEN`
   ```
 
 - **Anything else.** Run with `-v`, or set `GRAPH_LOG=debug`, to see graph's log of the connection on stderr.

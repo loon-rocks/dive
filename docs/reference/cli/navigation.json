@@ -57,6 +57,16 @@
     "root": "reference/cli/thread"
   },
   {
+    "group": "graph secret",
+    "pages": [
+      "reference/cli/secret/set",
+      "reference/cli/secret/rm",
+      "reference/cli/secret/list",
+      "reference/cli/secret/show"
+    ],
+    "root": "reference/cli/secret"
+  },
+  {
     "group": "graph mcp",
     "pages": [
       "reference/cli/mcp/list",

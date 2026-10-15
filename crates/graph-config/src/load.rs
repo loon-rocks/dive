@@ -288,7 +288,7 @@ fn distribute_missing_env(config: &mut Config, missing: Vec<(String, String)>) -
                 var,
             }),
             None => {
-                anyhow::bail!("environment variable {var} referenced in config ({path}) is not set")
+                anyhow::bail!("environment variable {var} referenced in config ({path}) is not set; set it, or store it with `graph secret set {var}`")
             }
         }
     }
@@ -788,7 +788,8 @@ fallbacks = [
         assert_eq!(
             crate::model::describe_missing_env("mcp.linear", &server.missing_env),
             "environment variable GRAPH_TEST_TOKEN_DOES_NOT_EXIST \
-             (mcp.linear.headers.Authorization) is not set"
+             (mcp.linear.headers.Authorization) is not set; set it, or store it with \
+             `graph secret set GRAPH_TEST_TOKEN_DOES_NOT_EXIST`"
         );
     }
 
@@ -1011,7 +1012,8 @@ fallbacks = [
         assert_eq!(
             crate::model::describe_missing_env("telemetry", &telemetry.missing_env),
             "environment variable GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST \
-             (telemetry.headers.Authorization) is not set"
+             (telemetry.headers.Authorization) is not set; set it, or store it with \
+             `graph secret set GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST`"
         );
     }
 
