@@ -1,6 +1,7 @@
 //! The effect executor: everything the pure reducer can't do. Long-running
 //! work is spawned; completion always arrives back as a [`WorkbenchEvent`].
 
+use super::artifact::ArtifactView;
 use super::event::WorkbenchEvent;
 use super::runner::{DebugControls, UiGate, UiInterlocutor};
 use super::tools::DraftState;
@@ -15,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 
-pub struct WorkbenchContext {
+pub struct Workbench {
     pub conversation: Conversation,
     pub active: std::sync::Mutex<String>,
     /// The plan-run pipeline (its sink already feeds the UI channel);
@@ -35,8 +36,25 @@ pub struct WorkbenchContext {
     pub tx: UnboundedSender<WorkbenchEvent>,
 }
 
-impl WorkbenchContext {
-    pub async fn run_agent_turn(&self, message: String) {
+impl Workbench {
+    pub fn plan(&self) -> Option<PlanDoc> {
+        self.draft.lock().unwrap().doc.clone()
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.draft.lock().unwrap().dirty
+    }
+
+    pub fn artifact(&self) -> Option<ArtifactView> {
+        super::artifact::view(&self.draft, &self.pipeline)
+    }
+
+    pub fn active_agent(&self) -> String {
+        self.active.lock().unwrap().clone()
+    }
+
+    pub async fn send_message(&self, message: impl Into<String>) -> Result<String, String> {
+        let message = message.into();
         let ctx = self;
         tracing::debug!(
             target: "workbench",
@@ -94,7 +112,8 @@ impl WorkbenchContext {
             turn_started.elapsed().as_secs_f64(),
             history.len()
         );
-        let _ = ctx.tx.send(WorkbenchEvent::TurnFinished(result));
+        let _ = ctx.tx.send(WorkbenchEvent::TurnFinished(result.clone()));
+        result
     }
 
     pub fn select_agent(&self, name: Option<String>) {
@@ -239,28 +258,33 @@ impl WorkbenchContext {
         let _ = ctx.tx.send(msg);
     }
 
-    pub fn save_plan(&self) {
+    pub fn save_plan(&self) -> Result<String, String> {
         let result = save_draft(&self.draft, self.plans_dir.as_deref());
-        let _ = self.tx.send(WorkbenchEvent::Saved(result));
+        let _ = self.tx.send(WorkbenchEvent::Saved(result.clone()));
+        result
     }
 
-    pub async fn save_artifact(&self) {
+    pub async fn save_artifact(&self) -> Result<String, String> {
         let ctx = self;
         let saved =
             super::artifact::save_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx, false, false, false)
                 .await;
-        let status = match saved {
-            Ok(message) => message,
+        let status = match &saved {
+            Ok(message) => message.clone(),
             Err(error) => format!("not saved: {error}"),
         };
         let _ = ctx.tx.send(WorkbenchEvent::Status(status));
+        saved
     }
 
-    pub fn discard_artifact(&self) {
+    pub fn discard_artifact(&self) -> Option<String> {
         let ctx = self;
-        let status = super::artifact::discard_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx)
+        let discarded = super::artifact::discard_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx);
+        let status = discarded
+            .clone()
             .unwrap_or_else(|| "nothing to discard".to_string());
         let _ = ctx.tx.send(WorkbenchEvent::Status(status));
+        discarded
     }
 
     pub fn restore_draft(&self) {
@@ -295,7 +319,7 @@ fn rejection_problems(rejected: &authoring::EditRejected) -> Vec<String> {
 }
 
 fn check_edit(
-    ctx: &WorkbenchContext,
+    ctx: &Workbench,
     doc: &PlanDoc,
     edit: impl Fn(&mut PlanDoc) -> Result<Value, Value>,
 ) -> WorkbenchEvent {

@@ -831,8 +831,8 @@ fn native_tools() -> Section {
 }
 
 fn workbench_tools() -> Section {
-    let mut defs = crate::workbench::tools::tool_defs();
-    defs.extend(crate::workbench::fs_tools::tool_defs());
+    let mut defs = graph_runtime::workbench::tools::tool_defs();
+    defs.extend(graph_runtime::workbench::fs_tools::tool_defs());
     def_section(
         DefSection {
             dir: WORKBENCH_TOOL_DIR,
