@@ -9,6 +9,7 @@ mod model;
 pub mod pack;
 #[cfg(test)]
 mod schema_tests;
+pub mod secrets;
 
 pub use format::{
     inspect, migrate_file, migration_count, window_problem, LayerInfo, Migrated, Unsupported,

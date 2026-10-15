@@ -2,6 +2,7 @@ use super::gate::StepPath;
 use super::interlocutor::{AskOutcome, AskRequest};
 use super::{Pipeline, ToolCatalog};
 use crate::agent::doc::{global_fragments, parse_agent_source, validate_doc, AgentDoc, AgentSet};
+use crate::secrets::{Origin, SecretSource};
 use crate::tools::{ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use crate::user_tools::{
     parse_tool_source, validate_tool, ToolKind, UserToolDoc, UserToolRegistry, USER_TOOL_PREFIX,
@@ -21,7 +22,7 @@ pub const SAVE_AGENT_TOOL: &str = "builtin__save_agent";
 
 const WORKBENCH_AGENTS: [&str; 4] = ["front_desk", "plan_drafter", "plan_loader", "plan_editor"];
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Drafted {
     tools: RwLock<Vec<UserToolDoc>>,
     agents: Arc<RwLock<Vec<AgentDoc>>>,
@@ -30,6 +31,22 @@ pub struct Drafted {
     pub tools_dir: Option<PathBuf>,
     pub agents_dir: Option<PathBuf>,
     pub tool_dirs: Vec<PathBuf>,
+    pub secrets: Arc<dyn SecretSource>,
+}
+
+impl Default for Drafted {
+    fn default() -> Self {
+        Self {
+            tools: RwLock::default(),
+            agents: Arc::default(),
+            tested: Mutex::default(),
+            approved: Mutex::default(),
+            tools_dir: None,
+            agents_dir: None,
+            tool_dirs: Vec::new(),
+            secrets: Arc::new(crate::secrets::system()),
+        }
+    }
 }
 
 impl Drafted {
@@ -43,6 +60,11 @@ impl Drafted {
 
     pub fn with_tool_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
         self.tool_dirs = dirs;
+        self
+    }
+
+    pub fn with_secrets(mut self, secrets: Arc<dyn SecretSource>) -> Self {
+        self.secrets = secrets;
         self
     }
 
@@ -79,6 +101,7 @@ impl DraftedTools {
 
     fn registry(&self) -> UserToolRegistry {
         UserToolRegistry::new(self.drafted.tools(), self.router.clone())
+            .with_secrets(self.drafted.secrets.clone())
     }
 }
 
@@ -238,6 +261,31 @@ fn write_file(path: &Path, yaml: &str, overwrite: bool) -> Result<PathBuf, Strin
     Ok(path)
 }
 
+fn stored_values(
+    doc: &UserToolDoc,
+    source: &dyn SecretSource,
+    supplied: &std::collections::BTreeMap<String, String>,
+) -> std::collections::BTreeMap<String, String> {
+    let mut hidden = supplied.clone();
+    let ToolKind::Exec { env, .. } = &doc.kind else {
+        return hidden;
+    };
+    for value in env.values() {
+        for reference in crate::secrets::env_references(value) {
+            if hidden.contains_key(reference.name) {
+                continue;
+            }
+            if let Some(found) = source
+                .resolve(reference.name)
+                .filter(|found| found.source == Origin::Store)
+            {
+                hidden.insert(reference.name.to_string(), found.value);
+            }
+        }
+    }
+    hidden
+}
+
 fn redacted_text(text: &str, secrets: &std::collections::BTreeMap<String, String>) -> String {
     let mut text = text.to_string();
     for secret in secrets.values().filter(|secret| !secret.is_empty()) {
@@ -375,7 +423,7 @@ impl Pipeline {
             Value::Object(_) => input["input"].clone(),
             _ => json!({}),
         };
-        let unset = crate::user_tools::unset_env_vars(&doc);
+        let unset = crate::user_tools::unset_env_vars(&doc, self.drafted.secrets.as_ref());
         let approval = format!("{yaml}\n{sample}");
         let remembered =
             unset.is_empty() && self.drafted.approved.lock().unwrap().contains(&approval);
@@ -391,13 +439,15 @@ impl Pipeline {
             self.drafted.approved.lock().unwrap().insert(approval);
         }
         let name = format!("{USER_TOOL_PREFIX}{}", doc.name);
+        let hidden = stored_values(&doc, self.drafted.secrets.as_ref(), &secrets);
         let doc = crate::user_tools::with_env_values(&doc, &secrets);
-        let registry = UserToolRegistry::new(vec![doc], self.router.clone());
+        let registry = UserToolRegistry::new(vec![doc], self.router.clone())
+            .with_secrets(self.drafted.secrets.clone());
         let outcome = registry
             .invoke(&name, sample)
             .await
-            .map_err(|error| redacted_text(&error.to_string(), &secrets))?;
-        let result = redacted(outcome.result, &secrets);
+            .map_err(|error| redacted_text(&error.to_string(), &hidden))?;
+        let result = redacted(outcome.result, &hidden);
         let mut report = json!({"ran": true, "is_error": outcome.is_error, "result": result});
         let outcome = ToolOutcome {
             result: report["result"].clone(),

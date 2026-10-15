@@ -694,7 +694,7 @@ pub fn load_packs(loaded: &graph_config::LoadedConfig) -> Result<crate::packs::I
 }
 
 pub fn load_config(workspace: &Workspace) -> Result<graph_config::LoadedConfig> {
-    graph_config::load_from(&workspace.config_paths())
+    graph_config::load_from(&workspace.config_paths(), &graph_core::secrets::system())
 }
 
 pub fn config_notices(loaded: &graph_config::LoadedConfig) -> Vec<String> {

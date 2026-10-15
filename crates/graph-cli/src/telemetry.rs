@@ -40,7 +40,7 @@ pub struct Init {
 
 pub fn init(config_paths: &[PathBuf]) -> Init {
     let mut init = Init::default();
-    let Ok(loaded) = graph_config::load_from(config_paths) else {
+    let Ok(loaded) = graph_config::load_from(config_paths, &graph_core::secrets::system()) else {
         return init;
     };
     let telemetry = &loaded.config.telemetry;

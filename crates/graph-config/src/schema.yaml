@@ -1,6 +1,14 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 title: config.toml
 x-format: TOML
+x-sections:
+  - heading: Secret references
+    body: |-
+      A string value can include `${NAME}` references, such as `api_key = "${ANTHROPIC_API_KEY}"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, graph reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `graph` and account `NAME`. The value is resolved each time a config file loads and is never written to a file.
+
+      A name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.
+
+      Where no credential store is available, as in a container or on Linux without a Secret Service daemon, graph reads the environment only. Set `GRAPH_SECRET_STORE` to `none` to skip the store on purpose.
 x-locations:
   - "`~/.config/graph/config.toml` (global)"
   - "`./.graph/config.toml` (project; its values win)"
@@ -43,7 +51,7 @@ properties:
           description: The provider. `systemone` serves decision models.
         api_key:
           type: string
-          description: API key, usually `${ENV_VAR}`.
+          description: API key, usually a `${NAME}` reference to a variable or stored secret.
         base_url:
           type: string
           description: Endpoint for `openai_compat` and self-hosted providers.
@@ -115,7 +123,7 @@ properties:
           type: object
           additionalProperties:
             type: string
-          description: Environment for a stdio server. Values expand `${VAR}`.
+          description: Environment for a stdio server. Values expand `${NAME}` references.
         url:
           type: string
           description: Endpoint for a streamable HTTP server.
@@ -123,7 +131,7 @@ properties:
           type: object
           additionalProperties:
             type: string
-          description: HTTP headers. Values expand `${VAR}`.
+          description: HTTP headers. Values expand `${NAME}` references.
         include_tools:
           type: array
           items:
@@ -306,6 +314,15 @@ x-environment:
       - name: GRAPH_LOG
         type: string
         description: A log filter for stderr, such as `info` or `graph=debug`. `-v`, `-vv` and `-vvv` set `info`, `debug` and `trace`.
+  - group: Secrets
+    description: "`${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store. See [Secret references](/reference/configuration#secret-references)."
+    variables:
+      - name: GRAPH_SECRET_STORE
+        default: os
+        description: Whether `${NAME}` references read the OS credential store when the environment doesn't set `NAME`.
+        values:
+          os: Read the macOS Keychain, or the Secret Service on Linux, under service `graph`. Where neither is available, graph reads the environment only.
+          none: Read the environment only.
   - group: Storage
     variables:
       - name: GRAPH_STORAGE
