@@ -97,8 +97,10 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
         sources.push(path);
     }
 
+    let project = project_id_of(&merged)?;
+    let secrets = crate::secrets::InProject::new(secrets, project);
     let mut missing = Vec::new();
-    let expanded = expand_env_in_value(toml::Value::Table(merged), "", secrets, &mut missing)
+    let expanded = expand_env_in_value(toml::Value::Table(merged), "", &secrets, &mut missing)
         .context("expanding ${VAR} references in config")?;
     let mut config: Config = expanded
         .try_into()
@@ -130,6 +132,76 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
         layers,
         pack_layers,
     })
+}
+
+fn project_id_of(merged: &toml::Table) -> Result<Option<String>> {
+    let Some(id) = merged
+        .get("project")
+        .and_then(toml::Value::as_table)
+        .and_then(|project| project.get("id"))
+    else {
+        return Ok(None);
+    };
+    let Some(id) = id.as_str() else {
+        anyhow::bail!("[project] id must be a string");
+    };
+    if !crate::secrets::is_project_id(id) {
+        anyhow::bail!("[project] id {id:?} must be letters, digits and hyphens");
+    }
+    Ok(Some(id.to_string()))
+}
+
+pub fn project_id(paths: &[PathBuf]) -> Option<String> {
+    let mut found = None;
+    for path in paths {
+        let Ok(raw) = std::fs::read_to_string(expand_tilde(path)) else {
+            continue;
+        };
+        let Ok(table) = raw.parse::<toml::Table>() else {
+            continue;
+        };
+        if let Ok(Some(id)) = project_id_of(&table) {
+            found = Some(id);
+        }
+    }
+    found
+}
+
+pub fn ensure_project_id(path: &Path) -> Result<String> {
+    let raw = match std::fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            format!("{} = {}\n", format::FORMAT_KEY, format::CONFIG_FORMAT)
+        }
+        Err(error) => {
+            return Err(error).with_context(|| format!("reading config file {}", path.display()))
+        }
+    };
+    let table: toml::Table = raw
+        .parse()
+        .with_context(|| format!("parsing config file {}", path.display()))?;
+    if let Some(id) = project_id_of(&table)? {
+        return Ok(id);
+    }
+    let mut doc: toml_edit::DocumentMut = raw
+        .parse()
+        .with_context(|| format!("parsing config file {}", path.display()))?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let project = doc
+        .entry("project")
+        .or_insert_with(toml_edit::table)
+        .as_table_mut()
+        .context("[project] must be a table")?;
+    project.insert("id", toml_edit::value(id.clone()));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let temp = path.with_extension("toml.tmp");
+    std::fs::write(&temp, doc.to_string())
+        .with_context(|| format!("writing {}", temp.display()))?;
+    std::fs::rename(&temp, path).with_context(|| format!("writing {}", path.display()))?;
+    Ok(id)
 }
 
 fn read_pack_entries(

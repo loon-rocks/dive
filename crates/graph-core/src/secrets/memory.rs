@@ -1,4 +1,6 @@
-use super::{is_secret_name, Origin, Resolved, SecretSource, SecretStore, StoreError};
+use super::{
+    store_account, store_resolve_in, Origin, Resolved, SecretSource, SecretStore, StoreError,
+};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
@@ -31,6 +33,10 @@ impl MemorySecrets {
         }
     }
 
+    pub fn with_project(self, name: &str, project: &str, value: &str) -> Self {
+        self.with(&format!("{name}@{project}"), value)
+    }
+
     pub fn with(self, name: &str, value: &str) -> Self {
         self.values
             .lock()
@@ -61,11 +67,10 @@ impl std::fmt::Debug for MemorySecrets {
 }
 
 impl MemorySecrets {
-    fn check(&self, name: &str) -> Result<(), StoreError> {
-        if !is_secret_name(name) {
-            return Err(StoreError::InvalidName(name.to_string()));
-        }
-        self.status()
+    fn account(&self, name: &str, project: Option<&str>) -> Result<String, StoreError> {
+        let account = store_account(name, project)?;
+        self.status()?;
+        Ok(account)
     }
 }
 
@@ -80,31 +85,38 @@ impl SecretStore for MemorySecrets {
         }
     }
 
-    fn get(&self, name: &str) -> Result<Option<String>, StoreError> {
-        self.check(name)?;
-        Ok(self.values.lock().unwrap().get(name).cloned())
+    fn get_in(&self, name: &str, project: Option<&str>) -> Result<Option<String>, StoreError> {
+        let account = self.account(name, project)?;
+        Ok(self.values.lock().unwrap().get(&account).cloned())
     }
 
-    fn set(&self, name: &str, value: &str) -> Result<(), StoreError> {
-        self.check(name)?;
+    fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError> {
+        let account = self.account(name, project)?;
         self.values
             .lock()
             .unwrap()
-            .insert(name.to_string(), value.to_string());
+            .insert(account, value.to_string());
         Ok(())
     }
 
-    fn remove(&self, name: &str) -> Result<bool, StoreError> {
-        self.check(name)?;
-        Ok(self.values.lock().unwrap().remove(name).is_some())
+    fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError> {
+        let account = self.account(name, project)?;
+        Ok(self.values.lock().unwrap().remove(&account).is_some())
     }
 }
 
 impl SecretSource for MemorySecrets {
     fn resolve(&self, name: &str) -> Option<Resolved> {
-        self.get(name).ok().flatten().map(|value| Resolved {
-            value,
-            source: self.source,
-        })
+        self.resolve_in(name, None)
+    }
+
+    fn resolve_in(&self, name: &str, project: Option<&str>) -> Option<Resolved> {
+        match self.source {
+            Origin::Store => store_resolve_in(self, name, project),
+            Origin::Env => self.get(name).ok().flatten().map(|value| Resolved {
+                value,
+                source: Origin::Env,
+            }),
+        }
     }
 }

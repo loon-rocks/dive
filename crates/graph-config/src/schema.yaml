@@ -231,6 +231,13 @@ properties:
       timezone:
         type: string
         description: Your timezone, such as `America/New_York`.
+  project:
+    type: object
+    description: This project's identity. Belongs in the project config.
+    properties:
+      id:
+        type: string
+        description: An id graph generates the first time you store a project secret with `graph secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.
   prompts:
     type: object
     description: Deprecated. Customize agents with agent files instead.
@@ -315,7 +322,7 @@ x-environment:
         type: string
         description: A log filter for stderr, such as `info` or `graph=debug`. `-v`, `-vv` and `-vvv` set `info`, `debug` and `trace`.
   - group: Secrets
-    description: "`${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store. See [Secret references](/reference/configuration#secret-references)."
+    description: "`${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store: this project's entry, then the one every project shares. See [Secret references](/reference/configuration#secret-references)."
     variables:
       - name: GRAPH_SECRET_STORE
         default: os

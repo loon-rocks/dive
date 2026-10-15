@@ -598,27 +598,31 @@ pub enum ThreadCommand {
 pub enum SecretCommand {
     #[command(
         about = "Store a secret in the OS credential store",
-        after_long_help = "Reads the value with hidden input when stdin is a terminal, or from stdin when it is piped; one trailing newline is dropped. The value is never accepted as an argument, where it would land in shell history. Storing a name again replaces its value. When the environment also sets the name, the environment's value still wins.\n\nExamples:\n  graph secret set ANTHROPIC_API_KEY\n  printf %s \"$TOKEN\" | graph secret set GITHUB_TOKEN"
+        after_long_help = "Reads the value with hidden input when stdin is a terminal, or from stdin when it is piped; one trailing newline is dropped. The value is never accepted as an argument, where it would land in shell history. Storing a name again replaces its value.\n\nWithout --project the value is shared by every project on this machine. With --project it applies only to this project, keyed by the `[project] id` in .graph/config.toml, which is generated on first use. A name resolves from the environment first, then this project's value, then the shared value.\n\nExamples:\n  graph secret set ANTHROPIC_API_KEY\n  graph secret set SLACK_BOT_TOKEN --project\n  printf %s \"$TOKEN\" | graph secret set GITHUB_TOKEN"
     )]
     Set {
         #[arg(help = "The variable name, as `${NAME}` references it")]
         name: String,
+        #[arg(long, help = "Store the value for this project only")]
+        project: bool,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     #[command(
         about = "Remove a secret from the OS credential store",
-        after_long_help = "Removing a name that isn't stored is refused and exits 1.\n\nExamples:\n  graph secret rm GITHUB_TOKEN"
+        after_long_help = "Removes the shared value, or this project's value with --project. Removing a name that isn't stored is refused and exits 1.\n\nExamples:\n  graph secret rm GITHUB_TOKEN\n  graph secret rm SLACK_BOT_TOKEN --project"
     )]
     Rm {
         #[arg(help = "The variable name, as `${NAME}` references it")]
         name: String,
+        #[arg(long, help = "Remove this project's value instead of the shared one")]
+        project: bool,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     #[command(
         about = "List every variable name the config, tools and packs reference, and where each resolves from",
-        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is `env`, `store`, `env (shadows store)` when both set it and the environment wins, or `missing`. The OS credential store can't be enumerated, so a stored name nothing references isn't listed. Values are never printed.\n\nExamples:\n  graph secret list\n  graph secret list --json"
+        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is the first of `env`, `project` and `shared` that sets it, followed by the sources it shadows, or `missing`. The OS credential store can't be enumerated, so a stored name nothing references isn't listed. Values are never printed.\n\nExamples:\n  graph secret list\n  graph secret list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -626,7 +630,7 @@ pub enum SecretCommand {
     },
     #[command(
         about = "Show where one name resolves from and what references it",
-        after_long_help = "Prints the name's source and references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  graph secret show ANTHROPIC_API_KEY"
+        after_long_help = "Prints the environment, project and shared values in resolution order, marks the one in use, and lists the references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  graph secret show ANTHROPIC_API_KEY"
     )]
     Show {
         #[arg(help = "The variable name, as `${NAME}` references it")]
