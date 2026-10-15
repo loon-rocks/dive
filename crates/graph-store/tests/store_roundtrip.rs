@@ -4,7 +4,7 @@
 mod common;
 
 use common::MessageLog;
-use graph_core::store::{conversation, EntryBody, NewEntry, Store};
+use graph_core::store::{conversation, EntryBody, EntryUsage, NewEntry, Stamp, Store};
 use graph_llm::types::{ChatMessage, ToolCall};
 use graph_store::{FileStore, MemoryStore};
 use serde_json::json;
@@ -179,18 +179,18 @@ async fn threads_record_owner_active_agent_and_every_entry_kind() {
                             content: "draft a plan".into(),
                         },
                     ),
-                    NewEntry {
-                        author: "orchestrator".into(),
-                        body: EntryBody::Handoff {
+                    NewEntry::new(
+                        "orchestrator",
+                        EntryBody::Handoff {
                             from: "orchestrator".into(),
                             to: "plan_author".into(),
                             message: "the user wants a plan".into(),
                             via: Some("transfer_to_plan_author".into()),
                         },
-                    },
-                    NewEntry {
-                        author: "plan_author".into(),
-                        body: EntryBody::SubagentRun {
+                    ),
+                    NewEntry::new(
+                        "plan_author",
+                        EntryBody::SubagentRun {
                             agent: "plan_verifier".into(),
                             caller: "plan_author".into(),
                             input: json!({"goal": "g"}),
@@ -200,7 +200,7 @@ async fn threads_record_owner_active_agent_and_every_entry_kind() {
                             output: json!({"passed": true}),
                             final_: true,
                         },
-                    },
+                    ),
                 ],
             )
             .await
@@ -228,5 +228,78 @@ async fn threads_record_owner_active_agent_and_every_entry_kind() {
         let seqs: Vec<u64> = entries.iter().map(|entry| entry.seq).collect();
         assert_eq!(seqs, [0, 1, 2], "{name}");
         assert_eq!(conversation(&entries).len(), 1, "{name}");
+    }
+}
+
+#[tokio::test]
+async fn entries_keep_their_duration_and_model_usage() {
+    let dir = tempfile::tempdir().unwrap();
+    let usage = EntryUsage {
+        model: "m".into(),
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_creation_input_tokens: 3,
+        cache_read_input_tokens: 4,
+    };
+    for (name, store) in backends(&dir) {
+        let thread = store.create_thread("t", "chat").await.unwrap();
+        let entries = vec![
+            NewEntry::message(
+                "user",
+                ChatMessage::User {
+                    content: "go".into(),
+                },
+            ),
+            NewEntry::message(
+                "chat",
+                ChatMessage::Assistant {
+                    thinking: Vec::new(),
+                    content: Some("done".into()),
+                    tool_calls: vec![],
+                },
+            )
+            .stamped(Stamp {
+                ms: Some(120),
+                usage: Some(usage.clone()),
+            }),
+            NewEntry::message(
+                "chat",
+                ChatMessage::ToolResult {
+                    tool_call_id: "c1".into(),
+                    content: json!({}),
+                    is_error: false,
+                },
+            )
+            .stamped(Stamp {
+                ms: Some(7),
+                usage: None,
+            }),
+        ];
+        store.append_entries(&thread.id, &entries).await.unwrap();
+        let loaded = store.load_entries(&thread.id).await.unwrap();
+        let stamps: Vec<(Option<u64>, Option<EntryUsage>)> = loaded
+            .iter()
+            .map(|entry| (entry.ms, entry.usage.clone()))
+            .collect();
+        assert_eq!(
+            stamps,
+            [
+                (None, None),
+                (Some(120), Some(usage.clone())),
+                (Some(7), None)
+            ],
+            "{name}"
+        );
+        let first = serde_json::to_value(&loaded[0]).unwrap();
+        assert!(
+            first.get("ms").is_none() && first.get("usage").is_none(),
+            "{name}"
+        );
+        let back = NewEntry::from(loaded[1].clone());
+        assert_eq!(
+            (back.ms, back.usage),
+            (Some(120), Some(usage.clone())),
+            "{name}"
+        );
     }
 }
