@@ -38,13 +38,13 @@ pub struct Init {
     pub warnings: Vec<String>,
 }
 
-pub fn init(config_paths: &[PathBuf]) -> Init {
+pub fn init(config_paths: &[PathBuf], env: &dyn Fn(&str) -> Option<String>) -> Init {
     let mut init = Init::default();
     let Ok(loaded) = graph_config::load_from(config_paths, &graph_core::secrets::system()) else {
         return init;
     };
     let telemetry = &loaded.config.telemetry;
-    let resolved = match telemetry.with_env(&|name| std::env::var(name).ok()) {
+    let resolved = match telemetry.with_env(env) {
         Ok(resolved) => resolved,
         Err(problem) => {
             init.warnings.push(format!("telemetry disabled: {problem}"));

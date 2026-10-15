@@ -6,12 +6,12 @@ mod host;
 mod interlocutor;
 mod mcp_server;
 mod output;
-mod telemetry;
 mod workbench;
 
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
+pub(crate) use graph_runtime::telemetry;
 use output::SilentExit;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -20,7 +20,9 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    let telemetry = telemetry::init(&telemetry_config_paths(&cli.command));
+    let telemetry = telemetry::init(&telemetry_config_paths(&cli.command), &|name| {
+        std::env::var(name).ok()
+    });
     // The workbench owns the terminal, so it routes tracing to a log file
     // itself instead of stderr.
     if !matches!(cli.command, Command::Workbench { .. }) {
