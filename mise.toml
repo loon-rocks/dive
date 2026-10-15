@@ -52,8 +52,17 @@ description = "Build the release binary"
 run = "cargo build --release"
 
 [tasks.install]
-description = "Built and install a release binary on the system"
-run = "cargo install --path crates/graph-cli"
+description = "Built and install a release binary on the system (re-signed with $GRAPH_DEV_SIGN_IDENTITY on macOS when it is set)"
+run = [
+    "cargo install --path crates/graph-cli",
+    '''
+if [ -n "${GRAPH_DEV_SIGN_IDENTITY:-}" ] && [ "$(uname -s)" = "Darwin" ]; then
+  installed="${CARGO_INSTALL_ROOT:-${CARGO_HOME:-$HOME/.cargo}}/bin/graph"
+  codesign --force --sign "$GRAPH_DEV_SIGN_IDENTITY" "$installed"
+  echo "signed $installed with $GRAPH_DEV_SIGN_IDENTITY"
+fi
+''',
+]
 depends = ["release"]
 
 [tasks."release:patch"]
