@@ -2,7 +2,6 @@ mod support;
 
 use serde_json::Value;
 use std::path::Path;
-use std::process::Command;
 use support::{Run, Scratch};
 
 const MANIFEST: &str = "version = 1\nname = \"example\"\ndescription = \"Example\"\n\n[requires]\nos = [\"macos\", \"linux\"]\n";
@@ -148,19 +147,7 @@ fn git_env() -> [(&'static str, &'static str); 6] {
 }
 
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .envs(git_env())
-        .args(["-c", "init.defaultBranch=main"])
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    graph_runtime::packs::git::fixture::git(dir, args)
 }
 
 fn commit(dir: &Path, message: &str) {

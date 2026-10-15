@@ -6,7 +6,6 @@ use graph_runtime::packs::{content_hash, InstalledPacks};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -41,29 +40,7 @@ const CONFIG: &str =
     "version = 4\n\n# my settings\n[settings]\nmax_agent_iterations = 7   # tuned\n";
 
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .args([
-            "-c",
-            "user.name=t",
-            "-c",
-            "user.email=t@example.com",
-            "-c",
-            "commit.gpgsign=false",
-            "-c",
-            "tag.gpgsign=false",
-            "-c",
-            "init.defaultBranch=main",
-        ])
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    graph_runtime::packs::git::fixture::git(dir, args)
 }
 
 fn write(dir: &Path, path: &str, content: &str) {
