@@ -2,134 +2,25 @@
 
 use crate::cli::ConfigCommand;
 use crate::commands::outcome::{report, Outcome};
-use anyhow::{bail, Context, Result};
-use graph_config::{CONFIG_FORMAT, FORMAT_KEY};
+use anyhow::Result;
+use graph_runtime::ops;
+use graph_runtime::runtime::Workspace;
 use serde_json::json;
-use std::path::PathBuf;
-
-const STARTER_CONFIG: &str = r#"# graph configuration
-# Values in ${VAR} form are read from the environment at load time.
-
-[settings]
-# data_dir = "~/.local/share/graph"
-# max_agent_iterations = 15
-# planning_attempts = 2
-
-# [storage]
-# backend = "file"      # default: plain files under data_dir
-# backend = "memory"    # ephemeral (CI jobs); or set GRAPH_STORAGE=memory
-
-[providers.anthropic]
-type = "anthropic"
-api_key = "${ANTHROPIC_API_KEY}"
-
-# [providers.local]
-# type = "openai_compat"
-# base_url = "http://localhost:11434/v1"
-
-# [providers.bedrock]
-# type = "bedrock"
-# region = "us-east-1"
-
-# Model roles. The standard roles (chat, planner, solver, repair, judge) fall
-# back to `default`; any other name is a custom role, selectable by name from
-# prompt tools, builtin__infer, and infer gates. Same shape for both.
-[models.default]
-provider = "anthropic"
-model = "claude-sonnet-5"
-
-# [models.planner]
-# provider = "anthropic"
-# model = "claude-fable-5"
-# temperature = 0.0
-
-# [models.solver]
-# provider = "anthropic"
-# model = "claude-haiku-4-5"
-# temperature = 0.4
-
-# A custom role with a description is advertised to the planner as a
-# routing choice — write the description for that audience.
-# [models.nano]
-# provider = "anthropic"
-# model = "claude-haiku-4-5"
-# description = "fast and cheap; small self-contained tasks like per-item map bodies"
-
-# Token prices, in USD per million tokens, keyed by model id. Without them a
-# run still reports its token counts — it just omits the dollar figure rather
-# than guessing one. Published prices change: check them before relying on
-# the number, and keep these entries current.
-# [pricing."claude-sonnet-5"]
-# input = 3.00
-# output = 15.00
-# cache_write = 3.75   # optional; defaults to input x 1.25
-# cache_read = 0.30    # optional; defaults to input x 0.10
-
-# [pricing."claude-haiku-4-5"]
-# input = 1.00
-# output = 5.00
-
-# OTLP export of run traces — Langfuse, an OpenTelemetry collector, any
-# OTLP/HTTP backend. The standard OTEL_EXPORTER_OTLP_* and OTEL_SERVICE_NAME
-# variables override these values.
-# [telemetry]
-# endpoint = "https://cloud.langfuse.com/api/public/otel"
-# capture_content = true    # default; false keeps prompts, completions, and tool I/O off spans
-# logs = false              # also export the diagnostic log (-v / GRAPH_LOG)
-# [telemetry.headers]
-# Authorization = "Basic ${LANGFUSE_AUTH}"   # base64 of pk-lf-…:sk-lf-…
-# "x-langfuse-ingestion-version" = "4"
-
-# [mcp.github]
-# command = "docker"
-# args = ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
-# env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
-
-# [mcp.linear]
-# url = "https://mcp.linear.app/mcp"
-# headers = { Authorization = "Bearer ${LINEAR_API_KEY}" }
-
-[user]
-# name = "Your Name"
-# context = "Role, primary repos, teams — injected into prompts."
-"#;
-
-fn starter_config() -> Result<String> {
-    Ok(format!(
-        "{FORMAT_KEY} = {CONFIG_FORMAT}\n\n{STARTER_CONFIG}"
-    ))
-}
 
 pub async fn run(command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::Show { json } => report(show()?, json),
-        ConfigCommand::Path { json } => report(path(), json),
+        ConfigCommand::Path { json } => report(path()?, json),
         ConfigCommand::Init { global, force, .. } => report(init(global, force)?, false),
-        ConfigCommand::Check { json } => report(check().await, json),
+        ConfigCommand::Check { json } => report(check().await?, json),
         ConfigCommand::Migrate { global, json } => report(migrate(global)?, json),
     }
 }
 
-/// The effective config. The text rendering is TOML — the format you would
-/// paste back into a config file — while `--json` gives the same values in
-/// the shape a program addresses.
 fn show() -> Result<Outcome> {
     let loaded = crate::host::load_config()?;
-    let rendered = format!(
-        "{FORMAT_KEY} = {CONFIG_FORMAT}\n\n{}",
-        toml::to_string_pretty(&loaded.config)?
-    );
-    let sources: Vec<String> = loaded
-        .sources
-        .iter()
-        .map(|source| source.display().to_string())
-        .collect();
-    let body = json!({
-        "version": CONFIG_FORMAT,
-        "config": serde_json::to_value(&loaded.config)?,
-        "sources": sources,
-        "layers": loaded.layers.iter().map(layer_json).collect::<Vec<_>>(),
-    });
+    let shown = ops::config::show(&loaded)?;
+    let body = serde_json::to_value(&shown)?;
     if loaded.sources.is_empty() {
         eprintln!("# no config files found — showing defaults (run `graph config init`)");
     } else {
@@ -137,169 +28,31 @@ fn show() -> Result<Outcome> {
             eprintln!("# merged from {}", source.display());
         }
     }
-    Ok(Outcome::raw(rendered, body))
+    Ok(Outcome::raw(shown.toml, body))
 }
 
-fn layer_json(layer: &graph_config::LayerInfo) -> serde_json::Value {
-    json!({
-        "path": layer.path.display().to_string(),
-        "version": layer.version,
-        "declared": layer.declared,
-        "current": layer.version == CONFIG_FORMAT,
-        "notes": layer.notes,
+fn path() -> Result<Outcome> {
+    let paths = ops::config::path(&Workspace::current());
+    let text = paths
+        .files
+        .iter()
+        .map(|file| format!("{}\t{}\n", file.path, file.marker()))
+        .collect::<String>();
+    Ok(Outcome::raw(text, serde_json::to_value(&paths)?))
+}
+
+async fn check() -> Result<Outcome> {
+    let verdict = ops::config::check(&Workspace::current()).await;
+    let body = serde_json::to_value(&verdict)?;
+    Ok(if verdict.ok {
+        Outcome::raw(verdict.text(), body)
+    } else {
+        Outcome::rejected(body)
     })
 }
 
-fn candidates() -> [PathBuf; 2] {
-    [
-        graph_config::expand_tilde(&graph_config::global_config_path()),
-        graph_config::expand_tilde(&graph_config::project_config_path()),
-    ]
-}
-
-fn path() -> Outcome {
-    let mut text = String::new();
-    let mut files = Vec::new();
-    for candidate in candidates() {
-        let exists = candidate.exists();
-        let format = exists
-            .then(|| graph_config::inspect(&candidate).ok())
-            .flatten();
-        let marker = match (&format, exists) {
-            (Some(info), _) => format!("exists\tversion {}", info.version),
-            (None, true) => "exists".to_string(),
-            (None, false) => "missing".to_string(),
-        };
-        text.push_str(&format!("{}\t{marker}\n", candidate.display()));
-        files.push(json!({
-            "path": candidate.display().to_string(),
-            "exists": exists,
-            "version": format.as_ref().map(|info| info.version),
-        }));
-    }
-    Outcome::raw(text, json!({"files": files, "count": files.len()}))
-}
-
-/// Each file's format on its own terms, then whether the merged whole loads.
-/// A file this binary cannot read, or a merged config that fails the schema,
-/// is a rejection: the body still carries every file's verdict.
-async fn check() -> Outcome {
-    let mut files = Vec::new();
-    let mut problems = Vec::new();
-    let mut text = String::new();
-    for candidate in candidates() {
-        if !candidate.exists() {
-            text.push_str(&format!("{}\tmissing\n", candidate.display()));
-            files.push(json!({"path": candidate.display().to_string(), "exists": false}));
-            continue;
-        }
-        match graph_config::inspect(&candidate) {
-            Ok(info) => {
-                let verdict = if let Some(problem) = graph_config::window_problem(
-                    "config",
-                    &candidate.display(),
-                    info.version,
-                    graph_config::CONFIG_FORMAT_OLDEST,
-                    CONFIG_FORMAT,
-                ) {
-                    problems.push(problem);
-                    if info.version > CONFIG_FORMAT {
-                        "too new"
-                    } else {
-                        "too old"
-                    }
-                } else if info.version < CONFIG_FORMAT {
-                    "migrate"
-                } else if info.declared.is_none() {
-                    "current (unstamped)"
-                } else {
-                    "current"
-                };
-                text.push_str(&format!(
-                    "{}\tversion {}\t{verdict}\n",
-                    candidate.display(),
-                    info.version
-                ));
-                files.push(json!({
-                    "path": candidate.display().to_string(),
-                    "exists": true,
-                    "version": info.version,
-                    "declared": info.declared,
-                    "readable": (graph_config::CONFIG_FORMAT_OLDEST..=CONFIG_FORMAT).contains(&info.version),
-                    "current": info.version == CONFIG_FORMAT,
-                }));
-            }
-            Err(error) => {
-                problems.push(error.clone());
-                text.push_str(&format!("{}\tunreadable\n", candidate.display()));
-                files.push(json!({
-                    "path": candidate.display().to_string(),
-                    "exists": true,
-                    "error": error,
-                }));
-            }
-        }
-    }
-    let mut packs = json!([]);
-    let mut warnings = Vec::new();
-    if problems.is_empty() {
-        match graph_config::load() {
-            Err(error) => problems.push(format!("{error:#}")),
-            Ok(loaded) => {
-                warnings.extend(loaded.layers.iter().flat_map(|layer| {
-                    layer
-                        .notes
-                        .iter()
-                        .map(|note| format!("{}: {note}", layer.path.display()))
-                }));
-                match graph_runtime::packs::InstalledPacks::for_config(&loaded) {
-                    Ok(installed) => {
-                        let manager = graph_mcp::McpManager::new(loaded.config.mcp.clone());
-                        let unmet = installed.unmet(&manager).await;
-                        manager.shutdown().await;
-                        text.push_str(&installed.check_text(&unmet));
-                        packs = installed.check_json(&unmet);
-                        warnings.extend(installed.warnings);
-                        warnings.extend(graph_core::packs::requirements::describe_unmet(&unmet));
-                    }
-                    Err(error) => problems.push(format!("{error:#}")),
-                }
-            }
-        }
-    }
-    let ok = problems.is_empty();
-    let body = json!({
-        "ok": ok,
-        "version": CONFIG_FORMAT,
-        "files": files,
-        "problems": problems,
-        "packs": packs,
-        "warnings": warnings,
-    });
-    if ok {
-        Outcome::raw(text, body)
-    } else {
-        let mut body = body;
-        body["error"] = json!("config does not load");
-        Outcome::rejected(body)
-    }
-}
-
 fn migrate(global: bool) -> Result<Outcome> {
-    let target = if global {
-        graph_config::global_config_path()
-    } else {
-        graph_config::project_config_path()
-    };
-    let target = graph_config::expand_tilde(&target);
-    if !target.exists() {
-        bail!(
-            "{} does not exist (run `graph config init{}` to create it)",
-            target.display(),
-            if global { " --global" } else { "" }
-        );
-    }
-    let migrated = graph_config::migrate_file(&target).map_err(anyhow::Error::msg)?;
+    let migrated = ops::config::migrate(&Workspace::current(), global)?;
     let mut outcome = Outcome::ok(json!({
         "ok": true,
         "savedTo": migrated.path.display().to_string(),
@@ -317,45 +70,6 @@ fn migrate(global: bool) -> Result<Outcome> {
 }
 
 fn init(global: bool, force: bool) -> Result<Outcome> {
-    let target = if global {
-        graph_config::global_config_path()
-    } else {
-        graph_config::project_config_path()
-    };
-    let target = graph_config::expand_tilde(&target);
-    if target.exists() && !force {
-        bail!(
-            "{} already exists (use --force to overwrite)",
-            target.display()
-        );
-    }
-    if let Some(parent) = target.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
-    }
-    std::fs::write(&target, starter_config()?)
-        .with_context(|| format!("writing {}", target.display()))?;
-    Ok(Outcome::ok(
-        json!({"ok": true, "savedTo": target.display().to_string()}),
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn starter_parses_and_leaves_prompts_to_the_agent_files() {
-        let starter = starter_config().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.toml");
-        std::fs::write(&path, &starter).unwrap();
-        // deny_unknown_fields on the model makes this catch skeleton drift.
-        let loaded = graph_config::load_from(&[path]).unwrap();
-        let config = loaded.config;
-        assert_eq!(config.prompts.chat, None);
-        assert_eq!(config.prompts.workbench, None);
-        assert_eq!(loaded.layers[0].declared, Some(CONFIG_FORMAT));
-        assert!(starter.starts_with(&format!("{FORMAT_KEY} = {CONFIG_FORMAT}\n")));
-    }
+    let created = ops::config::init(&Workspace::current(), global, force)?;
+    Ok(Outcome::ok(serde_json::to_value(&created)?))
 }
