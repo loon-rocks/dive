@@ -51,3 +51,6 @@ rmcp = { version = "2.2", default-features = false, features = [
     "elicitation",
 ] }
 schemars = "1"
+
+[dev-dependencies]
+graph-runtime = { workspace = true, features = ["clap", "fixtures"] }

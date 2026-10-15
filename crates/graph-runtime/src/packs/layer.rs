@@ -181,7 +181,7 @@ pub fn fetch(layer: &Layer, url: &str, target: &Target, dir: &str) -> Result<Fet
     } else {
         staging.path().join("clone")
     };
-    let sha = git::clone_at(url, reference, &clone)?;
+    let sha = git::clone_at(url, target, &clone)?;
     if let Some(moved) = clone_moved(target, url, &sha) {
         return Err(moved);
     }
@@ -199,10 +199,7 @@ pub fn fetch(layer: &Layer, url: &str, target: &Target, dir: &str) -> Result<Fet
             "{url} at {reference} has no {MANIFEST_FILE} {place}; is it a pack?"
         ));
     }
-    if dir.is_empty() {
-        std::fs::remove_dir_all(path.join(".git"))
-            .map_err(|e| format!("removing .git from the staged copy: {e}"))?;
-    } else {
+    if !dir.is_empty() {
         std::fs::rename(&root, &path).map_err(|e| format!("staging {dir}/ of the clone: {e}"))?;
         std::fs::remove_dir_all(&clone).map_err(|e| format!("removing the clone: {e}"))?;
     }

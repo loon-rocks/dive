@@ -51,10 +51,13 @@ opentelemetry-otlp = { version = "0.33", default-features = false, features = [
     "reqwest-rustls",
 ] }
 opentelemetry-appender-tracing = "0.33"
+gix = { version = "0.89", default-features = false, features = ["sha1", "blocking-http-transport-reqwest-rust-tls", "status"] }
 
 [features]
 clap = ["dep:clap"]
+fixtures = ["gix/revision"]
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33", features = ["testing"] }
 futures.workspace = true
+gix = { version = "0.89", default-features = false, features = ["revision"] }
