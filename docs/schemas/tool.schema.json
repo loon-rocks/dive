@@ -56,7 +56,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Extra environment variables. Values expand `${VAR}` from graph's environment, and `${VAR:-default}` falls back when it's unset or empty.",
+          "description": "Extra environment variables. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store. `${VAR:-default}` falls back to the default when neither has a value.",
           "type": "object"
         },
         "kind": {

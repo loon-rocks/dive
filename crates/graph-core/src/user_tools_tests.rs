@@ -119,6 +119,71 @@ args: ["-c", "echo oops >&2; exit 3"]
     assert_eq!(outcome.result["stderr"], "oops");
 }
 
+fn env_then_store(
+    env: crate::secrets::MemorySecrets,
+    store: crate::secrets::MemorySecrets,
+) -> crate::secrets::ChainedSource {
+    crate::secrets::ChainedSource::new(vec![Arc::new(env), Arc::new(store)])
+}
+
+#[tokio::test]
+async fn exec_tool_env_reads_a_stored_secret_when_the_environment_misses() {
+    let tool = doc(r#"
+name: show_token
+description: prints its token
+kind: exec
+command: sh
+args: ["-c", "printf %s \"$TOKEN\""]
+output: text
+env:
+  TOKEN: "${GRAPH_TEST_STORED_TOOL_TOKEN}"
+"#);
+    let secrets = env_then_store(
+        crate::secrets::MemorySecrets::env(),
+        crate::secrets::MemorySecrets::store().with("GRAPH_TEST_STORED_TOOL_TOKEN", "tok-1234"),
+    );
+    let registry = registry(vec![tool]).with_secrets(Arc::new(secrets));
+    let outcome = registry
+        .invoke("user__show_token", json!({}))
+        .await
+        .unwrap();
+    assert!(!outcome.is_error);
+    assert_eq!(outcome.result, json!({"text": "tok-1234"}));
+}
+
+#[test]
+fn an_env_default_applies_only_when_both_sources_miss() {
+    let secrets = env_then_store(
+        crate::secrets::MemorySecrets::env().with("IN_ENV", "env-value"),
+        crate::secrets::MemorySecrets::store()
+            .with("IN_ENV", "store-value")
+            .with("IN_STORE", "store-value"),
+    );
+    let expand = |text: &str| crate::user_tools::expand_env(text, &secrets).unwrap();
+    assert_eq!(expand("${IN_ENV:-fallback}"), "env-value");
+    assert_eq!(expand("${IN_STORE:-fallback}"), "store-value");
+    assert_eq!(expand("${IN_NEITHER:-fallback}"), "fallback");
+    assert!(crate::user_tools::expand_env("${IN_NEITHER}", &secrets)
+        .unwrap_err()
+        .contains("IN_NEITHER"));
+}
+
+#[test]
+fn a_stored_secret_is_never_reported_unset() {
+    let doc = crate::user_tools::parse_tool_source(
+        "name: search\ndescription: x\nkind: exec\ncommand: echo\nenv:\n  A: \"${GRAPH_TEST_ONLY_STORED}\"\n  B: \"${GRAPH_TEST_IN_NO_SOURCE}\"\n",
+    )
+    .unwrap();
+    let secrets = env_then_store(
+        crate::secrets::MemorySecrets::env(),
+        crate::secrets::MemorySecrets::store().with("GRAPH_TEST_ONLY_STORED", "s"),
+    );
+    assert_eq!(
+        crate::user_tools::unset_env_vars(&doc, &secrets),
+        ["GRAPH_TEST_IN_NO_SOURCE"]
+    );
+}
+
 #[tokio::test]
 async fn exec_tool_missing_input_is_a_schema_error() {
     let tool = doc(r#"
@@ -1881,7 +1946,7 @@ fn an_env_reference_can_carry_a_default_for_settings() {
     )
     .unwrap();
     assert_eq!(
-        crate::user_tools::unset_env_vars(&doc),
+        crate::user_tools::unset_env_vars(&doc, &crate::secrets::EnvSource),
         ["GRAPH_TEST_NEVER_SET_KEY"],
         "a reference with a default never counts as unset"
     );

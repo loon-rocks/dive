@@ -15,7 +15,7 @@
 </ParamField>
 
 <ParamField body="mcp.<name>.env" type="map<string, string>">
-  Environment for a stdio server. Values expand `${VAR}`.
+  Environment for a stdio server. Values expand `${NAME}` references.
 </ParamField>
 
 <ParamField body="mcp.<name>.url" type="string">
@@ -23,7 +23,7 @@
 </ParamField>
 
 <ParamField body="mcp.<name>.headers" type="map<string, string>">
-  HTTP headers. Values expand `${VAR}`.
+  HTTP headers. Values expand `${NAME}` references.
 </ParamField>
 
 <ParamField body="mcp.<name>.include_tools" type="string[]">

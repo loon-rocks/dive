@@ -20,6 +20,7 @@ fn machine() -> Machine {
             ("GH_TOKEN".to_string(), "secret".to_string()),
             ("EMPTY".to_string(), String::new()),
         ]),
+        stored: BTreeSet::new(),
     }
 }
 
@@ -74,6 +75,26 @@ fn missing_binaries_and_unset_or_empty_env_are_unmet_not_refused() {
             "requires.env: EMPTY, NEVER_SET not set (or empty)",
         ]
     );
+}
+
+#[test]
+fn a_required_env_name_in_the_credential_store_counts_as_met() {
+    let store = crate::secrets::MemorySecrets::store()
+        .with("STORED_TOKEN", "from-store")
+        .with("EMPTY", "also-stored")
+        .with("BLANK_IN_STORE", "");
+    let names: Vec<String> = ["STORED_TOKEN", "EMPTY", "BLANK_IN_STORE", "NEVER_SET"]
+        .iter()
+        .map(|name| name.to_string())
+        .collect();
+    let stocked = machine().with_stored(&names, &store);
+    let evaluation = evaluate(&requires(json!({"env": names})), &stocked);
+    assert_eq!(
+        evaluation.unmet,
+        ["requires.env: BLANK_IN_STORE, NEVER_SET not set (or empty)"]
+    );
+    let none = machine().with_stored(&names, &crate::secrets::MemorySecrets::unavailable());
+    assert!(none.stored.is_empty());
 }
 
 fn def(name: &str, schema: Value) -> ToolDef {

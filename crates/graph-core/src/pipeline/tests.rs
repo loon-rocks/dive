@@ -6068,6 +6068,38 @@ async fn a_secret_for_a_test_run_is_asked_in_the_form_used_once_and_kept_from_th
 }
 
 #[tokio::test]
+async fn a_try_run_asks_only_for_names_no_source_has_and_hides_stored_values_from_the_model() {
+    let tool = "name: whoami\ndescription: Echoes tokens\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"stored\\\":\\\"%s\\\",\\\"asked\\\":\\\"%s\\\"}\" \"$STORED\" \"$ASKED\"']\nenv:\n  STORED: \"${GRAPH_TEST_STORED_DRAFT_TOKEN}\"\n  ASKED: \"${GRAPH_TEST_NEVER_SET_DRAFT_TOKEN}\"\n";
+    let (mut pipeline, _dir, human) = drafting_pipeline(vec![AskOutcome::Answered(
+        json!({"run": true, "GRAPH_TEST_NEVER_SET_DRAFT_TOKEN": "oneoff99"}),
+    )]);
+    let store = crate::secrets::MemorySecrets::store()
+        .with("GRAPH_TEST_STORED_DRAFT_TOKEN", "stored-hunter22");
+    pipeline.drafted = Arc::new(super::Drafted::new(None, None).with_secrets(Arc::new(
+        crate::secrets::ChainedSource::new(vec![
+            Arc::new(crate::secrets::EnvSource),
+            Arc::new(store),
+        ]),
+    )));
+    let tried = pipeline
+        .call_native("builtin__try_tool", json!({"yaml": tool, "input": {}}))
+        .await;
+    assert_eq!(tried.result["ran"], json!(true), "{}", tried.result);
+    assert_eq!(tried.result["result"]["stored"], "[secret]");
+    assert_eq!(tried.result["result"]["asked"], "[secret]");
+    let shown = tried.result.to_string();
+    assert!(!shown.contains("stored-hunter22") && !shown.contains("oneoff99"));
+    assert_eq!(
+        tried.result["needs_env"],
+        json!(["GRAPH_TEST_NEVER_SET_DRAFT_TOKEN"])
+    );
+    let asked = human.asked.lock().unwrap();
+    let properties = &asked[0].schema["properties"];
+    assert!(properties["GRAPH_TEST_NEVER_SET_DRAFT_TOKEN"].is_object());
+    assert!(properties.get("GRAPH_TEST_STORED_DRAFT_TOKEN").is_none());
+}
+
+#[tokio::test]
 async fn short_secrets_and_secrets_with_escaped_characters_are_redacted_too() {
     let tool = "name: echo\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"%s\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${GRAPH_TEST_NEVER_SET_SHORT}\"\n";
     let (pipeline, _dir, _) = drafting_pipeline(vec![AskOutcome::Answered(

@@ -3,7 +3,7 @@ use crate::tools::{ServerIdentity, ToolRegistry};
 use graph_config::pack::{McpRequirement, PackRequires};
 use semver::{Version, VersionReq};
 use serde_json::{Map, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub const GRAPH_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -14,6 +14,7 @@ pub struct Machine {
     pub os: String,
     pub path: Vec<PathBuf>,
     pub env: BTreeMap<String, String>,
+    pub stored: BTreeSet<String>,
 }
 
 impl Machine {
@@ -29,7 +30,25 @@ impl Machine {
                     Some((key.into_string().ok()?, value.into_string().ok()?))
                 })
                 .collect(),
+            stored: BTreeSet::new(),
         }
+    }
+
+    pub fn with_stored(
+        mut self,
+        names: &[String],
+        store: &dyn crate::secrets::SecretSource,
+    ) -> Machine {
+        for name in names {
+            if !self.has_env(name)
+                && store
+                    .resolve(name)
+                    .is_some_and(|found| !found.value.is_empty())
+            {
+                self.stored.insert(name.clone());
+            }
+        }
+        self
     }
 
     pub fn has_binary(&self, name: &str) -> bool {
@@ -40,7 +59,7 @@ impl Machine {
     }
 
     pub fn has_env(&self, name: &str) -> bool {
-        self.env.get(name).is_some_and(|value| !value.is_empty())
+        self.env.get(name).is_some_and(|value| !value.is_empty()) || self.stored.contains(name)
     }
 }
 

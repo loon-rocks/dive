@@ -223,6 +223,19 @@ fn page(format: &Format, schema: &Yaml) -> String {
         out.push('\n');
     }
     file_facts(&mut out, format, schema);
+    for section in schema
+        .get("x-sections")
+        .and_then(Yaml::as_sequence)
+        .into_iter()
+        .flatten()
+    {
+        let _ = writeln!(
+            out,
+            "## {}\n\n{}\n",
+            text(section, "heading"),
+            paragraphs(text(section, "body"))
+        );
+    }
     let branches = schema.get("oneOf").and_then(Yaml::as_sequence);
     out.push_str(if branches.is_some() {
         "## Common fields\n\n"
@@ -412,6 +425,10 @@ fn environment() -> Section {
     let mut body = String::new();
     for group in &groups {
         let _ = writeln!(body, "## {}\n", text(group, "group"));
+        let description = text(group, "description");
+        if !description.is_empty() {
+            let _ = writeln!(body, "{}\n", paragraphs(description));
+        }
         for variable in group
             .get("variables")
             .and_then(Yaml::as_sequence)

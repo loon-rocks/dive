@@ -52,7 +52,9 @@ pub async fn run(command: PackCommand) -> Result<()> {
                 yes,
                 asker: crate::interlocutor::tty(),
             };
-            let config = graph_config::load_from(&layer.config_paths)?.config;
+            let config =
+                graph_config::load_from(&layer.config_paths, &graph_core::secrets::system())?
+                    .config;
             let majors = major::Majors {
                 consent: &consent,
                 config: &config,
