@@ -3,7 +3,7 @@
 
 use crate::cli::ThreadCommand;
 use crate::commands::outcome::{report, Outcome};
-use crate::runtime::open_store;
+use crate::host::open_store;
 use anyhow::{bail, Result};
 use graph_core::{EntryBody, Store, ThreadEntry};
 use graph_llm::types::ChatMessage;
@@ -11,7 +11,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 pub async fn run(command: ThreadCommand) -> Result<()> {
-    let config = crate::runtime::load_config()?.config;
+    let config = crate::host::load_config()?.config;
     let store = open_store(&config)?;
 
     match command {

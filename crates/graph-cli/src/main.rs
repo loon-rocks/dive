@@ -2,11 +2,10 @@ mod cli;
 mod commands;
 #[cfg(test)]
 mod docs_gen;
+mod host;
 mod interlocutor;
 mod mcp_server;
 mod output;
-mod packs;
-mod runtime;
 mod telemetry;
 mod workbench;
 

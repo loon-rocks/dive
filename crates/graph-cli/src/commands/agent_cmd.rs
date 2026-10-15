@@ -11,7 +11,7 @@ pub fn run(command: AgentCommand) -> Result<()> {
     if let AgentCommand::Migrate { path, json } = command {
         return report(migrate(&path)?, json);
     }
-    let installed = crate::runtime::load_packs(&crate::runtime::load_config()?)?;
+    let installed = graph_runtime::runtime::load_packs(&crate::host::load_config()?)?;
     let packs: Vec<AgentDoc> = installed.agents().cloned().collect();
     match command {
         AgentCommand::List { json } => report(list(&dirs, &installed.public_agents()), json),

@@ -1,6 +1,6 @@
 # graph-cli
 
-A Rust CLI agent with a plan-based execution engine. Cargo workspace, six crates. GitHub: `tylerdavis/graph`.
+A Rust CLI agent with a plan-based execution engine. Cargo workspace, seven crates. GitHub: `tylerdavis/graph`.
 
 **Positioning: plans first.** The plan pipeline is the core product. "The workbench" means the workbench TUI (`graph wb`; `graph wb plan|agent|tool` opens a mode directly) — the review/debug surface for plans; the agent loop (`ask`/`chat`) is the conversational layer for probing tools, prototyping, and exercising plans. Frame features and docs accordingly, and keep that vocabulary: never call `ask`/`chat` "the workbench".
 
@@ -28,6 +28,7 @@ CI (`.github/workflows/ci.yaml`) runs lint + tests on ubuntu-24.04 and macos-15 
 | Crate | Contents |
 |---|---|
 | `graph-cli` | binary: clap tree, REPL, sinks (`TtySink`, `JsonlSink`, OTLP exporter in `src/telemetry.rs` teed onto either via `[telemetry]`), input resolution, runtime wiring, plan workbench TUI (`src/workbench/`: ratatui dual-pane, pure `update()` reducer, channel-backed sink, `UiGate`), MCP **server** (`src/mcp_server/`: `graph mcp serve`, plans-as-tools + authoring tools) |
+| `graph-runtime` | the embeddable engine host the CLI and the desktop app share: `Runtime` (config → providers → MCP registry → store → pipeline/conversation wiring, opened on a `Workspace` with `RuntimeOptions` instead of reading the process env), pack install/update/author code (`src/packs/`), thread helpers; no terminal dependencies, never prints |
 | `graph-core` | agent loop, plan pipeline (incl. `exit` gates, plan composition), template engine, toolbox, user tools + built-in tool YAML (`src/builtins/`), installed packs (`src/packs/`), Store/ToolRegistry traits, prompts, shape inference |
 | `graph-llm` | ChatProvider trait + anthropic/openai_compat providers, retries with backoff, cross-provider failover (`fallbacks` on model entries), structured output + repair, ModelRouter (role → model) |
 | `graph-mcp` | rmcp client manager (stdio + streamable HTTP), `server__tool` namespacing, graceful shutdown |

@@ -3,17 +3,17 @@ use super::{
     update_outcome, wanted_ref, Update,
 };
 use crate::commands::outcome::Outcome;
-use crate::packs::author::{self, PackSession, MIGRATION_PREFIX};
-use crate::packs::git::{self, remote_url};
-use crate::packs::layer::{self, Fetched, Layer, LayerState};
-use crate::packs::refs::{self, PackRef, Release};
-use crate::packs::RequirementReport;
 use anyhow::Result;
 use graph_config::pack::{LockEntry, PackEntry, PackLock};
 use graph_config::Config;
 use graph_core::packs::PackSource;
 use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor, StepPath};
 use graph_core::EventSink;
+use graph_runtime::packs::author::{self, PackSession, MIGRATION_PREFIX};
+use graph_runtime::packs::git::{self, remote_url};
+use graph_runtime::packs::layer::{self, Fetched, Layer, LayerState};
+use graph_runtime::packs::refs::{self, PackRef, Release};
+use graph_runtime::packs::RequirementReport;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -361,6 +361,7 @@ async fn cross(
     let backup = if author::migrations(&with_migrations).contains(&major) {
         let session = PackSession::open(
             run.majors.config,
+            &crate::host::options(),
             with_migrations,
             run.majors.events.clone(),
         )

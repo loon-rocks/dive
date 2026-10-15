@@ -23,11 +23,11 @@
 use crate::cli::{PlanAttribute, StepAttribute, StepCommand};
 use crate::commands::outcome::Outcome;
 use crate::commands::plan_cmd::resolve_target;
-use crate::runtime::Runtime;
 use anyhow::{anyhow, bail, Context, Result};
 use graph_core::pipeline::authoring;
 use graph_core::pipeline::doc::{finish_label, PlanDoc};
 use graph_core::pipeline::{draft_input, plan_doc, Finish, COMPOSE_PLAN};
+use graph_runtime::runtime::Runtime;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 

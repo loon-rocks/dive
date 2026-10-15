@@ -32,8 +32,8 @@ mod run;
 use crate::cli::{PlanAttribute, StepAttribute};
 use crate::commands::outcome::Outcome;
 use crate::commands::plan_edit;
-use crate::runtime::Runtime;
 use anyhow::{anyhow, Result};
+use graph_runtime::runtime::Runtime;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams,
     ProtocolVersion, ServerCapabilities, ServerInfo,
@@ -124,8 +124,8 @@ impl GraphServer {
 /// project layer cannot sneak in via a call site that forgot.
 pub(crate) fn runtime() -> Result<Runtime> {
     let loaded = project::config()?;
-    let packs = crate::runtime::load_packs(&loaded)?;
-    Runtime::with_packs(loaded.config, packs)
+    let packs = graph_runtime::runtime::load_packs(&loaded)?;
+    Runtime::with_packs(loaded.config, packs, crate::host::options())
 }
 
 /// Turn an [`Outcome`] into a tool result.
