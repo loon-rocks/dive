@@ -6,10 +6,9 @@ use crate::commands::outcome::{report, Outcome};
 use crate::commands::plan_edit;
 use crate::output::SilentExit;
 use anyhow::{bail, Result};
-use graph_core::pipeline::authoring;
 use graph_core::pipeline::catalog;
-use graph_core::pipeline::doc::{parse_plan_doc, validate_input, LoadedPlans, PlanDoc};
-use graph_runtime::runtime::Runtime;
+use graph_core::pipeline::doc::validate_input;
+use graph_runtime::ops;
 use std::sync::Arc;
 
 /// Exit code for "the plan needs inputs you didn't provide".
@@ -95,138 +94,51 @@ pub async fn run(command: PlanCommand) -> Result<()> {
     }
 }
 
-/// `graph plan list` — the catalog, plus what was skipped and why.
-///
-/// The text rendering is `identifier\tname` on stdout: unlike the other
-/// listings this one *is* a deliverable (it is what you pipe into `xargs`),
-/// so it does not move to stderr without `--json`.
 fn list() -> Result<Outcome> {
     let runtime = crate::host::runtime()?;
-    let mut loaded = runtime.plan_docs();
-    let packs = runtime.packs.pack_set();
-    loaded
-        .docs
-        .retain(|doc| packs.shows(&graph_core::packs::Origin::Outside, &doc.identifier));
-    let body = plan_edit::list_as_json(&loaded);
-    if loaded.docs.is_empty() && loaded.skipped.is_empty() {
+    let listed = ops::plan::list(&runtime);
+    let body = serde_json::to_value(&listed)?;
+    if listed.is_empty() {
         return Ok(Outcome::raw(String::new(), body)
             .with_note("no plan documents found — add YAML files under [plans].paths"));
     }
-    let text = loaded
-        .docs
+    let text = listed
+        .plans
         .iter()
-        .map(|doc| match &doc.pack {
-            Some(source) => format!("{}\t{}\t{}\n", doc.identifier, doc.name, source.describe()),
-            None => format!("{}\t{}\n", doc.identifier, doc.name),
+        .map(|plan| match &plan.pack {
+            Some(source) => format!("{}\t{}\t{}\n", plan.identifier, plan.name, source),
+            None => format!("{}\t{}\n", plan.identifier, plan.name),
         })
         .collect::<String>();
     Ok(Outcome::raw(text, body))
 }
 
-/// `graph plan show` — the document itself, as YAML or as JSON.
 fn show(name: &str) -> Result<Outcome> {
     let runtime = crate::host::runtime()?;
-    // Lenient like `validate`: reading a plan the catalog rejects is
-    // exactly how you find out why it was rejected.
-    let (doc, _loaded) = resolve_target(&runtime, name)?;
-    let source = doc.source_label();
-    let mut body = plan_edit::doc_as_json(&doc)?;
-    body["source"] = serde_json::json!(source);
-    Ok(Outcome::raw(authoring::to_yaml(&doc)?, body).with_note(format!("source: {source}")))
+    let detail = ops::plan::show(&runtime, name)?;
+    let mut body = plan_edit::doc_as_json(&detail.doc)?;
+    body["source"] = serde_json::json!(detail.source);
+    Ok(Outcome::raw(detail.yaml, body).with_note(format!("source: {}", detail.source)))
 }
 
-/// Resolve a plan identifier or YAML file path to a document, for authoring
-/// and inspection.
-///
-/// Deliberately lenient: it uses `parse_plan_doc`, not `load_plan_doc`, so an
-/// invalid plan can still be opened. A `graph plan new` scaffold has no steps
-/// and therefore never enters the catalog — if this refused to open it, the
-/// build-it-up-with-`step add` flow would be impossible, and `plan validate`
-/// would report "failed to load" instead of the problem list it exists to
-/// print.
-///
-/// A path wins when it exists on disk. Otherwise the catalog is searched,
-/// then every plan file on disk via `Runtime::find_plan_file` — which is what
-/// lets a plan the catalog rejects (hidden by `requires_servers`, or invalid)
-/// still be opened and repaired. Only then does it give up, explaining why.
-pub fn resolve_target(runtime: &Runtime, name_or_path: &str) -> Result<(PlanDoc, LoadedPlans)> {
-    let loaded = runtime.plan_docs();
-    let path = std::path::Path::new(name_or_path);
-    if path.exists() {
-        return Ok((parse_plan_doc(path)?, loaded));
-    }
-    if let Some(doc) = loaded.docs.iter().find(|d| d.identifier == name_or_path) {
-        return Ok((doc.clone(), loaded));
-    }
-    if let Some(found) = runtime.find_plan_file(name_or_path) {
-        return Ok((parse_plan_doc(&found)?, loaded));
-    }
-    bail!(missing_plan(&loaded, name_or_path))
-}
-
-/// `graph plan validate` — the full verdict across all three layers.
-///
-/// `problems` are fatal: the plan cannot run here. `notes` are not — a
-/// `requires_servers` entry that this machine doesn't configure means the file
-/// is portable but not runnable locally, which is worth saying and not worth
-/// failing over.
 pub fn validate(name_or_path: &str) -> Result<Outcome> {
     let runtime = crate::host::runtime()?;
-    let (doc, loaded) = resolve_target(&runtime, name_or_path)?;
-    // Structural validation reruns here rather than being assumed from load
-    // time: a plan named by path may never have been through the catalog, and
-    // a caller asking "is this valid?" deserves every layer's answer.
-    let mut problems = authoring::static_problems(&doc);
-    for problem in authoring::model_kind_problems(&doc, &|role| runtime.model_kind_of(role)) {
-        if !problems.contains(&problem) {
-            problems.push(problem);
-        }
-    }
-    let catalog = runtime.tool_catalog(&loaded.docs)?;
-    let check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &catalog);
-    for problem in check.errors {
-        if !problems.contains(&problem) {
-            problems.push(problem);
-        }
-    }
-    let ok = problems.is_empty();
-    let body = serde_json::json!({
-        "plan": doc.identifier,
-        "steps": doc.steps.len(),
-        "ok": ok,
-        "problems": problems,
-        "notes": check.notes,
-    });
-    Ok(if ok {
+    let verdict = ops::plan::validate(&runtime, name_or_path)?;
+    let body = serde_json::to_value(&verdict)?;
+    Ok(if verdict.ok {
         Outcome::ok(body)
     } else {
         Outcome::rejected(body)
     })
 }
 
-/// `graph plan migrate` — rewrite one plan file to the current plan format.
-///
-/// Resolves like `validate`: a path that exists wins, otherwise the
-/// identifier is looked up on disk (so a plan the catalog rejects can still
-/// be migrated — that is often why it is rejected).
 fn migrate(name_or_path: &str) -> Result<Outcome> {
     let path = std::path::Path::new(name_or_path);
-    let path = if path.exists() {
-        path.to_path_buf()
+    let migrated = if path.exists() {
+        ops::plan::migrate_path(path, name_or_path)?
     } else {
-        let runtime = crate::host::runtime()?;
-        runtime.find_plan_file(name_or_path).ok_or_else(|| {
-            anyhow::anyhow!("no plan file for '{name_or_path}' under [plans].paths")
-        })?
+        ops::plan::migrate(&crate::host::runtime()?, name_or_path)?
     };
-    let check = |value: &serde_yaml::Value| -> Result<(), String> {
-        let yaml = serde_yaml::to_string(value).map_err(|e| e.to_string())?;
-        graph_core::pipeline::doc::parse_plan_source(&yaml, name_or_path)
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    };
-    let migrated = graph_core::format::migrate_file(graph_core::format::Kind::Plan, &path, &check)
-        .map_err(anyhow::Error::msg)?;
     Ok(migrated_outcome(migrated))
 }
 
@@ -280,19 +192,6 @@ fn render_validation(body: &serde_json::Value) -> Result<()> {
     Ok(())
 }
 
-/// Why a named plan isn't in the catalog: it requires MCP servers this
-/// config doesn't have, its file failed to load (say why), or it simply
-/// doesn't exist.
-fn missing_plan(loaded: &LoadedPlans, name: &str) -> String {
-    if let Some(reason) = loaded.hidden_reason(name) {
-        return reason;
-    }
-    match loaded.skip_reason(name) {
-        Some(reason) => format!("plan '{name}' failed to load — {reason}"),
-        None => format!("no plan named '{name}' (see `graph plan list`)"),
-    }
-}
-
 async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: bool) -> Result<()> {
     // `--json` promises machine-parseable stdout, so it suppresses CI
     // annotations (which are stdout workflow commands) even when a mode
@@ -305,7 +204,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     let runtime = crate::host::runtime()?;
     let loaded = runtime.plan_docs();
     let Some(doc) = loaded.docs.iter().find(|d| d.identifier == name).cloned() else {
-        let message = missing_plan(&loaded, name);
+        let message = ops::plan::missing(&loaded, name);
         annotate(&message);
         bail!(message);
     };
