@@ -2,7 +2,7 @@
 //! continue mode) and the execution gate that parks tool calls on a
 //! oneshot until the user decides.
 
-use super::app::{GateKind, Msg};
+use super::event::{GateKind, WorkbenchEvent};
 use async_trait::async_trait;
 use graph_core::pipeline::{
     AskOutcome, AskRequest, ErrorDecision, ExecutionGate, GateContext, GateDecision, Interlocutor,
@@ -115,8 +115,8 @@ pub struct RunReport {
 }
 
 impl RunReport {
-    pub fn finished_msg(&self) -> Msg {
-        Msg::RunFinished {
+    pub fn finished_msg(&self) -> WorkbenchEvent {
+        WorkbenchEvent::RunFinished {
             headline: self.headline.clone(),
             is_error: self.is_error,
             exited: self.exited,
@@ -206,7 +206,7 @@ pub(super) fn truncate(text: &str, max: usize) -> String {
 }
 
 pub struct UiGate {
-    tx: UnboundedSender<Msg>,
+    tx: UnboundedSender<WorkbenchEvent>,
     controls: std::sync::Arc<DebugControls>,
     /// One pause at a time: concurrent map items serialize their prompts
     /// instead of clobbering each other's GatePrompt in the UI.
@@ -214,7 +214,10 @@ pub struct UiGate {
 }
 
 impl UiGate {
-    pub fn new(tx: UnboundedSender<Msg>, controls: std::sync::Arc<DebugControls>) -> Self {
+    pub fn new(
+        tx: UnboundedSender<WorkbenchEvent>,
+        controls: std::sync::Arc<DebugControls>,
+    ) -> Self {
         Self {
             tx,
             controls,
@@ -240,7 +243,7 @@ impl UiGate {
             "gate pause at {path} ({}) — waiting for a decision",
             ctx.tool_name
         );
-        let sent = self.tx.send(Msg::GateAsk {
+        let sent = self.tx.send(WorkbenchEvent::GateAsk {
             kind,
             path: path.clone(),
             tool: ctx.tool_name.to_string(),
@@ -310,14 +313,14 @@ impl ExecutionGate for UiGate {
 /// not a breakpoint, and skipping it would silently take the
 /// `whenUnanswered` path while a human sat watching.
 pub struct UiInterlocutor {
-    tx: UnboundedSender<Msg>,
+    tx: UnboundedSender<WorkbenchEvent>,
     /// Concurrent `map` items must queue their questions rather than
     /// clobber each other's prompt — the same rule [`UiGate`] follows.
     ask_lock: tokio::sync::Mutex<()>,
 }
 
 impl UiInterlocutor {
-    pub fn new(tx: UnboundedSender<Msg>) -> Self {
+    pub fn new(tx: UnboundedSender<WorkbenchEvent>) -> Self {
         Self {
             tx,
             ask_lock: tokio::sync::Mutex::new(()),
@@ -335,7 +338,7 @@ impl Interlocutor for UiInterlocutor {
         } else {
             format!("{}→{}", request.call_stack.join("→"), request.path)
         };
-        let sent = self.tx.send(Msg::GateAsk {
+        let sent = self.tx.send(WorkbenchEvent::GateAsk {
             kind: GateKind::Ask {
                 schema: request.schema.clone(),
                 default: request.default.clone(),
@@ -422,9 +425,9 @@ mod tests {
     }
 
     /// Answer the next GateAsk on `rx` with `decision`.
-    fn answer(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Msg>, decision: UiDecision) {
+    fn answer(rx: &mut tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>, decision: UiDecision) {
         match rx.try_recv().expect("expected a GateAsk") {
-            Msg::GateAsk { reply, .. } => reply.send(decision).unwrap(),
+            WorkbenchEvent::GateAsk { reply, .. } => reply.send(decision).unwrap(),
             _ => panic!("expected GateAsk"),
         }
     }

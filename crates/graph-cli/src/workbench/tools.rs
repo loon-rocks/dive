@@ -2,7 +2,7 @@
 //! plan through these, so the plan pane is always the agent's source of
 //! truth. Registered under `workbench__` alongside the normal catalog.
 
-use super::app::Msg;
+use super::event::WorkbenchEvent;
 use super::runner::{DebugControls, UiGate, UiInterlocutor};
 use async_trait::async_trait;
 use graph_core::pipeline::authoring;
@@ -88,7 +88,7 @@ pub type SharedDraft = Arc<Mutex<DraftState>>;
 
 pub fn publish_draft(
     draft: &Mutex<DraftState>,
-    tx: &UnboundedSender<Msg>,
+    tx: &UnboundedSender<WorkbenchEvent>,
     doc: PlanDoc,
     dirty: bool,
 ) {
@@ -98,7 +98,7 @@ pub fn publish_draft(
         state.doc = Some(doc.clone());
         state.dirty = dirty;
     }
-    let _ = tx.send(Msg::DraftReplaced {
+    let _ = tx.send(WorkbenchEvent::DraftReplaced {
         doc: Box::new(doc),
         dirty,
     });
@@ -109,7 +109,7 @@ pub struct WorkbenchTools {
     pipeline: Arc<Pipeline>,
     plans_dir: Option<PathBuf>,
     debug: Arc<DebugControls>,
-    tx: UnboundedSender<Msg>,
+    tx: UnboundedSender<WorkbenchEvent>,
 }
 
 impl WorkbenchTools {
@@ -118,7 +118,7 @@ impl WorkbenchTools {
         pipeline: Arc<Pipeline>,
         plans_dir: Option<PathBuf>,
         debug: Arc<DebugControls>,
-        tx: UnboundedSender<Msg>,
+        tx: UnboundedSender<WorkbenchEvent>,
     ) -> Self {
         Self {
             draft,
@@ -249,7 +249,7 @@ impl WorkbenchTools {
             state.doc = Some(doc.clone());
             state.dirty = false;
         }
-        let _ = self.tx.send(Msg::DraftReplaced {
+        let _ = self.tx.send(WorkbenchEvent::DraftReplaced {
             doc: Box::new(doc),
             dirty: false,
         });
@@ -265,7 +265,7 @@ impl WorkbenchTools {
         match restored {
             Some((doc, dirty)) => {
                 let result = json!({"restored": doc.identifier, "dirty": dirty});
-                let _ = self.tx.send(Msg::DraftReplaced {
+                let _ = self.tx.send(WorkbenchEvent::DraftReplaced {
                     doc: Box::new(doc),
                     dirty,
                 });
@@ -351,7 +351,7 @@ impl WorkbenchTools {
             }
             self.debug.arm();
         }
-        let _ = self.tx.send(Msg::RunStarted {
+        let _ = self.tx.send(WorkbenchEvent::RunStarted {
             gated,
             breakpoints: provided.then(|| breakpoints.clone()),
         });
@@ -390,7 +390,7 @@ impl WorkbenchTools {
     /// Save the draft to disk and surface the result in the status bar.
     fn save_plan(&self) -> ToolOutcome {
         let result = super::effects::save_draft(&self.draft, self.plans_dir.as_deref());
-        let _ = self.tx.send(Msg::Saved(result.clone()));
+        let _ = self.tx.send(WorkbenchEvent::Saved(result.clone()));
         match result {
             Ok(path) => ToolOutcome {
                 result: json!({"savedTo": path}),
@@ -450,7 +450,7 @@ impl WorkbenchTools {
             state.doc = Some(doc.clone());
             state.dirty = true;
         }
-        let _ = self.tx.send(Msg::DraftReplaced {
+        let _ = self.tx.send(WorkbenchEvent::DraftReplaced {
             doc: Box::new(doc),
             dirty: true,
         });
@@ -1070,7 +1070,7 @@ steps:
         assert_eq!(outcome.result["validation"], json!("ok"));
         assert!(draft.lock().unwrap().doc.is_some());
         match rx.try_recv().unwrap() {
-            Msg::DraftReplaced { doc, dirty } => {
+            WorkbenchEvent::DraftReplaced { doc, dirty } => {
                 assert_eq!(doc.identifier, "demo");
                 assert!(!dirty, "a load is not an unsaved edit");
             }
@@ -1230,7 +1230,7 @@ steps:
         );
         assert!(!outcome.is_error, "{:?}", outcome.result);
         match rx.try_recv().unwrap() {
-            Msg::DraftReplaced { doc, dirty } => {
+            WorkbenchEvent::DraftReplaced { doc, dirty } => {
                 assert_eq!(doc.identifier, "other_plan");
                 assert!(!dirty);
             }
@@ -1277,7 +1277,10 @@ steps:
         let outcome = call(&tools, SAVE_ARTIFACT, json!({"kind": "plan"}));
         assert!(!outcome.is_error, "{:?}", outcome.result);
         assert!(dir.path().join("demo.yaml").exists());
-        assert!(matches!(rx.try_recv().unwrap(), Msg::Saved(Ok(_))));
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            WorkbenchEvent::Saved(Ok(_))
+        ));
     }
 
     #[test]
@@ -1350,7 +1353,7 @@ solver:
     ) -> (
         WorkbenchTools,
         SharedDraft,
-        tokio::sync::mpsc::UnboundedReceiver<Msg>,
+        tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>,
     ) {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let draft = Arc::new(Mutex::new(DraftState::new(doc)));
@@ -1364,9 +1367,11 @@ solver:
         (tools, draft, rx)
     }
 
-    fn assert_dirty_publish(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Msg>) {
+    fn assert_dirty_publish(rx: &mut tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>) {
         match rx.try_recv().unwrap() {
-            Msg::DraftReplaced { dirty, .. } => assert!(dirty, "edits are unsaved changes"),
+            WorkbenchEvent::DraftReplaced { dirty, .. } => {
+                assert!(dirty, "edits are unsaved changes")
+            }
             _ => panic!("expected DraftReplaced"),
         }
     }
@@ -1841,7 +1846,7 @@ steps:
         let outcome = tools.restore_draft();
         assert!(!outcome.is_error, "{:?}", outcome.result);
         match rx.try_recv().unwrap() {
-            Msg::DraftReplaced { doc, dirty } => {
+            WorkbenchEvent::DraftReplaced { doc, dirty } => {
                 assert_eq!(doc.name, "Demo");
                 assert!(!dirty);
             }
@@ -1992,7 +1997,10 @@ steps:
 
     fn draft_tools(
         pipeline: Arc<Pipeline>,
-    ) -> (WorkbenchTools, tokio::sync::mpsc::UnboundedReceiver<Msg>) {
+    ) -> (
+        WorkbenchTools,
+        tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>,
+    ) {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let tools = WorkbenchTools::new(
             Arc::new(Mutex::new(DraftState::new(None))),
@@ -2053,7 +2061,7 @@ steps:
         assert_eq!(outcome.result["identifier"], json!("report_on_x"));
         assert_eq!(outcome.result["steps"], json!(1));
         match rx.try_recv().unwrap() {
-            Msg::DraftReplaced { doc, dirty } => {
+            WorkbenchEvent::DraftReplaced { doc, dirty } => {
                 assert!(dirty);
                 assert_eq!(doc.steps[0].id, "E0");
             }
@@ -2134,7 +2142,7 @@ steps:
 
     fn drafting_tools() -> (
         WorkbenchTools,
-        tokio::sync::mpsc::UnboundedReceiver<Msg>,
+        tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>,
         tempfile::TempDir,
     ) {
         let dir = tempfile::tempdir().unwrap();
@@ -2147,10 +2155,10 @@ steps:
         (tools, rx, dir)
     }
 
-    fn shown(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Msg>) -> Option<bool> {
+    fn shown(rx: &mut tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>) -> Option<bool> {
         let mut last = None;
         while let Ok(msg) = rx.try_recv() {
-            if let Msg::ArtifactChanged(view) = msg {
+            if let WorkbenchEvent::ArtifactChanged(view) = msg {
                 last = Some(view.is_some());
             }
         }
@@ -2192,7 +2200,7 @@ steps:
         );
         let answering = async {
             while let Some(msg) = rx.recv().await {
-                if let Msg::GateAsk { reply, input, .. } = msg {
+                if let WorkbenchEvent::GateAsk { reply, input, .. } = msg {
                     assert!(input["prompt"]
                         .as_str()
                         .unwrap()

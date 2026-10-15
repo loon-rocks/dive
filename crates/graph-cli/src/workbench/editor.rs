@@ -4,7 +4,8 @@
 //! which fields downstream templates will read. Key handling lives in
 //! `app`; rendering in `ui`.
 
-use super::app::{GateKind, GatePrompt};
+use super::app::GatePrompt;
+use super::event::GateKind;
 use serde_json::Value;
 use tui_textarea::TextArea;
 
