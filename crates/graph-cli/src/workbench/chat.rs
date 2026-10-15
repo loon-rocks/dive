@@ -1,7 +1,7 @@
 //! The engine→UI bridge: an [`EventSink`] that forwards agent and plan
 //! events into the workbench's message channel.
 
-use super::app::Msg;
+use super::event::WorkbenchEvent;
 use graph_core::EventSink;
 use serde_json::Value;
 use std::time::Duration;
@@ -15,26 +15,26 @@ enum SinkKind {
 }
 
 pub struct ChannelSink {
-    tx: UnboundedSender<Msg>,
+    tx: UnboundedSender<WorkbenchEvent>,
     kind: SinkKind,
 }
 
 impl ChannelSink {
-    pub fn agent(tx: UnboundedSender<Msg>) -> Self {
+    pub fn agent(tx: UnboundedSender<WorkbenchEvent>) -> Self {
         Self {
             tx,
             kind: SinkKind::AgentTurn,
         }
     }
 
-    pub fn plan_run(tx: UnboundedSender<Msg>) -> Self {
+    pub fn plan_run(tx: UnboundedSender<WorkbenchEvent>) -> Self {
         Self {
             tx,
             kind: SinkKind::PlanRun,
         }
     }
 
-    fn send(&self, msg: Msg) {
+    fn send(&self, msg: WorkbenchEvent) {
         let _ = self.tx.send(msg);
     }
 }
@@ -53,7 +53,7 @@ fn display_path(call_stack: &[String], path: &str) -> (String, bool) {
 impl EventSink for ChannelSink {
     fn text_delta(&self, text: &str) {
         if matches!(self.kind, SinkKind::AgentTurn) {
-            self.send(Msg::AgentDelta(text.to_string()));
+            self.send(WorkbenchEvent::AgentDelta(text.to_string()));
         }
     }
 
@@ -64,7 +64,7 @@ impl EventSink for ChannelSink {
             } else {
                 "handed off to"
             };
-            self.send(Msg::ActiveAgent {
+            self.send(WorkbenchEvent::ActiveAgent {
                 name: to.to_string(),
                 note: Some(format!("⇢ {from} {verb} {to}")),
             });
@@ -73,13 +73,13 @@ impl EventSink for ChannelSink {
 
     fn tool_started(&self, name: &str, _args: &Value) {
         if matches!(self.kind, SinkKind::AgentTurn) {
-            self.send(Msg::AgentToolStarted(name.to_string()));
+            self.send(WorkbenchEvent::AgentToolStarted(name.to_string()));
         }
     }
 
     fn tool_finished(&self, name: &str, _elapsed: Duration, is_error: bool) {
         if matches!(self.kind, SinkKind::AgentTurn) {
-            self.send(Msg::AgentToolFinished {
+            self.send(WorkbenchEvent::AgentToolFinished {
                 name: name.to_string(),
                 is_error,
             });
@@ -88,13 +88,13 @@ impl EventSink for ChannelSink {
 
     fn planning(&self) {
         if matches!(self.kind, SinkKind::PlanRun) {
-            self.send(Msg::Planning);
+            self.send(WorkbenchEvent::Planning);
         }
     }
 
     fn synthesizing(&self) {
         if matches!(self.kind, SinkKind::PlanRun) {
-            self.send(Msg::Synthesizing);
+            self.send(WorkbenchEvent::Synthesizing);
         }
     }
 
@@ -105,19 +105,19 @@ impl EventSink for ChannelSink {
     /// Only the end-of-run total — one line per inference would bury the run
     /// log on a multi-round agent step, and the log is read by a human.
     fn usage_summary(&self, report: &graph_core::usage::UsageReport) {
-        self.send(Msg::RunUsage(report.summary()));
+        self.send(WorkbenchEvent::RunUsage(report.summary()));
     }
 
     fn solver_delta(&self, text: &str) {
         if matches!(self.kind, SinkKind::PlanRun) {
-            self.send(Msg::SolverDelta(text.to_string()));
+            self.send(WorkbenchEvent::SolverDelta(text.to_string()));
         }
     }
 
     fn step_started(&self, call_stack: &[String], path: &str, tool: &str, input: &Value) {
         if matches!(self.kind, SinkKind::PlanRun) {
             let (path, in_plan) = display_path(call_stack, path);
-            self.send(Msg::StepStarted {
+            self.send(WorkbenchEvent::StepStarted {
                 path,
                 tool: tool.to_string(),
                 input: input.clone(),
@@ -137,7 +137,7 @@ impl EventSink for ChannelSink {
     ) {
         if matches!(self.kind, SinkKind::PlanRun) {
             let (path, in_plan) = display_path(call_stack, path);
-            self.send(Msg::StepFinished {
+            self.send(WorkbenchEvent::StepFinished {
                 path,
                 result: result.clone(),
                 is_error,
@@ -173,10 +173,10 @@ mod tests {
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
             make(tx).usage_summary(&report());
             match rx.try_recv().expect("a usage message") {
-                Msg::RunUsage(summary) => {
+                WorkbenchEvent::RunUsage(summary) => {
                     assert_eq!(summary, "2 calls · 4k in / 250 out · $0.42")
                 }
-                _ => panic!("expected Msg::RunUsage"),
+                _ => panic!("expected WorkbenchEvent::RunUsage"),
             }
         }
     }
