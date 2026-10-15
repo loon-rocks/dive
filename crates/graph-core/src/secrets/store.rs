@@ -1,4 +1,4 @@
-use super::{is_secret_name, store_resolve, Resolved, SecretSource, SecretStore, StoreError};
+use super::{store_account, store_resolve_in, Resolved, SecretSource, SecretStore, StoreError};
 
 pub const SERVICE: &str = "graph";
 pub const STORE_ENV: &str = "GRAPH_SECRET_STORE";
@@ -19,12 +19,10 @@ impl CredentialStore {
         Self { enabled: false }
     }
 
-    fn entry(&self, name: &str) -> Result<keyring::Entry, StoreError> {
-        if !is_secret_name(name) {
-            return Err(StoreError::InvalidName(name.to_string()));
-        }
+    fn entry(&self, name: &str, project: Option<&str>) -> Result<keyring::Entry, StoreError> {
+        let account = store_account(name, project)?;
         self.status()?;
-        keyring::Entry::new(SERVICE, name).map_err(describe)
+        keyring::Entry::new(SERVICE, &account).map_err(describe)
     }
 }
 
@@ -56,20 +54,22 @@ impl SecretStore for CredentialStore {
             .map(|_| ())
     }
 
-    fn get(&self, name: &str) -> Result<Option<String>, StoreError> {
-        match self.entry(name)?.get_password() {
+    fn get_in(&self, name: &str, project: Option<&str>) -> Result<Option<String>, StoreError> {
+        match self.entry(name, project)?.get_password() {
             Ok(value) => Ok(Some(value)),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(error) => Err(describe(error)),
         }
     }
 
-    fn set(&self, name: &str, value: &str) -> Result<(), StoreError> {
-        self.entry(name)?.set_password(value).map_err(describe)
+    fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError> {
+        self.entry(name, project)?
+            .set_password(value)
+            .map_err(describe)
     }
 
-    fn remove(&self, name: &str) -> Result<bool, StoreError> {
-        match self.entry(name)?.delete_credential() {
+    fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError> {
+        match self.entry(name, project)?.delete_credential() {
             Ok(()) => Ok(true),
             Err(keyring::Error::NoEntry) => Ok(false),
             Err(error) => Err(describe(error)),
@@ -79,6 +79,10 @@ impl SecretStore for CredentialStore {
 
 impl SecretSource for CredentialStore {
     fn resolve(&self, name: &str) -> Option<Resolved> {
-        store_resolve(self, name)
+        store_resolve_in(self, name, None)
+    }
+
+    fn resolve_in(&self, name: &str, project: Option<&str>) -> Option<Resolved> {
+        store_resolve_in(self, name, project)
     }
 }

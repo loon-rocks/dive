@@ -103,7 +103,10 @@ impl Runtime {
                     .iter()
                     .map(|p| graph_config::expand_tilde(p))
                     .collect(),
-            ),
+            )
+            .with_secrets(Arc::new(graph_core::secrets::in_project(
+                loaded.config.project.id.clone(),
+            ))),
         );
         Ok(Self {
             config: loaded.config,
@@ -143,21 +146,26 @@ impl Runtime {
                 self.router.clone(),
             )) as Arc<dyn ToolRegistry>,
             self.registry.clone() as Arc<dyn ToolRegistry>,
-            Arc::new(UserToolRegistry::builtins(
-                docs.builtins,
-                self.router.clone(),
-            )),
-            Arc::new(UserToolRegistry::new(docs.user, self.router.clone())),
+            Arc::new(
+                UserToolRegistry::builtins(docs.builtins, self.router.clone())
+                    .with_secrets(self.secrets()),
+            ),
+            Arc::new(
+                UserToolRegistry::new(docs.user, self.router.clone()).with_secrets(self.secrets()),
+            ),
         ];
         for (source, tools) in docs.packs {
-            sources.push(Arc::new(UserToolRegistry::pack(
-                &source.name,
-                tools,
-                self.router.clone(),
-            )));
+            sources.push(Arc::new(
+                UserToolRegistry::pack(&source.name, tools, self.router.clone())
+                    .with_secrets(self.secrets()),
+            ));
         }
         let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
         Ok(Arc::new(RecordingRegistry::new(base, store.clone())))
+    }
+
+    pub fn secrets(&self) -> Arc<dyn graph_core::secrets::SecretSource> {
+        self.drafted.secrets.clone()
     }
 
     /// The directories user tools load from (`[tools].paths`, expanded).
