@@ -18,6 +18,46 @@ use graph_core::user_tools::UserToolDoc;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum PackCheck {
+    Installed(InstalledCheck),
+    Shadowed(ShadowedCheck),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledCheck {
+    pub name: String,
+    pub layer: String,
+    pub dir: String,
+    pub git: String,
+    #[serde(rename = "ref")]
+    pub reference: Option<String>,
+    pub path: String,
+    pub tag: Option<String>,
+    pub sha: String,
+    pub hash: String,
+    pub locked_hash: String,
+    pub modified: bool,
+    pub unmet: Vec<String>,
+    pub shadowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadowedCheck {
+    pub name: String,
+    pub layer: String,
+    pub dir: String,
+    pub git: String,
+    pub path: String,
+    #[serde(rename = "ref")]
+    pub reference: Option<String>,
+    pub shadowed: bool,
+    pub shadowed_by: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct InstalledPack {
     pub loaded: LoadedPack,
@@ -260,41 +300,41 @@ impl InstalledPacks {
         text
     }
 
-    pub fn check_json(&self, unmet: &requirements::Unmet) -> serde_json::Value {
-        let mut entries: Vec<serde_json::Value> = self
+    pub fn check_entries(&self, unmet: &requirements::Unmet) -> Vec<PackCheck> {
+        let mut entries: Vec<PackCheck> = self
             .packs
             .iter()
             .map(|pack| {
-                serde_json::json!({
-                    "name": pack.name(),
-                    "layer": graph_core::packs::layer_label(pack.loaded.source.layer),
-                    "dir": pack.loaded.source.dir.display().to_string(),
-                    "git": pack.entry.git,
-                    "ref": pack.entry.reference,
-                    "path": pack.entry.path,
-                    "tag": pack.lock.tag,
-                    "sha": pack.lock.sha,
-                    "hash": pack.hash,
-                    "lockedHash": pack.lock.hash,
-                    "modified": pack.modified(),
-                    "unmet": unmet.get(pack.name()).cloned().unwrap_or_default(),
-                    "shadowed": false,
+                PackCheck::Installed(InstalledCheck {
+                    name: pack.name().to_string(),
+                    layer: graph_core::packs::layer_label(pack.loaded.source.layer).to_string(),
+                    dir: pack.loaded.source.dir.display().to_string(),
+                    git: pack.entry.git.clone(),
+                    reference: pack.entry.reference.clone(),
+                    path: pack.entry.path.clone(),
+                    tag: pack.lock.tag.clone(),
+                    sha: pack.lock.sha.clone(),
+                    hash: pack.hash.clone(),
+                    locked_hash: pack.lock.hash.clone(),
+                    modified: pack.modified(),
+                    unmet: unmet.get(pack.name()).cloned().unwrap_or_default(),
+                    shadowed: false,
                 })
             })
             .collect();
         entries.extend(self.shadowed.iter().map(|shadowed| {
-            serde_json::json!({
-                "name": shadowed.name,
-                "layer": graph_core::packs::layer_label(shadowed.layer),
-                "dir": shadowed.dir.display().to_string(),
-                "git": shadowed.entry.git,
-                "path": shadowed.entry.path,
-                "ref": shadowed.entry.reference,
-                "shadowed": true,
-                "shadowedBy": graph_core::packs::layer_label(shadowed.by),
+            PackCheck::Shadowed(ShadowedCheck {
+                name: shadowed.name.clone(),
+                layer: graph_core::packs::layer_label(shadowed.layer).to_string(),
+                dir: shadowed.dir.display().to_string(),
+                git: shadowed.entry.git.clone(),
+                path: shadowed.entry.path.clone(),
+                reference: shadowed.entry.reference.clone(),
+                shadowed: true,
+                shadowed_by: graph_core::packs::layer_label(shadowed.by).to_string(),
             })
         }));
-        serde_json::Value::Array(entries)
+        entries
     }
 
     pub fn warn(&self) {
