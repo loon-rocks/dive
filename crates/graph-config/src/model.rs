@@ -265,8 +265,8 @@ impl MissingEnv {
     /// e.g. `environment variable ANTHROPIC_API_KEY (providers.anthropic.api_key) is not set`.
     pub fn describe(&self, entry: &str) -> String {
         format!(
-            "environment variable {} ({entry}.{}) is not set",
-            self.var, self.field
+            "environment variable {} ({entry}.{}) is not set; set it, or store it with `graph secret set {}`",
+            self.var, self.field, self.var
         )
     }
 }
