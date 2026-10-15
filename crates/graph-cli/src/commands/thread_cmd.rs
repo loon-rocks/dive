@@ -4,10 +4,10 @@
 use crate::cli::ThreadCommand;
 use crate::commands::outcome::{report, Outcome};
 use crate::host::open_store;
-use anyhow::{bail, Result};
+use anyhow::Result;
 use graph_core::{EntryBody, Store, ThreadEntry};
 use graph_llm::types::ChatMessage;
-use serde_json::json;
+use graph_runtime::ops::thread as ops;
 use std::sync::Arc;
 
 pub async fn run(command: ThreadCommand) -> Result<()> {
@@ -22,23 +22,14 @@ pub async fn run(command: ThreadCommand) -> Result<()> {
 }
 
 async fn list(store: &Arc<dyn Store>) -> Result<Outcome> {
-    let threads = store.list_threads().await?;
-    let body = json!({
-        "threads": threads.iter().map(|thread| json!({
-            "id": thread.id,
-            "title": thread.title,
-            "messageCount": thread.message_count,
-            "updatedAt": thread.updated_at,
-            "owner": thread.owner,
-            "active": thread.active,
-        })).collect::<Vec<_>>(),
-        "count": threads.len(),
-    });
-    if threads.is_empty() {
+    let listed = ops::list(store.as_ref()).await?;
+    let body = serde_json::to_value(&listed)?;
+    if listed.threads.is_empty() {
         return Ok(Outcome::raw(String::new(), body)
             .with_note("no threads yet — run `graph ask` or `graph chat`"));
     }
-    let text = threads
+    let text = listed
+        .threads
         .iter()
         .map(|thread| {
             format!(
@@ -54,25 +45,15 @@ async fn list(store: &Arc<dyn Store>) -> Result<Outcome> {
 }
 
 async fn show(store: &Arc<dyn Store>, id: &str, state: bool) -> Result<Outcome> {
-    let Some(meta) = store.get_thread(id).await? else {
-        bail!("no thread with id {id}");
-    };
-    let entries = store.load_entries(id).await?;
-    let body = json!({
-        "id": meta.id,
-        "title": meta.title,
-        "messageCount": meta.message_count,
-        "updatedAt": meta.updated_at,
-        "owner": meta.owner,
-        "active": meta.active,
-        "entries": entries,
-    });
+    let detail = ops::show(store.as_ref(), id).await?;
+    let body = serde_json::to_value(&detail)?;
     // `--state` asks for the raw runtime state, so it prints the entries
     // verbatim rather than the conversation transcript.
     if state {
-        let text = format!("{}\n", serde_json::to_string_pretty(&entries)?);
+        let text = format!("{}\n", serde_json::to_string_pretty(&detail.entries)?);
         return Ok(Outcome::raw(text, body));
     }
+    let meta = &detail.summary;
     let mut text = format!(
         "{} — {} ({} messages, updated {}; owner {}, active {})\n\n",
         meta.id,
@@ -82,7 +63,7 @@ async fn show(store: &Arc<dyn Store>, id: &str, state: bool) -> Result<Outcome> 
         meta.owner,
         meta.active,
     );
-    for entry in &entries {
+    for entry in &detail.entries {
         text.push_str(&render_entry(entry));
         text.push('\n');
     }
@@ -90,12 +71,10 @@ async fn show(store: &Arc<dyn Store>, id: &str, state: bool) -> Result<Outcome> 
 }
 
 async fn rm(store: &Arc<dyn Store>, id: &str) -> Result<Outcome> {
-    if !store.delete_thread(id).await? {
-        bail!("no thread with id {id}");
-    }
+    let deleted = ops::delete(store.as_ref(), id).await?;
     Ok(Outcome::raw(
-        format!("deleted {id}\n"),
-        json!({"deleted": id}),
+        format!("deleted {}\n", deleted.deleted),
+        serde_json::to_value(&deleted)?,
     ))
 }
 
