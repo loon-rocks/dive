@@ -76,7 +76,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         ```toml
         [providers.anthropic]
         type = "anthropic"
-        api_key = "${ANTHROPIC_API_KEY}"   # read from your environment at load time
+        api_key = "${ANTHROPIC_API_KEY}"   # read from your environment, or from `graph secret set ANTHROPIC_API_KEY`
         
         [models.default]
         provider = "anthropic"

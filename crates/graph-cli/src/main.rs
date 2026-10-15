@@ -96,6 +96,7 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
         }
         Command::Chat { agent, thread } => commands::chat_cmd::run(agent, thread).await,
         Command::Thread { command } => commands::thread_cmd::run(command).await,
+        Command::Secret { command } => commands::secret_cmd::run(command),
         Command::Shape { command } => commands::shape_cmd::run(command).await,
         Command::Plan { command } => commands::plan_cmd::run(command).await,
         Command::Workbench { command } => workbench::run(command, verbose).await,
