@@ -35,10 +35,6 @@ ratatui = { version = "0.29", features = ["unstable-rendered-line-info"] }
 jsonschema.workspace = true
 crossterm = { version = "0.28", features = ["event-stream"] }
 tui-textarea = "0.7"
-# Workbench filesystem research tools (read_file / grep / glob).
-ignore = "0.4"
-globset = "0.4"
-regex = "1"
 sha2 = "0.10"
 semver.workspace = true
 tempfile = "3"
@@ -55,4 +51,3 @@ rmcp = { version = "2.2", default-features = false, features = [
     "elicitation",
 ] }
 schemars = "1"
-uuid.workspace = true
