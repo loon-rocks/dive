@@ -835,7 +835,7 @@ pub enum PackCommand {
     )]
     Release {
         #[arg(value_name = "BUMP", help = "Which part of the version to raise")]
-        bump: crate::packs::release::Bump,
+        bump: graph_runtime::packs::release::Bump,
         #[arg(
             value_name = "PATH",
             default_value = ".",

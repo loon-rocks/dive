@@ -847,6 +847,7 @@ dependencies = [
  "graph-core",
  "graph-llm",
  "graph-mcp",
+ "graph-runtime",
  "graph-store",
  "ignore",
  "jsonschema",
@@ -949,6 +950,28 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml",
+ "tracing",
+]
+
+[[package]]
+name = "graph-runtime"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "graph-config",
+ "graph-core",
+ "graph-llm",
+ "graph-mcp",
+ "graph-store",
+ "regex",
+ "semver",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "toml",
+ "toml_edit",
  "tracing",
 ]
 

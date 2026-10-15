@@ -1,8 +1,8 @@
 use super::major::{Consent, Majors};
 use super::*;
-use crate::packs::InstalledPacks;
 use graph_config::pack::{load_lock, PackLock};
 use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor};
+use graph_runtime::packs::InstalledPacks;
 use std::collections::BTreeSet;
 use std::process::Command;
 use std::sync::Arc;

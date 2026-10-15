@@ -10,6 +10,7 @@ use graph_core::{CompositeRegistry, EventSink, NewEntry, Store, ThreadMeta, Tool
 use graph_llm::ModelRouter;
 use graph_mcp::McpManager;
 use graph_store::{FileStore, MemoryStore, RecordingRegistry};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// The interactive hooks a host can hand a [`Pipeline`]. Both are
@@ -35,6 +36,7 @@ pub struct Runtime {
     plans_warned: std::sync::atomic::AtomicBool,
     drafted: Arc<graph_core::pipeline::Drafted>,
     pub packs: Arc<crate::packs::InstalledPacks>,
+    options: RuntimeOptions,
 }
 
 impl Runtime {
@@ -42,10 +44,10 @@ impl Runtime {
         self.router.kind_of_role(role)
     }
 
-    pub fn init() -> Result<Self> {
-        let loaded = load_config()?;
+    pub fn open(workspace: &Workspace, options: RuntimeOptions) -> Result<Self> {
+        let loaded = load_config(workspace)?;
         let packs = load_packs(&loaded)?;
-        Self::with_packs(loaded.config, packs)
+        Self::with_packs(loaded.config, packs, options)
     }
 
     /// Build a runtime over an already-resolved config.
@@ -55,6 +57,7 @@ impl Runtime {
     pub fn with_packs(
         config: graph_config::Config,
         packs: crate::packs::InstalledPacks,
+        options: RuntimeOptions,
     ) -> Result<Self> {
         let loaded = graph_config::LoadedConfig {
             config,
@@ -67,7 +70,7 @@ impl Runtime {
         // would silently miss whatever was already handed out.
         let usage = Arc::new(
             UsageLedger::new(loaded.config.pricing.clone())
-                .with_content_capture(crate::telemetry::captures_content()),
+                .with_content_capture(options.capture_content),
         );
         let router = ModelRouter::from_config(&loaded.config)?.with_meter(usage.clone());
         let registry = Arc::new(McpManager::new(loaded.config.mcp.clone()));
@@ -99,6 +102,7 @@ impl Runtime {
             plans_warned: std::sync::atomic::AtomicBool::new(false),
             drafted,
             packs: Arc::new(packs),
+            options,
         })
     }
 
@@ -111,7 +115,11 @@ impl Runtime {
 
     /// Open the configured runtime-state store.
     pub fn store(&self) -> Result<Arc<dyn Store>> {
-        open_store(&self.config)
+        open_store(&self.config, &self.options)
+    }
+
+    pub fn options(&self) -> &RuntimeOptions {
+        &self.options
     }
 
     /// Base tool catalog (MCP servers + built-in tools + user-defined
@@ -510,10 +518,13 @@ fn user_context_text(user: &graph_config::UserConfig) -> String {
 }
 
 /// Open the configured runtime-state store. Backend selection:
-/// `GRAPH_STORAGE` env var (`file` | `memory`) wins over
+/// `RuntimeOptions::storage_backend` (`file` | `memory`) wins over
 /// `[storage].backend`; the default is plain files under `data_dir`.
-pub fn open_store(config: &graph_config::Config) -> Result<Arc<dyn Store>> {
-    let backend = match std::env::var("GRAPH_STORAGE").ok().as_deref() {
+pub fn open_store(
+    config: &graph_config::Config,
+    options: &RuntimeOptions,
+) -> Result<Arc<dyn Store>> {
+    let backend = match options.storage_backend.as_deref() {
         Some("memory") => graph_config::StorageBackend::Memory,
         Some("file") => graph_config::StorageBackend::File,
         Some(other) => anyhow::bail!("GRAPH_STORAGE must be 'file' or 'memory', got '{other}'"),
@@ -655,35 +666,123 @@ pub fn load_packs(loaded: &graph_config::LoadedConfig) -> Result<crate::packs::I
     Ok(packs)
 }
 
-pub fn load_config() -> Result<graph_config::LoadedConfig> {
-    let loaded = graph_config::load()?;
-    if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-        let global = graph_config::expand_tilde(&graph_config::global_config_path());
-        for layer in &loaded.layers {
-            if layer.version < graph_config::CONFIG_FORMAT {
-                let flag = if layer.path == global {
-                    " --global"
-                } else {
-                    ""
-                };
-                eprintln!(
-                    "{} is config version {}; run `graph config migrate{flag}` to bring it to {}",
-                    layer.path.display(),
-                    layer.version,
-                    graph_config::CONFIG_FORMAT
-                );
-            }
-            for note in &layer.notes {
-                eprintln!("{}: {note}", layer.path.display());
-            }
+pub fn load_config(workspace: &Workspace) -> Result<graph_config::LoadedConfig> {
+    graph_config::load_from(&workspace.config_paths())
+}
+
+pub fn config_notices(loaded: &graph_config::LoadedConfig) -> Vec<String> {
+    let global = graph_config::expand_tilde(&graph_config::global_config_path());
+    let mut notices = Vec::new();
+    for layer in &loaded.layers {
+        if layer.version < graph_config::CONFIG_FORMAT {
+            let flag = if layer.path == global {
+                " --global"
+            } else {
+                ""
+            };
+            notices.push(format!(
+                "{} is config version {}; run `graph config migrate{flag}` to bring it to {}",
+                layer.path.display(),
+                layer.version,
+                graph_config::CONFIG_FORMAT
+            ));
+        }
+        for note in &layer.notes {
+            notices.push(format!("{}: {note}", layer.path.display()));
         }
     }
-    Ok(loaded)
+    notices
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Workspace {
+    root: PathBuf,
+}
+
+impl Workspace {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+
+    pub fn current() -> Self {
+        Self::new(".")
+    }
+
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub fn config_paths(&self) -> Vec<PathBuf> {
+        vec![
+            graph_config::global_config_path(),
+            self.root.join(".graph").join("config.toml"),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeOptions {
+    pub storage_backend: Option<String>,
+    pub capture_content: bool,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_current_workspace_loads_the_same_layers_as_the_cli() {
+        assert_eq!(
+            Workspace::current().config_paths(),
+            vec![
+                graph_config::global_config_path(),
+                graph_config::project_config_path()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_workspace_reads_the_project_layer_under_its_root() {
+        let workspace = Workspace::new("/work/site");
+        assert_eq!(workspace.root(), Path::new("/work/site"));
+        assert_eq!(
+            workspace.config_paths()[1],
+            PathBuf::from("/work/site/.graph/config.toml")
+        );
+    }
+
+    #[test]
+    fn config_notices_name_old_layers_and_migration_notes() {
+        let global = graph_config::expand_tilde(&graph_config::global_config_path());
+        let project = PathBuf::from("/work/site/.graph/config.toml");
+        let layer = |path: &PathBuf, version: u32, notes: Vec<String>| graph_config::LayerInfo {
+            path: path.clone(),
+            declared: Some(version),
+            version,
+            notes,
+        };
+        let loaded = graph_config::LoadedConfig {
+            config: graph_config::Config::default(),
+            sources: Vec::new(),
+            layers: vec![
+                layer(&global, 0, Vec::new()),
+                layer(
+                    &project,
+                    graph_config::CONFIG_FORMAT,
+                    vec!["renamed x".to_string()],
+                ),
+            ],
+            pack_layers: Vec::new(),
+        };
+        let notices = config_notices(&loaded);
+        assert_eq!(notices.len(), 2, "{notices:?}");
+        assert!(
+            notices[0].contains("graph config migrate --global"),
+            "{}",
+            notices[0]
+        );
+        assert_eq!(notices[1], "/work/site/.graph/config.toml: renamed x");
+    }
 
     fn thread(owner: &str, active: &str) -> ThreadMeta {
         ThreadMeta {

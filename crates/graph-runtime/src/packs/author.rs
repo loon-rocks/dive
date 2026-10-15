@@ -1,5 +1,5 @@
 use super::InstalledPacks;
-use crate::runtime::Runtime;
+use crate::runtime::{Runtime, RuntimeOptions};
 use anyhow::Result;
 use graph_config::pack::{load_manifest, LayerKind, MANIFEST_FILE, SUPPORTED_OS};
 use graph_config::Config;
@@ -87,8 +87,13 @@ pub struct PackSession {
 }
 
 impl PackSession {
-    pub fn open(config: &Config, pack: LoadedPack, events: Arc<dyn EventSink>) -> Result<Self> {
-        let runtime = isolated_runtime(config, None, pack.clone())?;
+    pub fn open(
+        config: &Config,
+        options: &RuntimeOptions,
+        pack: LoadedPack,
+        events: Arc<dyn EventSink>,
+    ) -> Result<Self> {
+        let runtime = isolated_runtime(config, options, None, pack.clone())?;
         let store = runtime.store()?;
         Ok(PackSession {
             runtime,
@@ -221,7 +226,12 @@ fn is_identifier(key: &str) -> bool {
         && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-fn isolated_runtime(config: &Config, root: Option<&Path>, pack: LoadedPack) -> Result<Runtime> {
+fn isolated_runtime(
+    config: &Config,
+    options: &RuntimeOptions,
+    root: Option<&Path>,
+    pack: LoadedPack,
+) -> Result<Runtime> {
     let mut config = config.clone();
     config.tools.paths = root
         .map(|root| vec![root.join("tools")])
@@ -229,7 +239,7 @@ fn isolated_runtime(config: &Config, root: Option<&Path>, pack: LoadedPack) -> R
     config.plans.paths = root
         .map(|root| vec![root.join("plans")])
         .unwrap_or_default();
-    Runtime::with_packs(config, InstalledPacks::of(pack))
+    Runtime::with_packs(config, InstalledPacks::of(pack), options.clone())
 }
 
 fn builtin_catalog(runtime: &Runtime) -> Result<ToolCatalog> {
@@ -326,7 +336,11 @@ fn os_problem(dir: &Path) -> Option<String> {
     })
 }
 
-pub async fn check(config: &Config, dir: &Path) -> Result<(LoadedPack, Report)> {
+pub async fn check(
+    config: &Config,
+    options: &RuntimeOptions,
+    dir: &Path,
+) -> Result<(LoadedPack, Report)> {
     if !dir.is_dir() {
         anyhow::bail!("{} is not a directory", dir.display());
     }
@@ -344,7 +358,7 @@ pub async fn check(config: &Config, dir: &Path) -> Result<(LoadedPack, Report)> 
     problems.extend(literal_self_names(dir, &source.name));
     problems.extend(migration_problems(&loaded));
 
-    let runtime = isolated_runtime(config, None, loaded.clone())?;
+    let runtime = isolated_runtime(config, options, None, loaded.clone())?;
     let mut catalog = builtin_catalog(&runtime)?;
     for (prefix, need) in &loaded.needs.mcp {
         if config.mcp.contains_key(prefix) {
@@ -456,17 +470,22 @@ pub async fn run_migration_case(
     }
     let (current, _) = inspect_pack(session.pack.source.clone(), &[], &[]);
     run.problems.extend(
-        validate_user_files(config, current, &root)?
+        validate_user_files(config, session.runtime.options(), current, &root)?
             .into_iter()
             .map(|problem| format!("{label}: {problem}")),
     );
     Ok(run)
 }
 
-pub fn validate_user_files(config: &Config, pack: LoadedPack, root: &Path) -> Result<Vec<String>> {
+pub fn validate_user_files(
+    config: &Config,
+    options: &RuntimeOptions,
+    pack: LoadedPack,
+    root: &Path,
+) -> Result<Vec<String>> {
     let relative = |text: String| text.replace(&format!("{}/", root.display()), "");
     let mut problems = Vec::new();
-    let runtime = isolated_runtime(config, Some(root), pack)?;
+    let runtime = isolated_runtime(config, options, Some(root), pack)?;
     if let Err(error) = runtime.tool_docs() {
         problems.push(relative(error.to_string()));
     }

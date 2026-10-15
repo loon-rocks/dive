@@ -1,11 +1,11 @@
 //! `graph chat` — interactive REPL with persistent threads.
 
-use crate::runtime::{
-    load_history, persist_turn, resolve_thread, starting_agent, title_from, Runtime,
-};
 use anyhow::{bail, Result};
 use graph_core::agent::conversation::{view, Conversation};
 use graph_core::{NewEntry, Store, ThreadMeta};
+use graph_runtime::runtime::{
+    load_history, persist_turn, resolve_thread, starting_agent, title_from,
+};
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
     if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
         bail!("chat needs an interactive terminal — use `graph ask` for scripted queries");
     }
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
     let mut thread: Option<ThreadMeta> = resolve_thread(store.as_ref(), thread).await?;
     if let Some(name) = agent
@@ -38,7 +38,7 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
     let events: Arc<dyn graph_core::EventSink> = crate::output::make_sink(false, false, run);
     // A conversation already has the user's attention: a plan called as
     // plan__* from here can put an `ask` step's question to them.
-    let hooks = crate::runtime::PipelineHooks {
+    let hooks = graph_runtime::runtime::PipelineHooks {
         interlocutor: crate::interlocutor::tty(),
         ..Default::default()
     };

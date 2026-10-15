@@ -114,7 +114,7 @@ pub async fn run(command: ConfigCommand) -> Result<()> {
 /// paste back into a config file — while `--json` gives the same values in
 /// the shape a program addresses.
 fn show() -> Result<Outcome> {
-    let loaded = crate::runtime::load_config()?;
+    let loaded = crate::host::load_config()?;
     let rendered = format!(
         "{FORMAT_KEY} = {CONFIG_FORMAT}\n\n{}",
         toml::to_string_pretty(&loaded.config)?
@@ -252,7 +252,7 @@ async fn check() -> Outcome {
                         .iter()
                         .map(|note| format!("{}: {note}", layer.path.display()))
                 }));
-                match crate::packs::InstalledPacks::for_config(&loaded) {
+                match graph_runtime::packs::InstalledPacks::for_config(&loaded) {
                     Ok(installed) => {
                         let manager = graph_mcp::McpManager::new(loaded.config.mcp.clone());
                         let unmet = installed.unmet(&manager).await;
