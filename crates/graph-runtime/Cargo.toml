@@ -21,11 +21,13 @@ tempfile = "3"
 toml.workspace = true
 regex = "1"
 clap = { workspace = true, optional = true }
+tokio.workspace = true
+tokio-util = "0.7"
+async-trait.workspace = true
+thiserror.workspace = true
 
 [features]
 clap = ["dep:clap"]
 
 [dev-dependencies]
-tokio.workspace = true
-async-trait.workspace = true
 futures.workspace = true
