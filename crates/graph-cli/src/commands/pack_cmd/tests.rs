@@ -1,9 +1,11 @@
 use super::major::{Consent, Majors};
 use super::*;
-use graph_config::pack::{load_lock, PackLock};
+use graph_config::pack::{load_lock, LayerKind, PackLock};
 use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor};
-use graph_runtime::packs::InstalledPacks;
+use graph_runtime::packs::{content_hash, InstalledPacks};
+use serde_json::Value;
 use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use tempfile::TempDir;
