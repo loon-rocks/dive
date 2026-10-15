@@ -101,12 +101,8 @@ impl Store for MemoryStore {
             .ok_or_else(|| StoreError(format!("no thread {thread_id}")))?;
         let at = now_ms();
         for entry in entries {
-            stored.push(ThreadEntry {
-                seq: stored.len() as u64,
-                at,
-                author: entry.author.clone(),
-                body: entry.body.clone(),
-            });
+            let seq = stored.len() as u64;
+            stored.push(entry.clone().into_thread_entry(seq, at));
         }
         meta.message_count = stored
             .iter()

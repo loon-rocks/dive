@@ -6,9 +6,9 @@
 mod common;
 
 use common::MessageLog;
-use graph_core::store::Store;
+use graph_core::store::{EntryUsage, Store, ThreadEntry};
 use graph_llm::types::ChatMessage;
-use graph_store::FileStore;
+use graph_store::{FileStore, STORE_FORMAT};
 use serde_json::json;
 use std::io::Write;
 use std::sync::Arc;
@@ -242,40 +242,101 @@ fn contents(path: &std::path::Path) -> Vec<serde_json::Value> {
     vec![serde_json::from_str(&raw).unwrap_or_else(|_| json!(raw.trim()))]
 }
 
-#[test]
-fn a_version_1_data_directory_migrates_to_the_frozen_version_2_layout() {
-    let dir = copy_fixture("v1");
-    FileStore::open(dir.path()).unwrap();
-    let expected = fixture_dir("v2");
-    assert_eq!(data_files(dir.path()), data_files(&expected));
+fn assert_matches_fixture_except_marker(root: &std::path::Path, version: &str) {
+    let expected = fixture_dir(version);
+    assert_eq!(data_files(root), data_files(&expected));
     for file in data_files(&expected) {
+        if file == std::path::Path::new("FORMAT") {
+            continue;
+        }
         assert_eq!(
-            contents(&dir.path().join(&file)),
+            contents(&root.join(&file)),
             contents(&expected.join(&file)),
             "{}",
             file.display()
         );
     }
+    assert_eq!(
+        std::fs::read_to_string(root.join("FORMAT")).unwrap(),
+        format!("{STORE_FORMAT}\n")
+    );
+}
+
+#[test]
+fn a_version_1_data_directory_migrates_to_the_frozen_version_2_layout_and_is_marked_current() {
+    let dir = copy_fixture("v1");
+    FileStore::open(dir.path()).unwrap();
+    assert_matches_fixture_except_marker(dir.path(), "v2");
 }
 
 #[tokio::test]
-async fn a_frozen_version_2_data_directory_opens_as_is() {
+async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untouched() {
     let dir = copy_fixture("v2");
+    let store = FileStore::open(dir.path()).unwrap();
+    assert_matches_fixture_except_marker(dir.path(), "v2");
+    let entries_file = "threads/a1b2c3d4e5f6/entries.jsonl";
+    assert_eq!(
+        std::fs::read(dir.path().join(entries_file)).unwrap(),
+        std::fs::read(fixture_dir("v2").join(entries_file)).unwrap()
+    );
+    let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
+    assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
+    let entries = store.load_entries("a1b2c3d4e5f6").await.unwrap();
+    let authors: Vec<&str> = entries.iter().map(|entry| entry.author.as_str()).collect();
+    assert_eq!(authors, ["user", "chat", "chat", "chat"]);
+    assert!(entries
+        .iter()
+        .all(|entry| entry.ms.is_none() && entry.usage.is_none()));
+    assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
+}
+
+#[test]
+fn entries_without_timing_round_trip_byte_for_byte() {
+    for version in ["v2", "v3"] {
+        let raw = std::fs::read_to_string(
+            fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
+        )
+        .unwrap();
+        for line in raw.lines() {
+            let entry: ThreadEntry = serde_json::from_str(line).unwrap();
+            assert_eq!(serde_json::to_string(&entry).unwrap(), line, "{version}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_frozen_version_3_data_directory_opens_as_is() {
+    let dir = copy_fixture("v3");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
     assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
-    let authors: Vec<String> = store
-        .load_entries("a1b2c3d4e5f6")
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|entry| entry.author)
-        .collect();
-    assert_eq!(authors, ["user", "chat", "chat", "chat"]);
+    let entries = store.load_entries("a1b2c3d4e5f6").await.unwrap();
+    let ms: Vec<Option<u64>> = entries.iter().map(|entry| entry.ms).collect();
+    assert_eq!(ms, [None, Some(1840), Some(5230), Some(910)]);
+    assert_eq!(
+        entries[1].usage,
+        Some(EntryUsage {
+            model: "claude-sonnet-4-5".to_string(),
+            input_tokens: 1200,
+            output_tokens: 48,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 3100,
+        })
+    );
+    assert!(entries[2].usage.is_none());
     assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
+    let expected = fixture_dir("v3");
     assert_eq!(
         data_files(dir.path()),
-        data_files(&fixture_dir("v2")),
+        data_files(&expected),
         "opening a current store writes nothing new"
     );
+    for file in data_files(&expected) {
+        assert_eq!(
+            std::fs::read(dir.path().join(&file)).unwrap(),
+            std::fs::read(expected.join(&file)).unwrap(),
+            "{}",
+            file.display()
+        );
+    }
 }

@@ -116,11 +116,19 @@ impl Conversation {
             let mut messages = view(&active, history.iter().chain(entries.iter()));
             let before = messages.len();
             let result = agent.run_turn(&mut messages).await;
+            let stamps = result
+                .as_ref()
+                .map(|outcome| outcome.stamps.clone())
+                .unwrap_or_default();
             entries.extend(
                 messages[before..]
                     .iter()
                     .cloned()
-                    .map(|message| NewEntry::message(&active, message)),
+                    .enumerate()
+                    .map(|(i, message)| {
+                        NewEntry::message(&active, message)
+                            .stamped(stamps.get(i).cloned().unwrap_or_default())
+                    }),
             );
             entries.extend(tools.take_runs());
             let outcome = result.map_err(|source| ConversationError::Turn {
@@ -151,15 +159,15 @@ impl Conversation {
             };
             handoffs += 1;
             self.events.handoff(&active, &target, via == TRANSFER_BACK);
-            entries.push(NewEntry {
-                author: active.clone(),
-                body: EntryBody::Handoff {
+            entries.push(NewEntry::new(
+                &active,
+                EntryBody::Handoff {
                     from: active.clone(),
                     to: target.clone(),
                     message: message.clone(),
                     via: Some(via),
                 },
-            });
+            ));
             if wait_for_user {
                 let text = if outcome.text.trim().is_empty() {
                     message
@@ -348,9 +356,9 @@ impl Conversation {
                 is_error: true,
             }
         };
-        let entry = NewEntry {
-            author: caller.to_string(),
-            body: EntryBody::SubagentRun {
+        let entry = NewEntry::new(
+            caller,
+            EntryBody::SubagentRun {
                 agent: name.to_string(),
                 caller: caller.to_string(),
                 input,
@@ -358,7 +366,7 @@ impl Conversation {
                 output: outcome.output,
                 final_: outcome.final_,
             },
-        };
+        );
         (result, Some(entry))
     }
 }
@@ -876,6 +884,75 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[tokio::test]
+    async fn turn_entries_carry_tool_durations_and_model_usage() {
+        let mut answer = text("echoed");
+        answer.usage = Usage {
+            input_tokens: 30,
+            output_tokens: 4,
+            ..Default::default()
+        };
+        let (conversation, _) = conversation(vec![
+            call("c1", "t__echo", json!({"x": 1})),
+            call("c2", "transfer_to_back", json!({"message": "over to you"})),
+            answer,
+        ]);
+        let turn = conversation.run_turn(&[], "front", "go").await.unwrap();
+        let stamps: Vec<(String, Option<bool>, Option<String>)> = turn
+            .entries
+            .iter()
+            .map(|entry| {
+                let kind = match &entry.body {
+                    EntryBody::Message {
+                        message: ChatMessage::Assistant { .. },
+                    } => "assistant",
+                    EntryBody::Message {
+                        message: ChatMessage::ToolResult { .. },
+                    } => "tool_result",
+                    EntryBody::Message { .. } => "user",
+                    EntryBody::Handoff { .. } => "handoff",
+                    EntryBody::SubagentRun { .. } => "subagent_run",
+                };
+                (
+                    kind.to_string(),
+                    entry.ms.map(|_| true),
+                    entry.usage.as_ref().map(|usage| usage.model.clone()),
+                )
+            })
+            .collect();
+        let m = || Some("m".to_string());
+        assert_eq!(
+            stamps,
+            [
+                ("user".to_string(), None, None),
+                ("assistant".to_string(), Some(true), m()),
+                ("tool_result".to_string(), Some(true), None),
+                ("assistant".to_string(), Some(true), m()),
+                ("tool_result".to_string(), Some(true), None),
+                ("handoff".to_string(), None, None),
+                ("assistant".to_string(), Some(true), m()),
+            ]
+        );
+        let last = turn.entries.last().unwrap().usage.clone().unwrap();
+        assert_eq!((last.input_tokens, last.output_tokens), (30, 4));
+    }
+
+    #[tokio::test]
+    async fn a_failed_turn_leaves_its_partial_entries_unstamped() {
+        let mut empty = text("");
+        empty.stop_reason = StopReason::MaxTokens;
+        let (conversation, _) = conversation(vec![call("c1", "t__echo", json!({"x": 1})), empty]);
+        let Err(ConversationError::Turn { partial, .. }) =
+            conversation.run_turn(&[], "front", "go").await
+        else {
+            panic!("the turn should fail");
+        };
+        assert_eq!(partial.len(), 4);
+        assert!(partial
+            .iter()
+            .all(|entry| entry.ms.is_none() && entry.usage.is_none()));
     }
 
     #[tokio::test]

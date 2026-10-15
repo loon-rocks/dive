@@ -402,7 +402,7 @@
     "plan_file_version": "2",
     "tool_file_version": "2",
     "agent_file_version": "1",
-    "data_directory_version": "2",
+    "data_directory_version": "3",
     "pack_file_version": "1",
     "pack_lock_version": "1"
   }

@@ -19,6 +19,26 @@ graph keeps its runtime state in one directory, `~/.local/share/graph` by defaul
 
 Every file is plain JSON or JSONL, so `cat` and `jq` can read it. Thread IDs are 12 hex characters. In a shape file name, any character other than a letter, digit, `_`, `.` or `-` is percent-encoded.
 
+## Thread entries
+
+Each line of `entries.jsonl` is one entry. Every entry has these fields:
+
+| Field | Contents |
+| --- | --- |
+| `seq` | The entry's position in the thread, counting from 0. |
+| `at` | When the entry was written, in epoch milliseconds. Entries written together at the end of a turn share one value. |
+| `author` | `user`, or the name of the agent that wrote the entry. |
+| `kind` | `message`, `handoff` or `subagent_run`. The remaining fields depend on the kind. |
+
+A `message` entry written by an agent's turn can also carry:
+
+| Field | Contents |
+| --- | --- |
+| `ms` | On a model reply, how long the model call took. On a tool result, how long the tool call took. In milliseconds. |
+| `usage` | On a model reply only: `model`, the model that answered, plus `input_tokens`, `output_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens` for that call. |
+
+Both are left out when graph has nothing to record: on user messages, handoffs, subagent runs, the messages of a turn that failed, and entries written before graph recorded them.
+
 ## Share a directory between processes
 
 Several graph processes can use one data directory at the same time. Whole files are written to a temporary file and renamed into place, so a reader never sees a partial write. Appends to a thread are serialized by its lock file. When two processes record the same tool shape, the last write wins.

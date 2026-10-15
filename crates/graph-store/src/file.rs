@@ -29,7 +29,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub const STORE_FORMAT: u32 = 2;
+pub const STORE_FORMAT: u32 = 3;
 
 pub const STORE_FORMAT_OLDEST: u32 = 1;
 
@@ -193,6 +193,7 @@ fn migrate(root: &Path) -> Result<(), StoreError> {
     while found < STORE_FORMAT {
         match found {
             1 => migrate_threads_v1(&root.join("threads"))?,
+            2 => {}
             other => {
                 return Err(StoreError(format!(
                     "no migration from store version {other}"
@@ -322,12 +323,7 @@ fn legacy_entries(dir: &Path, at: i64) -> Result<Option<Vec<ThreadEntry>>, Store
         message_entries(LEGACY_AGENT, &messages)
             .into_iter()
             .enumerate()
-            .map(|(seq, entry)| ThreadEntry {
-                seq: seq as u64,
-                at,
-                author: entry.author,
-                body: entry.body,
-            })
+            .map(|(seq, entry)| entry.into_thread_entry(seq as u64, at))
             .collect(),
     ))
 }
@@ -481,12 +477,7 @@ impl Store for FileStore {
             let numbered: Vec<ThreadEntry> = entries
                 .into_iter()
                 .enumerate()
-                .map(|(i, entry)| ThreadEntry {
-                    seq: meta.entry_count + i as u64,
-                    at,
-                    author: entry.author,
-                    body: entry.body,
-                })
+                .map(|(i, entry)| entry.into_thread_entry(meta.entry_count + i as u64, at))
                 .collect();
             let path = dir.join(ENTRIES_FILE);
             let mut file = OpenOptions::new()
@@ -701,7 +692,7 @@ mod tests {
         .unwrap();
 
         let store = FileStore::open(root.path()).unwrap();
-        assert_eq!(marker_format(root.path()).unwrap(), Some(2));
+        assert_eq!(marker_format(root.path()).unwrap(), Some(STORE_FORMAT));
         let dir = root.path().join("threads").join(&id);
         assert!(!dir.join(LEGACY_MESSAGES_FILE).exists());
         let meta = read_meta(&dir).unwrap().unwrap();
@@ -806,7 +797,7 @@ mod tests {
         for handle in handles {
             handle.join().unwrap().unwrap();
         }
-        assert_eq!(marker_format(&path).unwrap(), Some(2));
+        assert_eq!(marker_format(&path).unwrap(), Some(STORE_FORMAT));
         let entries =
             std::fs::read_to_string(path.join("threads").join(id).join(ENTRIES_FILE)).unwrap();
         assert_eq!(entries.lines().count(), 2);
@@ -831,15 +822,15 @@ mod tests {
                             content: "go".to_string(),
                         },
                     ),
-                    NewEntry {
-                        author: "orchestrator".to_string(),
-                        body: EntryBody::Handoff {
+                    NewEntry::new(
+                        "orchestrator",
+                        EntryBody::Handoff {
                             from: "orchestrator".to_string(),
                             to: "plan_author".to_string(),
                             message: "draft it".to_string(),
                             via: None,
                         },
-                    },
+                    ),
                 ],
             )
             .await
@@ -851,9 +842,9 @@ mod tests {
         store
             .append_entries(
                 &meta.id,
-                &[NewEntry {
-                    author: "plan_author".to_string(),
-                    body: EntryBody::SubagentRun {
+                &[NewEntry::new(
+                    "plan_author",
+                    EntryBody::SubagentRun {
                         agent: "plan_refiner".to_string(),
                         caller: "plan_author".to_string(),
                         input: serde_json::json!({"goal": "g"}),
@@ -861,7 +852,7 @@ mod tests {
                         output: serde_json::json!({"changes": []}),
                         final_: true,
                     },
-                }],
+                )],
             )
             .await
             .unwrap();
