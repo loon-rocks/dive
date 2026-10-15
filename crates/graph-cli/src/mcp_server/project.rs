@@ -49,7 +49,7 @@ pub fn is_pinned() -> bool {
 /// which is exactly what must not be trusted here.
 pub fn config() -> Result<LoadedConfig> {
     if is_pinned() {
-        return crate::runtime::load_config();
+        return crate::host::load_config();
     }
     let mut loaded = graph_config::load_from(&[graph_config::global_config_path()])?;
     loaded

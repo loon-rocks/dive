@@ -5,11 +5,11 @@ use crate::commands::input::resolve_input;
 use crate::commands::outcome::{report, Outcome};
 use crate::commands::plan_edit;
 use crate::output::SilentExit;
-use crate::runtime::Runtime;
 use anyhow::{bail, Result};
 use graph_core::pipeline::authoring;
 use graph_core::pipeline::catalog;
 use graph_core::pipeline::doc::{parse_plan_doc, validate_input, LoadedPlans, PlanDoc};
+use graph_runtime::runtime::Runtime;
 use std::sync::Arc;
 
 /// Exit code for "the plan needs inputs you didn't provide".
@@ -44,7 +44,7 @@ pub async fn run(command: PlanCommand) -> Result<()> {
             json,
         } => report(
             plan_edit::new_plan(
-                &Runtime::init()?,
+                &crate::host::runtime()?,
                 &identifier,
                 name.as_deref(),
                 description.as_deref(),
@@ -59,8 +59,14 @@ pub async fn run(command: PlanCommand) -> Result<()> {
             stdout,
             json,
         } => {
-            let outcome =
-                plan_edit::draft(&Runtime::init()?, &goal, from.as_deref(), output, stdout).await?;
+            let outcome = plan_edit::draft(
+                &crate::host::runtime()?,
+                &goal,
+                from.as_deref(),
+                output,
+                stdout,
+            )
+            .await?;
             // `--stdout` asks for the document itself, so it outranks
             // `--json`: a caller who wanted raw YAML did not want it wrapped.
             report(outcome, json && !stdout)
@@ -71,7 +77,7 @@ pub async fn run(command: PlanCommand) -> Result<()> {
             value,
             json,
         } => report(
-            plan_edit::set(&Runtime::init()?, &target, attribute, &value)?,
+            plan_edit::set(&crate::host::runtime()?, &target, attribute, &value)?,
             json,
         ),
         PlanCommand::Unset {
@@ -79,12 +85,12 @@ pub async fn run(command: PlanCommand) -> Result<()> {
             attribute,
             json,
         } => report(
-            plan_edit::unset(&Runtime::init()?, &target, attribute)?,
+            plan_edit::unset(&crate::host::runtime()?, &target, attribute)?,
             json,
         ),
         PlanCommand::Step { command } => {
             let json = command.json();
-            report(plan_edit::step(&Runtime::init()?, command)?, json)
+            report(plan_edit::step(&crate::host::runtime()?, command)?, json)
         }
     }
 }
@@ -95,7 +101,7 @@ pub async fn run(command: PlanCommand) -> Result<()> {
 /// listings this one *is* a deliverable (it is what you pipe into `xargs`),
 /// so it does not move to stderr without `--json`.
 fn list() -> Result<Outcome> {
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let mut loaded = runtime.plan_docs();
     let packs = runtime.packs.pack_set();
     loaded
@@ -119,7 +125,7 @@ fn list() -> Result<Outcome> {
 
 /// `graph plan show` — the document itself, as YAML or as JSON.
 fn show(name: &str) -> Result<Outcome> {
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     // Lenient like `validate`: reading a plan the catalog rejects is
     // exactly how you find out why it was rejected.
     let (doc, _loaded) = resolve_target(&runtime, name)?;
@@ -165,7 +171,7 @@ pub fn resolve_target(runtime: &Runtime, name_or_path: &str) -> Result<(PlanDoc,
 /// is portable but not runnable locally, which is worth saying and not worth
 /// failing over.
 pub fn validate(name_or_path: &str) -> Result<Outcome> {
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let (doc, loaded) = resolve_target(&runtime, name_or_path)?;
     // Structural validation reruns here rather than being assumed from load
     // time: a plan named by path may never have been through the catalog, and
@@ -208,7 +214,7 @@ fn migrate(name_or_path: &str) -> Result<Outcome> {
     let path = if path.exists() {
         path.to_path_buf()
     } else {
-        let runtime = Runtime::init()?;
+        let runtime = crate::host::runtime()?;
         runtime.find_plan_file(name_or_path).ok_or_else(|| {
             anyhow::anyhow!("no plan file for '{name_or_path}' under [plans].paths")
         })?
@@ -296,7 +302,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
             crate::output::annotate_failure(message);
         }
     };
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let loaded = runtime.plan_docs();
     let Some(doc) = loaded.docs.iter().find(|d| d.identifier == name).cloned() else {
         let message = missing_plan(&loaded, name);
@@ -353,7 +359,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     // (CI, a redirected stdin, machine-readable events), the hook is
     // absent and each `ask` resolves by its declared `whenUnanswered` —
     // the same plan, a declared unattended behaviour.
-    let hooks = crate::runtime::PipelineHooks {
+    let hooks = graph_runtime::runtime::PipelineHooks {
         interlocutor: crate::interlocutor::tty(),
         ..Default::default()
     };

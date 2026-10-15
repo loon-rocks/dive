@@ -14,6 +14,7 @@ graph-llm.workspace = true
 graph-mcp.workspace = true
 graph-store.workspace = true
 graph-config.workspace = true
+graph-runtime = { workspace = true, features = ["clap"] }
 clap.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
