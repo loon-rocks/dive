@@ -24,3 +24,8 @@ clap = { workspace = true, optional = true }
 
 [features]
 clap = ["dep:clap"]
+
+[dev-dependencies]
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
