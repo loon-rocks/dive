@@ -27,9 +27,31 @@ tokio.workspace = true
 tokio-util = "0.7"
 async-trait.workspace = true
 thiserror.workspace = true
+tracing-subscriber.workspace = true
+reqwest = { version = "0.13", default-features = false }
+opentelemetry = "0.33"
+opentelemetry_sdk = { version = "0.33", default-features = false, features = [
+    "trace",
+    "logs",
+    "internal-logs",
+    "rt-tokio",
+    "experimental_trace_batch_span_processor_with_async_runtime",
+    "experimental_logs_batch_log_processor_with_async_runtime",
+] }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = [
+    "trace",
+    "logs",
+    "internal-logs",
+    "http-proto",
+    "http-json",
+    "reqwest-client",
+    "reqwest-rustls",
+] }
+opentelemetry-appender-tracing = "0.33"
 
 [features]
 clap = ["dep:clap"]
 
 [dev-dependencies]
+opentelemetry_sdk = { version = "0.33", features = ["testing"] }
 futures.workspace = true
