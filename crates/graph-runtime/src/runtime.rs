@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub struct PipelineHooks {
     pub gate: Option<Arc<dyn ExecutionGate>>,
     pub interlocutor: Option<Arc<dyn Interlocutor>>,
+    pub cancel: Option<crate::cancel::CancelHandle>,
 }
 
 pub struct Runtime {
@@ -401,8 +402,17 @@ impl Runtime {
         events: Arc<dyn EventSink>,
         hooks: PipelineHooks,
     ) -> Result<Arc<Pipeline>> {
-        let PipelineHooks { gate, interlocutor } = hooks;
-        let base = self.recording_registry(store)?;
+        let PipelineHooks {
+            gate,
+            interlocutor,
+            cancel,
+        } = hooks;
+        let mut base = self.recording_registry(store)?;
+        let mut gate = gate;
+        if let Some(cancel) = &cancel {
+            base = cancel.track(base);
+            gate = Some(cancel.gate(gate));
+        }
         let user_context = user_context_text(&self.config.user);
         let plans = self.plan_docs().docs;
         let catalog = self.tool_catalog(&plans)?;
@@ -436,8 +446,10 @@ impl Runtime {
         events: Arc<dyn EventSink>,
         hooks: PipelineHooks,
     ) -> Result<Conversation> {
+        let cancel = hooks.cancel.clone();
         let pipeline = self.pipeline_with(store, events.clone(), hooks).await?;
-        let catalog: Arc<dyn ToolRegistry> = self.toolbox_over(store, &pipeline)?;
+        let catalog: Arc<dyn ToolRegistry> =
+            self.toolbox_over(store, &pipeline, cancel.as_ref())?;
         Ok(self.conversation_over(pipeline.agents.clone(), catalog, pipeline, events))
     }
 
@@ -498,16 +510,21 @@ impl Runtime {
         events: Arc<dyn EventSink>,
         hooks: PipelineHooks,
     ) -> Result<Arc<AgentToolbox>> {
+        let cancel = hooks.cancel.clone();
         let pipeline = self.pipeline_with(store, events, hooks).await?;
-        self.toolbox_over(store, &pipeline)
+        self.toolbox_over(store, &pipeline, cancel.as_ref())
     }
 
     fn toolbox_over(
         &self,
         store: &Arc<dyn Store>,
         pipeline: &Arc<Pipeline>,
+        cancel: Option<&crate::cancel::CancelHandle>,
     ) -> Result<Arc<AgentToolbox>> {
-        let base = self.recording_registry(store)?;
+        let mut base = self.recording_registry(store)?;
+        if let Some(cancel) = cancel {
+            base = cancel.track(base);
+        }
         let plans = pipeline.plans.as_ref().clone();
         Ok(Arc::new(AgentToolbox::new(base, pipeline.clone(), plans)))
     }

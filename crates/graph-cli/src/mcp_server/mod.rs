@@ -241,7 +241,7 @@ impl GraphServer {
             let progress = progress::sink_for(context);
             // The client can cancel a long run; the gate stops it between
             // tool calls rather than mid-side-effect.
-            let gate = Arc::new(progress::CancelGate::new(context.ct.clone()));
+            let gate = Arc::new(graph_runtime::cancel::CancelGate::new(context.ct.clone()));
             // `ask` steps put their question to the client, when it said
             // at initialize time that it can carry one. When it can't, the
             // plan's own `whenUnanswered` decides — which is why a plan

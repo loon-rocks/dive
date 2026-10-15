@@ -243,7 +243,11 @@ pub async fn run_plan(
         .pipeline_with(
             &store,
             events.clone(),
-            graph_runtime::runtime::PipelineHooks { gate, interlocutor },
+            graph_runtime::runtime::PipelineHooks {
+                gate,
+                interlocutor,
+                cancel: None,
+            },
         )
         .await?;
     let query = format!("Run the '{}' plan", doc.name);
