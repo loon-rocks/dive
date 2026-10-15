@@ -7,6 +7,7 @@ pub mod task;
 
 pub use events::{EventSink, NullSink, RunStart, TeeSink};
 
+use crate::store::{EntryUsage, Stamp};
 use crate::tools::{ToolOutcome, ToolRegistry};
 use futures::StreamExt;
 use graph_llm::types::{
@@ -65,6 +66,7 @@ pub struct TurnOutcome {
     /// Names of tools invoked this turn, in first-use order, deduplicated.
     pub tools_used: Vec<String>,
     pub stopped_by: Option<String>,
+    pub stamps: Vec<Stamp>,
 }
 
 impl Agent {
@@ -79,6 +81,7 @@ impl Agent {
         let mut usage = Usage::default();
         let mut tool_calls_made = 0u32;
         let mut tools_used: Vec<String> = Vec::new();
+        let mut stamps: Vec<Stamp> = Vec::new();
         // `max_iterations` bounds *consecutive non-progress* iterations, not
         // the whole turn: a successful progress-tool call resets `stall` (see
         // `progress_tools`). With no progress tools configured, nothing ever
@@ -97,12 +100,17 @@ impl Agent {
             iteration += 1;
             // `stream_once` opens *and* drains the stream, so one scope over
             // the call covers the terminal event that carries the counts.
+            let called = Instant::now();
             let response = self
                 .call_site
                 .clone()
                 .scope(self.stream_once(messages, &tools))
                 .await?;
             usage.add(&response.usage);
+            stamps.push(Stamp {
+                ms: Some(millis(called.elapsed())),
+                usage: Some(EntryUsage::new(&self.model, &response.usage)),
+            });
 
             messages.push(ChatMessage::Assistant {
                 content: response.content.clone(),
@@ -126,6 +134,7 @@ impl Agent {
                     tool_calls_made,
                     tools_used,
                     stopped_by: None,
+                    stamps,
                 });
             }
 
@@ -135,7 +144,11 @@ impl Agent {
                     tools_used.push(call.name.clone());
                 }
             }
-            let results = self.execute_calls(&response.tool_calls).await;
+            let (results, durations): (Vec<ChatMessage>, Vec<u64>) = self
+                .execute_calls(&response.tool_calls)
+                .await
+                .into_iter()
+                .unzip();
             // A successful progress-tool call in this batch refreshes the
             // budget; otherwise the stall counter advances toward the cap.
             let made_progress = !self.progress_tools.is_empty()
@@ -150,6 +163,10 @@ impl Agent {
                 .find(|(call, msg)| self.stop_tools.contains(&call.name) && !is_error_result(msg))
                 .map(|(call, _)| call.name.clone());
             messages.extend(results);
+            stamps.extend(durations.into_iter().map(|ms| Stamp {
+                ms: Some(ms),
+                usage: None,
+            }));
             if stopped_by.is_some() {
                 return Ok(TurnOutcome {
                     text: response.content.unwrap_or_default(),
@@ -157,6 +174,7 @@ impl Agent {
                     tool_calls_made,
                     tools_used,
                     stopped_by,
+                    stamps,
                 });
             }
         }
@@ -205,7 +223,7 @@ impl Agent {
 
     /// Execute one round of tool calls concurrently, preserving call order
     /// in the returned messages.
-    async fn execute_calls(&self, calls: &[ToolCall]) -> Vec<ChatMessage> {
+    async fn execute_calls(&self, calls: &[ToolCall]) -> Vec<(ChatMessage, u64)> {
         let futures = calls.iter().map(|call| async {
             self.events.tool_started(&call.name, &call.arguments);
             let started = Instant::now();
@@ -217,16 +235,24 @@ impl Agent {
                     result: json!({ "error": e.to_string() }),
                     is_error: true,
                 });
+            let elapsed = started.elapsed();
             self.events
-                .tool_finished(&call.name, started.elapsed(), outcome.is_error);
-            ChatMessage::ToolResult {
-                tool_call_id: call.id.clone(),
-                content: outcome.result,
-                is_error: outcome.is_error,
-            }
+                .tool_finished(&call.name, elapsed, outcome.is_error);
+            (
+                ChatMessage::ToolResult {
+                    tool_call_id: call.id.clone(),
+                    content: outcome.result,
+                    is_error: outcome.is_error,
+                },
+                millis(elapsed),
+            )
         });
         futures::future::join_all(futures).await
     }
+}
+
+fn millis(elapsed: std::time::Duration) -> u64 {
+    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
 /// True when a tool-result message carried an error. `execute_calls` returns
@@ -385,6 +411,47 @@ mod tests {
         assert_eq!(outcome.tool_calls_made, 0);
         assert_eq!(messages.len(), 2);
         assert!(registry.invocations.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn every_appended_message_gets_a_stamp_in_order() {
+        let mut first = tool_response(vec![
+            ("test__echo", json!({"n": 1})),
+            ("test__echo", json!({"n": 2})),
+        ]);
+        first.usage = Usage {
+            input_tokens: 100,
+            output_tokens: 7,
+            cache_creation_input_tokens: 3,
+            cache_read_input_tokens: 40,
+        };
+        let (agent, _) = agent(vec![first, text_response("done")], false);
+        let mut messages = vec![ChatMessage::User {
+            content: "hello".into(),
+        }];
+        let outcome = agent.run_turn(&mut messages).await.unwrap();
+        let appended = &messages[1..];
+        assert_eq!(outcome.stamps.len(), appended.len());
+        for (message, stamp) in appended.iter().zip(&outcome.stamps) {
+            assert!(stamp.ms.is_some());
+            match message {
+                ChatMessage::Assistant { .. } => {
+                    assert_eq!(stamp.usage.as_ref().unwrap().model, "test-model")
+                }
+                _ => assert!(stamp.usage.is_none()),
+            }
+        }
+        assert_eq!(
+            outcome.stamps[0].usage,
+            Some(EntryUsage {
+                model: "test-model".into(),
+                input_tokens: 100,
+                output_tokens: 7,
+                cache_creation_input_tokens: 3,
+                cache_read_input_tokens: 40,
+            })
+        );
+        assert_eq!(outcome.stamps[3].usage.as_ref().unwrap().input_tokens, 10);
     }
 
     #[tokio::test]

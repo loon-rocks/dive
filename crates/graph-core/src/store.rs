@@ -3,7 +3,7 @@
 //! future remote stores) can be swapped.
 
 use async_trait::async_trait;
-use graph_llm::types::ChatMessage;
+use graph_llm::types::{ChatMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -28,6 +28,39 @@ pub struct ThreadEntry {
     pub author: String,
     #[serde(flatten)]
     pub body: EntryBody,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<EntryUsage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntryUsage {
+    pub model: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    #[serde(default)]
+    pub cache_creation_input_tokens: u64,
+    #[serde(default)]
+    pub cache_read_input_tokens: u64,
+}
+
+impl EntryUsage {
+    pub fn new(model: &str, usage: &Usage) -> Self {
+        Self {
+            model: model.to_string(),
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            cache_creation_input_tokens: usage.cache_creation_input_tokens,
+            cache_read_input_tokens: usage.cache_read_input_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Stamp {
+    pub ms: Option<u64>,
+    pub usage: Option<EntryUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,13 +91,40 @@ pub enum EntryBody {
 pub struct NewEntry {
     pub author: String,
     pub body: EntryBody,
+    pub ms: Option<u64>,
+    pub usage: Option<EntryUsage>,
 }
 
 impl NewEntry {
-    pub fn message(author: &str, message: ChatMessage) -> Self {
+    pub fn new(author: &str, body: EntryBody) -> Self {
         Self {
             author: author.to_string(),
-            body: EntryBody::Message { message },
+            body,
+            ms: None,
+            usage: None,
+        }
+    }
+
+    pub fn message(author: &str, message: ChatMessage) -> Self {
+        Self::new(author, EntryBody::Message { message })
+    }
+
+    pub fn stamped(self, stamp: Stamp) -> Self {
+        Self {
+            ms: stamp.ms,
+            usage: stamp.usage,
+            ..self
+        }
+    }
+
+    pub fn into_thread_entry(self, seq: u64, at: i64) -> ThreadEntry {
+        ThreadEntry {
+            seq,
+            at,
+            author: self.author,
+            body: self.body,
+            ms: self.ms,
+            usage: self.usage,
         }
     }
 }
@@ -74,6 +134,8 @@ impl From<ThreadEntry> for NewEntry {
         Self {
             author: entry.author,
             body: entry.body,
+            ms: entry.ms,
+            usage: entry.usage,
         }
     }
 }
@@ -156,6 +218,8 @@ mod tests {
                 message: "draft it".to_string(),
                 via: None,
             },
+            ms: None,
+            usage: None,
         };
         let value = serde_json::to_value(&entry).unwrap();
         assert_eq!(
@@ -180,6 +244,8 @@ mod tests {
                 output: json!({"changes": []}),
                 final_: true,
             },
+            ms: None,
+            usage: None,
         };
         let value = serde_json::to_value(&run).unwrap();
         assert_eq!(value["kind"], json!("subagent_run"));
