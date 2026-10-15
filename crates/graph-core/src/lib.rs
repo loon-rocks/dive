@@ -22,8 +22,8 @@ mod user_tools_tests;
 
 pub use agent::{Agent, AgentError, EventSink, NullSink, RunStart, TeeSink, TurnOutcome};
 pub use store::{
-    conversation, message_entries, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta,
-    ToolShape, USER_AUTHOR,
+    conversation, message_entries, EntryBody, EntryUsage, NewEntry, Stamp, Store, StoreError,
+    ThreadEntry, ThreadMeta, ToolShape, USER_AUTHOR,
 };
 pub use tools::{
     AllowlistRegistry, CompositeRegistry, ExcludingRegistry, ServerIdentity, ToolDef, ToolError,
