@@ -2,15 +2,18 @@
 
 use crate::cli::ToolCommand;
 use crate::commands::outcome::{report, Outcome};
-use anyhow::{bail, Result};
+use anyhow::Result;
 use graph_core::toolbox::AgentToolbox;
 use graph_core::ToolRegistry;
-use serde_json::json;
+use graph_runtime::ops;
 use std::collections::BTreeMap;
 
 pub async fn run(command: ToolCommand) -> Result<()> {
     if let ToolCommand::Migrate { path, json } = command {
-        return report(migrate(&path)?, json);
+        return report(
+            crate::commands::plan_cmd::migrated_outcome(ops::tool::migrate(&path)?),
+            json,
+        );
     }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
@@ -19,8 +22,6 @@ pub async fn run(command: ToolCommand) -> Result<()> {
         .await?;
     let docs = runtime.tool_docs()?;
     let result = dispatch(toolbox.as_ref(), command, &docs).await;
-    // MCP children must be shut down before the runtime drops, on every
-    // path — including the one where `report` returns a SilentExit.
     runtime.shutdown().await;
     let (outcome, json) = result?;
     report(outcome, json)
@@ -32,7 +33,10 @@ async fn dispatch(
     docs: &graph_core::user_tools::ToolDocs,
 ) -> Result<(Outcome, bool)> {
     match command {
-        ToolCommand::List { json } => Ok((list_labeled(registry, &pack_labels(docs)).await?, json)),
+        ToolCommand::List { json } => Ok((
+            list_labeled(registry, &ops::tool::pack_labels(docs)).await?,
+            json,
+        )),
         ToolCommand::Show { name, json } => Ok((show(registry, docs, &name).await?, json)),
         ToolCommand::Test {
             name,
@@ -47,88 +51,22 @@ async fn dispatch(
     }
 }
 
-fn tool_source(docs: &graph_core::user_tools::ToolDocs, name: &str) -> Option<String> {
-    if let Some(source) = docs.pack_source(name) {
-        return Some(source.describe());
-    }
-    let (list, bare) = match name.split_once("__")? {
-        ("builtin", bare) => (&docs.builtins, bare),
-        ("user", bare) => (&docs.user, bare),
-        _ => return None,
-    };
-    let doc = list.iter().find(|doc| doc.name == bare)?;
-    Some(match &doc.path {
-        Some(path) => path.display().to_string(),
-        None => "built-in".to_string(),
-    })
-}
-
-/// `graph tool migrate <path>` — rewrite one tool file to the current tool
-/// format. Takes a path, not a catalog name: a file the catalog refuses is
-/// the one most likely to need it.
-fn migrate(path: &std::path::Path) -> Result<Outcome> {
-    if !path.exists() {
-        bail!("{} does not exist", path.display());
-    }
-    let check = |value: &serde_yaml::Value| -> Result<(), String> {
-        let yaml = serde_yaml::to_string(value).map_err(|e| e.to_string())?;
-        graph_core::user_tools::parse_tool_source(&yaml).map(|_| ())
-    };
-    let migrated = graph_core::format::migrate_file(graph_core::format::Kind::Tool, path, &check)
-        .map_err(anyhow::Error::msg)?;
-    Ok(crate::commands::plan_cmd::migrated_outcome(migrated))
-}
-
-/// The catalog as an authoring caller needs to see it: invokable tools
-/// plus the control-step vocabulary.
-///
-/// Control steps are appended here rather than added to a registry because
-/// they are not invokable — the executor evaluates them. But an agent
-/// writing a plan needs their schemas exactly as much as a tool's, and a
-/// catalog that omits them sends it to read graph's source instead.
-pub(crate) async fn catalog(
-    registry: &(dyn ToolRegistry + Send + Sync),
-) -> Result<Vec<graph_core::ToolDef>> {
-    let mut defs = registry.tools().await?;
-    defs.extend(graph_core::pipeline::control_step_defs());
-    Ok(defs)
-}
-
 pub(crate) async fn list(registry: &(dyn ToolRegistry + Send + Sync)) -> Result<Outcome> {
     list_labeled(registry, &BTreeMap::new()).await
-}
-
-fn pack_labels(docs: &graph_core::user_tools::ToolDocs) -> BTreeMap<String, String> {
-    docs.packs
-        .iter()
-        .map(|(source, _)| (source.name.clone(), source.describe()))
-        .collect()
 }
 
 pub(crate) async fn list_labeled(
     registry: &(dyn ToolRegistry + Send + Sync),
     labels: &BTreeMap<String, String>,
 ) -> Result<Outcome> {
-    let defs = catalog(registry).await?;
-    // An empty catalog is a valid answer, not an error: the envelope still
-    // parses, so a caller branches on `count`.
-    let mut body = super::listing::tool_listing_as_json(&defs);
-    for key in ["tools", "sources"] {
-        for entry in body[key].as_array_mut().into_iter().flatten() {
-            if let Some(label) = entry["source"]
-                .as_str()
-                .and_then(|source| labels.get(source))
-            {
-                entry["pack"] = json!(label);
-            }
-        }
-    }
-    if defs.is_empty() {
+    let listing = ops::tool::list(registry, labels).await?;
+    let body = serde_json::to_value(&listing)?;
+    if listing.defs.is_empty() {
         return Ok(Outcome::raw(String::new(), body)
             .with_note("no tools available — configure [mcp.*] servers"));
     }
     let text = super::listing::render_tool_listing_labeled(
-        &defs,
+        &listing.defs,
         std::io::IsTerminal::is_terminal(&std::io::stdout()),
         labels,
     );
@@ -140,28 +78,21 @@ pub(crate) async fn show(
     docs: &graph_core::user_tools::ToolDocs,
     name: &str,
 ) -> Result<Outcome> {
-    let defs = catalog(registry).await?;
-    let Some(def) = defs.into_iter().find(|d| d.name == name) else {
-        // A bad argument, not a domain rejection — so no envelope, even
-        // under `--json`.
-        bail!("unknown tool: {name}");
-    };
-    let body = super::listing::tool_as_json(&def);
-    let mut text = format!("{}\n\n{}\n\n", def.name, def.description);
+    let detail = ops::tool::show(registry, docs, name).await?;
+    let mut text = format!("{}\n\n{}\n\n", detail.name, detail.description);
     text.push_str(&format!(
         "input schema:\n{}\n",
-        serde_json::to_string_pretty(&def.input_schema)?
+        serde_json::to_string_pretty(&detail.input_schema)?
     ));
-    if let Some(schema) = &def.output_schema {
+    if let Some(schema) = &detail.output_schema {
         text.push_str(&format!(
             "\noutput schema:\n{}\n",
             serde_json::to_string_pretty(schema)?
         ));
     }
-    let mut outcome = Outcome::raw(text, body);
-    if let Some(source) = tool_source(docs, name) {
-        outcome.body["source"] = json!(source);
-        outcome = outcome.with_note(format!("source: {source}"));
+    let mut outcome = Outcome::raw(text, serde_json::to_value(&detail)?);
+    if let Some(origin) = &detail.origin {
+        outcome = outcome.with_note(format!("source: {origin}"));
     }
     Ok(outcome)
 }
@@ -172,85 +103,12 @@ pub(crate) async fn test(
     input: Option<&str>,
     inputs: &[String],
 ) -> Result<Outcome> {
-    if let Some(message) = registry.refusal(name) {
-        bail!(message);
-    }
-    // A control step has a description and a schema, so it looks testable
-    // in a listing. It is not: the executor evaluates it, and dispatching
-    // the bare name would fail deep in the registry with an unhelpful
-    // "unknown tool". Say what it actually is instead.
-    if graph_core::pipeline::is_control_step(name) {
-        bail!(
-            "'{name}' is a control step, not an invokable tool — it is evaluated \
-             by the plan executor. Add it to a plan (graph plan step add) and run \
-             the plan; `graph tool show {name}` describes its input."
-        );
-    }
+    ops::tool::testable(registry, name)?;
     let input = crate::commands::input::resolve_input(input, inputs)?;
-    let invoked = registry.invoke(name, input).await?;
-    // A tool that reports failure is not a CLI failure: the call completed
-    // and its error payload is the result worth reading. `isError` carries
-    // that distinction to a machine caller, which the exit code cannot.
-    if invoked.is_error {
+    let tested = ops::tool::test(registry, name, input).await?;
+    if tested.is_error {
         eprintln!("tool returned an error:");
     }
-    let body = json!({
-        "tool": name,
-        "isError": invoked.is_error,
-        "result": invoked.result,
-    });
-    let text = format!("{}\n", serde_json::to_string_pretty(&invoked.result)?);
-    Ok(Outcome::raw(text, body))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tool_source_names_the_overriding_file_or_the_pack() {
-        let builtins = graph_core::user_tools::load_builtin_tools().unwrap();
-        let pack_tool = graph_core::user_tools::parse_tool_source(
-            "name: file_info\ndescription: d\nkind: exec\ncommand: wc\n",
-        )
-        .unwrap();
-        let docs = graph_core::user_tools::ToolDocs {
-            builtins: builtins.clone(),
-            user: Vec::new(),
-            packs: vec![(
-                graph_core::packs::PackSource {
-                    name: "example".to_string(),
-                    tag: Some("v1.0.0".to_string()),
-                    layer: graph_config::pack::LayerKind::Project,
-                    dir: std::path::PathBuf::from(".graph/packs/example"),
-                },
-                vec![pack_tool],
-            )],
-        };
-        assert_eq!(
-            tool_source(&docs, "example__tool__file_info").as_deref(),
-            Some("pack example v1.0.0 (project)")
-        );
-        assert_eq!(tool_source(&docs, "example__tool__missing"), None);
-        assert_eq!(
-            tool_source(&docs, "builtin__reshape").as_deref(),
-            Some("built-in")
-        );
-        let mut mine = builtins
-            .iter()
-            .find(|d| d.name == "reshape")
-            .unwrap()
-            .clone();
-        mine.path = Some(std::path::PathBuf::from("/tools/builtin/reshape.yaml"));
-        let overridden = graph_core::user_tools::ToolDocs {
-            builtins: graph_core::user_tools::apply_tool_overrides(builtins, vec![mine]).unwrap(),
-            user: Vec::new(),
-            packs: Vec::new(),
-        };
-        assert_eq!(
-            tool_source(&overridden, "builtin__reshape").as_deref(),
-            Some("/tools/builtin/reshape.yaml")
-        );
-        assert_eq!(tool_source(&docs, "linear__get_issue"), None);
-    }
+    let text = format!("{}\n", serde_json::to_string_pretty(&tested.result)?);
+    Ok(Outcome::raw(text, serde_json::to_value(&tested)?))
 }

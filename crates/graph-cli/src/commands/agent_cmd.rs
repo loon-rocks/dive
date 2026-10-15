@@ -1,9 +1,8 @@
 use crate::cli::AgentCommand;
 use crate::commands::outcome::{report, Outcome};
-use anyhow::{bail, Result};
-use graph_core::agent::doc::{agent_dirs, global_fragments, load_agent_file, AgentDoc, AgentSet};
-use graph_core::format::{migrate_file, stamp, Kind};
-use serde_json::{json, Value};
+use anyhow::Result;
+use graph_core::agent::doc::{agent_dirs, AgentDoc};
+use graph_runtime::ops;
 use std::path::{Path, PathBuf};
 
 pub fn run(command: AgentCommand) -> Result<()> {
@@ -23,98 +22,33 @@ pub fn run(command: AgentCommand) -> Result<()> {
     }
 }
 
-fn subagent_io(doc: &AgentDoc) -> &'static str {
-    match (&doc.input_schema, &doc.output_schema) {
-        (None, None) => "{prompt} -> {result}",
-        (Some(_), None) => "typed input -> {result}",
-        (None, Some(_)) => "{prompt} -> typed output",
-        (Some(_), Some(_)) => "typed input -> typed output",
-    }
-}
-
-fn source(doc: &AgentDoc, workbench: bool) -> String {
-    if workbench {
-        "built-in, workbench only (graph wb)".to_string()
-    } else {
-        doc.source.describe()
-    }
-}
-
-fn runnable_and_workbench(
-    dirs: &[PathBuf],
-    packs: &[AgentDoc],
-) -> (Vec<(AgentDoc, bool)>, Vec<String>) {
-    let (set, errors) = AgentSet::load(graph_core::agent::doc::BUILTINS, dirs);
-    let set = set.with_packs(packs.iter().cloned());
-    let mut agents: Vec<(AgentDoc, bool)> = set.iter().map(|doc| (doc, false)).collect();
-    for doc in crate::workbench::agents::workbench_only() {
-        if !agents.iter().any(|(known, _)| known.name == doc.name) {
-            agents.push((doc, true));
-        }
-    }
-    agents.sort_by(|(a, _), (b, _)| a.name.cmp(&b.name));
-    (agents, errors)
-}
-
-fn summary(doc: &AgentDoc, workbench: bool) -> Value {
-    json!({
-        "name": doc.name,
-        "description": doc.description,
-        "source": source(doc, workbench),
-        "workbenchOnly": workbench,
-        "model": doc.model,
-        "subagents": doc.subagents,
-        "handoffs": doc.handoffs,
-        "subagentIo": subagent_io(doc),
-    })
-}
-
 pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
-    let (listed, errors) = runnable_and_workbench(dirs, packs);
-    let agents: Vec<Value> = listed
-        .iter()
-        .map(|(doc, workbench)| summary(doc, *workbench))
-        .collect();
+    let listed = ops::agent::list(dirs, packs, &crate::workbench::agents::workbench_only());
     let text: String = listed
+        .agents
         .iter()
-        .map(|(doc, workbench)| {
-            format!(
-                "{}\t{}\t{}\n",
-                doc.name,
-                source(doc, *workbench),
-                doc.description
-            )
-        })
+        .map(|agent| format!("{}\t{}\t{}\n", agent.name, agent.source, agent.description))
         .collect();
-    let outcome = Outcome::raw(
-        text,
-        json!({ "agents": agents, "count": agents.len(), "loadErrors": errors }),
-    );
-    if errors.is_empty() {
+    let errors = listed.load_errors.len();
+    let outcome = Outcome::raw(text, serde_json::to_value(&listed).unwrap_or_default());
+    if errors == 0 {
         outcome
     } else {
         outcome.with_note(format!(
-            "{} agent file(s) failed to load — run `graph agent validate`",
-            errors.len()
+            "{errors} agent file(s) failed to load — run `graph agent validate`"
         ))
     }
 }
 
 pub(crate) fn show(dirs: &[PathBuf], packs: &[AgentDoc], name: &str) -> Result<Outcome> {
-    let (listed, _) = runnable_and_workbench(dirs, packs);
-    let Some((doc, workbench)) = listed.iter().find(|(doc, _)| doc.name == name).cloned() else {
-        let known: Vec<String> = listed.iter().map(|(d, _)| d.name.clone()).collect();
-        bail!("unknown agent '{name}' (defined: {})", known.join(", "));
-    };
-    let mut value = serde_yaml::to_value(&doc)?;
-    stamp(Kind::Agent, &mut value);
-    let yaml = serde_yaml::to_string(&value)?;
-    let body = json!({
-        "agent": serde_json::to_value(&doc)?,
-        "source": doc.source.describe(),
-        "yaml": yaml,
-    });
-    Ok(Outcome::raw(yaml, body).with_note(format!("source: {}", source(&doc, workbench))))
+    let detail = ops::agent::show(
+        dirs,
+        packs,
+        &crate::workbench::agents::workbench_only(),
+        name,
+    )?;
+    let body = serde_json::to_value(&detail)?;
+    Ok(Outcome::raw(detail.yaml, body).with_note(format!("source: {}", detail.label)))
 }
 
 pub(crate) fn validate(
@@ -122,58 +56,30 @@ pub(crate) fn validate(
     packs: &[AgentDoc],
     path: Option<&Path>,
 ) -> Result<Outcome> {
-    let (set, mut problems) = AgentSet::load(&crate::workbench::agents::builtin_sources(), dirs);
-    let mut set = set.with_packs(packs.iter().cloned());
-    let mut checked = "all agents".to_string();
-    if let Some(path) = path {
-        if !path.exists() {
-            bail!("{} does not exist", path.display());
-        }
-        checked = path.display().to_string();
-        match load_agent_file(path) {
-            Ok(doc) => {
-                let name = doc.name.clone();
-                set = AgentSet::layered(set.iter().collect(), vec![vec![doc]]);
-                problems = set.agent_problems(&name, &fragment_names());
-            }
-            Err(error) => problems = vec![error],
-        }
+    let verdict = ops::agent::validate(
+        &crate::workbench::agents::builtin_sources(),
+        dirs,
+        packs,
+        path,
+    )?;
+    let body = serde_json::to_value(&verdict)?;
+    Ok(if verdict.ok {
+        Outcome::ok(body)
     } else {
-        problems.extend(set.validate(&fragment_names()));
-    }
-    if problems.is_empty() {
-        return Ok(Outcome::ok(
-            json!({ "ok": true, "checked": checked, "problems": problems }),
-        ));
-    }
-    Ok(Outcome::rejected(json!({
-        "ok": false,
-        "checked": checked,
-        "error": format!("{checked} has problems"),
-        "problems": problems,
-    })))
-}
-
-fn fragment_names() -> Vec<&'static str> {
-    global_fragments().into_keys().collect()
+        Outcome::rejected(body)
+    })
 }
 
 fn migrate(path: &Path) -> Result<Outcome> {
-    if !path.exists() {
-        bail!("{} does not exist", path.display());
-    }
-    let check = |value: &serde_yaml::Value| -> Result<(), String> {
-        let yaml = serde_yaml::to_string(value).map_err(|e| e.to_string())?;
-        graph_core::agent::doc::parse_agent_source(&yaml).map(|_| ())
-    };
-    let migrated = migrate_file(Kind::Agent, path, &check).map_err(anyhow::Error::msg)?;
-    Ok(crate::commands::plan_cmd::migrated_outcome(migrated))
+    Ok(crate::commands::plan_cmd::migrated_outcome(
+        ops::agent::migrate(path)?,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graph_core::agent::doc::AgentSource;
+    use graph_core::agent::doc::{AgentSet, AgentSource};
 
     fn write_agent(dir: &Path, file: &str, body: &str) -> PathBuf {
         let path = dir.join(file);
