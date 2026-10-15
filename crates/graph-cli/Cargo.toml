@@ -42,6 +42,7 @@ regex = "1"
 sha2 = "0.10"
 semver.workspace = true
 tempfile = "3"
+rpassword = "7"
 toml_edit.workspace = true
 # graph as an MCP *server* (`graph mcp serve`). graph-mcp holds the client
 # half; the server lives here because what it serves is this crate's command

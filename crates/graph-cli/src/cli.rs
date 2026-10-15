@@ -78,6 +78,15 @@ pub enum Command {
         #[command(subcommand)]
         command: ThreadCommand,
     },
+    #[command(
+        about = "Store, inspect and remove secrets in the OS credential store",
+        alias = "secrets",
+        after_long_help = "A `${NAME}` reference in config.toml or a tool's `env` reads the environment variable `NAME` first, then the OS credential store: the macOS Keychain, or the Secret Service on Linux, under service `graph` and account `NAME`. These commands manage the stored values. They never print a value in full.\n\nExamples:\n  graph secret set ANTHROPIC_API_KEY\n  graph secret list"
+    )]
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommand,
+    },
     /// Manage MCP servers
     Mcp {
         #[command(subcommand)]
@@ -580,6 +589,48 @@ pub enum ThreadCommand {
     Rm {
         #[arg(help = "The thread id, as `graph thread list` prints it")]
         id: String,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SecretCommand {
+    #[command(
+        about = "Store a secret in the OS credential store",
+        after_long_help = "Reads the value with hidden input when stdin is a terminal, or from stdin when it is piped; one trailing newline is dropped. The value is never accepted as an argument, where it would land in shell history. Storing a name again replaces its value. When the environment also sets the name, the environment's value still wins.\n\nExamples:\n  graph secret set ANTHROPIC_API_KEY\n  printf %s \"$TOKEN\" | graph secret set GITHUB_TOKEN"
+    )]
+    Set {
+        #[arg(help = "The variable name, as `${NAME}` references it")]
+        name: String,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
+    #[command(
+        about = "Remove a secret from the OS credential store",
+        after_long_help = "Removing a name that isn't stored is refused and exits 1.\n\nExamples:\n  graph secret rm GITHUB_TOKEN"
+    )]
+    Rm {
+        #[arg(help = "The variable name, as `${NAME}` references it")]
+        name: String,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
+    #[command(
+        about = "List every variable name the config, tools and packs reference, and where each resolves from",
+        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is `env`, `store`, `env (shadows store)` when both set it and the environment wins, or `missing`. The OS credential store can't be enumerated, so a stored name nothing references isn't listed. Values are never printed.\n\nExamples:\n  graph secret list\n  graph secret list --json"
+    )]
+    List {
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
+    #[command(
+        about = "Show where one name resolves from and what references it",
+        after_long_help = "Prints the name's source and references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  graph secret show ANTHROPIC_API_KEY"
+    )]
+    Show {
+        #[arg(help = "The variable name, as `${NAME}` references it")]
+        name: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },

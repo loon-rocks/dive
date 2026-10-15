@@ -59,7 +59,7 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | `openai_compat` | Any OpenAI-compatible endpoint, such as Ollama, vLLM or a gateway, at `base_url` |
 | `systemone` | A [decision model](#decision-models) |
 
-`api_key = "${ANTHROPIC_API_KEY}"` reads the key from the environment, so the file is safe to commit.
+`api_key = "${ANTHROPIC_API_KEY}"` reads the key from the environment or, when it isn't set there, from the OS credential store, so the file is safe to commit. `graph secret set ANTHROPIC_API_KEY` stores the key there; see [Secret references](/reference/configuration#secret-references).
 
 ## Roles
 

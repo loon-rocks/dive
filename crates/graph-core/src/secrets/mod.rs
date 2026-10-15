@@ -1,4 +1,5 @@
 mod memory;
+pub mod references;
 mod store;
 
 pub use graph_config::secrets::{is_secret_name, EnvSource, Origin, Resolved, SecretSource};
