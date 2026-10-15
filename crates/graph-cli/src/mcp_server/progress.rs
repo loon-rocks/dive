@@ -193,46 +193,9 @@ impl EventSink for ProgressSink {
     // noise would be one notification per token.
 }
 
-/// Stops a run when the MCP client cancels the request.
-///
-/// MCP cancellation is a notification, not a reply — the client says "stop"
-/// and stops caring. The pipeline already has the matching concept: an
-/// [`ExecutionGate`] returning [`GateDecision::Abort`] halts before the next
-/// real tool call and surfaces as `PipelineError::Aborted` carrying the
-/// partial state, so a cancelled run stops *between* side effects rather
-/// than in the middle of one.
-///
-/// The check is at the gate rather than a `select!` around the whole run for
-/// exactly that reason: a plan that is midway through creating an issue
-/// should finish that call and stop before the next, not be dropped.
-pub struct CancelGate {
-    token: tokio_util::sync::CancellationToken,
-}
-
-impl CancelGate {
-    pub fn new(token: tokio_util::sync::CancellationToken) -> Self {
-        Self { token }
-    }
-}
-
-#[async_trait::async_trait]
-impl graph_core::pipeline::ExecutionGate for CancelGate {
-    async fn before_tool(
-        &self,
-        _ctx: graph_core::pipeline::GateContext<'_>,
-    ) -> graph_core::pipeline::GateDecision {
-        if self.token.is_cancelled() {
-            graph_core::pipeline::GateDecision::Abort
-        } else {
-            graph_core::pipeline::GateDecision::Proceed
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graph_core::pipeline::{ExecutionGate, GateDecision};
 
     /// A sink wired to a plain channel — `new` needs a live MCP peer, which a
     /// unit test has no business standing up.
@@ -305,36 +268,5 @@ mod tests {
         sink.usage_summary(&report);
 
         assert_eq!(rx.try_recv().unwrap(), "3 calls · 5k in / 400 out · $1.50");
-    }
-
-    #[tokio::test]
-    async fn the_gate_aborts_once_the_client_cancels() {
-        use graph_core::pipeline::{GateContext, StepPath};
-        use serde_json::json;
-
-        let token = tokio_util::sync::CancellationToken::new();
-        let gate = CancelGate::new(token.clone());
-        let path = StepPath::top("E1");
-        let input = json!({});
-        let scope = serde_json::Map::new();
-        let context = || GateContext {
-            path: &path,
-            tool_name: "t__search",
-            rendered_input: &input,
-            call_stack: &[],
-            scope: &scope,
-        };
-
-        // Before cancellation the run proceeds untouched...
-        assert!(matches!(
-            gate.before_tool(context()).await,
-            GateDecision::Proceed
-        ));
-        token.cancel();
-        // ...and after it, the next tool call is the one that does not happen.
-        assert!(matches!(
-            gate.before_tool(context()).await,
-            GateDecision::Abort
-        ));
     }
 }

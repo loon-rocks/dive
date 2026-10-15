@@ -1,3 +1,4 @@
+use crate::cancel::CancelHandle;
 use crate::runtime::{
     load_history, persist_turn, resolve_thread, starting_agent, title_from, PipelineHooks, Runtime,
 };
@@ -66,11 +67,19 @@ impl ChatStart {
         run_name: Option<String>,
     ) -> Result<ChatSession> {
         runtime.usage.attach_events(events.clone());
+        let hooks_cancel = hooks.cancel.clone();
         let conversation = runtime
             .conversation(&self.store, events.clone(), hooks)
             .await?;
-        self.over(conversation, runtime.usage.clone(), events, run_name)
-            .await
+        let cancel = hooks_cancel;
+        self.over(
+            conversation,
+            runtime.usage.clone(),
+            events,
+            run_name,
+            cancel,
+        )
+        .await
     }
 
     pub async fn over(
@@ -79,6 +88,7 @@ impl ChatStart {
         usage: Arc<UsageLedger>,
         events: Arc<dyn EventSink>,
         run_name: Option<String>,
+        cancel: Option<CancelHandle>,
     ) -> Result<ChatSession> {
         conversation.agent(&self.active)?;
         let history = match &self.thread {
@@ -91,6 +101,7 @@ impl ChatStart {
             usage,
             events,
             run_name,
+            cancel,
             thread: self.thread,
             fresh_thread: self.fresh_thread,
             owner: self.owner,
@@ -106,6 +117,7 @@ pub struct ChatSession {
     usage: Arc<UsageLedger>,
     events: Arc<dyn EventSink>,
     run_name: Option<String>,
+    cancel: Option<CancelHandle>,
     thread: Option<ThreadMeta>,
     fresh_thread: bool,
     owner: String,
@@ -146,6 +158,10 @@ impl ChatSession {
         Ok(())
     }
 
+    pub fn cancel_handle(&self) -> Option<&CancelHandle> {
+        self.cancel.as_ref()
+    }
+
     pub async fn send(&mut self, message: &str) -> Result<TurnReport> {
         let mut thread_error = None;
         if self.thread.is_none() {
@@ -157,6 +173,9 @@ impl ChatSession {
                 Err(error) => thread_error = Some(error),
             }
         }
+        if let Some(cancel) = &self.cancel {
+            cancel.rearm();
+        }
         if let Some(name) = &self.run_name {
             self.events.run_started(&RunStart {
                 name: name.clone(),
@@ -164,10 +183,16 @@ impl ChatSession {
                 input: Some(serde_json::Value::String(message.to_string())),
             });
         }
-        let result = self
+        let turn = self
             .conversation
-            .run_turn(&self.history, &self.active, message)
-            .await;
+            .run_turn(&self.history, &self.active, message);
+        let result: Result<ConversationTurn> = match &self.cancel {
+            Some(cancel) => match cancel.run(turn).await {
+                Ok(result) => result.map_err(Into::into),
+                Err(cancelled) => Err(cancelled.into()),
+            },
+            None => turn.await.map_err(Into::into),
+        };
         let usage = self.usage.take();
         let outcome = match result {
             Ok(turn) => {
@@ -198,7 +223,7 @@ impl ChatSession {
                     }
                     self.fresh_thread = false;
                 }
-                Err(error.into())
+                Err(error)
             }
         };
         if !usage.is_empty() {
@@ -336,7 +361,7 @@ mod tests {
         ChatStart::resolve(runtime, store.clone(), Some("front"), thread)
             .await
             .unwrap()
-            .over(conversation, runtime.usage.clone(), events, None)
+            .over(conversation, runtime.usage.clone(), events, None, None)
             .await
             .unwrap()
     }
@@ -407,6 +432,150 @@ mod tests {
             .unwrap();
         assert_eq!(meta.active, "back");
         assert_eq!(meta.owner, "front");
+    }
+
+    struct Slow {
+        finished: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    #[async_trait]
+    impl graph_core::ToolRegistry for Slow {
+        async fn tools(&self) -> Result<Vec<graph_core::ToolDef>, graph_core::ToolError> {
+            Ok(vec![graph_core::ToolDef {
+                name: "slow__wait".to_string(),
+                description: "waits".to_string(),
+                input_schema: json!({"type": "object"}),
+                output_schema: None,
+                output_example: None,
+                read_only: Some(true),
+            }])
+        }
+
+        async fn invoke(
+            &self,
+            _: &str,
+            _: Value,
+        ) -> Result<graph_core::ToolOutcome, graph_core::ToolError> {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            self.finished
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(graph_core::ToolOutcome {
+                result: json!({}),
+                is_error: false,
+            })
+        }
+    }
+
+    struct Delayed(Mutex<VecDeque<ChatResponse>>);
+
+    #[async_trait]
+    impl ChatProvider for Delayed {
+        async fn chat(&self, _: ChatRequest) -> Result<ChatResponse, LlmError> {
+            Err(LlmError::Unsupported("stream only".to_string()))
+        }
+
+        async fn chat_stream(&self, _: ChatRequest) -> Result<EventStream, LlmError> {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let response = self
+                .0
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| LlmError::Unsupported("script exhausted".to_string()))?;
+            Ok(futures::stream::iter(vec![Ok(StreamEvent::Completed(response))]).boxed())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_turn_finishes_its_tool_call_then_stops_and_persists_nothing() {
+        let mut config = graph_config::Config::default();
+        config.tools.paths = Vec::new();
+        config.plans.paths = Vec::new();
+        let provider: Arc<dyn ChatProvider> = Arc::new(Delayed(Mutex::new(
+            vec![call("slow__wait", json!({})), text("after")].into(),
+        )));
+        let router = ModelRouter::with_providers(
+            HashMap::from([("scripted".to_string(), provider)]),
+            ModelRoles::from([(
+                "default",
+                ModelChoice {
+                    provider: "scripted".to_string(),
+                    model: "scripted".to_string(),
+                    temperature: None,
+                    description: None,
+                    fallbacks: Vec::new(),
+                    context_window: None,
+                },
+            )]),
+        );
+        let options = RuntimeOptions {
+            storage_backend: Some("memory".to_string()),
+            capture_content: false,
+        };
+        let runtime =
+            Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap();
+        let store = runtime.store().unwrap();
+        let cancel = CancelHandle::new();
+        let events: Arc<dyn EventSink> = Arc::new(NullSink);
+        let hooks = PipelineHooks {
+            cancel: Some(cancel.clone()),
+            ..Default::default()
+        };
+        let mut conversation = runtime
+            .conversation(&store, events.clone(), hooks)
+            .await
+            .unwrap();
+        conversation.agents = Arc::new(AgentSet::layered(
+            builtin_agents(&["name: waiter\ndescription: waits\nmodel: chat\ntools: [slow__wait]\nsystem_prompt: Wait.\n"]),
+            Vec::new(),
+        ));
+        let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        conversation.catalog = cancel.track(Arc::new(Slow {
+            finished: finished.clone(),
+        }));
+        let mut chat = ChatStart::resolve(&runtime, store.clone(), Some("waiter"), None)
+            .await
+            .unwrap()
+            .over(
+                conversation,
+                runtime.usage.clone(),
+                events,
+                None,
+                Some(cancel.clone()),
+            )
+            .await
+            .unwrap();
+
+        let canceller = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            canceller.cancel();
+        });
+        let started = std::time::Instant::now();
+        let Err(error) = chat.send("wait for it").await else {
+            panic!("the turn should be cancelled");
+        };
+        let elapsed = started.elapsed();
+        assert!(
+            error.downcast_ref::<crate::cancel::Cancelled>().is_some(),
+            "{error}"
+        );
+        assert!(
+            finished.load(std::sync::atomic::Ordering::SeqCst),
+            "the tool call finished"
+        );
+        assert!(
+            elapsed >= std::time::Duration::from_millis(1300),
+            "{elapsed:?}"
+        );
+        assert!(
+            elapsed < std::time::Duration::from_millis(1600),
+            "{elapsed:?}"
+        );
+        assert!(chat.thread().is_none());
+        assert!(chat.history().is_empty());
+        assert!(store.list_threads().await.unwrap().is_empty());
+        assert_eq!(cancel.tools_in_flight(), 0);
     }
 
     #[tokio::test]
