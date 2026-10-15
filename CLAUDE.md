@@ -15,7 +15,7 @@ mise run build          # cargo build
 mise run test           # all workspace tests
 mise run lint           # fmt --check + clippy -D warnings (run before committing)
 mise run run -- <args>  # run the CLI
-mise run install        # release build onto PATH
+mise run install        # release build onto PATH; on macOS, re-signed with $GRAPH_DEV_SIGN_IDENTITY when set (local dev only, so Keychain "Always allow" survives rebuilds; never used by CI or releases)
 mise run release:patch  # prepare a release for review (also :minor / :major); release:publish ships it — see RELEASING.md
 ```
 
