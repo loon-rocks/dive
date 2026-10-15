@@ -14,16 +14,16 @@ llm:
 
 tools:
   github__tool__gh_release:
-    - tag: v0.15.0
-      name: v0.15.0
+    - tag: v0.16.0
+      name: v0.16.0
       body: ""
-      url: https://github.com/tylerdavis/graph/releases/tag/v0.15.0
-      published_at: "2026-09-24T04:34:59Z"
+      url: https://github.com/tylerdavis/graph/releases/tag/v0.16.0
+      published_at: "2026-10-14T23:36:31Z"
       author: github-actions[bot]
       is_prerelease: false
       is_draft: false
       target: main
-      previous_tag: v0.14.0
+      previous_tag: v0.15.0
 
 capture:
   pause_at: commits

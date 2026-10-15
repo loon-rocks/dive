@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 
 const PAGE_DIR: &str = "reference/cli";
 const NAV_FILE: &str = "reference/cli/navigation.json";
+const RELEASE_TAG: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
 pub fn section() -> Section {
     Section {
@@ -340,7 +341,7 @@ fn after_help(command: &Command) -> (String, Vec<String>) {
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .map(str::to_string)
+        .map(|line| line.replace(RELEASE_TAG, "{{release_version}}"))
         .collect();
     (details.trim().to_string(), examples)
 }

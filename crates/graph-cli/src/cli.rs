@@ -196,7 +196,7 @@ pub enum PlanCommand {
     },
     /// Run a plan directly (bypasses the agent loop)
     #[command(
-        after_long_help = "Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  graph plan run weekly_changes\n  graph plan run weekly_changes '{\"base\":\"v0.15.0\"}'\n  graph plan run weekly_changes @inputs.json --input base=v0.14.0"
+        after_long_help = concat!("Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  graph plan run weekly_changes\n  graph plan run weekly_changes '{\"base\":\"", "v", env!("CARGO_PKG_VERSION"), "\"}'\n  graph plan run weekly_changes @inputs.json --input base=v0.14.0")
     )]
     Run {
         #[arg(help = "The plan's identifier, as `graph plan list` prints it")]
@@ -252,7 +252,7 @@ pub enum PlanCommand {
     },
     /// Set one plan attribute
     #[command(
-        after_long_help = "Sets one attribute, named as it appears in the plan file. `solver` and `output` are the two finish modes, so setting one clears the other. Changing `identifier` writes a new file and leaves the old one in place.\n\nAn edit is refused if it adds a validation problem, and a refused edit exits 1 and leaves the file untouched. Problems that were already there never block an edit; they are reported as `preExistingProblems`.\n\nEvery edit rewrites the whole file, so YAML comments are dropped and flow mappings become block mappings.\n\nExamples:\n  graph plan set weekly_changes description \"Summarize the commits merged since a ref\"\n  graph plan set weekly_changes exemplars \"What changed this week?\" \"What shipped since v0.15.0?\"\n  graph plan set weekly_changes input_schema @schema.json"
+        after_long_help = concat!("Sets one attribute, named as it appears in the plan file. `solver` and `output` are the two finish modes, so setting one clears the other. Changing `identifier` writes a new file and leaves the old one in place.\n\nAn edit is refused if it adds a validation problem, and a refused edit exits 1 and leaves the file untouched. Problems that were already there never block an edit; they are reported as `preExistingProblems`.\n\nEvery edit rewrites the whole file, so YAML comments are dropped and flow mappings become block mappings.\n\nExamples:\n  graph plan set weekly_changes description \"Summarize the commits merged since a ref\"\n  graph plan set weekly_changes exemplars \"What changed this week?\" \"What shipped since ", "v", env!("CARGO_PKG_VERSION"), "?\"\n  graph plan set weekly_changes input_schema @schema.json")
     )]
     Set {
         #[arg(
@@ -486,7 +486,7 @@ pub enum ToolCommand {
     },
     /// Invoke a tool directly
     #[command(
-        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tool test github__tool__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  graph tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json"
+        after_long_help = concat!("Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tool test github__tool__git_log '{\"base\":\"", "v", env!("CARGO_PKG_VERSION"), "\",\"head\":\"HEAD\"}'\n  graph tool test github__tool__git_log --input base=", "v", env!("CARGO_PKG_VERSION"), " --input head=HEAD --json")
     )]
     Test {
         #[arg(help = "The tool's namespaced name, as `graph tool list` prints it")]
