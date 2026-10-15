@@ -59,6 +59,16 @@ impl Runtime {
         packs: crate::packs::InstalledPacks,
         options: RuntimeOptions,
     ) -> Result<Self> {
+        let router = ModelRouter::from_config(&config)?;
+        Self::with_router(config, packs, options, router)
+    }
+
+    pub fn with_router(
+        config: graph_config::Config,
+        packs: crate::packs::InstalledPacks,
+        options: RuntimeOptions,
+        router: ModelRouter,
+    ) -> Result<Self> {
         let loaded = graph_config::LoadedConfig {
             config,
             sources: Vec::new(),
@@ -72,7 +82,7 @@ impl Runtime {
             UsageLedger::new(loaded.config.pricing.clone())
                 .with_content_capture(options.capture_content),
         );
-        let router = ModelRouter::from_config(&loaded.config)?.with_meter(usage.clone());
+        let router = router.with_meter(usage.clone());
         let registry = Arc::new(McpManager::new(loaded.config.mcp.clone()));
         let drafted = Arc::new(
             graph_core::pipeline::Drafted::new(

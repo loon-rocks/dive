@@ -958,8 +958,10 @@ name = "graph-runtime"
 version = "0.16.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "clap",
+ "futures",
  "graph-config",
  "graph-core",
  "graph-llm",
@@ -970,6 +972,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "tokio",
  "toml",
  "toml_edit",
  "tracing",
