@@ -74,10 +74,11 @@ fn an_installed_pack_loads_with_its_lock_tag() {
     );
     let set = installed.pack_set();
     assert!(set.item("example__tool__echo").is_some());
-    assert_eq!(
-        installed.check_json(&Default::default())[0]["modified"],
-        false
-    );
+    let checked = serde_json::to_value(installed.check_entries(&Default::default())).unwrap();
+    assert_eq!(checked[0]["modified"], false);
+    assert_eq!(checked[0]["shadowed"], false);
+    assert!(checked[0].get("lockedHash").is_some());
+    assert!(checked[0].get("ref").is_some());
 }
 
 #[test]
