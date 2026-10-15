@@ -22,11 +22,11 @@
 
 use crate::cli::{PlanAttribute, StepAttribute, StepCommand};
 use crate::commands::outcome::Outcome;
-use crate::commands::plan_cmd::resolve_target;
 use anyhow::{anyhow, bail, Context, Result};
 use graph_core::pipeline::authoring;
 use graph_core::pipeline::doc::{finish_label, PlanDoc};
 use graph_core::pipeline::{draft_input, plan_doc, Finish, COMPOSE_PLAN};
+use graph_runtime::ops::plan::resolve as resolve_target;
 use graph_runtime::runtime::Runtime;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -489,31 +489,6 @@ pub fn doc_as_json(doc: &PlanDoc) -> Result<Value> {
     Ok(value)
 }
 
-/// The `--json` shape of `plan list`: the catalog, plus the plans that are
-/// present on disk but unusable here. Both matter to a caller deciding what
-/// it can edit — `skipped` files are broken, `hidden` ones just need MCP
-/// servers this machine lacks.
-pub fn list_as_json(loaded: &graph_core::pipeline::doc::LoadedPlans) -> Value {
-    json!({
-        "plans": loaded.docs.iter().map(|doc| json!({
-            "identifier": doc.identifier,
-            "name": doc.name,
-            "description": doc.description,
-            "steps": doc.steps.len(),
-            "path": doc.path.as_ref().map(|p| p.display().to_string()),
-            "source": doc.source_label(),
-        })).collect::<Vec<_>>(),
-        "skipped": loaded.skipped.iter().map(|error| json!({
-            "path": error.path(),
-            "reason": error.to_string(),
-        })).collect::<Vec<_>>(),
-        "hidden": loaded.hidden.iter().map(|hidden| json!({
-            "identifier": hidden.identifier,
-            "missingServers": hidden.missing_servers,
-        })).collect::<Vec<_>>(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -583,26 +558,6 @@ mod tests {
         assert_eq!(PlanAttribute::RequiresServers.as_str(), "requires_servers");
         assert_eq!(PlanAttribute::InputSchema.as_str(), "input_schema");
         assert_eq!(StepAttribute::Tool.as_str(), "tool");
-    }
-
-    #[test]
-    fn list_json_reports_broken_and_hidden_plans_separately() {
-        use graph_core::pipeline::doc::{DocError, HiddenPlan, LoadedPlans};
-        let loaded = LoadedPlans {
-            docs: Vec::new(),
-            skipped: vec![DocError::Invalid {
-                path: "/plans/broken.yaml".to_string(),
-                message: "plan has no steps".to_string(),
-            }],
-            hidden: vec![HiddenPlan {
-                identifier: "needs_linear".to_string(),
-                missing_servers: vec!["linear".to_string()],
-            }],
-        };
-        let value = list_as_json(&loaded);
-        assert_eq!(value["skipped"][0]["path"], json!("/plans/broken.yaml"));
-        assert_eq!(value["hidden"][0]["identifier"], json!("needs_linear"));
-        assert_eq!(value["hidden"][0]["missingServers"], json!(["linear"]));
     }
 
     #[test]
