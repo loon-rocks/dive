@@ -1,5 +1,10 @@
-use graph_config::{load_from, CONFIG_FORMAT, CONFIG_FORMAT_OLDEST};
+use graph_config::secrets::EnvSource;
+use graph_config::{LoadedConfig, CONFIG_FORMAT, CONFIG_FORMAT_OLDEST};
 use std::path::{Path, PathBuf};
+
+fn load_from(paths: &[PathBuf]) -> anyhow::Result<LoadedConfig> {
+    graph_config::load_from(paths, &EnvSource)
+}
 
 fn fixtures_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")

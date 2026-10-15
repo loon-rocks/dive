@@ -45,7 +45,7 @@ impl Layer {
     }
 
     pub fn state(&self) -> Result<LayerState> {
-        let loaded = graph_config::load_from(&self.config_paths)?;
+        let loaded = graph_config::load_from(&self.config_paths, &graph_core::secrets::system())?;
         let packs = loaded
             .pack_layers
             .into_iter()

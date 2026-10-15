@@ -117,7 +117,11 @@ pub fn inspect_pack(
         .collect();
     problems.extend(long_names(&items));
 
-    let evaluation = evaluate(&manifest.requires, &Machine::current());
+    let machine = Machine::current().with_stored(
+        &manifest.requires.env,
+        &crate::secrets::CredentialStore::system(),
+    );
+    let evaluation = evaluate(&manifest.requires, &machine);
     problems.extend(evaluation.refused);
     apply_interface(&mut items, include, exclude);
     let needs = PackNeeds {

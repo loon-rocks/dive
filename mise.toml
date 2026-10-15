@@ -22,6 +22,7 @@ run = "cargo build"
 [tasks.test]
 description = "Run all workspace tests"
 run = "cargo test"
+env = { GRAPH_SECRET_STORE = "none" }
 
 [tasks.lint]
 description = "Check formatting and run clippy"

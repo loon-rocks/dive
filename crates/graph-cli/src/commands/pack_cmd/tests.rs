@@ -162,7 +162,7 @@ fn error(outcome: &Outcome) -> String {
 
 fn load(layers: &[&Layer]) -> anyhow::Result<InstalledPacks> {
     let paths: Vec<PathBuf> = layers.iter().map(|layer| layer.config_path()).collect();
-    let loaded = graph_config::load_from(&paths)?;
+    let loaded = graph_config::load_from(&paths, &graph_core::secrets::EnvSource)?;
     InstalledPacks::load(&loaded.pack_layers, &BTreeSet::new())
 }
 

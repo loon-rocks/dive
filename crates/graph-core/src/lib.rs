@@ -9,6 +9,7 @@ pub mod packs;
 pub mod pipeline;
 pub mod prompts;
 pub mod schemas;
+pub mod secrets;
 pub mod shapes;
 pub mod store;
 pub mod template;

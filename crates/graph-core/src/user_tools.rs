@@ -9,6 +9,7 @@
 //! - `reshape` — project the input into a new JSON shape whose leaf
 //!   strings are `{{input.*}}` templates; pure, no side effects, no LLM.
 
+use crate::secrets::SecretSource;
 use crate::template::{render_input, render_str, Roots};
 use crate::tools::{ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use async_trait::async_trait;
@@ -445,6 +446,7 @@ pub struct UserToolRegistry {
     tools: Vec<UserToolDoc>,
     router: Arc<ModelRouter>,
     prefix: String,
+    secrets: Arc<dyn SecretSource>,
 }
 
 impl UserToolRegistry {
@@ -453,7 +455,13 @@ impl UserToolRegistry {
             tools,
             router,
             prefix: USER_TOOL_PREFIX.to_string(),
+            secrets: Arc::new(crate::secrets::system()),
         }
+    }
+
+    pub fn with_secrets(mut self, secrets: Arc<dyn SecretSource>) -> Self {
+        self.secrets = secrets;
+        self
     }
 
     /// A registry serving graph's built-in tools under `builtin__`.
@@ -462,6 +470,7 @@ impl UserToolRegistry {
             tools,
             router,
             prefix: BUILTIN_TOOL_PREFIX.to_string(),
+            secrets: Arc::new(crate::secrets::system()),
         }
     }
 
@@ -470,6 +479,7 @@ impl UserToolRegistry {
             tools,
             router,
             prefix: crate::packs::catalog_name(pack, crate::packs::ItemKind::Tool, ""),
+            secrets: Arc::new(crate::secrets::system()),
         }
     }
 
@@ -679,7 +689,8 @@ impl UserToolRegistry {
         let mut cmd = tokio::process::Command::new(command);
         cmd.args(&rendered_args);
         for (key, value) in env {
-            let expanded = expand_env(value).map_err(ToolError::Transport)?;
+            let expanded =
+                expand_env(value, self.secrets.as_ref()).map_err(ToolError::Transport)?;
             cmd.env(key, expanded);
         }
         if let Some(cwd) = cwd {
@@ -1090,7 +1101,7 @@ fn env_reference(inner: &str) -> (&str, Option<&str>) {
     }
 }
 
-fn expand_env(value: &str) -> Result<String, String> {
+pub fn expand_env(value: &str, secrets: &dyn SecretSource) -> Result<String, String> {
     let mut out = String::with_capacity(value.len());
     let mut rest = value;
     while let Some(start) = rest.find("${") {
@@ -1100,11 +1111,11 @@ fn expand_env(value: &str) -> Result<String, String> {
             .find('}')
             .ok_or_else(|| format!("unterminated ${{...}} in env value: {value:?}"))?;
         let (var, default) = env_reference(&after[..end]);
-        let resolved = match (std::env::var(var), default) {
-            (Ok(set), Some(default)) if set.is_empty() => default.to_string(),
-            (Ok(set), _) => set,
-            (Err(_), Some(default)) => default.to_string(),
-            (Err(_), None) => {
+        let resolved = match (secrets.resolve(var), default) {
+            (Some(set), Some(default)) if set.value.is_empty() => default.to_string(),
+            (Some(set), _) => set.value,
+            (None, Some(default)) => default.to_string(),
+            (None, None) => {
                 return Err(format!(
                     "environment variable {var} referenced by tool env is not set"
                 ))
@@ -1117,7 +1128,7 @@ fn expand_env(value: &str) -> Result<String, String> {
     Ok(out)
 }
 
-pub fn unset_env_vars(doc: &UserToolDoc) -> Vec<String> {
+pub fn unset_env_vars(doc: &UserToolDoc, secrets: &dyn SecretSource) -> Vec<String> {
     let ToolKind::Exec { env, .. } = &doc.kind else {
         return Vec::new();
     };
@@ -1131,7 +1142,7 @@ pub fn unset_env_vars(doc: &UserToolDoc) -> Vec<String> {
             };
             let (var, default) = env_reference(&after[..end]);
             if default.is_none()
-                && std::env::var(var).is_err()
+                && secrets.resolve(var).is_none()
                 && !unset.iter().any(|seen| seen == var)
             {
                 unset.push(var.to_string());
