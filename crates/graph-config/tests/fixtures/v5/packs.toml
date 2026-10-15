@@ -1,0 +1,18 @@
+version = 5
+
+[mcp.linear]
+url = "https://mcp.linear.app/mcp"
+
+[packs.example]
+git = "github.com/acme/graph-packs"
+path = "example"
+ref = "v2"
+include = ["plan__*"]
+exclude = ["tool__file_info"]
+
+[packs.pinned]
+git = "https://example.com/acme/graph-pack-pinned.git"
+ref = "v1.4.0"
+
+[packs.bare]
+git = "github.com/acme/graph-pack-bare"

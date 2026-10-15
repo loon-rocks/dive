@@ -23,7 +23,7 @@ import EnvOtelServiceName from "/snippets/generated/environment/otel-service-nam
 
 ## Secrets
 
-`${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store. See [Secret references](/reference/configuration#secret-references).
+`${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store: this project's entry, then the one every project shares. See [Secret references](/reference/configuration#secret-references).
 
 <EnvGraphSecretStore />
 

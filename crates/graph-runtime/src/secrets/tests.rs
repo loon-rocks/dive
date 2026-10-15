@@ -144,38 +144,236 @@ fn show_masks_values_to_their_last_four_characters() {
         "GRAPH_T_WEB_TOKEN",
     );
     assert_eq!(shown.status, SecretStatus::EnvShadowsStore);
+    assert_eq!(shown.in_use, Some(Layer::Env));
     assert_eq!(shown.env_value.as_deref(), Some("****"));
-    assert_eq!(shown.store_value.as_deref(), Some("****wxyz"));
+    assert_eq!(shown.shared_value.as_deref(), Some("****wxyz"));
+    assert_eq!(shown.project_value, None);
     assert_eq!(shown.references.len(), 2);
     assert_eq!(mask("abcdefgh"), "****efgh");
     assert_eq!(mask("abcdefg"), "****");
 }
 
+fn project_workspace(id: Option<&str>) -> (tempfile::TempDir, Workspace) {
+    let dir = tempfile::tempdir().unwrap();
+    if let Some(id) = id {
+        write(
+            dir.path(),
+            ".graph/config.toml",
+            &format!("version = 5\n[project]\nid = \"{id}\"\n"),
+        );
+    }
+    let workspace = Workspace::new(dir.path());
+    (dir, workspace)
+}
+
+fn in_use(secrets: &Secrets, workspace: &Workspace, name: &str) -> Option<Layer> {
+    secrets
+        .values(name, project_id(workspace).as_deref())
+        .in_use()
+}
+
 #[test]
 fn set_and_remove_go_through_the_store() {
+    let (_dir, workspace) = project_workspace(None);
     let secrets = secrets(
         MemorySecrets::env().with("SHADOWED", "env"),
         MemorySecrets::store(),
     );
-    let saved = set(&secrets, "NEW_KEY", "value-1234").unwrap();
-    assert!(!saved.shadowed_by_env);
-    assert_eq!(secrets.status("NEW_KEY"), SecretStatus::Store);
-    assert!(set(&secrets, "SHADOWED", "stored").unwrap().shadowed_by_env);
-    assert!(set(&secrets, "EMPTY", "").is_err());
-    assert!(set(&secrets, "not-a-name", "x").is_err());
-    assert!(remove(&secrets, "NEW_KEY").unwrap().removed);
-    assert!(!remove(&secrets, "NEW_KEY").unwrap().removed);
-    assert_eq!(secrets.status("NEW_KEY"), SecretStatus::Missing);
+    let shared = SecretScope::Shared;
+    let saved = set(&secrets, &workspace, "NEW_KEY", "value-1234", shared).unwrap();
+    assert_eq!(saved.shadowed_by, None);
+    assert_eq!(in_use(&secrets, &workspace, "NEW_KEY"), Some(Layer::Shared));
+    assert_eq!(
+        set(&secrets, &workspace, "SHADOWED", "stored", shared)
+            .unwrap()
+            .shadowed_by,
+        Some(Layer::Env)
+    );
+    assert!(set(&secrets, &workspace, "EMPTY", "", shared).is_err());
+    assert!(set(&secrets, &workspace, "not-a-name", "x", shared).is_err());
+    assert!(
+        remove(&secrets, &workspace, "NEW_KEY", shared)
+            .unwrap()
+            .removed
+    );
+    assert!(
+        !remove(&secrets, &workspace, "NEW_KEY", shared)
+            .unwrap()
+            .removed
+    );
+    assert_eq!(in_use(&secrets, &workspace, "NEW_KEY"), None);
+    assert!(!workspace.root().join(".graph/config.toml").exists());
+}
+
+#[test]
+fn a_project_value_wins_over_the_shared_one_and_the_environment_wins_over_both() {
+    let (_dir, workspace) = project_workspace(Some("p1"));
+    let secrets = secrets(
+        MemorySecrets::env(),
+        MemorySecrets::store()
+            .with("SLACK_BOT_TOKEN", "xoxb-shared-value")
+            .with_project("SLACK_BOT_TOKEN", "p1", "xoxb-project-value")
+            .with_project("SLACK_BOT_TOKEN", "p2", "xoxb-other-project"),
+    );
+    assert_eq!(
+        reveal(&secrets, &workspace, "SLACK_BOT_TOKEN").as_deref(),
+        Some("xoxb-project-value")
+    );
+    let shown = show(&workspace, &secrets, "SLACK_BOT_TOKEN").unwrap();
+    assert_eq!(shown.in_use, Some(Layer::Project));
+    assert_eq!(shown.status, SecretStatus::Store);
+    assert_eq!(shown.project.as_deref(), Some("p1"));
+    assert_eq!(shown.project_value.as_deref(), Some("****alue"));
+    assert_eq!(shown.shared_value.as_deref(), Some("****alue"));
+    let resolver =
+        graph_config::secrets::InProject::new(secrets.resolver(), project_id(&workspace));
+    assert_eq!(
+        resolver.resolve("SLACK_BOT_TOKEN").unwrap().value,
+        "xoxb-project-value"
+    );
+
+    let env = secrets_with_env(&secrets, "SLACK_BOT_TOKEN", "xoxb-env-value");
+    assert_eq!(
+        in_use(&env, &workspace, "SLACK_BOT_TOKEN"),
+        Some(Layer::Env)
+    );
+    assert_eq!(
+        reveal(&env, &workspace, "SLACK_BOT_TOKEN").as_deref(),
+        Some("xoxb-env-value")
+    );
+
+    let (_other, elsewhere) = project_workspace(Some("p3"));
+    assert_eq!(
+        reveal(&secrets, &elsewhere, "SLACK_BOT_TOKEN").as_deref(),
+        Some("xoxb-shared-value")
+    );
+}
+
+fn secrets_with_env(base: &Secrets, name: &str, value: &str) -> Secrets {
+    Secrets::new(
+        Arc::new(MemorySecrets::env().with(name, value)),
+        base.store.clone(),
+    )
+}
+
+#[test]
+fn the_first_project_set_writes_a_project_id_and_later_sets_reuse_it() {
+    let (dir, workspace) = project_workspace(None);
+    write(
+        dir.path(),
+        ".graph/config.toml",
+        "version = 5\n\n# my models\n[models.default]\nprovider = \"anthropic\"\nmodel = \"claude\"\n",
+    );
+    let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
+    let project = SecretScope::Project;
+    let saved = set(&secrets, &workspace, "TOKEN", "project-value", project).unwrap();
+    let id = saved.project.clone().unwrap();
+    assert!(graph_core::secrets::is_project_id(&id), "{id}");
+    let text = std::fs::read_to_string(dir.path().join(".graph/config.toml")).unwrap();
+    assert!(text.contains("# my models"), "{text}");
+    assert!(
+        text.contains(&format!("[project]\nid = \"{id}\"")),
+        "{text}"
+    );
+    assert!(!text.contains("project-value"), "{text}");
+    assert_eq!(project_id(&workspace).as_deref(), Some(id.as_str()));
+
+    let again = set(&secrets, &workspace, "OTHER", "value-2", project).unwrap();
+    assert_eq!(again.project.as_deref(), Some(id.as_str()));
+    assert_eq!(
+        secrets.store.get_in("TOKEN", Some(&id)).unwrap().as_deref(),
+        Some("project-value")
+    );
+    assert_eq!(secrets.store.get("TOKEN").unwrap(), None);
+
+    let shared = set(
+        &secrets,
+        &workspace,
+        "TOKEN",
+        "shared-value",
+        SecretScope::Shared,
+    )
+    .unwrap();
+    assert_eq!(shared.shadowed_by, Some(Layer::Project));
+    assert!(
+        remove(&secrets, &workspace, "TOKEN", project)
+            .unwrap()
+            .removed
+    );
+    assert_eq!(
+        reveal(&secrets, &workspace, "TOKEN").as_deref(),
+        Some("shared-value")
+    );
+}
+
+#[test]
+fn a_new_project_config_is_created_holding_only_the_id() {
+    let (dir, workspace) = project_workspace(None);
+    let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
+    let saved = set(&secrets, &workspace, "TOKEN", "v", SecretScope::Project).unwrap();
+    let text = std::fs::read_to_string(dir.path().join(".graph/config.toml")).unwrap();
+    assert_eq!(
+        text,
+        format!(
+            "version = {}\n\n[project]\nid = \"{}\"\n",
+            graph_config::CONFIG_FORMAT,
+            saved.project.unwrap()
+        )
+    );
+    graph_config::load_from(
+        &workspace.config_paths()[1..],
+        &graph_core::secrets::EnvSource,
+    )
+    .unwrap();
+}
+
+#[test]
+fn removing_a_project_value_without_a_project_id_writes_nothing() {
+    let (dir, workspace) = project_workspace(None);
+    let secrets = secrets(
+        MemorySecrets::env(),
+        MemorySecrets::store().with("TOKEN", "x"),
+    );
+    assert!(
+        !remove(&secrets, &workspace, "TOKEN", SecretScope::Project)
+            .unwrap()
+            .removed
+    );
+    assert!(!dir.path().join(".graph").exists());
+    assert_eq!(secrets.store.get("TOKEN").unwrap().as_deref(), Some("x"));
+}
+
+#[test]
+fn config_references_resolve_from_the_project_entry_first() {
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        "config.toml",
+        "version = 5\n[project]\nid = \"p1\"\n[settings]\ndata_dir = \"${GRAPH_T_DIR}\"\n",
+    );
+    let secrets = secrets(
+        MemorySecrets::env(),
+        MemorySecrets::store()
+            .with("GRAPH_T_DIR", "/shared")
+            .with_project("GRAPH_T_DIR", "p1", "/project"),
+    );
+    let loaded =
+        graph_config::load_from(&[dir.path().join("config.toml")], &secrets.resolver()).unwrap();
+    assert_eq!(loaded.config.settings.data_dir, PathBuf::from("/project"));
+    assert_eq!(loaded.config.project.id.as_deref(), Some("p1"));
 }
 
 #[test]
 fn an_unavailable_store_is_reported_and_every_name_falls_back_to_the_environment() {
+    let (_dir, workspace) = project_workspace(None);
     let secrets = secrets(
         MemorySecrets::env().with("SET", "value"),
         MemorySecrets::unavailable(),
     );
-    assert_eq!(secrets.status("SET"), SecretStatus::Env);
-    assert_eq!(secrets.status("UNSET"), SecretStatus::Missing);
+    assert_eq!(in_use(&secrets, &workspace, "SET"), Some(Layer::Env));
+    assert_eq!(in_use(&secrets, &workspace, "UNSET"), None);
     assert!(!secrets.store_state().available);
-    assert!(set(&secrets, "SET", "x").is_err());
+    assert!(set(&secrets, &workspace, "SET", "x", SecretScope::Shared).is_err());
+    assert!(set(&secrets, &workspace, "SET", "x", SecretScope::Project).is_err());
+    assert!(!workspace.root().join(".graph").exists());
 }

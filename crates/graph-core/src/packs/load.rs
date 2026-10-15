@@ -117,9 +117,20 @@ pub fn inspect_pack(
         .collect();
     problems.extend(long_names(&items));
 
+    let layer_config = source
+        .dir
+        .parent()
+        .and_then(Path::parent)
+        .map(|layer| layer.join("config.toml"));
+    let config_paths: Vec<PathBuf> = std::iter::once(graph_config::global_config_path())
+        .chain(layer_config)
+        .collect();
     let machine = Machine::current().with_stored(
         &manifest.requires.env,
-        &crate::secrets::CredentialStore::system(),
+        &crate::secrets::InProject::new(
+            crate::secrets::CredentialStore::system(),
+            graph_config::project_id(&config_paths),
+        ),
     );
     let evaluation = evaluate(&manifest.requires, &machine);
     problems.extend(evaluation.refused);

@@ -28,6 +28,8 @@ pub struct Config {
     #[serde(default)]
     pub user: UserConfig,
     #[serde(default)]
+    pub project: ProjectConfig,
+    #[serde(default)]
     pub prompts: PromptConfig,
     #[serde(default)]
     pub workbench: WorkbenchConfig,
@@ -611,6 +613,12 @@ impl Default for ToolPaths {
             always_loaded: vec!["builtin__infer".into(), "builtin__reshape".into()],
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct ProjectConfig {
+    pub id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
