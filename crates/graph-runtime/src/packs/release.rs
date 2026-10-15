@@ -6,7 +6,8 @@ use std::path::Path;
 
 pub const MIGRATING_FILE: &str = "MIGRATING.md";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum Bump {
     Patch,
     Minor,

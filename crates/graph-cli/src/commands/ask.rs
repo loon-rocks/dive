@@ -1,10 +1,10 @@
 //! `graph ask` — one agent turn, persisted to a thread.
 
-use crate::runtime::{
-    load_history, persist_turn, resolve_thread, starting_agent, title_from, Runtime,
-};
 use anyhow::{bail, Result};
 use graph_core::NullSink;
+use graph_runtime::runtime::{
+    load_history, persist_turn, resolve_thread, starting_agent, title_from,
+};
 use std::io::{IsTerminal, Read};
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ pub struct AskArgs {
 pub async fn run(args: AskArgs) -> Result<()> {
     let message = resolve_message(args.message)?;
 
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
     let existing = resolve_thread(store.as_ref(), args.thread).await?;
     if let Some(name) = args
@@ -55,7 +55,7 @@ pub async fn run(args: AskArgs) -> Result<()> {
     };
     // A conversation already has the user's attention: a plan called as
     // plan__* from here can put an `ask` step's question to them.
-    let hooks = crate::runtime::PipelineHooks {
+    let hooks = graph_runtime::runtime::PipelineHooks {
         interlocutor: crate::interlocutor::tty(),
         ..Default::default()
     };

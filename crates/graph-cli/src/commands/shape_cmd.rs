@@ -3,13 +3,13 @@
 
 use crate::cli::ShapeCommand;
 use crate::commands::outcome::{report, Outcome};
-use crate::runtime::open_store;
+use crate::host::open_store;
 use anyhow::{bail, Result};
 use graph_core::ToolShape;
 use serde_json::{json, Value};
 
 pub async fn run(command: ShapeCommand) -> Result<()> {
-    let config = crate::runtime::load_config()?.config;
+    let config = crate::host::load_config()?.config;
     let store = open_store(&config)?;
     let shapes = store.tool_shapes().await?;
 

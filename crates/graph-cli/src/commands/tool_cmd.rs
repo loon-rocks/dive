@@ -2,7 +2,6 @@
 
 use crate::cli::ToolCommand;
 use crate::commands::outcome::{report, Outcome};
-use crate::runtime::Runtime;
 use anyhow::{bail, Result};
 use graph_core::toolbox::AgentToolbox;
 use graph_core::ToolRegistry;
@@ -13,7 +12,7 @@ pub async fn run(command: ToolCommand) -> Result<()> {
     if let ToolCommand::Migrate { path, json } = command {
         return report(migrate(&path)?, json);
     }
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
     let toolbox = runtime
         .toolbox(&store, std::sync::Arc::new(graph_core::NullSink))

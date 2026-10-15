@@ -22,7 +22,6 @@ pub(crate) mod tools;
 mod ui;
 
 use crate::cli::WorkbenchCommand;
-use crate::runtime::Runtime;
 use anyhow::{bail, Context, Result};
 use app::{App, Msg};
 use crossterm::event::{
@@ -37,6 +36,7 @@ use effects::WorkbenchContext;
 use futures::StreamExt;
 use graph_core::pipeline::doc::{load_plan_doc, PlanDoc};
 use graph_core::{CompositeRegistry, EventSink, ExcludingRegistry, ToolRegistry};
+use graph_runtime::runtime::Runtime;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{IsTerminal, Stdout};
@@ -58,7 +58,7 @@ pub async fn run(command: Option<WorkbenchCommand>, verbosity: u8) -> Result<()>
              use `graph plan run` or `graph ask` for scripting"
         );
     }
-    let runtime = Runtime::init()?;
+    let runtime = crate::host::runtime()?;
     let log_path = init_debug_log(&runtime, verbosity);
     let result = run_workbench(&runtime, start, log_path).await;
     // MCP child processes must shut down before the tokio runtime drops.
@@ -165,7 +165,7 @@ async fn run_workbench(
 
     let agent_sink: Arc<dyn EventSink> =
         crate::telemetry::tee(Arc::new(chat::ChannelSink::agent(tx.clone())), exporter);
-    let hooks = crate::runtime::PipelineHooks {
+    let hooks = graph_runtime::runtime::PipelineHooks {
         interlocutor: Some(Arc::new(runner::UiInterlocutor::new(tx.clone()))),
         ..Default::default()
     };
@@ -217,7 +217,7 @@ async fn run_workbench(
         tx.clone(),
     ));
     conversation.progress_tools = tools::progress_tools();
-    if let Some(prompt) = crate::runtime::deprecated_prompt(
+    if let Some(prompt) = graph_runtime::runtime::deprecated_prompt(
         &conversation.agents,
         agents::PLAN_EDITOR,
         "workbench",

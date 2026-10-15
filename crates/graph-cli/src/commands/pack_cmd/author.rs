@@ -1,13 +1,13 @@
 use super::{refusal, refused};
 use crate::commands::outcome::Outcome;
-use crate::packs::author::{self, PackSession, Report};
-use crate::packs::release::{self, Bump};
-use crate::packs::{git, refs, scaffold};
 use anyhow::Result;
 use graph_config::pack::{check_pack_name, MANIFEST_FILE};
 use graph_config::Config;
 use graph_core::packs::{LoadedPack, PackSource};
 use graph_core::EventSink;
+use graph_runtime::packs::author::{self, PackSession, Report};
+use graph_runtime::packs::release::{self, Bump};
+use graph_runtime::packs::{git, refs, scaffold};
 use serde_json::{json, Value};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -36,7 +36,7 @@ fn repo_path(top: &Path, dir: &Path) -> Result<String, String> {
 }
 
 fn config() -> Result<Config> {
-    Ok(crate::runtime::load_config()?.config)
+    Ok(crate::host::load_config()?.config)
 }
 
 fn events(json: bool, name: &str) -> Arc<dyn EventSink> {
@@ -198,7 +198,7 @@ pub async fn check(path: &Path) -> Result<Outcome> {
 }
 
 async fn check_pack(config: &Config, path: &Path) -> Result<Outcome> {
-    let (loaded, report) = author::check(config, path).await?;
+    let (loaded, report) = author::check(config, &crate::host::options(), path).await?;
     let mut body = check_body(&loaded, &report);
     if !report.problems.is_empty() {
         body["error"] = json!(format!(
@@ -243,7 +243,12 @@ pub async fn run_item(path: &Path, item: &str, input: Value, json: bool) -> Resu
         Ok(loaded) => loaded,
         Err(outcome) => return Ok(outcome),
     };
-    let session = PackSession::open(&config()?, loaded, events(json, item))?;
+    let session = PackSession::open(
+        &config()?,
+        &crate::host::options(),
+        loaded,
+        events(json, item),
+    )?;
     let resolved = session.resolve(item);
     let result = match &resolved {
         Ok(name) => session.run(name, input).await,
@@ -327,7 +332,7 @@ impl Tested {
 }
 
 async fn run_tests(config: &Config, path: &Path, json: bool) -> Result<Tested> {
-    let (loaded, check) = author::check(config, path).await?;
+    let (loaded, check) = author::check(config, &crate::host::options(), path).await?;
     let mut tested = Tested {
         loaded,
         check,
@@ -343,6 +348,7 @@ async fn run_tests(config: &Config, path: &Path, json: bool) -> Result<Tested> {
     let majors = author::migrations(&tested.loaded);
     let session = PackSession::open(
         config,
+        &crate::host::options(),
         tested.loaded.clone(),
         events(json, &format!("{} migrations", tested.loaded.source.name)),
     )?;

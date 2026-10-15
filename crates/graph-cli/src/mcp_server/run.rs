@@ -243,7 +243,7 @@ pub async fn run_plan(
         .pipeline_with(
             &store,
             events.clone(),
-            crate::runtime::PipelineHooks { gate, interlocutor },
+            graph_runtime::runtime::PipelineHooks { gate, interlocutor },
         )
         .await?;
     let query = format!("Run the '{}' plan", doc.name);
