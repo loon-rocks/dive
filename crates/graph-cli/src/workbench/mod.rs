@@ -2,28 +2,22 @@
 //! chat agent on the left and the plan workspace (structure, context, runs)
 //! on the right. See docs/getting-started/workbench.mdx.
 
-pub(crate) mod agents;
 mod answer;
 mod app;
-mod artifact;
-mod chat;
 mod edit;
 mod editor;
-mod effects;
-mod event;
 mod form;
-pub(crate) mod fs_tools;
 mod plan_ws;
-mod runner;
 #[cfg(test)]
 mod screenshot;
 #[cfg(test)]
 mod shots;
-pub(crate) mod tools;
 mod ui;
 
+pub(crate) use graph_runtime::workbench::{agents, artifact, event, runner};
+
 use crate::cli::WorkbenchCommand;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use app::{App, Msg};
 use crossterm::event::{
     DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
@@ -33,19 +27,14 @@ use crossterm::event::{
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use effects::WorkbenchContext;
-use event::WorkbenchEvent;
 use futures::StreamExt;
-use graph_core::pipeline::doc::{load_plan_doc, PlanDoc};
-use graph_core::{CompositeRegistry, EventSink, ExcludingRegistry, ToolRegistry};
 use graph_runtime::runtime::Runtime;
+use graph_runtime::workbench::{Workbench, WorkbenchEvent};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{IsTerminal, Stdout};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-
-pub(crate) const WORKBENCH_SYSTEM_PROMPT: &str = include_str!("prompts/system.md").trim_ascii_end();
 
 pub async fn run(command: Option<WorkbenchCommand>, verbosity: u8) -> Result<()> {
     let start = match command {
@@ -134,134 +123,13 @@ async fn run_workbench(
     start: agents::Start,
     log_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    let doc = match &start {
-        agents::Start::Plan(Some(arg)) => Some(resolve_doc(runtime, arg)?),
-        _ => None,
-    };
-    let opening = match &start {
-        agents::Start::Agent(Some(name)) => Some((artifact::ArtifactKind::Agent, name.clone())),
-        agents::Start::Tool(Some(name)) => Some((artifact::ArtifactKind::Tool, name.clone())),
-        _ => None,
-    };
-    let store = runtime.store()?;
     let (tx, mut rx) = mpsc::unbounded_channel::<WorkbenchEvent>();
+    let context = Arc::new(Workbench::open(runtime, start, std::env::current_dir()?, tx).await?);
 
-    // Plan runs report through their own sink; gated runs add a UiGate.
-    let user = runtime.config.user.name.as_deref();
-    let session = Some(uuid::Uuid::new_v4().simple().to_string());
-    let exporter = crate::telemetry::exporter(
-        crate::telemetry::RunInfo::conversation("workbench", session).user(user),
-    );
-    let run_sink: Arc<dyn EventSink> = crate::telemetry::tee(
-        Arc::new(chat::ChannelSink::plan_run(tx.clone())),
-        exporter.clone(),
-    );
-    // Either ChannelSink would do: both feed the same channel, and usage is
-    // the one event they report identically regardless of kind.
-    runtime.usage.attach_events(run_sink.clone());
-    let pipeline = runtime.pipeline(&store, run_sink).await?;
-
-    // The draft is shared between the reducer's world (via messages), the
-    // workbench tools, and the effect executor.
-    let draft = Arc::new(std::sync::Mutex::new(tools::DraftState::new(doc.clone())));
-
-    let agent_sink: Arc<dyn EventSink> =
-        crate::telemetry::tee(Arc::new(chat::ChannelSink::agent(tx.clone())), exporter);
-    let hooks = graph_runtime::runtime::PipelineHooks {
-        interlocutor: Some(Arc::new(runner::UiInterlocutor::new(tx.clone()))),
-        ..Default::default()
-    };
-    let toolbox = runtime
-        .toolbox_with(&store, agent_sink.clone(), hooks)
-        .await?;
-    // The workbench doesn't yet support open-ended sub-tasks, so hide
-    // `plan_and_execute` from both the agents' tool lists and the
-    // Context tab's catalog view without removing it from the shared catalog.
-    let visible_catalog: Arc<dyn ToolRegistry> = Arc::new(ExcludingRegistry::new(
-        toolbox.clone() as Arc<dyn ToolRegistry>,
-        vec!["plan_and_execute".to_string()],
-    ));
-    let plans_dir = runtime.plans_dir();
-    let debug = Arc::new(runner::DebugControls::default());
-    let workbench_tools = Arc::new(tools::WorkbenchTools::new(
-        draft.clone(),
-        pipeline.clone(),
-        plans_dir.clone(),
-        debug.clone(),
-        tx.clone(),
-    ));
-    let fs_tools = Arc::new(
-        fs_tools::FsTools::new(std::env::current_dir()?)
-            .context("failed to resolve the workbench project directory")?,
-    );
-    let registry: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(vec![
-        Arc::new(tools::ComposedCapture::new(
-            visible_catalog.clone(),
-            draft.clone(),
-        )),
-        workbench_tools,
-        fs_tools,
-    ]));
-    let (agent_set, errors) = graph_core::agent::doc::AgentSet::load(
-        &agents::builtin_sources(),
-        &graph_core::agent::doc::agent_dirs(),
-    );
-    let agent_set = agent_set.with_drafted(runtime.drafted().agents());
-    for error in errors {
-        tracing::warn!("skipping agent file — {error}");
-    }
-    let mut conversation =
-        runtime.conversation_over(Arc::new(agent_set), registry, pipeline.clone(), agent_sink);
-    conversation.context = Some(agents::context_hook(draft.clone(), pipeline.clone()));
-    conversation.handoff_guard = Some(artifact::handoff_guard(
-        draft.clone(),
-        pipeline.clone(),
-        tx.clone(),
-    ));
-    conversation.progress_tools = tools::progress_tools();
-    if let Some(prompt) = graph_runtime::runtime::deprecated_prompt(
-        &conversation.agents,
-        agents::PLAN_EDITOR,
-        "workbench",
-        runtime.config.prompts.workbench.as_deref(),
-        WORKBENCH_SYSTEM_PROMPT,
-    ) {
-        if let Some(doc) = conversation.agents.get(agents::PLAN_EDITOR) {
-            if let Ok(rendered) = graph_core::agent::doc::render_system_prompt(
-                &doc,
-                &graph_core::agent::doc::global_fragments(),
-                &conversation.session,
-            ) {
-                conversation.prompt_overrides.insert(
-                    agents::PLAN_EDITOR.to_string(),
-                    format!("{prompt}\n\n{rendered}"),
-                );
-            }
-        }
-    }
-
-    let context = Arc::new(WorkbenchContext {
-        active: std::sync::Mutex::new(agents::starting_agent(&start, doc.as_ref()).to_string()),
-        conversation,
-        pipeline,
-        history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
-        draft,
-        catalog: visible_catalog,
-        store,
-        plans_dir,
-        debug,
-        tx: tx.clone(),
-    });
-
-    let mut app = App::new(doc);
-    app.agent = agents::starting_agent(&start, app.ws.doc.as_ref()).to_string();
+    let mut app = App::new(context.plan());
+    app.agent = context.active_agent();
     app.log_path = log_path;
-    if let Some((kind, name)) = opening {
-        artifact::open_existing(&context.draft, &context.pipeline, &context.tx, kind, &name)
-            .await
-            .map_err(anyhow::Error::msg)?;
-        app.artifact = artifact::view(&context.draft, &context.pipeline);
-    }
+    app.artifact = context.artifact();
     run_effect(app::Effect::LoadContext, &context);
     if app.ws.doc.is_some() {
         run_effect(app::Effect::Validate, &context);
@@ -274,28 +142,11 @@ async fn run_workbench(
     loop_result
 }
 
-fn resolve_doc(runtime: &Runtime, name_or_path: &str) -> Result<PlanDoc> {
-    let path = std::path::Path::new(name_or_path);
-    if path.exists() {
-        return load_plan_doc(path).context("failed to load plan file");
-    }
-    let loaded = runtime.plan_docs();
-    loaded
-        .docs
-        .iter()
-        .find(|d| d.identifier == name_or_path)
-        .cloned()
-        .with_context(|| match loaded.skip_reason(name_or_path) {
-            Some(reason) => format!("plan '{name_or_path}' failed to load — {reason}"),
-            None => format!("'{name_or_path}' is neither a file nor a known plan identifier"),
-        })
-}
-
 async fn event_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     app: &mut App,
     rx: &mut mpsc::UnboundedReceiver<WorkbenchEvent>,
-    context: &Arc<WorkbenchContext>,
+    context: &Arc<Workbench>,
 ) -> Result<()> {
     let mut term_events = EventStream::new();
     // The animation heartbeat only fires while something is executing, so
@@ -341,11 +192,11 @@ async fn event_loop(
     }
 }
 
-fn run_effect(effect: app::Effect, context: &Arc<WorkbenchContext>) {
+fn run_effect(effect: app::Effect, context: &Arc<Workbench>) {
     let ctx = context.clone();
     match effect {
         app::Effect::RunAgentTurn { message } => {
-            tokio::spawn(async move { ctx.run_agent_turn(message).await });
+            tokio::spawn(async move { ctx.send_message(message).await });
         }
         app::Effect::Agent { name } => ctx.select_agent(name),
         app::Effect::StartRun { gated, input } => {
@@ -357,11 +208,15 @@ fn run_effect(effect: app::Effect, context: &Arc<WorkbenchContext>) {
         }
         app::Effect::SyncDebug { breakpoints } => ctx.sync_debug(breakpoints),
         app::Effect::ApplyEdit { edit, commit } => ctx.apply_edit(commit, |doc| edit.apply(doc)),
-        app::Effect::SavePlan => ctx.save_plan(),
+        app::Effect::SavePlan => {
+            let _ = ctx.save_plan();
+        }
         app::Effect::SaveArtifact => {
             tokio::spawn(async move { ctx.save_artifact().await });
         }
-        app::Effect::DiscardArtifact => ctx.discard_artifact(),
+        app::Effect::DiscardArtifact => {
+            ctx.discard_artifact();
+        }
         app::Effect::RestoreDraft => ctx.restore_draft(),
     }
 }

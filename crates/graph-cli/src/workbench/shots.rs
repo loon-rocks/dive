@@ -25,13 +25,8 @@
 //! (or `mise run shots`); output lands in `docs/images/workbench/`.
 
 use super::app::{self, App, Mode, Msg};
-use super::chat::ChannelSink;
-use super::effects::WorkbenchContext;
-use super::event::WorkbenchEvent;
 use super::run_effect;
-use super::runner::DebugControls;
 use super::screenshot::buffer_to_svg;
-use super::tools::{progress_tools, DraftState, WorkbenchTools};
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -46,6 +41,10 @@ use graph_llm::types::{
     ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
 };
 use graph_llm::{ChatProvider, LlmError, ModelRouter};
+use graph_runtime::workbench::runner::DebugControls;
+use graph_runtime::workbench::sink::ChannelSink;
+use graph_runtime::workbench::tools::{progress_tools, DraftState, WorkbenchTools};
+use graph_runtime::workbench::{Workbench, WorkbenchEvent};
 use graph_store::MemoryStore;
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
@@ -482,7 +481,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
     let start_agent = spec.agent.clone().unwrap_or_else(|| {
         super::agents::starting_agent(&super::agents::Start::Plan(None), doc.as_ref()).to_string()
     });
-    let context = Arc::new(WorkbenchContext {
+    let context = Arc::new(Workbench {
         active: Mutex::new(start_agent.clone()),
         conversation,
         pipeline,
@@ -618,11 +617,11 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
 }
 
 /// Feed one key through the reducer and run any effects it returns.
-fn feed_key(app: &mut App, code: KeyCode, context: &Arc<WorkbenchContext>) {
+fn feed_key(app: &mut App, code: KeyCode, context: &Arc<Workbench>) {
     feed(app, KeyEvent::new(code, KeyModifiers::NONE), context);
 }
 
-fn feed(app: &mut App, key: KeyEvent, context: &Arc<WorkbenchContext>) {
+fn feed(app: &mut App, key: KeyEvent, context: &Arc<Workbench>) {
     for effect in app::update(app, Msg::Term(Event::Key(key))) {
         run_effect(effect, context);
     }

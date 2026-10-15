@@ -1157,18 +1157,15 @@ dependencies = [
  "clap",
  "crossterm",
  "futures",
- "globset",
  "graph-config",
  "graph-core",
  "graph-llm",
  "graph-mcp",
  "graph-runtime",
  "graph-store",
- "ignore",
  "jsonschema",
  "ratatui",
  "reedline",
- "regex",
  "rmcp",
  "rpassword",
  "schemars 1.2.2",
@@ -1185,7 +1182,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tui-textarea",
- "uuid",
 ]
 
 [[package]]
@@ -1275,11 +1271,13 @@ dependencies = [
  "chrono",
  "clap",
  "futures",
+ "globset",
  "graph-config",
  "graph-core",
  "graph-llm",
  "graph-mcp",
  "graph-store",
+ "ignore",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
@@ -1299,6 +1297,7 @@ dependencies = [
  "toml_edit 0.22.27",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
