@@ -254,7 +254,7 @@ pub async fn check(workspace: &Workspace) -> ConfigCheck {
     let mut packs_text = String::new();
     let mut warnings = Vec::new();
     if problems.is_empty() {
-        match graph_config::load_from(&workspace.config_paths()) {
+        match graph_config::load_from(&workspace.config_paths(), &graph_core::secrets::system()) {
             Err(error) => problems.push(format!("{error:#}")),
             Ok(loaded) => {
                 warnings.extend(loaded.layers.iter().flat_map(|layer| {
@@ -338,7 +338,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         std::fs::write(&path, &starter).unwrap();
-        let loaded = graph_config::load_from(&[path]).unwrap();
+        let loaded = graph_config::load_from(&[path], &graph_core::secrets::EnvSource).unwrap();
         let config = loaded.config;
         assert_eq!(config.prompts.chat, None);
         assert_eq!(config.prompts.workbench, None);
@@ -452,7 +452,9 @@ mod tests {
     #[test]
     fn show_renders_toml_with_the_version_stamp() {
         let dir = tempfile::tempdir().unwrap();
-        let loaded = graph_config::load_from(&[project(dir.path())]).unwrap();
+        let loaded =
+            graph_config::load_from(&[project(dir.path())], &graph_core::secrets::EnvSource)
+                .unwrap();
         let shown = show(&loaded).unwrap();
         assert!(shown
             .toml

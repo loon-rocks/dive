@@ -22,3 +22,4 @@ tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 tempfile = "3"
+keyring = "4.2"

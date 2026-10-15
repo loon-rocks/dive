@@ -21,7 +21,7 @@ These fields go alongside the [common fields](/tools/reference/tool-file#common-
 </ParamField>
 
 <ParamField body="env" type="map<string, string>">
-  Extra environment variables. Values expand `${VAR}` from graph's environment, and `${VAR:-default}` falls back when it's unset or empty.
+  Extra environment variables. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store. `${VAR:-default}` falls back to the default when neither has a value.
 </ParamField>
 
 <ParamField body="cwd" type="string">

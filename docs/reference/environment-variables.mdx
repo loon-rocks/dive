@@ -6,6 +6,7 @@ keywords: ["environment variables", "env", "GRAPH_LOG", "OTEL"]
 
 import EnvGraphEvents from "/snippets/generated/environment/graph-events.mdx";
 import EnvGraphLog from "/snippets/generated/environment/graph-log.mdx";
+import EnvGraphSecretStore from "/snippets/generated/environment/graph-secret-store.mdx";
 import EnvGraphStorage from "/snippets/generated/environment/graph-storage.mdx";
 import EnvGraphWorkbenchLog from "/snippets/generated/environment/graph-workbench-log.mdx";
 import EnvOtelExporterOtlpEndpoint from "/snippets/generated/environment/otel-exporter-otlp-endpoint.mdx";
@@ -19,6 +20,12 @@ import EnvOtelServiceName from "/snippets/generated/environment/otel-service-nam
 <EnvGraphEvents />
 
 <EnvGraphLog />
+
+## Secrets
+
+`${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store. See [Secret references](/reference/configuration#secret-references).
+
+<EnvGraphSecretStore />
 
 ## Storage
 

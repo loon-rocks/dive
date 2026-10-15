@@ -51,7 +51,10 @@ pub fn config() -> Result<LoadedConfig> {
     if is_pinned() {
         return crate::host::load_config();
     }
-    let mut loaded = graph_config::load_from(&[graph_config::global_config_path()])?;
+    let mut loaded = graph_config::load_from(
+        &[graph_config::global_config_path()],
+        &graph_core::secrets::system(),
+    )?;
     loaded
         .config
         .plans

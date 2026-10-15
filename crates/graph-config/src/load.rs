@@ -3,6 +3,7 @@
 use crate::format::{self, LayerInfo};
 use crate::model::Config;
 use crate::pack::{check_pack_name, check_pack_path, LayerKind, PackEntry, PackLayer};
+use crate::secrets::SecretSource;
 use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -45,11 +46,11 @@ pub fn project_config_path() -> PathBuf {
 /// start and *explain* a missing key instead of dying before the handshake.
 /// Anywhere else a missing variable still fails the load loudly — a path or
 /// prompt carrying literal `${VAR}` text would be silently wrong everywhere.
-pub fn load() -> Result<LoadedConfig> {
-    load_from(&[global_config_path(), project_config_path()])
+pub fn load(secrets: &dyn SecretSource) -> Result<LoadedConfig> {
+    load_from(&[global_config_path(), project_config_path()], secrets)
 }
 
-pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
+pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<LoadedConfig> {
     let mut merged = toml::Table::new();
     let mut sources = Vec::new();
     let mut layers = Vec::new();
@@ -97,7 +98,7 @@ pub fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
     }
 
     let mut missing = Vec::new();
-    let expanded = expand_env_in_value(toml::Value::Table(merged), "", &mut missing)
+    let expanded = expand_env_in_value(toml::Value::Table(merged), "", secrets, &mut missing)
         .context("expanding ${VAR} references in config")?;
     let mut config: Config = expanded
         .try_into()
@@ -187,6 +188,7 @@ fn merge_tables(base: &mut toml::Table, overlay: toml::Table) {
 fn expand_env_in_value(
     value: toml::Value,
     path: &str,
+    secrets: &dyn SecretSource,
     missing: &mut Vec<(String, String)>,
 ) -> Result<toml::Value> {
     let child = |path: &str, key: &str| {
@@ -197,13 +199,13 @@ fn expand_env_in_value(
         }
     };
     Ok(match value {
-        toml::Value::String(s) => toml::Value::String(expand_env(&s, path, missing)?),
+        toml::Value::String(s) => toml::Value::String(expand_env(&s, path, secrets, missing)?),
         toml::Value::Array(items) => toml::Value::Array(
             items
                 .into_iter()
                 .enumerate()
                 .map(|(index, item)| {
-                    expand_env_in_value(item, &child(path, &index.to_string()), missing)
+                    expand_env_in_value(item, &child(path, &index.to_string()), secrets, missing)
                 })
                 .collect::<Result<_>>()?,
         ),
@@ -211,7 +213,7 @@ fn expand_env_in_value(
             table
                 .into_iter()
                 .map(|(k, v)| {
-                    let expanded = expand_env_in_value(v, &child(path, &k), missing)?;
+                    let expanded = expand_env_in_value(v, &child(path, &k), secrets, missing)?;
                     Ok((k, expanded))
                 })
                 .collect::<Result<_>>()?,
@@ -220,7 +222,12 @@ fn expand_env_in_value(
     })
 }
 
-fn expand_env(input: &str, path: &str, missing: &mut Vec<(String, String)>) -> Result<String> {
+fn expand_env(
+    input: &str,
+    path: &str,
+    secrets: &dyn SecretSource,
+    missing: &mut Vec<(String, String)>,
+) -> Result<String> {
     let mut out = String::with_capacity(input.len());
     let mut rest = input;
     while let Some(start) = rest.find("${") {
@@ -230,9 +237,9 @@ fn expand_env(input: &str, path: &str, missing: &mut Vec<(String, String)>) -> R
             .find('}')
             .with_context(|| format!("unterminated ${{...}} in config value: {input:?}"))?;
         let var = &after[..end];
-        match std::env::var(var) {
-            Ok(value) => out.push_str(&value),
-            Err(_) => {
+        match secrets.resolve(var) {
+            Some(resolved) => out.push_str(&resolved.value),
+            None => {
                 missing.push((path.to_string(), var.to_string()));
                 out.push_str(&rest[start..start + 2 + end + 1]);
             }
@@ -302,11 +309,88 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use crate::model::{ModelChoice, ModelKind, ModelRoles, ProviderKind, Role};
+    use crate::secrets::{EnvSource, Origin, Resolved};
 
     fn write(dir: &Path, name: &str, contents: &str) -> PathBuf {
         let path = dir.join(name);
         std::fs::write(&path, contents).unwrap();
         path
+    }
+
+    fn load_from(paths: &[PathBuf]) -> Result<LoadedConfig> {
+        super::load_from(paths, &EnvSource)
+    }
+
+    #[derive(Debug)]
+    struct Stored(Vec<(&'static str, &'static str)>);
+
+    impl SecretSource for Stored {
+        fn resolve(&self, name: &str) -> Option<Resolved> {
+            EnvSource.resolve(name).or_else(|| {
+                self.0
+                    .iter()
+                    .find(|(stored, _)| *stored == name)
+                    .map(|(_, value)| Resolved {
+                        value: value.to_string(),
+                        source: Origin::Store,
+                    })
+            })
+        }
+    }
+
+    #[test]
+    fn a_provider_key_and_an_mcp_header_come_from_the_secret_source_when_the_environment_misses() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(
+            dir.path(),
+            "config.toml",
+            r#"
+            [providers.anthropic]
+            type = "anthropic"
+            api_key = "${GRAPH_TEST_STORED_KEY_ONLY}"
+
+            [mcp.linear]
+            url = "https://mcp.linear.app/mcp"
+            headers = { Authorization = "Bearer ${GRAPH_TEST_STORED_TOKEN_ONLY}" }
+            "#,
+        );
+        let stored = Stored(vec![
+            ("GRAPH_TEST_STORED_KEY_ONLY", "sk-from-store"),
+            ("GRAPH_TEST_STORED_TOKEN_ONLY", "lin-from-store"),
+        ]);
+        let loaded = super::load_from(&[path], &stored).unwrap();
+        let provider = &loaded.config.providers["anthropic"];
+        assert_eq!(provider.api_key.as_deref(), Some("sk-from-store"));
+        assert!(provider.missing_env.is_empty());
+        let server = &loaded.config.mcp["linear"];
+        assert_eq!(
+            server.headers.get("Authorization").map(String::as_str),
+            Some("Bearer lin-from-store")
+        );
+        assert!(server.missing_env.is_empty());
+    }
+
+    #[test]
+    fn a_name_missing_from_every_source_keeps_the_deferred_missing_env_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(
+            dir.path(),
+            "config.toml",
+            r#"
+            [providers.openai]
+            type = "openai"
+            api_key = "${GRAPH_TEST_IN_NO_SOURCE}"
+            "#,
+        );
+        let stored = Stored(vec![("GRAPH_TEST_SOMETHING_ELSE", "x")]);
+        let loaded = super::load_from(&[path], &stored).unwrap();
+        assert_eq!(
+            loaded.config.providers["openai"].missing_env,
+            vec![crate::model::MissingEnv {
+                field: "api_key".into(),
+                var: "GRAPH_TEST_IN_NO_SOURCE".into(),
+            }]
+        );
     }
 
     #[test]
