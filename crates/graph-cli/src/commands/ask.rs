@@ -2,9 +2,7 @@
 
 use anyhow::{bail, Result};
 use graph_core::NullSink;
-use graph_runtime::runtime::{
-    load_history, persist_turn, resolve_thread, starting_agent, title_from,
-};
+use graph_runtime::chat::ChatStart;
 use std::io::{IsTerminal, Read};
 use std::sync::Arc;
 
@@ -19,9 +17,6 @@ pub struct AskArgs {
 pub async fn run(args: AskArgs) -> Result<()> {
     let message = resolve_message(args.message)?;
 
-    let runtime = crate::host::runtime()?;
-    let store = runtime.store()?;
-    let existing = resolve_thread(store.as_ref(), args.thread).await?;
     if let Some(name) = args
         .agent
         .as_deref()
@@ -29,18 +24,16 @@ pub async fn run(args: AskArgs) -> Result<()> {
     {
         bail!("{name} runs only in the workbench: start it with `graph wb`");
     }
-    let agents = runtime.agent_set();
-    let active = starting_agent(existing.as_ref(), args.agent.as_deref(), &|name| {
-        agents.get(name).is_some()
-    })?;
+    let runtime = crate::host::runtime()?;
+    let store = runtime.store()?;
+    let mut start = ChatStart::resolve(&runtime, store, args.agent.as_deref(), args.thread).await?;
 
     let stream_text = !args.json && !args.no_stream;
-    let created = existing.is_none();
-    let thread = match existing {
-        Some(thread) => thread,
-        None => store.create_thread(&title_from(&message), &active).await?,
+    let thread_id = match start.thread() {
+        Some(meta) => meta.id.clone(),
+        None => start.create_thread(&message).await?.id.clone(),
     };
-    let run = crate::telemetry::RunInfo::conversation("ask", Some(thread.id.clone()))
+    let run = crate::telemetry::RunInfo::conversation("ask", Some(thread_id.clone()))
         .user(runtime.config.user.name.as_deref())
         .input(serde_json::Value::String(message.clone()));
     let events: Arc<dyn graph_core::EventSink> = if args.json {
@@ -59,30 +52,16 @@ pub async fn run(args: AskArgs) -> Result<()> {
         interlocutor: crate::interlocutor::tty(),
         ..Default::default()
     };
-    runtime.usage.attach_events(events.clone());
-    let conversation = runtime.conversation(&store, events.clone(), hooks).await?;
+    let mut session = start.open(&runtime, events, hooks, None).await?;
 
-    let history = load_history(store.as_ref(), &thread.id).await?;
-
-    let result = conversation.run_turn(&history, &active, &message).await;
+    let result = session.send(&message).await;
     runtime.shutdown().await;
-    match &result {
-        Ok(outcome) => events.run_finished(&serde_json::Value::String(outcome.text.clone()), false),
-        Err(error) => events.run_finished(&serde_json::json!({"error": error.to_string()}), true),
+    let report = result?;
+    if let Some(error) = report.persist_error {
+        return Err(error);
     }
-    // The ledger, not `outcome.usage`: a turn that called a `plan__*` tool
-    // spent tokens in the solver and inside that plan's steps too, and the
-    // agent's own tally cannot see any of it.
-    let usage = runtime.usage.take();
-    if !usage.is_empty() {
-        events.usage_summary(&usage);
-    }
-    if created && result.is_err() {
-        let _ = store.delete_thread(&thread.id).await;
-    }
-    let outcome = result?;
-
-    persist_turn(store.as_ref(), &thread, &active, &outcome).await?;
+    let outcome = report.turn;
+    let usage = report.usage;
 
     if args.json {
         let envelope = serde_json::json!({
@@ -90,7 +69,7 @@ pub async fn run(args: AskArgs) -> Result<()> {
             "tool_calls_made": outcome.tool_calls_made,
             "tools_used": outcome.tools_used,
             "usage": usage,
-            "thread_id": thread.id,
+            "thread_id": thread_id,
             "agent": outcome.active,
         });
         println!("{}", serde_json::to_string_pretty(&envelope)?);
@@ -107,7 +86,7 @@ pub async fn run(args: AskArgs) -> Result<()> {
         }
         eprintln!(
             "\x1b[2mresume with `graph chat --thread {}`\x1b[0m",
-            thread.id
+            thread_id
         );
     }
     Ok(())
