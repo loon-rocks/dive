@@ -26,7 +26,9 @@
 
 use super::app::{self, App, Mode, Msg};
 use super::chat::ChannelSink;
-use super::effects::{run_effect, WorkbenchContext};
+use super::effects::WorkbenchContext;
+use super::event::WorkbenchEvent;
+use super::run_effect;
 use super::runner::DebugControls;
 use super::screenshot::buffer_to_svg;
 use super::tools::{progress_tools, DraftState, WorkbenchTools};
@@ -317,7 +319,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         Some(plan) => Some(load_plan_doc(&root.join(plan)).context("loading the shot's plan")?),
         None => None,
     };
-    let (tx, mut rx) = mpsc::unbounded_channel::<Msg>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<WorkbenchEvent>();
 
     // Every model role resolves to the scripted provider.
     let chat_provider = Arc::new(ScriptedChat::new(spec.llm));
@@ -516,20 +518,19 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
     let mut validated = spec.plan.is_none();
     let mut turn_done = spec.chat.is_none();
     loop {
-        let msg = tokio::time::timeout(Duration::from_secs(30), rx.recv())
+        let event = tokio::time::timeout(Duration::from_secs(30), rx.recv())
             .await
             .with_context(|| format!("shot '{}' timed out awaiting its capture point", spec.name))?
             .context("workbench channel closed before the capture point")?;
-        if let Some((_, line)) = msg.log_line() {
-            eprintln!("[shot {}] {line}", spec.name);
-        }
-        match &msg {
-            Msg::ContextLoaded { .. } => context_loaded = true,
-            Msg::Validated(_) => validated = true,
-            Msg::TurnFinished(_) => turn_done = true,
+        let (_, line) = event.log_line();
+        eprintln!("[shot {}] {line}", spec.name);
+        match &event {
+            WorkbenchEvent::ContextLoaded { .. } => context_loaded = true,
+            WorkbenchEvent::Validated(_) => validated = true,
+            WorkbenchEvent::TurnFinished(_) => turn_done = true,
             _ => {}
         }
-        for effect in app::update(&mut app, msg) {
+        for effect in app::update(&mut app, event) {
             run_effect(effect, &context);
         }
         if let Mode::Answering(state) = &mut app.mode {

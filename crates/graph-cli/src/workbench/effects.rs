@@ -1,7 +1,7 @@
 //! The effect executor: everything the pure reducer can't do. Long-running
-//! work is spawned; completion always arrives back as a [`Msg`].
+//! work is spawned; completion always arrives back as a [`WorkbenchEvent`].
 
-use super::app::{Effect, Msg};
+use super::event::WorkbenchEvent;
 use super::runner::{DebugControls, UiGate, UiInterlocutor};
 use super::tools::DraftState;
 use graph_core::agent::conversation::{Conversation, ConversationError};
@@ -9,7 +9,8 @@ use graph_core::pipeline::authoring;
 use graph_core::pipeline::doc::PlanDoc;
 use graph_core::pipeline::Pipeline;
 use graph_core::{AgentError, NewEntry, Store, ToolRegistry};
-use serde_json::Map;
+use serde_json::{Map, Value};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -31,263 +32,251 @@ pub struct WorkbenchContext {
     pub plans_dir: Option<PathBuf>,
     /// Shared debugger state (breakpoints, continue mode) read by the gate.
     pub debug: Arc<DebugControls>,
-    pub tx: UnboundedSender<Msg>,
+    pub tx: UnboundedSender<WorkbenchEvent>,
 }
 
-pub fn run_effect(effect: Effect, context: &Arc<WorkbenchContext>) {
-    let ctx = context.clone();
-    match effect {
-        Effect::RunAgentTurn { message } => {
-            tokio::spawn(async move {
-                tracing::debug!(
-                    target: "workbench",
-                    "agent turn started ({} chars)",
-                    message.len()
-                );
-                let turn_started = std::time::Instant::now();
-                let events = ctx.conversation.events.clone();
+impl WorkbenchContext {
+    pub async fn run_agent_turn(&self, message: String) {
+        let ctx = self;
+        tracing::debug!(
+            target: "workbench",
+            "agent turn started ({} chars)",
+            message.len()
+        );
+        let turn_started = std::time::Instant::now();
+        let events = ctx.conversation.events.clone();
+        let active = ctx.active.lock().unwrap().clone();
+        let mut history = ctx.history.lock().await;
+        events.run_started(&graph_core::RunStart {
+            name: "workbench".to_string(),
+            session_id: None,
+            input: Some(serde_json::Value::String(message.clone())),
+        });
+        let result = ctx.conversation.run_turn(&history, &active, &message).await;
+        match &result {
+            Ok(turn) => events.run_finished(&serde_json::Value::String(turn.text.clone()), false),
+            Err(error) => {
+                events.run_finished(&serde_json::json!({"error": error.to_string()}), true)
+            }
+        }
+        let result = match result {
+            Ok(turn) => {
+                history.extend(turn.entries);
+                if turn.active != active {
+                    *ctx.active.lock().unwrap() = turn.active.clone();
+                    let _ = ctx.tx.send(WorkbenchEvent::ActiveAgent {
+                        name: turn.active.clone(),
+                        note: None,
+                    });
+                }
+                Ok(turn.text)
+            }
+            Err(ConversationError::Turn {
+                source, partial, ..
+            }) => {
+                if keep_partial_history(&source) {
+                    history.extend(partial);
+                }
+                Err(turn_failure_message(source))
+            }
+            Err(other) => Err(other.to_string()),
+        };
+        // Per turn, matching `graph chat`. The ledger is shared with
+        // the pipeline, so a turn that called a plan tool reports that
+        // plan's spend too.
+        let usage = ctx.pipeline.usage.take();
+        if !usage.is_empty() {
+            events.usage_summary(&usage);
+        }
+        tracing::debug!(
+            target: "workbench",
+            "agent turn took {:.1}s ({} entries in history)",
+            turn_started.elapsed().as_secs_f64(),
+            history.len()
+        );
+        let _ = ctx.tx.send(WorkbenchEvent::TurnFinished(result));
+    }
+
+    pub fn select_agent(&self, name: Option<String>) {
+        let ctx = self;
+        let msg = match name {
+            None => {
                 let active = ctx.active.lock().unwrap().clone();
-                let mut history = ctx.history.lock().await;
-                events.run_started(&graph_core::RunStart {
-                    name: "workbench".to_string(),
-                    session_id: None,
-                    input: Some(serde_json::Value::String(message.clone())),
-                });
-                let result = ctx.conversation.run_turn(&history, &active, &message).await;
-                match &result {
-                    Ok(turn) => {
-                        events.run_finished(&serde_json::Value::String(turn.text.clone()), false)
-                    }
-                    Err(error) => {
-                        events.run_finished(&serde_json::json!({"error": error.to_string()}), true)
+                let lines: Vec<String> = ctx
+                    .conversation
+                    .agents
+                    .iter()
+                    .map(|doc| {
+                        let marker = if doc.name == active { "*" } else { " " };
+                        format!("{marker} {} — {}", doc.name, doc.description)
+                    })
+                    .collect();
+                WorkbenchEvent::AgentNotice(format!("talking with {active}\n{}", lines.join("\n")))
+            }
+            Some(name) => match ctx.conversation.agent(&name) {
+                Ok(doc) => {
+                    *ctx.active.lock().unwrap() = doc.name.clone();
+                    WorkbenchEvent::ActiveAgent {
+                        name: doc.name.clone(),
+                        note: Some(format!("now talking with {}", doc.name)),
                     }
                 }
-                let result = match result {
-                    Ok(turn) => {
-                        history.extend(turn.entries);
-                        if turn.active != active {
-                            *ctx.active.lock().unwrap() = turn.active.clone();
-                            let _ = ctx.tx.send(Msg::ActiveAgent {
-                                name: turn.active.clone(),
-                                note: None,
-                            });
-                        }
-                        Ok(turn.text)
-                    }
-                    Err(ConversationError::Turn {
-                        source, partial, ..
-                    }) => {
-                        if keep_partial_history(&source) {
-                            history.extend(partial);
-                        }
-                        Err(turn_failure_message(source))
-                    }
-                    Err(other) => Err(other.to_string()),
-                };
-                // Per turn, matching `graph chat`. The ledger is shared with
-                // the pipeline, so a turn that called a plan tool reports that
-                // plan's spend too.
-                let usage = ctx.pipeline.usage.take();
-                if !usage.is_empty() {
-                    events.usage_summary(&usage);
-                }
-                tracing::debug!(
-                    target: "workbench",
-                    "agent turn took {:.1}s ({} entries in history)",
-                    turn_started.elapsed().as_secs_f64(),
-                    history.len()
-                );
-                let _ = ctx.tx.send(Msg::TurnFinished(result));
+                Err(error) => WorkbenchEvent::AgentNotice(error.to_string()),
+            },
+        };
+        let _ = ctx.tx.send(msg);
+    }
+
+    pub async fn start_run(&self, gated: bool, input: Value) {
+        let ctx = self;
+        let doc = { ctx.draft.lock().unwrap().doc.clone() };
+        let Some(doc) = doc else {
+            let _ = ctx.tx.send(WorkbenchEvent::RunFinished {
+                headline: "no plan to run".to_string(),
+                is_error: true,
+                exited: false,
+                results: Map::new(),
             });
+            return;
+        };
+        let mut pipeline = (*ctx.pipeline)
+            .clone()
+            .with_interlocutor(Arc::new(UiInterlocutor::new(ctx.tx.clone())));
+        if gated {
+            ctx.debug.arm();
+            pipeline = pipeline.with_gate(Arc::new(UiGate::new(ctx.tx.clone(), ctx.debug.clone())));
         }
+        tracing::debug!(
+            target: "workbench",
+            "run started: '{}' ({} steps, gated={gated})",
+            doc.identifier,
+            doc.steps.len()
+        );
+        let run_started = std::time::Instant::now();
+        pipeline.events.run_started(&graph_core::RunStart {
+            name: doc.identifier.clone(),
+            session_id: None,
+            input: Some(input.clone()),
+        });
+        let query = format!("Run the '{}' plan", doc.name);
+        let result = pipeline
+            .run_explicit_in(
+                &query,
+                doc.steps.clone(),
+                doc.finish.clone(),
+                Some(input),
+                doc.pack.as_ref(),
+            )
+            .await;
+        crate::telemetry::report_plan_result(pipeline.events.as_ref(), &result);
+        tracing::debug!(
+            target: "workbench",
+            "run took {:.1}s",
+            run_started.elapsed().as_secs_f64()
+        );
+        // Before the finished message, so the run log reads
+        // step → usage → verdict. Drained even on a failed run: the
+        // tokens were still spent.
+        let usage = pipeline.usage.take();
+        if !usage.is_empty() {
+            pipeline.events.usage_summary(&usage);
+        }
+        let msg = super::runner::report(result).finished_msg();
+        let _ = ctx.tx.send(msg);
+    }
 
-        Effect::Agent { name } => {
-            let msg = match name {
-                None => {
-                    let active = ctx.active.lock().unwrap().clone();
-                    let lines: Vec<String> = ctx
-                        .conversation
-                        .agents
-                        .iter()
-                        .map(|doc| {
-                            let marker = if doc.name == active { "*" } else { " " };
-                            format!("{marker} {} — {}", doc.name, doc.description)
-                        })
-                        .collect();
-                    Msg::AgentNotice(format!("talking with {active}\n{}", lines.join("\n")))
-                }
-                Some(name) => match ctx.conversation.agent(&name) {
-                    Ok(doc) => {
-                        *ctx.active.lock().unwrap() = doc.name.clone();
-                        Msg::ActiveAgent {
-                            name: doc.name.clone(),
-                            note: Some(format!("now talking with {}", doc.name)),
-                        }
+    pub fn validate(&self) {
+        let ctx = self;
+        let problems = match &ctx.draft.lock().unwrap().doc {
+            Some(doc) => super::tools::plan_problems(&ctx.pipeline, doc),
+            None => vec!["no draft to validate".to_string()],
+        };
+        let _ = ctx.tx.send(WorkbenchEvent::Validated(problems));
+    }
+
+    pub async fn load_context(&self) {
+        let ctx = self;
+        // The registry alone under-reports what the planner sees:
+        // control steps are executor-evaluated, never registered, so
+        // their descriptions are appended here just like the `tools`
+        // command surface does.
+        let mut tools = ctx.catalog.tools().await.unwrap_or_default();
+        tools.extend(graph_core::pipeline::control_step_defs());
+        let shapes = ctx.store.tool_shapes().await.unwrap_or_default();
+        let _ = ctx.tx.send(WorkbenchEvent::ContextLoaded { tools, shapes });
+    }
+
+    pub fn sync_debug(&self, breakpoints: HashSet<String>) {
+        self.debug.set_breakpoints(breakpoints);
+    }
+
+    pub fn apply_edit(&self, commit: bool, edit: impl Fn(&mut PlanDoc) -> Result<Value, Value>) {
+        let ctx = self;
+        let current = { ctx.draft.lock().unwrap().doc.clone() };
+        let msg = match current {
+            None => WorkbenchEvent::EditOutcome {
+                committed: false,
+                introduced: vec!["no draft to edit".to_string()],
+                pre_existing: Vec::new(),
+            },
+            Some(doc) if commit => match authoring::apply_edit(&doc, &edit) {
+                Ok(accepted) => {
+                    super::tools::publish_draft(&ctx.draft, &ctx.tx, accepted.doc, true);
+                    WorkbenchEvent::EditOutcome {
+                        committed: true,
+                        introduced: Vec::new(),
+                        pre_existing: accepted.pre_existing,
                     }
-                    Err(error) => Msg::AgentNotice(error.to_string()),
-                },
-            };
-            let _ = ctx.tx.send(msg);
-        }
-
-        Effect::StartRun { gated, input } => {
-            tokio::spawn(async move {
-                let doc = { ctx.draft.lock().unwrap().doc.clone() };
-                let Some(doc) = doc else {
-                    let _ = ctx.tx.send(Msg::RunFinished {
-                        headline: "no plan to run".to_string(),
-                        is_error: true,
-                        exited: false,
-                        results: Map::new(),
-                    });
-                    return;
-                };
-                let mut pipeline = (*ctx.pipeline)
-                    .clone()
-                    .with_interlocutor(Arc::new(UiInterlocutor::new(ctx.tx.clone())));
-                if gated {
-                    ctx.debug.arm();
-                    pipeline = pipeline
-                        .with_gate(Arc::new(UiGate::new(ctx.tx.clone(), ctx.debug.clone())));
                 }
-                tracing::debug!(
-                    target: "workbench",
-                    "run started: '{}' ({} steps, gated={gated})",
-                    doc.identifier,
-                    doc.steps.len()
-                );
-                let run_started = std::time::Instant::now();
-                pipeline.events.run_started(&graph_core::RunStart {
-                    name: doc.identifier.clone(),
-                    session_id: None,
-                    input: Some(input.clone()),
-                });
-                let query = format!("Run the '{}' plan", doc.name);
-                let result = pipeline
-                    .run_explicit_in(
-                        &query,
-                        doc.steps.clone(),
-                        doc.finish.clone(),
-                        Some(input),
-                        doc.pack.as_ref(),
-                    )
-                    .await;
-                crate::telemetry::report_plan_result(pipeline.events.as_ref(), &result);
-                tracing::debug!(
-                    target: "workbench",
-                    "run took {:.1}s",
-                    run_started.elapsed().as_secs_f64()
-                );
-                // Before the finished message, so the run log reads
-                // step → usage → verdict. Drained even on a failed run: the
-                // tokens were still spent.
-                let usage = pipeline.usage.take();
-                if !usage.is_empty() {
-                    pipeline.events.usage_summary(&usage);
-                }
-                let msg = super::runner::report(result).finished_msg();
-                let _ = ctx.tx.send(msg);
-            });
-        }
-
-        Effect::Validate => {
-            let problems = match &ctx.draft.lock().unwrap().doc {
-                Some(doc) => super::tools::plan_problems(&ctx.pipeline, doc),
-                None => vec!["no draft to validate".to_string()],
-            };
-            let _ = ctx.tx.send(Msg::Validated(problems));
-        }
-
-        Effect::LoadContext => {
-            tokio::spawn(async move {
-                // The registry alone under-reports what the planner sees:
-                // control steps are executor-evaluated, never registered, so
-                // their descriptions are appended here just like the `tools`
-                // command surface does.
-                let mut tools = ctx.catalog.tools().await.unwrap_or_default();
-                tools.extend(graph_core::pipeline::control_step_defs());
-                let shapes = ctx.store.tool_shapes().await.unwrap_or_default();
-                let _ = ctx.tx.send(Msg::ContextLoaded { tools, shapes });
-            });
-        }
-
-        Effect::SyncDebug { breakpoints } => {
-            ctx.debug.set_breakpoints(breakpoints);
-        }
-
-        Effect::ApplyEdit { edit, commit } => {
-            let current = { ctx.draft.lock().unwrap().doc.clone() };
-            let msg = match current {
-                None => Msg::EditOutcome {
+                Err(rejected) => WorkbenchEvent::EditOutcome {
                     committed: false,
-                    introduced: vec!["no draft to edit".to_string()],
-                    pre_existing: Vec::new(),
+                    introduced: rejection_problems(&rejected),
+                    pre_existing: rejected.pre_existing,
                 },
-                Some(doc) if commit => match authoring::apply_edit(&doc, |d| edit.apply(d)) {
-                    Ok(accepted) => {
-                        super::tools::publish_draft(&ctx.draft, &ctx.tx, accepted.doc, true);
-                        Msg::EditOutcome {
-                            committed: true,
-                            introduced: Vec::new(),
-                            pre_existing: accepted.pre_existing,
-                        }
-                    }
-                    Err(rejected) => Msg::EditOutcome {
-                        committed: false,
-                        introduced: rejection_problems(&rejected),
-                        pre_existing: rejected.pre_existing,
-                    },
-                },
-                Some(doc) => check_edit(&ctx, &doc, &edit),
-            };
-            let _ = ctx.tx.send(msg);
-        }
+            },
+            Some(doc) => check_edit(ctx, &doc, &edit),
+        };
+        let _ = ctx.tx.send(msg);
+    }
 
-        Effect::SavePlan => {
-            let result = save_draft(&ctx.draft, ctx.plans_dir.as_deref());
-            let _ = ctx.tx.send(Msg::Saved(result));
-        }
+    pub fn save_plan(&self) {
+        let result = save_draft(&self.draft, self.plans_dir.as_deref());
+        let _ = self.tx.send(WorkbenchEvent::Saved(result));
+    }
 
-        Effect::SaveArtifact => {
-            let ctx = context.clone();
-            tokio::spawn(async move {
-                let saved = super::artifact::save_artifact(
-                    &ctx.draft,
-                    &ctx.pipeline,
-                    &ctx.tx,
-                    false,
-                    false,
-                    false,
-                )
+    pub async fn save_artifact(&self) {
+        let ctx = self;
+        let saved =
+            super::artifact::save_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx, false, false, false)
                 .await;
-                let status = match saved {
-                    Ok(message) => message,
-                    Err(error) => format!("not saved: {error}"),
-                };
-                let _ = ctx.tx.send(Msg::Status(status));
-            });
-        }
+        let status = match saved {
+            Ok(message) => message,
+            Err(error) => format!("not saved: {error}"),
+        };
+        let _ = ctx.tx.send(WorkbenchEvent::Status(status));
+    }
 
-        Effect::DiscardArtifact => {
-            let status = super::artifact::discard_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx)
-                .unwrap_or_else(|| "nothing to discard".to_string());
-            let _ = ctx.tx.send(Msg::Status(status));
-        }
+    pub fn discard_artifact(&self) {
+        let ctx = self;
+        let status = super::artifact::discard_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx)
+            .unwrap_or_else(|| "nothing to discard".to_string());
+        let _ = ctx.tx.send(WorkbenchEvent::Status(status));
+    }
 
-        Effect::RestoreDraft => {
-            let restored = ctx.draft.lock().unwrap().restore();
-            match restored {
-                Some((doc, dirty)) => {
-                    let _ = ctx.tx.send(Msg::DraftReplaced {
-                        doc: Box::new(doc),
-                        dirty,
-                    });
-                }
-                None => {
-                    let _ = ctx.tx.send(Msg::Status(
-                        "nothing to restore — the draft has not been replaced yet".to_string(),
-                    ));
-                }
+    pub fn restore_draft(&self) {
+        let ctx = self;
+        let restored = ctx.draft.lock().unwrap().restore();
+        match restored {
+            Some((doc, dirty)) => {
+                let _ = ctx.tx.send(WorkbenchEvent::DraftReplaced {
+                    doc: Box::new(doc),
+                    dirty,
+                });
+            }
+            None => {
+                let _ = ctx.tx.send(WorkbenchEvent::Status(
+                    "nothing to restore — the draft has not been replaced yet".to_string(),
+                ));
             }
         }
     }
@@ -305,11 +294,15 @@ fn rejection_problems(rejected: &authoring::EditRejected) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn check_edit(ctx: &WorkbenchContext, doc: &PlanDoc, edit: &super::edit::PendingEdit) -> Msg {
+fn check_edit(
+    ctx: &WorkbenchContext,
+    doc: &PlanDoc,
+    edit: impl Fn(&mut PlanDoc) -> Result<Value, Value>,
+) -> WorkbenchEvent {
     let before = super::tools::plan_problems(&ctx.pipeline, doc);
     let mut edited = doc.clone();
-    if let Err(body) = edit.apply(&mut edited) {
-        return Msg::EditOutcome {
+    if let Err(body) = edit(&mut edited) {
+        return WorkbenchEvent::EditOutcome {
             committed: false,
             introduced: body
                 .get("error")
@@ -334,7 +327,7 @@ fn check_edit(ctx: &WorkbenchContext, doc: &PlanDoc, edit: &super::edit::Pending
             }
         })
         .collect();
-    Msg::EditOutcome {
+    WorkbenchEvent::EditOutcome {
         committed: false,
         introduced,
         pre_existing,
