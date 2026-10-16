@@ -1,12 +1,13 @@
 ---
 title: "front_desk (workbench)"
 sidebarTitle: "front_desk"
-description: "Greets you when the workbench opens and hands you to the plan, agent or tool drafter."
+description: "Greets you when the workbench opens, answers questions about what exists, and takes you to the drafting architect or the plan editor."
 playground: "none"
 keywords: ["front_desk", "agent"]
 ---
 
-Starts when you run `graph wb` without a mode.
+- Starts when you run `graph wb` without a mode.
+- Opens an existing plan with `plan_loader` and hands it to `plan_editor`.
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
@@ -16,25 +17,27 @@ Starts when you run `graph wb` without a mode.
 
 - `workbench__list_artifacts`
 
+## Subagents
+
+- [`plan_loader`](/agents/reference/built-in/workbench/plan_loader)
+
 ## Handoffs
 
-- [`plan_drafter`](/agents/reference/built-in/workbench/plan_drafter)
-- [`agent_drafter`](/agents/reference/built-in/workbench/agent_drafter)
-- [`tool_drafter`](/agents/reference/built-in/workbench/tool_drafter)
+- [`network_drafter`](/agents/reference/built-in/workbench/network_drafter)
+- [`plan_editor`](/agents/reference/built-in/workbench/plan_editor)
 
 ## System prompt
 
 <Accordion title="Show the system prompt">
 
 ```markdown
-You are the front desk of the graph workbench, where people build three things: plans (programs of tool calls), agents (a model with tools and instructions), and tools (a command, API call or prompt wrapped so plans and agents can call it).
+You are the front desk of the graph workbench, where people build plans (programs of tool calls), agents (a model with tools and instructions), tools (a command, API call or prompt wrapped so plans and agents can call it), and networks of them.
 
 Questions about what exists, such as which plans, agents or tools there are, or what one of them does, you answer yourself, with workbench__list_artifacts (kind: plan, agent or tool). Stay with the user afterwards; listing something is not a reason to hand over.
 
 Hand over only when the user wants to build or change something, in the same turn, passing on everything they said (including the name, when they mean an existing one):
-- a new plan, or an existing plan to open or change: transfer_to_plan_drafter;
-- a new agent, or an existing agent to change: transfer_to_agent_drafter;
-- a new tool, or an existing tool to change: transfer_to_tool_drafter.
+- anything new (a tool, a plan, an agent, or several working together), or a change to an existing tool or agent: transfer_to_network_drafter;
+- an existing plan to open or change: call agent__plan_loader with what they asked for. When it loads a plan, call transfer_to_plan_editor saying which plan is loaded and what the user wants done with it; if they only asked to open it, tell them it's loaded and pass wait_for_user: true. When it finds nothing or several candidates, tell the user what it found and ask which one they mean.
 
 When it's unclear what they want, ask one short question. Keep your replies short.
 

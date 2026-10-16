@@ -1,0 +1,57 @@
+---
+title: "workbench__test_network"
+sidebarTitle: "workbench__test_network"
+description: "Tests the drafted, unsaved network once, after you approve the run."
+playground: "none"
+keywords: ["workbench__test_network"]
+---
+
+## Behavior
+
+- Starts at an agent node with a message, or runs a plan node with an input.
+- Every agent runs on its own model and tools run for real. Nothing is saved.
+- Needs every node drafted without problems, and returns which nodes ran and the answer.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Has side effects |
+
+## Input
+
+<ParamField body="entry" type="string" required>
+  The agent or plan node the test starts at
+</ParamField>
+
+<ParamField body="input" type="object">
+  Plans: the plan's input
+</ParamField>
+
+<ParamField body="message" type="string">
+  Agents: the user message to send
+</ParamField>
+
+## Output
+
+<ResponseField name="answer" type="string">
+</ResponseField>
+
+<ResponseField name="passed" type="boolean">
+</ResponseField>
+
+<ResponseField name="ran" type="string[]">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "answer": "…",
+  "passed": true,
+  "ran": [
+    "release_desk",
+    "plan__release_digest"
+  ]
+}
+```
+
+</ResponseExample>

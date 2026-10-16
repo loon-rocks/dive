@@ -108,6 +108,7 @@ mod tests {
                 "agent_drafter",
                 "chat",
                 "front_desk",
+                "network_drafter",
                 "plan_drafter",
                 "plan_editor",
                 "plan_loader",
@@ -129,13 +130,10 @@ mod tests {
         assert_eq!(by_name("tool_drafter")["workbenchOnly"], false);
         assert_eq!(by_name("chat")["workbenchOnly"], false);
         assert_eq!(
-            outcome.body["agents"][6]["subagentIo"],
+            by_name("search_bot")["subagentIo"],
             "typed input -> typed output"
         );
-        assert_eq!(
-            outcome.body["agents"][7]["subagentIo"],
-            "{prompt} -> {result}"
-        );
+        assert_eq!(by_name("chat")["subagentIo"], "{prompt} -> {result}");
     }
 
     #[test]

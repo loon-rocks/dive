@@ -25,6 +25,7 @@ const PLAN_ORDER: &[&str] = &["compose_plan", "search_tools"];
 const GLOBAL_AGENT_ORDER: &[&str] = &["chat", "agent_drafter", "tool_drafter"];
 const WORKBENCH_AGENT_ORDER: &[&str] = &[
     "front_desk",
+    "network_drafter",
     "plan_drafter",
     "plan_loader",
     "plan_editor",
@@ -70,6 +71,16 @@ const WORKBENCH_TOOL_GROUPS: &[(&str, &[&str])] = &[
             "workbench__try_artifact",
             "workbench__save_artifact",
             "workbench__discard_artifact",
+        ],
+    ),
+    (
+        "Networks",
+        &[
+            "workbench__set_sketch",
+            "workbench__test_network",
+            "workbench__fail_test",
+            "workbench__save_network",
+            "workbench__discard_network",
         ],
     ),
     (

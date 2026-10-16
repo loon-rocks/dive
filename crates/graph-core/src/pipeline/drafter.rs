@@ -20,7 +20,13 @@ pub const SAVE_TOOL_TOOL: &str = "builtin__save_tool";
 
 pub const SAVE_AGENT_TOOL: &str = "builtin__save_agent";
 
-const WORKBENCH_AGENTS: [&str; 4] = ["front_desk", "plan_drafter", "plan_loader", "plan_editor"];
+const WORKBENCH_AGENTS: [&str; 5] = [
+    "front_desk",
+    "network_drafter",
+    "plan_drafter",
+    "plan_loader",
+    "plan_editor",
+];
 
 #[derive(Debug)]
 pub struct Drafted {

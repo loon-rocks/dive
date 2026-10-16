@@ -2,11 +2,26 @@ name: tool-try
 title: graph workbench — test-running a tool
 grid: { cols: 120, rows: 36 }
 
-agent: tool_drafter
+agent: network_drafter
 
-chat: "this repository is enough, test it"
+chat: "yes, build it"
 
 llm:
+  - call: workbench__set_sketch
+    input:
+      restate:
+        outcome: A tool that lists the pull requests merged into this repository since a date
+        success: Each merged pull request comes back with its number, title and merge time
+        constraint: No model; the gh CLI does the work
+        out_of_scope: [Other repositories, Open or closed pull requests]
+      nodes:
+        - name: merged_prs
+          kind: tool
+          job: Lists the pull requests merged since a date with the gh CLI
+          principles: [No model needed]
+  - call: agent__tool_drafter
+    input:
+      node: merged_prs
   - call: workbench__set_artifact
     input:
       kind: tool

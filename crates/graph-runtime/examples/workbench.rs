@@ -121,21 +121,20 @@ async fn main() -> anyhow::Result<()> {
 
     let workbench = Workbench::open(&runtime, Start::Tool(None), workspace.path(), tx).await?;
     let reply = workbench
-        .send_message("Draft a tool that repeats a word back, then test it")
+        .send_message("Build a tool named echo_word that repeats a word back, and test it. You have everything you need and the restate is confirmed: don't ask me anything, sketch it and build it.")
         .await
         .map_err(anyhow::Error::msg)?;
     let tried = workbench
-        .artifact()
-        .and_then(|view| view.last_run)
+        .network()
+        .nodes
+        .into_iter()
+        .find_map(|node| node.last_run)
         .unwrap_or_default();
     anyhow::ensure!(
         tried["ran"] == json!(true),
         "the test run did not run: {tried}"
     );
-    let saved = workbench
-        .save_artifact()
-        .await
-        .map_err(anyhow::Error::msg)?;
+    let saved = workbench.save_network().await.map_err(anyhow::Error::msg)?;
     drop(workbench);
     runtime.shutdown().await;
     drop(runtime);

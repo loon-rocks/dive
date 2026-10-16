@@ -1,10 +1,10 @@
 ---
 title: "Create an agent in the workbench"
-description: "Use the workbench to draft an agent with tools and save it."
-keywords: ["agent drafter", "workbench", "create agent"]
+description: "Use the workbench's drafting architect to design an agent, and any tools or plans it needs, and save them together."
+keywords: ["agent drafter", "network_drafter", "workbench", "create agent"]
 ---
 
-The agent drafter writes an agent file with you. You describe the job, it drafts the file in the workbench's pane, and you save it when it's right.
+The drafting architect designs the agent with you, sketches it with any tools or plans it needs, and has the builders draft each one. You save them together when they're right.
 
 ## Draft the agent
 
@@ -14,25 +14,27 @@ The agent drafter writes an agent file with you. You describe the job, it drafts
     graph workbench agent
     ```
   </Step>
-  <Step title="Describe the job">
-    Say what the agent is for, what it should read and what it should produce. The drafter picks tools from your catalog and puts a first draft in the pane.
+  <Step title="Answer the architect's questions">
+    Say what the agent is for, what it reads and what it produces. The architect asks what it can't settle, one question at a time with its guess, including whether the agent is for conversation, [plan](/plans/overview) steps, or both. It ends with a restate of what it'll build, including what's out of scope, for you to confirm.
+  </Step>
+  <Step title="Review the sketch">
+    The sketch in the workspace lists every piece with its job, model role and the design principles it applies. When the agent needs a tool that doesn't exist, the tool is a node of its own.
 
-    <Frame caption="The agent drafter's first draft in the pane, with its question in the chat.">
-      <img src="/images/workbench/agent-drafting.svg" alt="The workbench with agent_drafter active: the request and the drafter's question on the left, and the release_notes agent draft on the right with its description, model, tools, input, output and system prompt." />
+    <Frame caption="A sketch with the agent and the tool it needs.">
+      <img src="/images/workbench/agent-missing-tool.svg" alt="The workbench with network_drafter active: it explains that no tool can post to the changelog page, so the sketch adds post_changelog, and the workspace shows the restate, the post_changelog tool node and the release_notes agent node that calls it." />
     </Frame>
-  </Step>
-  <Step title="Answer its questions">
-    The drafter asks what it can't settle itself, including whether the agent is for conversation, [plan](/plans/overview) steps, or both.
-  </Step>
-  <Step title="Draft any missing tools">
-    When the agent needs a tool that doesn't exist, the drafter offers to draft it. Say yes, and once you save the tool you're back in the agent draft with the tool added.
 
-    <Frame caption="The drafter offers to draft a tool the agent needs.">
-      <img src="/images/workbench/agent-missing-tool.svg" alt="The agent drafter in the workbench saying none of the tools can post to the changelog page and asking whether to draft one now, with the agent draft in the pane on the right." />
+    Change anything in chat. The architect pushes back once when a change costs more than the job needs, then does what you choose.
+  </Step>
+  <Step title="Build it">
+    Tell the architect to build. The agent drafter writes the agent file, the tool drafter writes and test-runs the tool, and the architect tests the network on a realistic message, on each agent's own model.
+
+    <Frame caption="The agent drafter's file in the workspace.">
+      <img src="/images/workbench/agent-drafting.svg" alt="The workbench after building: the architect's summary on the left, and the release_notes agent draft on the right with its description, model, tools, input, output and system prompt." />
     </Frame>
   </Step>
   <Step title="Save">
-    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes the file to `./.graph/agents/<name>.yaml`.
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes tools to `./.graph/tools/` and the agent to `./.graph/agents/<name>.yaml`.
   </Step>
 </Steps>
 
@@ -53,7 +55,7 @@ graph ask --agent release_notes \
     Use your agent in `graph ask` and `graph chat`.
   </Card>
   <Card title="Create a tool in the workbench" icon="wrench" href="/tools/guides/create-in-workbench">
-    Draft a tool on its own with the tool drafter.
+    Draft a tool on its own.
   </Card>
   <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
     Change one of graph's own agents.
