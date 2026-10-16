@@ -30,6 +30,7 @@ pub enum KeyState {
     Set,
     Missing,
     InFile,
+    Unreadable,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -82,7 +83,6 @@ pub struct ModelsView {
     pub file: PathBuf,
     pub global_workspace: bool,
     pub blocked: Option<String>,
-    pub migrates_from: Option<u32>,
     pub providers: Vec<ProviderEntry>,
     pub roles: Vec<RoleEntry>,
     pub pricing: Vec<PriceEntry>,
@@ -179,8 +179,26 @@ fn same_dir(a: &Path, b: &Path) -> bool {
 }
 
 pub fn view(workspace: &Workspace, secrets: &Secrets) -> ModelsView {
-    let resolver = InProject::new(secrets.resolver(), crate::secrets::project_id(workspace));
-    view_layers(&Layers::of(workspace), &resolver)
+    let project = crate::secrets::project_id(workspace);
+    let resolver = InProject::new(secrets.resolver(), project.clone());
+    let mut view = view_layers(&Layers::of(workspace), &resolver);
+    if secrets.store.status().is_ok() {
+        for provider in &mut view.providers {
+            let unreadable = provider.key == KeyState::Missing
+                && provider.key_names.iter().any(|name| {
+                    project
+                        .as_deref()
+                        .map(Some)
+                        .into_iter()
+                        .chain(std::iter::once(None))
+                        .any(|layer| secrets.store.get_in(name, layer).is_err())
+                });
+            if unreadable {
+                provider.key = KeyState::Unreadable;
+            }
+        }
+    }
+    view
 }
 
 struct Merged {
@@ -382,7 +400,6 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
         file: layers.file.clone(),
         global_workspace: layers.global_workspace,
         blocked: blocked(&layers.file),
-        migrates_from: migrates_from(&layers.file),
         providers,
         roles,
         pricing,
@@ -404,33 +421,6 @@ fn blocked(file: &Path) -> Option<String> {
         )),
         Ok(_) => None,
     }
-}
-
-fn migrates_from(file: &Path) -> Option<u32> {
-    graph_config::inspect(file)
-        .ok()
-        .map(|layer| layer.version)
-        .filter(|version| *version < CONFIG_FORMAT)
-}
-
-fn migrated_text(file: &Path, text: String) -> Result<String> {
-    if migrates_from(file).is_none() {
-        return Ok(text);
-    }
-    let dir = file.parent().context("the config file has no folder")?;
-    let temp = tempfile::Builder::new()
-        .prefix(".config-migrate")
-        .suffix(".toml")
-        .tempfile_in(dir)
-        .context("creating a temporary config to migrate")?;
-    std::fs::write(temp.path(), &text).context("writing the config to migrate")?;
-    graph_config::migrate_file(temp.path()).map_err(|error| {
-        anyhow!(error.replace(
-            &temp.path().display().to_string(),
-            &file.display().to_string()
-        ))
-    })?;
-    std::fs::read_to_string(temp.path()).context("reading the migrated config")
 }
 
 #[derive(Debug)]
@@ -524,7 +514,6 @@ fn edit(layers: &Layers, change: impl FnOnce(&mut DocumentMut) -> Result<()>) ->
             return Err(error).with_context(|| format!("reading {}", layers.file.display()))
         }
     };
-    let text = migrated_text(&layers.file, text)?;
     let mut doc: DocumentMut = text
         .parse()
         .with_context(|| format!("parsing {}", layers.file.display()))?;

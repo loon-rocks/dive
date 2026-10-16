@@ -103,6 +103,11 @@ impl SecretStore for MemorySecrets {
         let account = self.account(name, project)?;
         Ok(self.values.lock().unwrap().remove(&account).is_some())
     }
+
+    fn accounts(&self) -> Result<Vec<String>, StoreError> {
+        self.status()?;
+        Ok(self.names())
+    }
 }
 
 impl SecretSource for MemorySecrets {

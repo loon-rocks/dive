@@ -235,6 +235,9 @@ fn render_detail(detail: &SecretDetail) -> String {
         };
         text.push_str(&format!("{marker} {:8} {value}\n", layer.label()));
     }
+    if let Some(error) = &detail.read_error {
+        text.push_str(&format!("  couldn't read the credential store: {error}\n"));
+    }
     if detail.references.is_empty() {
         text.push_str("  not referenced by config.toml, user tools or installed packs\n");
     } else {
