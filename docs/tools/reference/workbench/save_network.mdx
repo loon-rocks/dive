@@ -8,7 +8,8 @@ keywords: ["workbench__save_network"]
 
 ## Behavior
 
-- Writes tools first, then plans, then agents.
+- Writes tools first, then plans, then agents, to this project's `.graph`, to the global config for every project (`scope`), or to the configured directories.
+- Leaves out the nodes named in `skip`.
 - Needs every node drafted without problems, and a passing test since the network last changed unless `untested` is true.
 
 | Available to | Effect |
@@ -16,6 +17,16 @@ keywords: ["workbench__save_network"]
 | Workbench agents only | Has side effects |
 
 ## Input
+
+<ParamField body="scope" type="enum<string>">
+  This project's .graph, or the global config for every project; omit for the configured directories
+
+  Available options: `project`, `everywhere`
+</ParamField>
+
+<ParamField body="skip" type="string[]">
+  Node names the user chose not to save
+</ParamField>
 
 <ParamField body="untested" type="boolean">
   Save without a passing test, only when the user said not to test it

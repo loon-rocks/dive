@@ -81,7 +81,7 @@
 <text x="1009.2" y="175.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="34.8" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">→</text>
-<text x="51.6" y="193.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbenc</text>
+<text x="51.6" y="193.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">agent__t</text>
 <text x="118.8" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
 <text x="135.6" y="193.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">with</text>
 <text x="177.6" y="193.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">input:</text>
@@ -95,8 +95,8 @@
 <text x="916.8" y="211.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
 <text x="1009.2" y="211.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
-<text x="34.8" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">→</text>
-<text x="51.6" y="229.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbenc</text>
+<text x="51.6" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">↳</text>
+<text x="68.4" y="229.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbe</text>
 <text x="118.8" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
 <text x="135.6" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">}</text>
 <text x="916.8" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
@@ -106,6 +106,8 @@
 <text x="916.8" y="247.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
 <text x="1009.2" y="247.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
+<text x="51.6" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">↳</text>
+<text x="68.4" y="265.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbe</text>
 <text x="118.8" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
 <text x="916.8" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#e5c07b">│</text>
 <text x="1009.2" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>

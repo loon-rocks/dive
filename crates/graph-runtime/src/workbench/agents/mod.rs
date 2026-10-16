@@ -48,6 +48,7 @@ pub fn builtin_sources() -> Vec<&'static str> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Start {
     FrontDesk,
+    Resume(String),
     Plan(Option<String>),
     Agent(Option<String>),
     Tool(Option<String>),
@@ -55,7 +56,7 @@ pub enum Start {
 
 pub fn starting_agent(start: &Start, doc: Option<&PlanDoc>) -> &'static str {
     match (start, doc) {
-        (Start::FrontDesk, _) => FRONT_DESK,
+        (Start::FrontDesk, _) | (Start::Resume(_), _) => FRONT_DESK,
         (Start::Plan(_), Some(_)) => PLAN_EDITOR,
         (Start::Plan(_), None) | (Start::Agent(_), _) | (Start::Tool(_), _) => {
             super::artifact::NETWORK_DRAFTER
@@ -66,13 +67,14 @@ pub fn starting_agent(start: &Start, doc: Option<&PlanDoc>) -> &'static str {
 enum Section {
     CurrentDraft,
     Network,
+    Models,
 }
 
 fn sections(agent: &str) -> &'static [Section] {
     match agent {
         "plan_editor" => &[Section::CurrentDraft],
         "network_drafter" | "plan_drafter" | "tool_drafter" | "agent_drafter" => {
-            &[Section::Network]
+            &[Section::Models, Section::Network]
         }
         _ => &[],
     }
@@ -86,9 +88,33 @@ pub fn context_hook(draft: Arc<Mutex<DraftState>>, pipeline: Arc<Pipeline>) -> C
             .map(|section| match section {
                 Section::CurrentDraft => current_draft(&pipeline, &doc),
                 Section::Network => super::artifact::context_section(&draft),
+                Section::Models => model_roles(&pipeline),
             })
             .collect()
     })
+}
+
+pub fn model_roles(pipeline: &Pipeline) -> String {
+    let roles = pipeline.router.roles();
+    let mut section = String::from(
+        "## Model roles\nA node's model role, and the model of every agent, prompt tool and infer step, is one of these configured names; no other name works:\n",
+    );
+    for name in roles.known_names() {
+        let Some(choice) = roles.resolve(name) else {
+            continue;
+        };
+        let kind = match pipeline.router.kind_of_role(name) {
+            Some(graph_config::ModelKind::Decision) => " (decision model: decide gates only)",
+            _ => "",
+        };
+        let description = choice
+            .description
+            .as_deref()
+            .map(|description| format!(": {description}"))
+            .unwrap_or_default();
+        section.push_str(&format!("- {name} → {}{kind}{description}\n", choice.model));
+    }
+    section
 }
 
 fn current_draft(pipeline: &Pipeline, doc: &Option<PlanDoc>) -> String {
@@ -196,10 +222,9 @@ steps:
             "tool_drafter",
             "agent_drafter",
         ] {
-            assert!(
-                hook(builder)[0].starts_with("## The network draft"),
-                "{builder}"
-            );
+            let sections = hook(builder);
+            assert!(sections[0].starts_with("## Model roles"), "{builder}");
+            assert!(sections[1].starts_with("## The network draft"), "{builder}");
         }
         assert!(hook("plan_editor")[0].starts_with("## Current draft"));
         assert!(hook("plan_loader").is_empty());

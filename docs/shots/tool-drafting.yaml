@@ -10,15 +10,21 @@ llm:
   - call: plan__search_tools
     input:
       query: List the pull requests merged into a GitHub repository since a date
-  - text: >-
-      My read: a tool that lists what merged into this repository since a date, for release
-      notes or a weekly summary. 70% confident; missing: which repository.
+  - call: workbench__set_interview
+    input:
+      reply: |-
+        My read: a tool that lists what merged into this repository since a date, for release notes or a weekly summary. 70% confident; missing: which repository.
 
-
-      Question: should it take a repository as input, or always use the one graph runs in?
-
-      My guess: the one graph runs in. The gh CLI already knows it, so the tool needs only the
-      date and no model at all.
+        Question: should it take a repository as input, or always use the one graph runs in?
+        My guess: the one graph runs in. The gh CLI already knows it, so the tool needs only the date and no model at all.
+      confidence: 70
+      missing: which repository
+      question: Should it take a repository as input, or always use the one graph runs in?
+      guess: The one graph runs in; the gh CLI already knows it.
+      facts:
+        - { label: Outcome, text: Pull requests merged since a date, state: known }
+        - { label: Where, text: The repository graph runs in, state: asking }
+        - { label: Returns, text: "Number, title and merge time", state: guess }
 
 capture:
   at: loaded

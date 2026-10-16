@@ -394,6 +394,10 @@ impl ModelRouter {
 
     /// The roles carrying a `description`, for catalog surfaces that
     /// advertise selectable models.
+    pub fn roles(&self) -> &graph_config::ModelRoles {
+        &self.roles
+    }
+
     pub fn described_models(&self) -> impl Iterator<Item = (&str, &ModelChoice)> {
         self.roles.described()
     }

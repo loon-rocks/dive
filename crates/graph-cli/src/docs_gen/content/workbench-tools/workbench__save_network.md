@@ -4,5 +4,6 @@ summary: Saves every drafted node of the network after you confirm the list of f
 
 ## Behavior
 
-- Writes tools first, then plans, then agents.
+- Writes tools first, then plans, then agents, to this project's `.graph`, to the global config for every project (`scope`), or to the configured directories.
+- Leaves out the nodes named in `skip`.
 - Needs every node drafted without problems, and a passing test since the network last changed unless `untested` is true.

@@ -71,6 +71,55 @@ impl EventSink for ChannelSink {
         }
     }
 
+    fn subagent_started(&self, run: u64, agent: &str, _caller: &str, input: &Value) {
+        if matches!(self.kind, SinkKind::AgentTurn) {
+            self.send(WorkbenchEvent::SubagentStarted {
+                run,
+                agent: agent.to_string(),
+                input: input.clone(),
+            });
+        }
+    }
+
+    fn subagent_finished(
+        &self,
+        run: u64,
+        agent: &str,
+        output: &Value,
+        is_error: bool,
+        elapsed: Duration,
+    ) {
+        if matches!(self.kind, SinkKind::AgentTurn) {
+            self.send(WorkbenchEvent::SubagentFinished {
+                run,
+                agent: agent.to_string(),
+                output: output.clone(),
+                is_error,
+                seconds: elapsed.as_secs_f64(),
+            });
+        }
+    }
+
+    fn subagent_tool_started(&self, run: u64, name: &str, _args: &Value) {
+        if matches!(self.kind, SinkKind::AgentTurn) {
+            self.send(WorkbenchEvent::SubagentTool {
+                run,
+                name: name.to_string(),
+                finished: None,
+            });
+        }
+    }
+
+    fn subagent_tool_finished(&self, run: u64, name: &str, _elapsed: Duration, is_error: bool) {
+        if matches!(self.kind, SinkKind::AgentTurn) {
+            self.send(WorkbenchEvent::SubagentTool {
+                run,
+                name: name.to_string(),
+                finished: Some(!is_error),
+            });
+        }
+    }
+
     fn tool_started(&self, name: &str, _args: &Value) {
         if matches!(self.kind, SinkKind::AgentTurn) {
             self.send(WorkbenchEvent::AgentToolStarted(name.to_string()));
@@ -143,6 +192,62 @@ impl EventSink for ChannelSink {
                 is_error,
                 in_plan,
             });
+        }
+    }
+}
+
+pub struct NetworkProgress {
+    pub draft: super::tools::SharedDraft,
+    pub tx: UnboundedSender<WorkbenchEvent>,
+    pub builders: &'static [&'static str],
+}
+
+impl EventSink for NetworkProgress {
+    fn subagent_started(&self, _run: u64, agent: &str, _caller: &str, input: &Value) {
+        if !self.builders.contains(&agent) {
+            return;
+        }
+        if let Some(node) = input["node"].as_str() {
+            self.draft
+                .lock()
+                .unwrap()
+                .network
+                .builder_started(node, agent);
+            super::artifact::publish(&self.draft, &self.tx);
+        }
+    }
+
+    fn subagent_finished(
+        &self,
+        _run: u64,
+        agent: &str,
+        output: &Value,
+        is_error: bool,
+        _elapsed: Duration,
+    ) {
+        if !self.builders.contains(&agent) {
+            return;
+        }
+        let node = output["name"].as_str().map(str::to_string).or_else(|| {
+            self.draft
+                .lock()
+                .unwrap()
+                .network
+                .nodes
+                .iter()
+                .find(|node| {
+                    node.builder.as_deref() == Some(agent)
+                        && node.status == super::network::NodeStatus::Drafting
+                })
+                .map(|node| node.name.clone())
+        });
+        if let Some(node) = node {
+            self.draft
+                .lock()
+                .unwrap()
+                .network
+                .builder_finished(&node, agent, output, is_error);
+            super::artifact::publish(&self.draft, &self.tx);
         }
     }
 }
