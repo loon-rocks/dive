@@ -7,7 +7,7 @@ use graph_llm::types::{
 use graph_llm::{ChatProvider, LlmError, ModelRouter};
 use graph_runtime::packs::InstalledPacks;
 use graph_runtime::runtime::{Runtime, RuntimeOptions};
-use graph_runtime::workbench::artifact::{SET_ARTIFACT, TRY_ARTIFACT};
+use graph_runtime::workbench::artifact::{SET_ARTIFACT, SET_SKETCH, TRY_ARTIFACT};
 use graph_runtime::workbench::{GateKind, Start, UiDecision, Workbench, WorkbenchEvent};
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
@@ -63,6 +63,25 @@ fn runtime(root: &std::path::Path) -> Runtime {
     let provider: Arc<dyn ChatProvider> = Arc::new(Scripted(Mutex::new(VecDeque::from([
         response(
             None,
+            Some((
+                SET_SKETCH,
+                json!({
+                    "restate": {
+                        "outcome": "A tool that repeats a word back",
+                        "success": "It returns the word",
+                        "constraint": "No model",
+                        "out_of_scope": ["Anything else"]
+                    },
+                    "nodes": [{"name": "shout", "kind": "tool", "job": "Repeats a word back", "principles": ["No model needed"]}]
+                }),
+            )),
+        ),
+        response(
+            None,
+            Some(("agent__tool_drafter", json!({"node": "shout"}))),
+        ),
+        response(
+            None,
             Some((SET_ARTIFACT, json!({"kind": "tool", "yaml": TOOL}))),
         ),
         response(
@@ -71,6 +90,12 @@ fn runtime(root: &std::path::Path) -> Runtime {
                 TRY_ARTIFACT,
                 json!({"kind": "tool", "input": {"word": "hello"}}),
             )),
+        ),
+        response(
+            Some(
+                r#"{"name": "shout", "status": "drafted", "summary": "Takes a word and returns it as said"}"#,
+            ),
+            None,
         ),
         response(Some("drafted and tested"), None),
     ]))));
@@ -99,14 +124,14 @@ fn runtime(root: &std::path::Path) -> Runtime {
 
 #[derive(Debug, PartialEq)]
 enum Seen {
-    Shown(bool),
+    Shown(usize),
     Asked,
     Turn(Result<String, String>),
     Status(String),
 }
 
 #[tokio::test]
-async fn drafting_trying_and_saving_a_tool_reports_each_step_as_an_event() {
+async fn the_architect_sketches_a_builder_drafts_and_tries_and_the_network_saves() {
     let root = tempfile::tempdir().unwrap();
     let runtime = runtime(root.path());
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<WorkbenchEvent>();
@@ -114,7 +139,7 @@ async fn drafting_trying_and_saving_a_tool_reports_each_step_as_an_event() {
         let mut seen = Vec::new();
         while let Some(event) = rx.recv().await {
             match event {
-                WorkbenchEvent::ArtifactChanged(view) => seen.push(Seen::Shown(view.is_some())),
+                WorkbenchEvent::NetworkChanged(view) => seen.push(Seen::Shown(view.unsaved())),
                 WorkbenchEvent::GateAsk {
                     kind: GateKind::Ask { default, .. },
                     reply,
@@ -136,21 +161,28 @@ async fn drafting_trying_and_saving_a_tool_reports_each_step_as_an_event() {
     let workbench = Workbench::open(&runtime, Start::Tool(None), root.path(), tx)
         .await
         .unwrap();
-    assert_eq!(workbench.active_agent(), "tool_drafter");
+    assert_eq!(workbench.active_agent(), "network_drafter");
     let reply = workbench.send_message("make a shout tool").await;
     assert_eq!(reply, Ok("drafted and tested".to_string()));
-    let view = workbench.artifact().expect("the draft is in the pane");
-    assert_eq!(view.yaml, TOOL);
-    assert!(view.tested);
-    assert_eq!(view.last_run.unwrap()["result"], json!({"said": "hello"}));
+    let view = workbench.network();
+    assert_eq!(
+        view.restate.as_ref().unwrap().out_of_scope,
+        ["Anything else"]
+    );
+    let node = &view.nodes[0];
+    assert_eq!(node.yaml.as_deref(), Some(TOOL));
+    assert_eq!(
+        node.last_run.as_ref().unwrap()["result"],
+        json!({"said": "hello"})
+    );
 
-    let saved = workbench.save_artifact().await.unwrap();
+    let saved = workbench.save_network().await.unwrap();
     let path = root.path().join("tools/shout.yaml");
-    assert!(saved.starts_with("saved user__shout to "), "{saved}");
+    assert!(saved.ends_with("tools/shout.yaml"), "{saved}");
     assert!(std::fs::read_to_string(&path)
         .unwrap()
         .contains("name: shout"));
-    assert!(workbench.artifact().is_none());
+    assert!(workbench.network().is_empty());
 
     drop(workbench);
     runtime.shutdown().await;
@@ -158,11 +190,12 @@ async fn drafting_trying_and_saving_a_tool_reports_each_step_as_an_event() {
     assert_eq!(
         collector.await.unwrap(),
         vec![
-            Seen::Shown(true),
+            Seen::Shown(0),
+            Seen::Shown(1),
             Seen::Asked,
-            Seen::Shown(true),
+            Seen::Shown(1),
             Seen::Turn(Ok("drafted and tested".to_string())),
-            Seen::Shown(false),
+            Seen::Shown(0),
             Seen::Status(saved),
         ]
     );

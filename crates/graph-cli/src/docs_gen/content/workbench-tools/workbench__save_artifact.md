@@ -1,9 +1,8 @@
 ---
-summary: Saves the draft in the pane to the project.
+summary: Saves the plan in the plan pane.
 ---
 
 ## Behavior
 
-- A plan goes back to the file it came from, or into the plans directory when it's new.
-- A tool must pass a test run first, unless `untested` is true.
-- Replacing an existing agent or tool file needs `overwrite`.
+- The plan goes back to the file it came from, or into the plans directory when it's new.
+- Agents, tools and network plans are saved together with `workbench__save_network`.

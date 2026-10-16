@@ -1,0 +1,94 @@
+---
+title: "workbench__set_sketch"
+sidebarTitle: "workbench__set_sketch"
+description: "Puts the design sketch of the network in the pane, replacing the previous one."
+playground: "none"
+keywords: ["workbench__set_sketch"]
+---
+
+## Behavior
+
+- Carries the confirmed restate, every node with its job, model role and design principles, and the edges between nodes.
+- Nodes keep their drafts across sketches. A drafted node left out of the new sketch is reported so it can be discarded.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="edges" type="object[]">
+</ParamField>
+
+<ParamField body="edges.[].from" type="string" required>
+  A node name
+</ParamField>
+
+<ParamField body="edges.[].kind" type="enum<string>" required>
+  Available options: `handoff`, `subagent`, `calls`
+</ParamField>
+
+<ParamField body="edges.[].to" type="string" required>
+  A node name, or an existing tool, plan or agent
+</ParamField>
+
+<ParamField body="nodes" type="object[]" required>
+</ParamField>
+
+<ParamField body="nodes.[].job" type="string" required>
+  What this node does, in one sentence
+</ParamField>
+
+<ParamField body="nodes.[].kind" type="enum<string>" required>
+  Available options: `agent`, `plan`, `tool`
+</ParamField>
+
+<ParamField body="nodes.[].model" type="string">
+  The model role it runs on (agents, prompt tools, and plan steps that call a model); omit when it calls no model
+</ParamField>
+
+<ParamField body="nodes.[].name" type="string" required>
+  The file's name: a tool name without user__, a plan identifier, or an agent name
+</ParamField>
+
+<ParamField body="nodes.[].principles" type="string[]">
+  The design principles this node applies
+</ParamField>
+
+<ParamField body="restate" type="object" required>
+</ParamField>
+
+<ParamField body="restate.constraint" type="string" required>
+</ParamField>
+
+<ParamField body="restate.out_of_scope" type="string[]" required>
+</ParamField>
+
+<ParamField body="restate.outcome" type="string" required>
+</ParamField>
+
+<ParamField body="restate.success" type="string" required>
+</ParamField>
+
+## Output
+
+<ResponseField name="drafted" type="any[]">
+</ResponseField>
+
+<ResponseField name="edges" type="integer">
+</ResponseField>
+
+<ResponseField name="nodes" type="integer">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "drafted": [],
+  "edges": 3,
+  "nodes": 4
+}
+```
+
+</ResponseExample>

@@ -129,7 +129,8 @@ async fn run_workbench(
     let mut app = App::new(context.plan());
     app.agent = context.active_agent();
     app.log_path = log_path;
-    app.artifact = context.artifact();
+    let network = context.network();
+    app.network = (!network.is_empty()).then_some(network);
     run_effect(app::Effect::LoadContext, &context);
     if app.ws.doc.is_some() {
         run_effect(app::Effect::Validate, &context);
@@ -211,11 +212,11 @@ fn run_effect(effect: app::Effect, context: &Arc<Workbench>) {
         app::Effect::SavePlan => {
             let _ = ctx.save_plan();
         }
-        app::Effect::SaveArtifact => {
-            tokio::spawn(async move { ctx.save_artifact().await });
+        app::Effect::SaveNetwork => {
+            tokio::spawn(async move { ctx.save_network().await });
         }
-        app::Effect::DiscardArtifact => {
-            ctx.discard_artifact();
+        app::Effect::DiscardNetwork => {
+            ctx.discard_network();
         }
         app::Effect::RestoreDraft => ctx.restore_draft(),
     }

@@ -1,7 +1,7 @@
 ---
 title: "Create a tool in the workbench"
-description: "Draft a tool with the tool drafter, test-run it, and save it."
-keywords: ["tool drafter", "workbench", "create tool"]
+description: "Describe a tool, answer the architect's questions, and save the tool its builder drafts and test-runs."
+keywords: ["tool drafter", "network_drafter", "workbench", "create tool"]
 ---
 
 `merged_prs` lists the pull requests merged since a date by running the `gh` CLI.
@@ -41,20 +41,20 @@ input_schema:
     ```
   </Step>
   <Step title="Describe the tool">
-    Say what goes in, what comes back, and which command or API it uses. The drafter checks your catalog for a tool that already does it, then puts a first draft in the pane and asks what it can't settle itself.
+    Say what goes in and what comes back. The drafting architect checks your catalog for a tool that already does it, then asks what it can't settle, one question at a time, each with its guess and how confident it is.
 
-    <Frame caption="The tool drafter's first draft in the pane, with its question in the chat.">
-      <img src="/images/workbench/tool-drafting.svg" alt="The workbench with tool_drafter active: the request and the drafter's question on the left, and the merged_prs draft on the right with its description, kind exec, the gh command it runs, its since input, and no problems." />
+    <Frame caption="The architect's question, with its guess and its confidence.">
+      <img src="/images/workbench/tool-drafting.svg" alt="The workbench with network_drafter active: the request on the left and the architect's read of it, 70% confident, asking whether the tool should take a repository or use the one graph runs in, guessing the latter." />
     </Frame>
   </Step>
-  <Step title="Test-run it">
-    Answer its questions and ask it to test the tool. It runs the draft on a sample input once you approve the run:
+  <Step title="Confirm and build it">
+    Once it can predict your answers, the architect restates what it'll build, including what's out of scope, and sketches the tool in the workspace. Say yes, then tell it to build. The tool drafter writes the file and test-runs it on a sample input once you approve the run:
 
     <Frame caption="The approval form for a test run, showing the command and the sample input.">
       <img src="/images/workbench/tool-try.svg" alt="The workbench's approval form asking whether to test-run user__merged_prs once with the command gh pr list --state merged --search merged:>={{input.since}} --json number,title,mergedAt and the input since 2026-09-24, with run set to true." />
     </Frame>
 
-    The result shows in the pane:
+    The result shows in the workspace:
 
     ```json
     [
@@ -62,11 +62,6 @@ input_schema:
         "mergedAt": "2026-10-09T02:25:01Z",
         "number": 147,
         "title": "feat!: plans state how they finish with a required finish key…"
-      },
-      {
-        "mergedAt": "2026-10-08T19:34:56Z",
-        "number": 146,
-        "title": "feat!: workbench agents work on plans through the same artifact tools…"
       },
       …
     ]

@@ -1,8 +1,8 @@
 //! The effect executor: everything the pure reducer can't do. Long-running
 //! work is spawned; completion always arrives back as a [`WorkbenchEvent`].
 
-use super::artifact::ArtifactView;
 use super::event::WorkbenchEvent;
+use super::network::NetworkView;
 use super::runner::{DebugControls, UiGate, UiInterlocutor};
 use super::tools::DraftState;
 use graph_core::agent::conversation::{Conversation, ConversationError};
@@ -45,8 +45,8 @@ impl Workbench {
         self.draft.lock().unwrap().dirty
     }
 
-    pub fn artifact(&self) -> Option<ArtifactView> {
-        super::artifact::view(&self.draft, &self.pipeline)
+    pub fn network(&self) -> NetworkView {
+        super::artifact::view(&self.draft)
     }
 
     pub fn active_agent(&self) -> String {
@@ -264,11 +264,17 @@ impl Workbench {
         result
     }
 
-    pub async fn save_artifact(&self) -> Result<String, String> {
+    pub async fn save_network(&self) -> Result<String, String> {
         let ctx = self;
-        let saved =
-            super::artifact::save_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx, false, false, false)
-                .await;
+        let saved = super::artifact::save_network(
+            &ctx.draft,
+            &ctx.pipeline,
+            &ctx.tx,
+            ctx.plans_dir.as_deref(),
+            true,
+            false,
+        )
+        .await;
         let status = match &saved {
             Ok(message) => message.clone(),
             Err(error) => format!("not saved: {error}"),
@@ -277,9 +283,9 @@ impl Workbench {
         saved
     }
 
-    pub fn discard_artifact(&self) -> Option<String> {
+    pub fn discard_network(&self) -> Option<String> {
         let ctx = self;
-        let discarded = super::artifact::discard_artifact(&ctx.draft, &ctx.pipeline, &ctx.tx);
+        let discarded = super::artifact::discard_network(&ctx.draft, &ctx.tx);
         let status = discarded
             .clone()
             .unwrap_or_else(|| "nothing to discard".to_string());

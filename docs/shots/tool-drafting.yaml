@@ -2,7 +2,7 @@ name: tool-drafting
 title: graph workbench — drafting a tool
 grid: { cols: 120, rows: 36 }
 
-agent: tool_drafter
+agent: network_drafter
 
 chat: "a tool that lists the pull requests merged since a date"
 
@@ -10,34 +10,15 @@ llm:
   - call: plan__search_tools
     input:
       query: List the pull requests merged into a GitHub repository since a date
-  - call: workbench__set_artifact
-    input:
-      kind: tool
-      yaml: |
-        name: merged_prs
-        description: Pull requests merged into this repository since a date, as number, title and merge time.
-        kind: exec
-        command: gh
-        args:
-          - pr
-          - list
-          - --state
-          - merged
-          - --search
-          - "merged:>={{input.since}}"
-          - --json
-          - number,title,mergedAt
-        read_only: true
-        input_schema:
-          type: object
-          required: [since]
-          properties:
-            since:
-              type: string
-              description: The earliest merge date, as YYYY-MM-DD
   - text: >-
-      There's a first draft in the pane. It uses the gh CLI against the repository
-      graph runs in. Should it take a repository as input too, or is this one enough?
+      My read: a tool that lists what merged into this repository since a date, for release
+      notes or a weekly summary. 70% confident; missing: which repository.
+
+
+      Question: should it take a repository as input, or always use the one graph runs in?
+
+      My guess: the one graph runs in. The gh CLI already knows it, so the tool needs only the
+      date and no model at all.
 
 capture:
   at: loaded

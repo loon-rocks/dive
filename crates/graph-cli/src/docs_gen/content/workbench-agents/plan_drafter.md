@@ -1,7 +1,6 @@
 ---
-summary: Drafts a new plan with you, or opens an existing plan you want to work on.
+summary: Builds one plan node of the architect's sketch with the built-in compose_plan plan.
 ---
 
-- Drafts with the built-in `compose_plan` plan and shows the result in the workbench pane.
-- Hands off to `plan_editor` once there's a draft to change.
-- Starts when you run `graph wb plan` without naming a plan.
+- `network_drafter` runs it as a subagent; it never talks to you.
+- Spells out everything the sketch settles, so `compose_plan` has nothing to guess.
