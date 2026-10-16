@@ -23,4 +23,5 @@ uuid.workspace = true
 chrono.workspace = true
 tempfile = "3"
 keyring = "4.2"
+keyring-core = "1.0"
 toml.workspace = true

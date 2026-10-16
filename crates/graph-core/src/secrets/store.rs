@@ -75,6 +75,25 @@ impl SecretStore for CredentialStore {
             Err(error) => Err(describe(error)),
         }
     }
+
+    fn accounts(&self) -> Result<Vec<String>, StoreError> {
+        self.status()?;
+        let spec = std::collections::HashMap::from([("service", SERVICE)]);
+        let entries = match keyring_core::Entry::search(&spec) {
+            Ok(entries) => entries,
+            Err(keyring::Error::NoEntry) => return Ok(Vec::new()),
+            Err(error) => return Err(describe(error)),
+        };
+        let mut accounts: Vec<String> = entries
+            .iter()
+            .filter_map(|entry| entry.get_specifiers())
+            .filter(|(service, _)| service == SERVICE)
+            .map(|(_, account)| account)
+            .collect();
+        accounts.sort();
+        accounts.dedup();
+        Ok(accounts)
+    }
 }
 
 impl SecretSource for CredentialStore {
