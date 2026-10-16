@@ -29,6 +29,7 @@ pub enum KeyState {
     None,
     Set,
     Missing,
+    InFile,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -81,6 +82,7 @@ pub struct ModelsView {
     pub file: PathBuf,
     pub global_workspace: bool,
     pub blocked: Option<String>,
+    pub migrates_from: Option<u32>,
     pub providers: Vec<ProviderEntry>,
     pub roles: Vec<RoleEntry>,
     pub pricing: Vec<PriceEntry>,
@@ -253,6 +255,9 @@ fn key_state(api_key: Option<&str>, resolver: &dyn SecretSource) -> (Vec<String>
         return (Vec::new(), KeyState::None);
     };
     let references = graph_core::secrets::env_references(api_key);
+    if references.is_empty() {
+        return (Vec::new(), KeyState::InFile);
+    }
     let names: Vec<String> = references.iter().map(|r| r.name.to_string()).collect();
     let all_set = references.iter().all(|reference| {
         reference.default.is_some()
@@ -377,6 +382,7 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
         file: layers.file.clone(),
         global_workspace: layers.global_workspace,
         blocked: blocked(&layers.file),
+        migrates_from: migrates_from(&layers.file),
         providers,
         roles,
         pricing,
@@ -391,11 +397,6 @@ fn blocked(file: &Path) -> Option<String> {
     }
     match graph_config::inspect(file) {
         Err(error) => Some(error),
-        Ok(layer) if layer.version < CONFIG_FORMAT => Some(format!(
-            "{} is config version {}. Run `graph config migrate` to bring it to version {CONFIG_FORMAT} before editing it here.",
-            file.display(),
-            layer.version
-        )),
         Ok(layer) if layer.version > CONFIG_FORMAT => Some(format!(
             "{} is config version {}, newer than this app reads ({CONFIG_FORMAT}).",
             file.display(),
@@ -403,6 +404,33 @@ fn blocked(file: &Path) -> Option<String> {
         )),
         Ok(_) => None,
     }
+}
+
+fn migrates_from(file: &Path) -> Option<u32> {
+    graph_config::inspect(file)
+        .ok()
+        .map(|layer| layer.version)
+        .filter(|version| *version < CONFIG_FORMAT)
+}
+
+fn migrated_text(file: &Path, text: String) -> Result<String> {
+    if migrates_from(file).is_none() {
+        return Ok(text);
+    }
+    let dir = file.parent().context("the config file has no folder")?;
+    let temp = tempfile::Builder::new()
+        .prefix(".config-migrate")
+        .suffix(".toml")
+        .tempfile_in(dir)
+        .context("creating a temporary config to migrate")?;
+    std::fs::write(temp.path(), &text).context("writing the config to migrate")?;
+    graph_config::migrate_file(temp.path()).map_err(|error| {
+        anyhow!(error.replace(
+            &temp.path().display().to_string(),
+            &file.display().to_string()
+        ))
+    })?;
+    std::fs::read_to_string(temp.path()).context("reading the migrated config")
 }
 
 #[derive(Debug)]
@@ -496,6 +524,7 @@ fn edit(layers: &Layers, change: impl FnOnce(&mut DocumentMut) -> Result<()>) ->
             return Err(error).with_context(|| format!("reading {}", layers.file.display()))
         }
     };
+    let text = migrated_text(&layers.file, text)?;
     let mut doc: DocumentMut = text
         .parse()
         .with_context(|| format!("parsing {}", layers.file.display()))?;
