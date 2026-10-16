@@ -2,11 +2,27 @@ name: agent-drafting
 title: graph workbench — drafting an agent
 grid: { cols: 120, rows: 36 }
 
-agent: agent_drafter
+agent: network_drafter
 
-chat: "an agent that writes release notes from the commits since a tag"
+chat: "yes, build it"
 
 llm:
+  - call: workbench__set_sketch
+    input:
+      restate:
+        outcome: Release notes written from the commits since a tag
+        success: Short, customer-facing notes grouped into features and fixes
+        constraint: One agent turn per release
+        out_of_scope: [Internal changes such as CI and tooling]
+      nodes:
+        - name: release_notes
+          kind: agent
+          job: Reads the commits since a tag and writes the release notes
+          model: chat
+          principles: [Plans before agents]
+  - call: agent__agent_drafter
+    input:
+      node: release_notes
   - call: workbench__set_artifact
     input:
       kind: agent
@@ -29,9 +45,10 @@ llm:
           You write release notes for one release. Read the commits since the given tag with
           github__tool__git_log, group them into features and fixes, and write short, customer-facing
           notes. Leave out internal changes such as CI and tooling.
+  - text: '{"name": "release_notes", "status": "drafted", "summary": "Reads the commits since the tag with git_log and returns markdown notes", "problems": []}'
   - text: >-
-      There's a first draft in the pane. Should it also be usable in chat, or only as a
-      plan step taking the tag as input?
+      release_notes is drafted: it reads the commits since the tag with git_log and writes
+      the notes in one turn on the chat role. Want me to test it on v0.15.0?
 
 capture:
   at: loaded

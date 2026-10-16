@@ -179,7 +179,7 @@ pub struct App {
     /// The terminal reports Shift+Enter distinctly (keyboard-enhancement
     /// protocol); otherwise only Alt+Enter can insert a newline.
     pub enhanced_keys: bool,
-    pub artifact: Option<super::artifact::ArtifactView>,
+    pub network: Option<graph_runtime::workbench::NetworkView>,
     pub discard_armed: bool,
 }
 
@@ -210,7 +210,7 @@ impl App {
             regions: RefCell::new(Regions::default()),
             last_click: None,
             enhanced_keys: false,
-            artifact: None,
+            network: None,
             discard_armed: false,
         }
     }
@@ -304,8 +304,8 @@ pub enum Effect {
     Validate,
     LoadContext,
     SavePlan,
-    SaveArtifact,
-    DiscardArtifact,
+    SaveNetwork,
+    DiscardNetwork,
     /// One-level undo of the last draft replacement (again to redo).
     RestoreDraft,
     /// Mirror the display breakpoints into the shared debug controls.
@@ -329,8 +329,8 @@ impl Effect {
             Effect::Validate => "validate",
             Effect::LoadContext => "load-context",
             Effect::SavePlan => "save-plan",
-            Effect::SaveArtifact => "save-artifact",
-            Effect::DiscardArtifact => "discard-artifact",
+            Effect::SaveNetwork => "save-network",
+            Effect::DiscardNetwork => "discard-network",
             Effect::RestoreDraft => "restore-draft",
             Effect::SyncDebug { .. } => "sync-debug",
             Effect::ApplyEdit { commit: true, .. } => "apply-edit",
@@ -592,10 +592,10 @@ fn on_event(app: &mut App, event: WorkbenchEvent) -> Vec<Effect> {
             app.status = text;
             Vec::new()
         }
-        WorkbenchEvent::ArtifactChanged(view) => {
+        WorkbenchEvent::NetworkChanged(view) => {
             app.discard_armed = false;
-            app.artifact = view.map(|view| *view);
-            if app.artifact.is_some() {
+            app.network = (!view.is_empty()).then_some(*view);
+            if app.network.is_some() {
                 app.ws.tab = WsTab::Plan;
             }
             Vec::new()
@@ -993,8 +993,8 @@ fn request_quit(app: &mut App) -> Vec<Effect> {
 }
 
 fn save(app: &mut App) -> Vec<Effect> {
-    if app.artifact.is_some() {
-        return vec![Effect::SaveArtifact];
+    if app.network.is_some() {
+        return vec![Effect::SaveNetwork];
     }
     if app.ws.doc.is_none() {
         app.status = "nothing to save — no draft yet".to_string();
@@ -1054,15 +1054,15 @@ fn on_chat_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
 }
 
 fn on_workspace_key(app: &mut App, key: KeyEvent) -> Vec<Effect> {
-    if let (Some(view), KeyCode::Char('x')) = (&app.artifact, key.code) {
+    if let (Some(view), KeyCode::Char('x')) = (&app.network, key.code) {
         if app.discard_armed {
             app.discard_armed = false;
-            return vec![Effect::DiscardArtifact];
+            return vec![Effect::DiscardNetwork];
         }
         app.discard_armed = true;
         app.status = format!(
-            "discard the {} draft? x again to discard · any other key keeps it",
-            view.kind.label()
+            "discard the network and its {} drafts? x again to discard · any other key keeps it",
+            view.unsaved()
         );
         return Vec::new();
     }
@@ -1822,35 +1822,42 @@ steps:
 
     #[test]
     fn an_open_draft_takes_the_pane_and_the_save_and_discard_keys() {
-        use crate::workbench::artifact::{ArtifactKind, ArtifactView};
+        use graph_runtime::workbench::{ArtifactKind, NetworkView, NodeStatus, NodeView};
         let mut app = App::new(Some(two_step_doc()));
         app.ws.tab = WsTab::Run;
         update(
             &mut app,
-            WorkbenchEvent::ArtifactChanged(Some(Box::new(ArtifactView {
-                kind: ArtifactKind::Agent,
-                yaml: "name: triager\n".to_string(),
-                problems: Vec::new(),
-                last_run: None,
-                tested: false,
-                parked: None,
-            }))),
+            WorkbenchEvent::NetworkChanged(Box::new(NetworkView {
+                nodes: vec![NodeView {
+                    name: "triager".to_string(),
+                    kind: ArtifactKind::Agent,
+                    job: String::new(),
+                    model: None,
+                    principles: Vec::new(),
+                    sketched: false,
+                    status: NodeStatus::Drafted,
+                    yaml: Some("name: triager\n".to_string()),
+                    problems: Vec::new(),
+                    last_run: None,
+                }],
+                ..NetworkView::default()
+            })),
         );
-        assert!(app.artifact.is_some());
+        assert!(app.network.is_some());
         assert_eq!(app.ws.tab, WsTab::Plan, "the draft is shown");
 
-        assert_eq!(update(&mut app, ctrl('s')), vec![Effect::SaveArtifact]);
+        assert_eq!(update(&mut app, ctrl('s')), vec![Effect::SaveNetwork]);
 
         app.focus = Focus::Workspace;
         assert!(update(&mut app, key(KeyCode::Char('x'))).is_empty());
         assert!(app.status.contains("discard"), "{}", app.status);
         assert_eq!(
             update(&mut app, key(KeyCode::Char('x'))),
-            vec![Effect::DiscardArtifact]
+            vec![Effect::DiscardNetwork]
         );
 
-        update(&mut app, WorkbenchEvent::ArtifactChanged(None));
-        assert!(app.artifact.is_none());
+        update(&mut app, WorkbenchEvent::NetworkChanged(Box::default()));
+        assert!(app.network.is_none());
         assert_eq!(update(&mut app, ctrl('s')), vec![Effect::SavePlan]);
     }
 

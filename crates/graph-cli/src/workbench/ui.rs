@@ -412,8 +412,8 @@ fn draw_workspace(frame: &mut Frame, app: &App, area: Rect, regions: &mut Region
         WsTab::Context => 1,
         WsTab::Run => 2,
     };
-    let first = match &app.artifact {
-        Some(view) => format!("1 {}", view.kind.label()),
+    let first = match &app.network {
+        Some(_) => "1 network".to_string(),
         None => "1 plan".to_string(),
     };
     let titles = [first.as_str(), "2 context", "3 run"];
@@ -438,8 +438,8 @@ fn draw_workspace(frame: &mut Frame, app: &App, area: Rect, regions: &mut Region
     frame.render_widget(tabs, tabs_area);
 
     match app.ws.tab {
-        WsTab::Plan => match &app.artifact {
-            Some(view) => draw_artifact(frame, app, view, body),
+        WsTab::Plan => match &app.network {
+            Some(view) => draw_network(frame, app, view, body),
             None => draw_plan_tab(frame, app, body, regions),
         },
         WsTab::Context => draw_context_tab(frame, &app.ws, body, regions),
@@ -1527,62 +1527,73 @@ fn artifact_block(lines: &mut Vec<Line<'static>>, label: &str, text: Option<Stri
     }
 }
 
-fn artifact_lines(view: &super::artifact::ArtifactView) -> Vec<Line<'static>> {
+fn node_lines(node: &graph_runtime::workbench::NodeView, lines: &mut Vec<Line<'static>>) {
     use super::artifact::ArtifactKind;
-    let doc: serde_yaml::Value =
-        serde_yaml::from_str(&view.yaml).unwrap_or(serde_yaml::Value::Null);
+    let Some(yaml) = &node.yaml else {
+        return;
+    };
+    let doc: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap_or(serde_yaml::Value::Null);
     let field = |key: &str| doc.get(key);
-    let name = yaml_text(field("name")).unwrap_or_else(|| "unnamed".to_string());
-    let mut lines = vec![Line::styled(name, ACCENT.add_modifier(Modifier::BOLD))];
-    if let Some(parked) = &view.parked {
-        lines.push(Line::styled(format!("⏸ waiting: {parked}"), DIM));
-    }
     lines.push(Line::default());
-    artifact_field(&mut lines, "description", yaml_text(field("description")));
-    match view.kind {
+    lines.push(Line::styled(
+        format!("{} {}", node.kind.label(), node.name),
+        ACCENT.add_modifier(Modifier::BOLD),
+    ));
+    artifact_field(lines, "description", yaml_text(field("description")));
+    match node.kind {
         ArtifactKind::Agent => {
-            artifact_field(&mut lines, "model", yaml_text(field("model")));
-            artifact_list(&mut lines, "tools", yaml_list(field("tools")));
-            artifact_list(&mut lines, "subagents", yaml_list(field("subagents")));
-            artifact_list(&mut lines, "handoffs", yaml_list(field("handoffs")));
-            artifact_schema(&mut lines, "input", field("input_schema"));
-            artifact_schema(&mut lines, "output", field("output_schema"));
-            artifact_field(
-                &mut lines,
-                "max iterations",
-                yaml_text(field("max_iterations")),
-            );
-            artifact_block(
-                &mut lines,
-                "system prompt",
-                yaml_text(field("system_prompt")),
-            );
+            artifact_field(lines, "model", yaml_text(field("model")));
+            artifact_list(lines, "tools", yaml_list(field("tools")));
+            artifact_list(lines, "subagents", yaml_list(field("subagents")));
+            artifact_list(lines, "handoffs", yaml_list(field("handoffs")));
+            artifact_schema(lines, "input", field("input_schema"));
+            artifact_schema(lines, "output", field("output_schema"));
+            artifact_field(lines, "max iterations", yaml_text(field("max_iterations")));
+            artifact_block(lines, "system prompt", yaml_text(field("system_prompt")));
         }
         ArtifactKind::Tool => {
-            artifact_field(&mut lines, "kind", yaml_text(field("kind")));
+            artifact_field(lines, "kind", yaml_text(field("kind")));
             if let Some(command) = yaml_text(field("command")) {
                 let mut run = vec![command];
                 run.extend(yaml_list(field("args")));
-                artifact_field(&mut lines, "runs", Some(run.join(" ")));
+                artifact_field(lines, "runs", Some(run.join(" ")));
             }
-            artifact_block(&mut lines, "prompt", yaml_text(field("prompt")));
-            artifact_field(&mut lines, "model", yaml_text(field("model")));
-            artifact_field(&mut lines, "read only", yaml_text(field("read_only")));
-            artifact_schema(&mut lines, "input", field("input_schema"));
-            artifact_schema(&mut lines, "output", field("output_schema"));
+            artifact_block(lines, "prompt", yaml_text(field("prompt")));
+            artifact_field(lines, "model", yaml_text(field("model")));
+            artifact_field(lines, "read only", yaml_text(field("read_only")));
+            artifact_schema(lines, "input", field("input_schema"));
+            artifact_schema(lines, "output", field("output_schema"));
+        }
+        ArtifactKind::Plan => {
+            let steps = field("steps")
+                .and_then(serde_yaml::Value::as_sequence)
+                .map(|steps| {
+                    steps
+                        .iter()
+                        .map(|step| {
+                            format!(
+                                "{} {}",
+                                yaml_text(step.get("id")).unwrap_or_default(),
+                                yaml_text(step.get("tool_name").or_else(|| step.get("toolName")))
+                                    .unwrap_or_default()
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            artifact_list(lines, "steps", steps);
         }
     }
-    lines.push(Line::default());
-    if view.problems.is_empty() {
+    if node.problems.is_empty() {
         lines.push(Line::styled("✓ no problems", OK));
     } else {
-        for problem in &view.problems {
+        for problem in &node.problems {
             lines.push(Line::styled(format!("✗ {problem}"), ERROR));
         }
     }
-    if view.kind == ArtifactKind::Tool {
-        match &view.last_run {
-            None => lines.push(Line::styled("not tested yet", DIM)),
+    if node.kind == ArtifactKind::Tool {
+        match &node.last_run {
+            None => lines.push(Line::styled("not tried yet", DIM)),
             Some(run) if run["ran"] == serde_json::json!(true) => {
                 let (mark, style) = if run["is_error"] == serde_json::json!(true) {
                     ("✗ test run failed", ERROR)
@@ -1604,17 +1615,99 @@ fn artifact_lines(view: &super::artifact::ArtifactView) -> Vec<Line<'static>> {
             }
         }
     }
+}
+
+fn network_lines(view: &graph_runtime::workbench::NetworkView) -> Vec<Line<'static>> {
+    use graph_runtime::workbench::NodeStatus;
+    let mut lines = Vec::new();
+    if let Some(restate) = &view.restate {
+        lines.push(Line::styled(
+            restate.outcome.clone(),
+            ACCENT.add_modifier(Modifier::BOLD),
+        ));
+        artifact_field(
+            &mut lines,
+            "success",
+            Some(restate.success.clone()).filter(|s| !s.is_empty()),
+        );
+        artifact_field(
+            &mut lines,
+            "constraint",
+            Some(restate.constraint.clone()).filter(|s| !s.is_empty()),
+        );
+        artifact_list(&mut lines, "out of scope", restate.out_of_scope.clone());
+        lines.push(Line::default());
+    }
+    for node in &view.nodes {
+        let style = match node.status {
+            NodeStatus::Ready => OK,
+            NodeStatus::Failed => ERROR,
+            NodeStatus::Sketched => DIM,
+            NodeStatus::Drafted => Style::default(),
+        };
+        let mut line = format!(
+            "{} {} · {}",
+            node.kind.label(),
+            node.name,
+            node.status.label()
+        );
+        if let Some(model) = &node.model {
+            line.push_str(&format!(" · {model}"));
+        }
+        if !node.sketched && view.restate.is_some() {
+            line.push_str(" · not in the sketch");
+        }
+        lines.push(Line::styled(line, style));
+        if !node.job.is_empty() {
+            lines.push(Line::styled(format!("  {}", node.job), DIM));
+        }
+        if !node.principles.is_empty() {
+            lines.push(Line::styled(
+                format!("  {}", node.principles.join(" · ")),
+                DIM,
+            ));
+        }
+    }
+    for edge in &view.edges {
+        lines.push(Line::styled(
+            format!("  {} → {} ({})", edge.from, edge.to, edge.kind.label()),
+            DIM,
+        ));
+    }
+    if let Some(test) = view.tests.last() {
+        lines.push(Line::default());
+        let (mark, style) = if test.passed {
+            ("✓ test passed", OK)
+        } else {
+            ("✗ test failed", ERROR)
+        };
+        lines.push(Line::styled(format!("{mark}: {}", test.message), style));
+        if !test.ran.is_empty() {
+            lines.push(Line::styled(format!("  ran {}", test.ran.join(", ")), DIM));
+        }
+    }
+    for node in &view.nodes {
+        node_lines(node, &mut lines);
+    }
     lines.push(Line::default());
-    lines.push(Line::styled("Ctrl+S save · x twice discard", DIM));
+    lines.push(Line::styled(
+        "Ctrl+S save the network · x twice discard it",
+        DIM,
+    ));
     lines
 }
 
-fn draw_artifact(frame: &mut Frame, app: &App, view: &super::artifact::ArtifactView, area: Rect) {
-    let title = format!(" {} draft ", view.kind.label());
+fn draw_network(
+    frame: &mut Frame,
+    app: &App,
+    view: &graph_runtime::workbench::NetworkView,
+    area: Rect,
+) {
+    let title = format!(" network · {} drafted ", view.unsaved());
     let block = Block::bordered().title(title).border_style(DIM);
     render_scrolled(
         frame,
-        artifact_lines(view),
+        network_lines(view),
         block,
         area,
         &app.ws.detail_scroll,

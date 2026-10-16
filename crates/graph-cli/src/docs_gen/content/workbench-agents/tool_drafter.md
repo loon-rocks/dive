@@ -1,6 +1,7 @@
 ---
-summary: Drafts a new tool with you in the workbench pane, test-runs it, and saves it when you say so.
+summary: Builds one tool node of the architect's sketch as a user tool file and test-runs it.
 ---
 
-- Starts when you run `graph wb tool`.
+- `network_drafter` runs it as a subagent; it never talks to you.
 - Test runs need your approval.
+- Returns a question instead of guessing a value only you know.

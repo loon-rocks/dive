@@ -14,6 +14,16 @@
       ]
     },
     {
+      "group": "Networks",
+      "pages": [
+        "tools/reference/workbench/set_sketch",
+        "tools/reference/workbench/test_network",
+        "tools/reference/workbench/fail_test",
+        "tools/reference/workbench/save_network",
+        "tools/reference/workbench/discard_network"
+      ]
+    },
+    {
       "group": "Plan edits",
       "pages": [
         "tools/reference/workbench/update_metadata",

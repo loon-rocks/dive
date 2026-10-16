@@ -11,9 +11,10 @@ Global agents run in `graph ask`, `graph chat` and plan steps. Workbench agents 
 | [`chat`](/agents/reference/built-in/chat) | The default agent for questions and tasks, with access to every tool and plan in your catalog. |
 | [`agent_drafter`](/agents/reference/built-in/agent_drafter) | Writes a new agent with you and saves it to the project. |
 | [`tool_drafter`](/agents/reference/built-in/tool_drafter) | Writes a new tool with you, test-runs it, and saves it to the project. |
-| [`front_desk (workbench)`](/agents/reference/built-in/workbench/front_desk) | Greets you when the workbench opens and hands you to the plan, agent or tool drafter. |
-| [`plan_drafter (workbench)`](/agents/reference/built-in/workbench/plan_drafter) | Drafts a new plan with you, or opens an existing plan you want to work on. |
+| [`front_desk (workbench)`](/agents/reference/built-in/workbench/front_desk) | Greets you when the workbench opens, answers questions about what exists, and takes you to the drafting architect or the plan editor. |
+| [`network_drafter (workbench)`](/agents/reference/built-in/workbench/network_drafter) | The drafting architect. Interviews you, sketches the most efficient network of tools, plans and agents, has the builders draft each node, tests the network and saves it when you say so. |
+| [`plan_drafter (workbench)`](/agents/reference/built-in/workbench/plan_drafter) | Builds one plan node of the architect's sketch with the built-in compose_plan plan. |
 | [`plan_loader (workbench)`](/agents/reference/built-in/workbench/plan_loader) | Finds an existing plan from a name or description and loads it into the workbench. |
 | [`plan_editor (workbench)`](/agents/reference/built-in/workbench/plan_editor) | Edits, validates, runs and saves the plan open in the workbench, one change at a time. |
-| [`agent_drafter (workbench)`](/agents/reference/built-in/workbench/agent_drafter) | Drafts a new agent with you in the workbench pane and saves it when you say so. |
-| [`tool_drafter (workbench)`](/agents/reference/built-in/workbench/tool_drafter) | Drafts a new tool with you in the workbench pane, test-runs it, and saves it when you say so. |
+| [`agent_drafter (workbench)`](/agents/reference/built-in/workbench/agent_drafter) | Builds one agent node of the architect's sketch as an agent file. |
+| [`tool_drafter (workbench)`](/agents/reference/built-in/workbench/tool_drafter) | Builds one tool node of the architect's sketch as a user tool file and test-runs it. |

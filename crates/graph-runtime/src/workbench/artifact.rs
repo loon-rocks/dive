@@ -1,11 +1,16 @@
 use super::event::WorkbenchEvent;
+use super::network::{self, Network, NetworkView, TestRun};
 use super::runner::UiInterlocutor;
 use super::tools::SharedDraft;
-use graph_core::agent::conversation::HandoffGuard;
-use graph_core::pipeline::Pipeline;
-use graph_core::{ToolDef, ToolOutcome};
+use graph_core::agent::conversation::{Conversation, HandoffGuard};
+use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor, Pipeline, StepPath};
+use graph_core::store::EntryBody;
+use graph_core::toolbox::AgentToolbox;
+use graph_core::{ExcludingRegistry, NullSink, ToolDef, ToolOutcome};
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc::UnboundedSender;
 
 pub const SET_ARTIFACT: &str = "workbench__set_artifact";
@@ -15,6 +20,11 @@ pub const DISCARD_ARTIFACT: &str = "workbench__discard_artifact";
 pub const LOAD_ARTIFACT: &str = "workbench__load_artifact";
 pub const LIST_ARTIFACTS: &str = "workbench__list_artifacts";
 pub const SHOW_ARTIFACT: &str = "workbench__show_artifact";
+pub const SET_SKETCH: &str = "workbench__set_sketch";
+pub const TEST_NETWORK: &str = "workbench__test_network";
+pub const FAIL_TEST: &str = "workbench__fail_test";
+pub const SAVE_NETWORK: &str = "workbench__save_network";
+pub const DISCARD_NETWORK: &str = "workbench__discard_network";
 
 pub const ARTIFACT_TOOLS: [&str; 7] = [
     SET_ARTIFACT,
@@ -26,12 +36,24 @@ pub const ARTIFACT_TOOLS: [&str; 7] = [
     SHOW_ARTIFACT,
 ];
 
+pub const NETWORK_TOOLS: [&str; 5] = [
+    SET_SKETCH,
+    TEST_NETWORK,
+    FAIL_TEST,
+    SAVE_NETWORK,
+    DISCARD_NETWORK,
+];
+
+pub const NETWORK_DRAFTER: &str = "network_drafter";
 pub const TOOL_DRAFTER: &str = "tool_drafter";
 pub const AGENT_DRAFTER: &str = "agent_drafter";
+
+pub type Tester = Arc<OnceLock<Conversation>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArtifactKind {
     Agent,
+    Plan,
     Tool,
 }
 
@@ -39,6 +61,7 @@ impl ArtifactKind {
     pub fn parse(text: &str) -> Option<Self> {
         match text {
             "agent" => Some(Self::Agent),
+            "plan" => Some(Self::Plan),
             "tool" => Some(Self::Tool),
             _ => None,
         }
@@ -47,153 +70,136 @@ impl ArtifactKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::Agent => "agent",
+            Self::Plan => "plan",
             Self::Tool => "tool",
         }
     }
-
-    fn drafter(self) -> &'static str {
-        match self {
-            Self::Agent => AGENT_DRAFTER,
-            Self::Tool => TOOL_DRAFTER,
-        }
-    }
 }
 
-#[derive(Debug, Clone)]
-pub struct Artifact {
-    pub kind: ArtifactKind,
-    pub yaml: String,
-    pub problems: Vec<String>,
-    pub last_run: Option<Value>,
-    pub editing: Option<std::path::PathBuf>,
-    pub original: Option<String>,
+fn yaml_name(yaml: &str) -> String {
+    serde_yaml::from_str::<serde_yaml::Value>(yaml)
+        .ok()
+        .and_then(|doc| {
+            doc.get("name")
+                .and_then(|name| name.as_str().map(str::to_string))
+        })
+        .unwrap_or_else(|| "unnamed".to_string())
 }
 
-impl Artifact {
-    pub fn name(&self) -> String {
-        serde_yaml::from_str::<serde_yaml::Value>(&self.yaml)
-            .ok()
-            .and_then(|doc| {
-                doc.get("name")
-                    .and_then(|name| name.as_str().map(str::to_string))
-            })
-            .unwrap_or_else(|| "unnamed".to_string())
-    }
+pub fn view(draft: &SharedDraft) -> NetworkView {
+    draft.lock().unwrap().network.view()
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ArtifactView {
-    pub kind: ArtifactKind,
-    pub yaml: String,
-    pub problems: Vec<String>,
-    pub last_run: Option<Value>,
-    pub tested: bool,
-    pub parked: Option<String>,
-}
-
-fn is_drafter(name: &str) -> bool {
-    name == TOOL_DRAFTER || name == AGENT_DRAFTER
-}
-
-pub fn view(draft: &SharedDraft, pipeline: &Pipeline) -> Option<ArtifactView> {
-    let state = draft.lock().unwrap();
-    let artifact = state.artifact.as_ref()?;
-    Some(ArtifactView {
-        kind: artifact.kind,
-        yaml: artifact.yaml.clone(),
-        problems: artifact.problems.clone(),
-        last_run: artifact.last_run.clone(),
-        tested: artifact.kind == ArtifactKind::Tool && pipeline.tool_was_tested(&artifact.yaml),
-        parked: state
-            .parked
-            .as_ref()
-            .map(|parked| format!("{} draft '{}'", parked.kind.label(), parked.name())),
-    })
-}
-
-fn publish(draft: &SharedDraft, pipeline: &Pipeline, tx: &UnboundedSender<WorkbenchEvent>) {
-    let _ = tx.send(WorkbenchEvent::ArtifactChanged(
-        view(draft, pipeline).map(Box::new),
-    ));
+pub fn publish(draft: &SharedDraft, tx: &UnboundedSender<WorkbenchEvent>) {
+    let _ = tx.send(WorkbenchEvent::NetworkChanged(Box::new(view(draft))));
 }
 
 fn outcome(result: Value, is_error: bool) -> ToolOutcome {
     ToolOutcome { result, is_error }
 }
 
-async fn check(pipeline: &Pipeline, kind: ArtifactKind, yaml: &str) -> Vec<String> {
+fn error(message: impl Into<String>) -> ToolOutcome {
+    outcome(json!({"error": message.into()}), true)
+}
+
+pub async fn check(
+    pipeline: &Pipeline,
+    network: &Network,
+    kind: ArtifactKind,
+    yaml: &str,
+) -> Vec<String> {
+    let over = network::overlay(pipeline, network);
     match kind {
-        ArtifactKind::Tool => pipeline.check_tool_file(yaml),
-        ArtifactKind::Agent => pipeline
-            .check_agent_file(yaml)
-            .await
-            .err()
-            .unwrap_or_default(),
+        ArtifactKind::Tool => over.check_tool_file(yaml),
+        ArtifactKind::Agent => over.check_agent_file(yaml).await.err().unwrap_or_default(),
+        ArtifactKind::Plan => match network::parse_plan(yaml) {
+            Ok(doc) => super::tools::plan_problems(&over, &doc),
+            Err(problem) => vec![problem],
+        },
     }
+}
+
+pub async fn put(
+    draft: &SharedDraft,
+    pipeline: &Pipeline,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    kind: ArtifactKind,
+    name: &str,
+    yaml: &str,
+) -> ToolOutcome {
+    let network = draft.lock().unwrap().network.clone();
+    let problems = check(pipeline, &network, kind, yaml).await;
+    let placed =
+        draft
+            .lock()
+            .unwrap()
+            .network
+            .put_draft(kind, name, yaml.to_string(), problems.clone());
+    if let Err(refusal) = placed {
+        return error(refusal);
+    }
+    publish(draft, tx);
+    outcome(
+        json!({"name": name, "kind": kind.label(), "problems": problems}),
+        false,
+    )
 }
 
 pub async fn set_artifact(
     draft: &SharedDraft,
     pipeline: &Pipeline,
     tx: &UnboundedSender<WorkbenchEvent>,
+    kind: ArtifactKind,
     input: &Value,
 ) -> ToolOutcome {
-    let Some(kind) = input["kind"].as_str().and_then(ArtifactKind::parse) else {
-        return outcome(json!({"error": "kind must be \"agent\" or \"tool\""}), true);
-    };
     let Some(yaml) = input["yaml"]
         .as_str()
         .filter(|yaml| !yaml.trim().is_empty())
     else {
-        return outcome(json!({"error": "yaml must be the whole file"}), true);
+        return error("yaml must be the whole file");
     };
-    if let Some(open) = &draft.lock().unwrap().artifact {
-        if open.kind != kind {
-            return outcome(
-                json!({"error": format!("a {} draft is open; save or discard it first", open.kind.label())}),
-                true,
-            );
+    let name = yaml_name(yaml);
+    put(draft, pipeline, tx, kind, &name, yaml).await
+}
+
+fn pick(
+    network: &Network,
+    kind: ArtifactKind,
+    name: Option<&str>,
+) -> Result<(String, String), String> {
+    let drafted: Vec<&network::Node> = network
+        .nodes
+        .iter()
+        .filter(|node| node.kind == kind && node.drafted())
+        .collect();
+    let node = match name {
+        Some(name) => {
+            let name = network::bare_name(kind, name);
+            drafted.into_iter().find(|node| node.name == name)
         }
-        let incoming = Artifact {
-            kind,
-            yaml: yaml.to_string(),
-            problems: Vec::new(),
-            last_run: None,
-            editing: None,
-            original: None,
+        None if drafted.len() == 1 => drafted.into_iter().next(),
+        None if drafted.is_empty() => None,
+        None => {
+            return Err(format!(
+                "several {} drafts are open ({}); pass `name`",
+                kind.label(),
+                drafted
+                    .iter()
+                    .map(|node| node.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
         }
-        .name();
-        let current = open.name();
-        if incoming != current && current != "unnamed" {
-            return outcome(
-                json!({"error": format!(
-                    "the {} draft '{current}' is still open; save or discard it before starting '{incoming}'",
-                    kind.label()
-                )}),
-                true,
-            );
-        }
-    }
-    let problems = check(pipeline, kind, yaml).await;
-    let (editing, original) = draft
-        .lock()
-        .unwrap()
-        .artifact
-        .as_ref()
-        .map(|open| (open.editing.clone(), open.original.clone()))
-        .unwrap_or_default();
-    let artifact = Artifact {
-        kind,
-        yaml: yaml.to_string(),
-        problems: problems.clone(),
-        last_run: None,
-        editing,
-        original,
     };
-    let name = artifact.name();
-    draft.lock().unwrap().artifact = Some(artifact);
-    publish(draft, pipeline, tx);
-    outcome(json!({"name": name, "problems": problems}), false)
+    let node = node.ok_or_else(|| {
+        format!(
+            "there is no {} draft{} to use",
+            kind.label(),
+            name.map(|name| format!(" named '{name}'"))
+                .unwrap_or_default()
+        )
+    })?;
+    Ok((node.name.clone(), node.yaml.clone().unwrap_or_default()))
 }
 
 pub async fn try_artifact(
@@ -202,15 +208,14 @@ pub async fn try_artifact(
     tx: &UnboundedSender<WorkbenchEvent>,
     input: &Value,
 ) -> ToolOutcome {
-    let yaml = match &draft.lock().unwrap().artifact {
-        Some(artifact) if artifact.kind == ArtifactKind::Tool => artifact.yaml.clone(),
-        Some(_) => return outcome(json!({"error": "only a tool draft can be test-run"}), true),
-        None => {
-            return outcome(
-                json!({"error": "there is no tool draft to test; set one first"}),
-                true,
-            )
-        }
+    let picked = pick(
+        &draft.lock().unwrap().network,
+        ArtifactKind::Tool,
+        input["name"].as_str(),
+    );
+    let (name, yaml) = match picked {
+        Ok(found) => found,
+        Err(refusal) => return error(refusal),
     };
     let asking = pipeline
         .clone()
@@ -220,12 +225,12 @@ pub async fn try_artifact(
         _ => json!({}),
     };
     let run = asking.try_tool_file(&yaml, sample).await;
-    if let Some(artifact) = draft.lock().unwrap().artifact.as_mut() {
-        if artifact.yaml == yaml {
-            artifact.last_run = Some(run.clone());
-        }
-    }
-    publish(draft, pipeline, tx);
+    draft
+        .lock()
+        .unwrap()
+        .network
+        .record_run(ArtifactKind::Tool, &name, &yaml, run.clone());
+    publish(draft, tx);
     outcome(for_the_model(run), false)
 }
 
@@ -253,75 +258,14 @@ fn for_the_model(run: Value) -> Value {
     trimmed
 }
 
-pub async fn save_artifact(
-    draft: &SharedDraft,
-    pipeline: &Pipeline,
-    tx: &UnboundedSender<WorkbenchEvent>,
-    overwrite: bool,
-    untested: bool,
-    confirm: bool,
-) -> Result<String, String> {
-    let Some(artifact) = draft.lock().unwrap().artifact.clone() else {
-        return Err("there is no draft to save".to_string());
-    };
-    let replacing = artifact.editing.is_some()
-        && artifact.original.as_deref() == Some(artifact.name().as_str());
-    let overwrite = overwrite || replacing;
-    let existing = artifact
-        .editing
-        .as_deref()
-        .filter(|path| replacing && !path.as_os_str().is_empty());
-    let asking;
-    let saving = if confirm {
-        asking = pipeline
-            .clone()
-            .with_interlocutor(Arc::new(UiInterlocutor::new(tx.clone())));
-        &asking
-    } else {
-        pipeline
-    };
-    let saved = match artifact.kind {
-        ArtifactKind::Tool => {
-            saving
-                .save_tool_file_at(&artifact.yaml, untested, overwrite, confirm, existing)
-                .await
-        }
-        ArtifactKind::Agent => {
-            saving
-                .save_agent_file_at(&artifact.yaml, overwrite, confirm, existing)
-                .await
-        }
-    };
-    let Some(name) = saved["saved"].as_str() else {
-        let mut message = saved["error"].as_str().unwrap_or("not saved").to_string();
-        if let Some(problems) = saved["problems"]
-            .as_array()
-            .filter(|problems| !problems.is_empty())
-        {
-            let listed: Vec<String> = problems
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect();
-            message.push_str(&format!(": {}", listed.join("; ")));
-        }
-        return Err(message);
-    };
-    let name = name.to_string();
-    draft.lock().unwrap().artifact = None;
-    publish(draft, pipeline, tx);
-    Ok(format!(
-        "saved {name} to {}",
-        saved["path"].as_str().unwrap_or_default()
-    ))
+pub struct Existing {
+    pub yaml: String,
+    pub editing: Option<PathBuf>,
+    pub name: String,
 }
 
-pub fn existing(
-    kind: ArtifactKind,
-    name: &str,
-    tool_dirs: &[std::path::PathBuf],
-) -> Result<Artifact, String> {
-    let (yaml, editing) = match kind {
+pub fn existing(kind: ArtifactKind, name: &str, tool_dirs: &[PathBuf]) -> Result<Existing, String> {
+    match kind {
         ArtifactKind::Agent => {
             let (set, _) = graph_core::agent::doc::AgentSet::load(
                 graph_core::agent::doc::BUILTINS,
@@ -330,7 +274,7 @@ pub fn existing(
             let doc = set
                 .get(name)
                 .ok_or_else(|| format!("there's no agent named '{name}'"))?;
-            match &doc.source {
+            let (yaml, editing) = match &doc.source {
                 graph_core::agent::doc::AgentSource::File(path) => (
                     std::fs::read_to_string(path)
                         .map_err(|e| format!("can't read {}: {e}", path.display()))?,
@@ -342,15 +286,18 @@ pub fn existing(
                     graph_core::format::stamp(graph_core::format::Kind::Agent, &mut value);
                     (
                         serde_yaml::to_string(&value).map_err(|e| e.to_string())?,
-                        Some(std::path::PathBuf::new()),
+                        None,
                     )
                 }
-            }
+            };
+            Ok(Existing {
+                yaml,
+                editing,
+                name: name.to_string(),
+            })
         }
         ArtifactKind::Tool => {
-            let bare = name
-                .strip_prefix(graph_core::user_tools::USER_TOOL_PREFIX)
-                .unwrap_or(name);
+            let bare = network::bare_name(kind, name);
             let docs = graph_core::user_tools::load_user_tools(tool_dirs)?;
             let doc = docs.into_iter().find(|doc| doc.name == bare).ok_or_else(|| {
                 format!("there's no user tool named '{bare}'; built-in pack tools can't be edited here")
@@ -358,27 +305,15 @@ pub fn existing(
             let path = doc
                 .path
                 .ok_or_else(|| format!("'{bare}' has no file to edit"))?;
-            (
-                std::fs::read_to_string(&path)
+            Ok(Existing {
+                yaml: std::fs::read_to_string(&path)
                     .map_err(|e| format!("can't read {}: {e}", path.display()))?,
-                Some(path),
-            )
+                editing: Some(path),
+                name: bare,
+            })
         }
-    };
-    Ok(Artifact {
-        kind,
-        yaml,
-        problems: Vec::new(),
-        last_run: None,
-        editing,
-        original: Some(match kind {
-            ArtifactKind::Agent => name.to_string(),
-            ArtifactKind::Tool => name
-                .strip_prefix(graph_core::user_tools::USER_TOOL_PREFIX)
-                .unwrap_or(name)
-                .to_string(),
-        }),
-    })
+        ArtifactKind::Plan => Err("plans open in the plan pane".to_string()),
+    }
 }
 
 pub async fn open_existing(
@@ -388,15 +323,32 @@ pub async fn open_existing(
     kind: ArtifactKind,
     name: &str,
 ) -> Result<String, String> {
-    if draft.lock().unwrap().artifact.is_some() {
-        return Err("a draft is already open; save or discard it first".to_string());
+    let found = existing(kind, name, &pipeline.drafted.tool_dirs)?;
+    if draft
+        .lock()
+        .unwrap()
+        .network
+        .node(kind, &found.name)
+        .is_some_and(|node| node.drafted())
+    {
+        return Err(format!(
+            "the {} '{}' is already open as a draft",
+            kind.label(),
+            found.name
+        ));
     }
-    let mut artifact = existing(kind, name, &pipeline.drafted.tool_dirs)?;
-    artifact.problems = check(pipeline, kind, &artifact.yaml).await;
-    let name = artifact.name();
-    draft.lock().unwrap().artifact = Some(artifact);
-    publish(draft, pipeline, tx);
-    Ok(name)
+    let network = draft.lock().unwrap().network.clone();
+    let problems = check(pipeline, &network, kind, &found.yaml).await;
+    draft.lock().unwrap().network.open(
+        kind,
+        &found.name,
+        found.yaml,
+        found.editing,
+        Some(found.name.clone()),
+        problems,
+    );
+    publish(draft, tx);
+    Ok(found.name)
 }
 
 pub fn list_agents(pipeline: &Pipeline) -> ToolOutcome {
@@ -439,84 +391,419 @@ pub async fn list_tools(pipeline: &Pipeline) -> ToolOutcome {
 
 pub fn discard_artifact(
     draft: &SharedDraft,
-    pipeline: &Pipeline,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    kind: ArtifactKind,
+    name: Option<&str>,
+) -> Result<String, String> {
+    let picked = pick(&draft.lock().unwrap().network, kind, name);
+    let (name, _) = picked?;
+    let discarded = draft
+        .lock()
+        .unwrap()
+        .network
+        .discard(kind, &name)
+        .ok_or_else(|| "there is no draft to discard".to_string())?;
+    publish(draft, tx);
+    Ok(discarded)
+}
+
+pub fn discard_network(
+    draft: &SharedDraft,
     tx: &UnboundedSender<WorkbenchEvent>,
 ) -> Option<String> {
-    let discarded = draft.lock().unwrap().artifact.take()?;
-    publish(draft, pipeline, tx);
-    Some(format!(
-        "discarded the {} draft '{}'",
-        discarded.kind.label(),
-        discarded.name()
+    let (empty, drafted) = {
+        let mut state = draft.lock().unwrap();
+        let empty = state.network.is_empty();
+        (empty, state.network.clear())
+    };
+    if empty {
+        return None;
+    }
+    publish(draft, tx);
+    Some(format!("discarded the network and its {drafted} drafts"))
+}
+
+pub fn set_sketch(
+    draft: &SharedDraft,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    input: &Value,
+) -> ToolOutcome {
+    let applied = draft.lock().unwrap().network.set_sketch(input);
+    match applied {
+        Ok(summary) => {
+            publish(draft, tx);
+            outcome(summary, false)
+        }
+        Err(refusal) => error(refusal),
+    }
+}
+
+pub fn fail_test(
+    draft: &SharedDraft,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    input: &Value,
+) -> ToolOutcome {
+    let nodes: Vec<String> = input["nodes"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let reason = input["reason"].as_str().unwrap_or_default().to_string();
+    {
+        let mut state = draft.lock().unwrap();
+        let Some(last) = state.network.tests.last_mut() else {
+            return error("there is no test run to fail; run workbench__test_network first");
+        };
+        last.passed = false;
+        if !reason.is_empty() {
+            last.answer = format!("{} (failed: {reason})", last.answer);
+        }
+        state.network.untest();
+        state.network.mark_failed(&nodes);
+    }
+    publish(draft, tx);
+    outcome(json!({"failed": nodes, "reason": reason}), false)
+}
+
+async fn ask_yes(
+    tx: &UnboundedSender<WorkbenchEvent>,
+    what: &str,
+    prompt: String,
+    key: &str,
+) -> Result<(), String> {
+    let interlocutor = UiInterlocutor::new(tx.clone());
+    let answer = interlocutor
+        .ask(AskRequest {
+            path: StepPath::top(what),
+            call_stack: Vec::new(),
+            prompt,
+            schema: json!({
+                "type": "object",
+                "required": [key],
+                "properties": {key: {"type": "boolean", "description": "Go ahead?"}}
+            }),
+            default: Some(json!({key: true})),
+        })
+        .await;
+    match answer {
+        AskOutcome::Answered(answer) if answer[key] == json!(true) => Ok(()),
+        AskOutcome::Unavailable(reason) => Err(format!("the user couldn't be asked: {reason}")),
+        _ => Err("the user said no".to_string()),
+    }
+}
+
+fn ran_in(entries: &[graph_core::NewEntry], tools_used: &[String]) -> Vec<String> {
+    let mut ran = BTreeSet::new();
+    for entry in entries {
+        match &entry.body {
+            EntryBody::Message { .. } if entry.author != "user" => {
+                ran.insert(entry.author.clone());
+            }
+            EntryBody::Handoff { to, .. } => {
+                ran.insert(to.clone());
+            }
+            EntryBody::SubagentRun { agent, .. } => {
+                ran.insert(agent.clone());
+            }
+            _ => {}
+        }
+    }
+    ran.extend(tools_used.iter().cloned());
+    ran.into_iter().collect()
+}
+
+pub async fn test_network(
+    draft: &SharedDraft,
+    pipeline: &Pipeline,
+    tester: &Tester,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    input: &Value,
+) -> ToolOutcome {
+    let network = draft.lock().unwrap().network.clone();
+    let missing = network.missing();
+    if !missing.is_empty() {
+        return error(format!(
+            "not every node is drafted yet: {}",
+            missing.join(", ")
+        ));
+    }
+    let broken = network.with_problems();
+    if !broken.is_empty() {
+        return error(format!(
+            "fix these drafts before testing: {}",
+            broken.join(" | ")
+        ));
+    }
+    let entry = input["entry"].as_str().unwrap_or_default().to_string();
+    let Some(node) = network
+        .nodes
+        .iter()
+        .find(|node| node.name == entry || node.catalog_name() == entry)
+        .cloned()
+    else {
+        return error(format!(
+            "`entry` must name an agent or plan in the network, not '{entry}'"
+        ));
+    };
+    let message = input["message"].as_str().unwrap_or_default().to_string();
+    let plan_input = match &input["input"] {
+        Value::Object(_) => input["input"].clone(),
+        _ => json!({}),
+    };
+    let what = match node.kind {
+        ArtifactKind::Agent => format!("send \"{message}\" to {}", node.name),
+        _ => format!("run {} with {plan_input}", node.catalog_name()),
+    };
+    if let Err(refusal) = ask_yes(
+        tx,
+        "test_network",
+        format!("Test the network: {what}? Tools in it run for real, on each agent's own model, and nothing is saved."),
+        "run",
+    )
+    .await
+    {
+        return error(format!("not tested: {refusal}"));
+    }
+    let asking = pipeline
+        .clone()
+        .with_interlocutor(Arc::new(UiInterlocutor::new(tx.clone())));
+    let over = Arc::new(network::overlay(&asking, &network));
+    let run = match node.kind {
+        ArtifactKind::Agent => {
+            let Some(base) = tester.get() else {
+                return error("network tests need the workbench conversation");
+            };
+            if message.trim().is_empty() {
+                return error("`message` is required to test an agent");
+            }
+            let mut conversation = base.clone();
+            conversation.agents = Arc::new(graph_core::agent::doc::AgentSet::layered(
+                base.agents.iter().collect(),
+                vec![network::network_agents(&network)],
+            ));
+            let toolbox =
+                AgentToolbox::new(over.registry.clone(), over.clone(), over.plans.to_vec());
+            conversation.catalog = Arc::new(ExcludingRegistry::new(
+                Arc::new(toolbox),
+                vec!["plan_and_execute".to_string()],
+            ));
+            conversation.pipeline = over.clone();
+            conversation.context = None;
+            conversation.handoff_guard = None;
+            conversation.prompt_overrides.clear();
+            conversation.events = Arc::new(NullSink);
+            match conversation.run_turn(&[], &node.name, &message).await {
+                Ok(turn) => TestRun {
+                    entry: node.name.clone(),
+                    message: message.clone(),
+                    passed: true,
+                    ran: ran_in(&turn.entries, &turn.tools_used),
+                    answer: turn.text,
+                },
+                Err(failure) => TestRun {
+                    entry: node.name.clone(),
+                    message: message.clone(),
+                    passed: false,
+                    ran: Vec::new(),
+                    answer: failure.to_string(),
+                },
+            }
+        }
+        _ => {
+            let call = over.call_plan(&node.name, plan_input.clone()).await;
+            TestRun {
+                entry: node.catalog_name(),
+                message: plan_input.to_string(),
+                passed: !call.is_error,
+                ran: vec![node.catalog_name()],
+                answer: serde_json::to_string(&call.result).unwrap_or_default(),
+            }
+        }
+    };
+    let report = json!({
+        "passed": run.passed,
+        "ran": run.ran,
+        "answer": run.answer,
+        "note": "passed means it ran without an error; judge the answer against the restate, and call workbench__fail_test when it falls short",
+    });
+    draft.lock().unwrap().network.record_test(run);
+    publish(draft, tx);
+    outcome(report, false)
+}
+
+fn target(
+    node: &network::Node,
+    pipeline: &Pipeline,
+    plans_dir: Option<&Path>,
+) -> Result<PathBuf, String> {
+    if let Some(path) = &node.editing {
+        return Ok(path.clone());
+    }
+    match node.kind {
+        ArtifactKind::Tool => pipeline
+            .drafted
+            .tools_dir
+            .clone()
+            .map(|dir| dir.join(format!("{}.yaml", node.name)))
+            .ok_or_else(|| "no tools directory is configured ([tools].paths)".to_string()),
+        ArtifactKind::Agent => pipeline
+            .drafted
+            .agents_dir
+            .clone()
+            .map(|dir| dir.join(format!("{}.yaml", node.name)))
+            .ok_or_else(|| "no agents directory is available".to_string()),
+        ArtifactKind::Plan => {
+            let doc = network::parse_plan(node.yaml.as_deref().unwrap_or_default())?;
+            graph_core::pipeline::authoring::target_path(&doc, plans_dir).map_err(|e| e.to_string())
+        }
+    }
+}
+
+pub async fn save_network(
+    draft: &SharedDraft,
+    pipeline: &Pipeline,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    plans_dir: Option<&Path>,
+    untested: bool,
+    confirm: bool,
+) -> Result<String, String> {
+    let network = draft.lock().unwrap().network.clone();
+    if network.in_save_order().is_empty() {
+        return Err("there is nothing drafted to save".to_string());
+    }
+    let missing = network.missing();
+    if !missing.is_empty() {
+        return Err(format!(
+            "not every node is drafted yet: {}",
+            missing.join(", ")
+        ));
+    }
+    let broken = network.with_problems();
+    if !broken.is_empty() {
+        return Err(format!(
+            "these drafts have problems: {}",
+            broken.join(" | ")
+        ));
+    }
+    if !untested && !network.tested() {
+        return Err("the network hasn't passed a test since it last changed: test it with workbench__test_network first".to_string());
+    }
+    let mut plan = Vec::new();
+    for node in network.in_save_order() {
+        plan.push((node.clone(), target(node, pipeline, plans_dir)?));
+    }
+    if confirm {
+        let listing: Vec<String> = plan
+            .iter()
+            .map(|(node, path)| {
+                format!("- {} {} → {}", node.kind.label(), node.name, path.display())
+            })
+            .collect();
+        ask_yes(
+            tx,
+            "save_network",
+            format!(
+                "Save the network: {} files?\n{}",
+                plan.len(),
+                listing.join("\n")
+            ),
+            "save",
+        )
+        .await?;
+    }
+    let over = network::overlay(pipeline, &network);
+    let mut saved = Vec::new();
+    for (node, path) in &plan {
+        let yaml = node.yaml.clone().unwrap_or_default();
+        let replacing = node.editing.is_some();
+        let result = match node.kind {
+            ArtifactKind::Tool => {
+                let saved = pipeline
+                    .save_tool_file_at(&yaml, true, replacing, false, node.editing.as_deref())
+                    .await;
+                saved["path"]
+                    .as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| refusal(&saved))
+            }
+            ArtifactKind::Agent => {
+                let saved = over
+                    .save_agent_file_at(&yaml, replacing, false, node.editing.as_deref())
+                    .await;
+                saved["path"]
+                    .as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| refusal(&saved))
+            }
+            ArtifactKind::Plan => network::parse_plan(&yaml).and_then(|doc| {
+                graph_core::pipeline::authoring::write_doc(&doc, path, replacing)
+                    .map(|()| path.display().to_string())
+                    .map_err(|e| e.to_string())
+            }),
+        };
+        match result {
+            Ok(written) => saved.push((node.kind, node.name.clone(), written)),
+            Err(problem) => {
+                {
+                    let mut state = draft.lock().unwrap();
+                    for (kind, name, written) in &saved {
+                        state
+                            .network
+                            .mark_saved(*kind, name, PathBuf::from(written));
+                    }
+                }
+                publish(draft, tx);
+                return Err(format!(
+                    "saved {} of {}; {} {} was not saved: {problem}",
+                    saved.len(),
+                    plan.len(),
+                    node.kind.label(),
+                    node.name
+                ));
+            }
+        }
+    }
+    draft.lock().unwrap().network.clear();
+    publish(draft, tx);
+    Ok(format!(
+        "saved {}",
+        saved
+            .iter()
+            .map(|(_, _, path)| path.clone())
+            .collect::<Vec<_>>()
+            .join(", ")
     ))
 }
 
-pub fn handoff_guard(
-    draft: SharedDraft,
-    pipeline: Arc<Pipeline>,
-    tx: UnboundedSender<WorkbenchEvent>,
-) -> HandoffGuard {
-    Arc::new(move |from: &str, to: &str| {
-        let mut state = draft.lock().unwrap();
-        let between_drafters = is_drafter(from) && is_drafter(to);
-        if let Some(open) = &state.artifact {
-            if between_drafters && state.parked.is_none() {
-                state.parked = state.artifact.take();
-                drop(state);
-                publish(&draft, &pipeline, &tx);
-                return None;
-            }
-            return Some(format!(
-                "the {} draft '{}' isn't saved: save it or discard it before handing off",
-                open.kind.label(),
-                open.name()
-            ));
-        }
-        if state
-            .parked
-            .as_ref()
-            .is_some_and(|parked| parked.kind.drafter() == to)
-        {
-            state.artifact = state.parked.take();
-            drop(state);
-            publish(&draft, &pipeline, &tx);
-        }
-        None
+fn refusal(saved: &Value) -> String {
+    let mut message = saved["error"].as_str().unwrap_or("not saved").to_string();
+    if let Some(problems) = saved["problems"]
+        .as_array()
+        .filter(|problems| !problems.is_empty())
+    {
+        let listed: Vec<&str> = problems.iter().filter_map(Value::as_str).collect();
+        message.push_str(&format!(": {}", listed.join("; ")));
+    }
+    message
+}
+
+pub fn handoff_guard(draft: SharedDraft) -> HandoffGuard {
+    Arc::new(move |from: &str, _to: &str| {
+        let state = draft.lock().unwrap();
+        let unsaved = state.network.view().unsaved();
+        (from == NETWORK_DRAFTER && unsaved > 0).then(|| {
+            format!("the network has {unsaved} unsaved drafts: save it with workbench__save_network or discard it with workbench__discard_network before handing off")
+        })
     })
 }
 
 pub fn context_section(draft: &SharedDraft) -> String {
-    let state = draft.lock().unwrap();
-    let mut section = String::from("## Current draft\n");
-    match &state.artifact {
-        Some(artifact) => {
-            section.push_str(&format!(
-                "The pane shows this {} draft, current as of this turn:\n{}\n",
-                artifact.kind.label(),
-                artifact.yaml
-            ));
-            if artifact.problems.is_empty() {
-                section.push_str("It has no problems.\n");
-            } else {
-                section.push_str(&format!(
-                    "Its problems:\n- {}\n",
-                    artifact.problems.join("\n- ")
-                ));
-            }
-            if let Some(run) = &artifact.last_run {
-                section.push_str(&format!("Its last test run: {run}\n"));
-            }
-        }
-        None => section.push_str("(none yet: put a first draft in the pane)\n"),
-    }
-    if let Some(parked) = &state.parked {
-        section.push_str(&format!(
-            "Waiting while you work: the {} draft '{}', which is restored when you hand back.\n",
-            parked.kind.label(),
-            parked.name()
-        ));
-    }
-    section
+    draft.lock().unwrap().network.context_section()
 }
 
 fn kind_property(description: &str) -> Value {
@@ -527,44 +814,47 @@ pub fn tool_defs() -> Vec<ToolDef> {
     vec![
         ToolDef {
             name: SET_ARTIFACT.to_string(),
-            description: "Put a whole plan, agent or tool file in the workbench pane as the \
-                          current draft, replacing what's there. It is checked right away and \
-                          the problems come back, but nothing is written to disk. For a plan, \
-                          omit `yaml` to publish exactly what plan__compose_plan last returned; \
-                          replacing a plan with unsaved changes fails unless overwrite_draft is \
-                          true, which needs the user's confirmation."
+            description: "Put a whole agent, tool or plan file in the network draft as the draft \
+                          of the sketch node it names, replacing that node's previous draft. It \
+                          is checked right away, with nodes of the sketch that aren't drafted yet \
+                          counting as existing, and the problems come back; nothing is written to \
+                          disk. For a plan, omit `yaml` to use exactly what plan__compose_plan \
+                          last returned. With no network in progress, a plan goes to the plan \
+                          pane instead; replacing a plan there with unsaved changes fails unless \
+                          overwrite_draft is true, which needs the user's confirmation."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["kind"],
                 "properties": {
                     "kind": kind_property("What the file is"),
-                    "yaml": {"type": "string", "description": "The whole file. Required for an agent or tool; omit it for a plan to publish what plan__compose_plan returned"},
-                    "overwrite_draft": {"type": "boolean", "description": "Plans only: discard unsaved changes to the current plan draft, only after the user confirms"}
+                    "yaml": {"type": "string", "description": "The whole file. Required for an agent or tool; omit it for a plan to use what plan__compose_plan returned"},
+                    "overwrite_draft": {"type": "boolean", "description": "Plan pane only: discard unsaved changes to the current plan draft, only after the user confirms"}
                 }
             }),
             output_schema: None,
             output_example: Some(
-                json!({"identifier": "sprint_report", "steps": 3, "validation": "ok"}),
+                json!({"name": "changelog_section", "kind": "tool", "problems": []}),
             ),
             read_only: Some(true),
         },
         ToolDef {
             name: TRY_ARTIFACT.to_string(),
-            description: "Run the draft in the pane. A tool runs once on a sample input after \
-                          the user approves it, with the result shown in the pane. A plan runs \
-                          only when the user asks: its steps stream to the pane; gated=true \
-                          makes it a debug run that pauses for the USER's decision (step / \
-                          continue / skip / abort) and breaks on any failing call, and \
-                          `breakpoints` (top-level step ids, implies gated) run freely to those \
-                          steps. Prefer a debug run for a plan with side effects. An agent \
-                          draft can't be run."
+            description: "Run a draft. A tool draft runs once on a sample input after the user \
+                          approves it, with the result shown in the pane; pass `name` when \
+                          several tool drafts are open. The plan in the plan pane runs only when \
+                          the user asks: its steps stream to the pane; gated=true makes it a \
+                          debug run that pauses for the USER's decision (step / continue / skip \
+                          / abort) and breaks on any failing call, and `breakpoints` (top-level \
+                          step ids, implies gated) run freely to those steps. Agents and network \
+                          plans are tried with workbench__test_network."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["kind"],
                 "properties": {
                     "kind": kind_property("What the draft is"),
+                    "name": {"type": "string", "description": "Tools: which tool draft, when there are several"},
                     "input": {"type": "object", "description": "A tool's sample input matching its input_schema, or a plan's input validated against its input_schema"},
                     "gated": {"type": "boolean", "description": "Plans only: debug run, pausing for the user's decisions and breaking on errors. Default false."},
                     "breakpoints": {"type": "array", "items": {"type": "string"}, "description": "Plans only: top-level step ids to pause at. Implies gated; the run proceeds until a breakpoint (or a failing call) and pauses for the USER."}
@@ -576,18 +866,16 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: SAVE_ARTIFACT.to_string(),
-            description: "Save the draft in the pane to the project, only when the user asks to \
-                          save it. A plan goes back to the file it was loaded from, or into the \
-                          plans directory when it's new. A tool must have passed a test run \
-                          unless `untested` is true because the user said not to test it."
+            description: "Save the plan in the plan pane, only when the user asks to save it. It \
+                          goes back to the file it was loaded from, or into the plans directory \
+                          when it's new. Agents, tools and network plans are saved together \
+                          with workbench__save_network."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["kind"],
                 "properties": {
-                    "kind": kind_property("What the draft is"),
-                    "overwrite": {"type": "boolean", "description": "Agents and tools: replace an existing file, only after the user confirms"},
-                    "untested": {"type": "boolean", "description": "Tools only: save without a test run, only when the user said not to test it"}
+                    "kind": {"type": "string", "enum": ["plan"], "description": "Always plan"}
                 }
             }),
             output_schema: None,
@@ -615,7 +903,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
         ToolDef {
             name: SHOW_ARTIFACT.to_string(),
             description: "Read an existing plan, agent or user tool as YAML without touching \
-                          the pane, to inspect it or use it as a reference."
+                          any draft, to inspect it or use it as a reference."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -631,11 +919,11 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: LOAD_ARTIFACT.to_string(),
-            description: "Open an existing plan, agent or user tool in the pane for editing. \
-                          Saving it later replaces that file (an edited built-in agent is saved \
-                          as a project override). Open a plan only when the user names a \
-                          different one, never to continue the current draft; it fails when \
-                          the plan draft has unsaved changes unless overwrite_draft is true."
+            description: "Open an existing plan, agent or user tool for editing. A plan opens in \
+                          the plan pane (it fails when the plan draft has unsaved changes \
+                          unless overwrite_draft is true); an agent or tool opens as a node of \
+                          the network draft, and saving the network replaces its file (an \
+                          edited built-in agent is saved as a project override)."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -652,16 +940,142 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: DISCARD_ARTIFACT.to_string(),
-            description: "Throw away the agent or tool draft in the pane, only when the user \
-                          asks to discard it. Plan drafts can't be discarded."
+            description: "Throw away one agent, tool or plan draft in the network, only when the \
+                          user asks or the sketch dropped it. A sketched node goes back to not \
+                          drafted. The plan pane's plan can't be discarded."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["kind"],
                 "properties": {
-                    "kind": kind_property("What the draft is")
+                    "kind": kind_property("What the draft is"),
+                    "name": {"type": "string", "description": "Which draft, when there are several of this kind"}
                 }
             }),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: SET_SKETCH.to_string(),
+            description: "Put the design sketch of the network in the draft pane, replacing the \
+                          previous sketch: the confirmed restate, every node (agent, plan or \
+                          tool) with its job, model role and the design principles it applies, \
+                          and the edges between nodes. Nodes keep their drafts across sketches; \
+                          a drafted node left out of the new sketch is reported so it can be \
+                          discarded. Nothing is drafted or written."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["restate", "nodes"],
+                "properties": {
+                    "restate": {
+                        "type": "object",
+                        "required": ["outcome", "success", "constraint", "out_of_scope"],
+                        "properties": {
+                            "outcome": {"type": "string"},
+                            "success": {"type": "string"},
+                            "constraint": {"type": "string"},
+                            "out_of_scope": {"type": "array", "items": {"type": "string"}}
+                        }
+                    },
+                    "nodes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["name", "kind", "job"],
+                            "properties": {
+                                "name": {"type": "string", "description": "The file's name: a tool name without user__, a plan identifier, or an agent name"},
+                                "kind": {"type": "string", "enum": ["agent", "plan", "tool"]},
+                                "job": {"type": "string", "description": "What this node does, in one sentence"},
+                                "model": {"type": "string", "description": "The model role it runs on (agents, prompt tools, and plan steps that call a model); omit when it calls no model"},
+                                "principles": {"type": "array", "items": {"type": "string"}, "description": "The design principles this node applies"}
+                            }
+                        }
+                    },
+                    "edges": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["from", "to", "kind"],
+                            "properties": {
+                                "from": {"type": "string", "description": "A node name"},
+                                "to": {"type": "string", "description": "A node name, or an existing tool, plan or agent"},
+                                "kind": {"type": "string", "enum": ["handoff", "subagent", "calls"]}
+                            }
+                        }
+                    }
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({"nodes": 4, "edges": 3, "drafted": []})),
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: TEST_NETWORK.to_string(),
+            description: "Test the drafted, unsaved network once, after the user approves: one \
+                          conversation turn starting at an agent node with `message`, or one run \
+                          of a plan node with `input`. Every agent runs on its own model and \
+                          tools run for real; nothing is saved. Returns which nodes ran and the \
+                          answer. Every node has to be drafted without problems first."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["entry"],
+                "properties": {
+                    "entry": {"type": "string", "description": "The agent or plan node the test starts at"},
+                    "message": {"type": "string", "description": "Agents: the user message to send"},
+                    "input": {"type": "object", "description": "Plans: the plan's input"}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(
+                json!({"passed": true, "ran": ["release_desk", "plan__release_digest"], "answer": "…"}),
+            ),
+            read_only: Some(false),
+        },
+        ToolDef {
+            name: FAIL_TEST.to_string(),
+            description: "Mark the last network test as failed when its answer falls short of \
+                          the restate, naming the nodes at fault and why. The pane shows it, and \
+                          the network has to pass a new test before it can be saved."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                    "reason": {"type": "string"},
+                    "nodes": {"type": "array", "items": {"type": "string"}}
+                }
+            }),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: SAVE_NETWORK.to_string(),
+            description: "Save every drafted node of the network, after the user confirms the \
+                          list of files: tools first, then plans, then agents. Every sketched \
+                          node has to be drafted without problems, and the network has to have \
+                          passed a test since it last changed unless `untested` is true because \
+                          the user said not to test it."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "untested": {"type": "boolean", "description": "Save without a passing test, only when the user said not to test it"}
+                }
+            }),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(false),
+        },
+        ToolDef {
+            name: DISCARD_NETWORK.to_string(),
+            description: "Throw away the whole network draft (sketch and every draft), only when \
+                          the user asks."
+                .to_string(),
+            input_schema: json!({"type": "object", "properties": {}}),
             output_schema: None,
             output_example: None,
             read_only: Some(true),
@@ -694,5 +1108,35 @@ mod tests {
             json!({"ran": true, "is_error": false, "result": {"ok": 1}, "shape": {}}),
         );
         assert_eq!(short["result"], json!({"ok": 1}));
+    }
+
+    #[test]
+    fn the_test_run_names_every_agent_and_tool_that_took_part() {
+        let entries = vec![
+            graph_core::NewEntry::new(
+                "triage",
+                EntryBody::Handoff {
+                    from: "triage".into(),
+                    to: "release_desk".into(),
+                    message: String::new(),
+                    via: None,
+                },
+            ),
+            graph_core::NewEntry::new(
+                "release_desk",
+                EntryBody::SubagentRun {
+                    agent: "risk_check".into(),
+                    caller: "release_desk".into(),
+                    input: json!({}),
+                    messages: Vec::new(),
+                    output: json!({}),
+                    final_: true,
+                },
+            ),
+        ];
+        assert_eq!(
+            ran_in(&entries, &["plan__release_digest".to_string()]),
+            ["plan__release_digest", "release_desk", "risk_check"]
+        );
     }
 }

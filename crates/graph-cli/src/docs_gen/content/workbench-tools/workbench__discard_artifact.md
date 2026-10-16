@@ -1,5 +1,5 @@
 ---
-summary: Discards the agent or tool draft in the pane.
+summary: Discards one agent, tool or plan draft in the network.
 ---
 
-- Plan drafts can't be discarded.
+- A node of the sketch goes back to not drafted; the plan pane's plan can't be discarded.

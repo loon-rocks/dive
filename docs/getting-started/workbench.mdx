@@ -30,19 +30,21 @@ graph workbench tool merged_prs
 
 - **Chat**, on the left: you talk to the workbench's agents. The pane title names the agent you're talking to.
 - **Workspace**, on the right, with three tabs:
-  - <kbd>1</kbd> the plan, agent or tool you're working on, with the selected row's detail below it.
+  - <kbd>1</kbd> the network you're drafting, or the plan you're editing, with the selected row's detail below it.
   - <kbd>2</kbd> the tool catalog the agents draft from.
   - <kbd>3</kbd> the latest run.
 
 ## Who you're talking to
 
-The front desk hands you to the plan drafter, the agent drafter or the tool drafter. Once a plan is drafted or opened, the plan editor takes over. The plan drafter and plan editor can hand you to the tool or agent drafter when a plan needs a new tool or agent, and those drafters hand you back when they're done.
+Whatever you build, a single tool, a plan, an agent or several working together, the front desk hands you to the drafting architect, `network_drafter`. It interviews you one question at a time until the problem is clear, confirms what it'll build, and sketches the network in the workspace: each tool, plan and agent, the model role it runs on, and how they connect. It designs for small models, composed plans and map/reduce before a large model with many tools, and says so when you ask for something more expensive than the job needs.
+
+When you say to build it, the architect has the tool, plan and agent drafters write each piece, tests the whole network, and saves it when you're ready. To open an existing plan, the front desk loads it and hands you to the plan editor; when a plan needs a new tool, the plan editor hands you to the architect and gets you back once it's saved.
 
 To switch by hand, type `/agent <name>` in the chat. See [Built-in agents](/agents/reference/built-in-agents) for what each one does.
 
 ## Saving
 
-<kbd>Ctrl</kbd>+<kbd>S</kbd> saves what's in the workspace: plans to `./.graph/plans/`, agents to `./.graph/agents/` and tools to `./.graph/tools/`, ready to commit. A file you opened is saved in place.
+<kbd>Ctrl</kbd>+<kbd>S</kbd> saves what's in the workspace: a drafted network all at once, tools to `./.graph/tools/`, plans to `./.graph/plans/` and agents to `./.graph/agents/`, or the plan you're editing. A file you opened is saved in place.
 
 ## Keys
 
@@ -61,7 +63,7 @@ To switch by hand, type `/agent <name>` in the chat. See [Built-in agents](/agen
 | <kbd>g</kbd> | Debug run: pause at each breakpoint, or before every call when there are none |
 | <kbd>b</kbd> | Toggle a breakpoint on the selected step |
 | <kbd>u</kbd> | Undo the last time an agent replaced the draft. Press again to redo |
-| <kbd>x</kbd> <kbd>x</kbd> | Discard the agent or tool draft |
+| <kbd>x</kbd> <kbd>x</kbd> | Discard the drafted network |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
 | <kbd>?</kbd> | Show the keys |
 | <kbd>q</kbd> | Quit |
