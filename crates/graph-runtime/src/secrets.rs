@@ -45,6 +45,17 @@ impl Secrets {
             .filter(|value| !value.is_empty())
     }
 
+    fn read_error(&self, name: &str, project: Option<&str>) -> Option<String> {
+        if self.store.status().is_err() {
+            return None;
+        }
+        let layers = project.map(Some).into_iter().chain(std::iter::once(None));
+        layers
+            .filter_map(|layer| self.store.get_in(name, layer).err())
+            .map(|error| error.to_string())
+            .next()
+    }
+
     fn values(&self, name: &str, project: Option<&str>) -> Values {
         Values {
             env: self.env_value(name),
@@ -188,6 +199,8 @@ pub struct SecretEntry {
     pub status: SecretStatus,
     pub in_use: Option<Layer>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub env_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_value: Option<String>,
@@ -212,6 +225,8 @@ pub struct SecretDetail {
     pub name: String,
     pub status: SecretStatus,
     pub in_use: Option<Layer>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -372,7 +387,22 @@ pub fn list(workspace: &Workspace, secrets: &Secrets) -> SecretList {
     listed(collect(workspace, secrets), secrets)
 }
 
-fn listed(collected: Collected, secrets: &Secrets) -> SecretList {
+fn stored_names(secrets: &Secrets, project: Option<&str>) -> Vec<String> {
+    secrets
+        .store
+        .accounts()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|account| graph_core::secrets::split_account(account))
+        .filter(|(_, scope)| scope.is_none() || *scope == project)
+        .map(|(name, _)| name.to_string())
+        .collect()
+}
+
+fn listed(mut collected: Collected, secrets: &Secrets) -> SecretList {
+    for name in stored_names(secrets, collected.project.as_deref()) {
+        collected.references.entry(name).or_default();
+    }
     let project = collected.project.as_deref();
     let entries: Vec<SecretEntry> = collected
         .references
@@ -382,6 +412,7 @@ fn listed(collected: Collected, secrets: &Secrets) -> SecretList {
             SecretEntry {
                 status: values.status(),
                 in_use: values.in_use(),
+                read_error: secrets.read_error(&name, project),
                 env_value: values.masked(Layer::Env),
                 project_value: values.masked(Layer::Project),
                 shared_value: values.masked(Layer::Shared),
@@ -410,6 +441,7 @@ fn detail(mut collected: Collected, secrets: &Secrets, name: &str) -> SecretDeta
         name: name.to_string(),
         status: values.status(),
         in_use: values.in_use(),
+        read_error: secrets.read_error(name, collected.project.as_deref()),
         env_value: values.masked(Layer::Env),
         project_value: values.masked(Layer::Project),
         shared_value: values.masked(Layer::Shared),

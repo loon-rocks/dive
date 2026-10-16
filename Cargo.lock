@@ -2254,6 +2254,7 @@ dependencies = [
  "graph-llm",
  "jsonschema",
  "keyring",
+ "keyring-core",
  "schemars 0.8.22",
  "semver",
  "serde",
