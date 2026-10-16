@@ -11,6 +11,10 @@ api_key = "${GRAPH_T_ANTHROPIC}"
 type = "openai_compat"
 base_url = "http://localhost:11434/v1"
 
+[providers.plain]
+type = "openai"
+api_key = "sk-written-into-the-file"
+
 [models.default]
 provider = "anthropic"
 model = "claude-sonnet-5-5"
@@ -89,6 +93,7 @@ fn the_view_merges_layers_and_marks_where_each_entry_comes_from() {
         [
             ("anthropic", Origin::Global, KeyState::Set),
             ("local", Origin::Global, KeyState::None),
+            ("plain", Origin::Global, KeyState::InFile),
             ("systemone", Origin::Workspace, KeyState::Missing),
         ]
     );
@@ -110,6 +115,7 @@ fn the_view_merges_layers_and_marks_where_each_entry_comes_from() {
     assert_eq!(planner.fallbacks[0].model, "llama3");
     assert_eq!(view.providers[0].used_by, ["default", "planner", "judge"]);
     assert_eq!(view.providers[1].used_by, ["planner fallback"]);
+    assert!(view.providers[2].key_names.is_empty());
     assert_eq!(view.pricing[0].used_by, ["judge"]);
     assert_eq!(view.unpriced, ["claude-sonnet-5-5", "jev-1", "llama3"]);
     assert_eq!(view.blocked, None);
@@ -332,14 +338,48 @@ fn the_first_save_creates_the_workspace_file_at_the_current_version() {
 }
 
 #[test]
-fn an_old_file_is_shown_but_never_edited() {
-    let (_dir, layers) = layers(GLOBAL, Some("[settings]\nhistory_limit = 3\n"));
+fn saving_brings_an_older_file_to_the_current_version() {
+    let old = "# my settings\n[settings]\nhistory_limit = 3\n";
+    let (_dir, layers) = layers(GLOBAL, Some(old));
+    let view = view_layers(&layers, &resolver());
+    assert_eq!(view.blocked, None);
+    assert_eq!(view.migrates_from, Some(1));
+    save_price_in(
+        &layers,
+        None,
+        &PriceEdit {
+            model: "m".to_string(),
+            input: 1.0,
+            output: 2.0,
+            cache_write: None,
+            cache_read: None,
+        },
+    )
+    .unwrap();
+    let written = text(&layers);
+    assert!(
+        written.contains(&format!("version = {CONFIG_FORMAT}")),
+        "{written}"
+    );
+    assert!(written.contains("# my settings"), "{written}");
+    assert!(written.contains("history_limit = 3"), "{written}");
+    assert_eq!(view_layers(&layers, &resolver()).migrates_from, None);
+    let leftovers = std::fs::read_dir(layers.file.parent().unwrap())
+        .unwrap()
+        .count();
+    assert_eq!(leftovers, 1);
+}
+
+#[test]
+fn a_newer_file_is_shown_but_never_edited() {
+    let newer = format!("version = {}\n", CONFIG_FORMAT + 1);
+    let (_dir, layers) = layers(GLOBAL, Some(&newer));
     let view = view_layers(&layers, &resolver());
     assert!(view
         .blocked
         .as_deref()
         .unwrap()
-        .contains("graph config migrate"));
+        .contains("newer than this app reads"));
     assert!(remove_role_in(&layers, "judge").is_err());
 }
 
