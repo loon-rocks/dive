@@ -362,9 +362,22 @@ async fn main() -> anyhow::Result<()> {
     } else {
         for goal in goals {
             let id = goal.id.clone();
-            let result = run_goal(root.clone(), goal, max_turns)
+            let limit = std::time::Duration::from_secs(
+                std::env::var("EVAL_GOAL_SECONDS")
+                    .ok()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(420),
+            );
+            let result = match tokio::time::timeout(limit, run_goal(root.clone(), goal, max_turns))
                 .await
-                .unwrap_or_else(|error| json!({"id": id, "error": format!("{error:#}")}));
+            {
+                Ok(result) => {
+                    result.unwrap_or_else(|error| json!({"id": id, "error": format!("{error:#}")}))
+                }
+                Err(_) => {
+                    json!({"id": id, "error": format!("goal ran longer than {}s", limit.as_secs())})
+                }
+            };
             eprintln!(
                 "{:<22} build {:>6}s  total {:>6}s  tested {:<5}  nodes {}  calls {}  out {}  {}",
                 result["id"].as_str().unwrap_or_default(),
