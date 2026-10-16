@@ -4,6 +4,7 @@ mod effects;
 pub mod event;
 pub mod fs_tools;
 pub mod network;
+pub mod replay;
 pub mod runner;
 pub mod sink;
 pub mod tools;
@@ -12,7 +13,10 @@ pub use agents::Start;
 pub use artifact::ArtifactKind;
 pub use effects::{save_draft, Workbench};
 pub use event::{GateKind, WorkbenchEvent};
-pub use network::{EdgeKind, NetworkView, NodeStatus, NodeView, Restate, TestRun};
+pub use network::{
+    Design, Designs, EdgeKind, Fact, FactState, Interview, NetworkView, NodeStatus, NodeView,
+    Restate, TestRun,
+};
 pub use runner::{DebugControls, UiDecision};
 pub use tools::DraftState;
 
@@ -58,8 +62,18 @@ impl Workbench {
 
         let draft = Arc::new(std::sync::Mutex::new(DraftState::new(doc.clone())));
 
-        let agent_sink: Arc<dyn EventSink> =
-            crate::telemetry::tee(Arc::new(sink::ChannelSink::agent(tx.clone())), exporter);
+        let progress: Arc<dyn EventSink> = Arc::new(sink::NetworkProgress {
+            draft: draft.clone(),
+            tx: tx.clone(),
+            builders: &["tool_drafter", "plan_drafter", "agent_drafter"],
+        });
+        let agent_sink: Arc<dyn EventSink> = crate::telemetry::tee(
+            Arc::new(graph_core::TeeSink::new(vec![
+                Arc::new(sink::ChannelSink::agent(tx.clone())),
+                progress,
+            ])),
+            exporter,
+        );
         let hooks = PipelineHooks {
             interlocutor: Some(Arc::new(runner::UiInterlocutor::new(tx.clone()))),
             ..Default::default()
@@ -72,6 +86,7 @@ impl Workbench {
             vec!["plan_and_execute".to_string()],
         ));
         let plans_dir = runtime.plans_dir();
+        let root: PathBuf = root.into();
         let debug = Arc::new(DebugControls::default());
         let tester: artifact::Tester = Arc::new(std::sync::OnceLock::new());
         let workbench_tools = Arc::new(
@@ -82,10 +97,11 @@ impl Workbench {
                 debug.clone(),
                 tx.clone(),
             )
-            .with_tester(tester.clone()),
+            .with_tester(tester.clone())
+            .with_root(root.clone()),
         );
         let fs_tools = Arc::new(
-            fs_tools::FsTools::new(root.into())
+            fs_tools::FsTools::new(root.clone())
                 .context("failed to resolve the workbench project directory")?,
         );
         let registry: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(vec![
@@ -109,6 +125,10 @@ impl Workbench {
         conversation.context = Some(agents::context_hook(draft.clone(), pipeline.clone()));
         conversation.handoff_guard = Some(artifact::handoff_guard(draft.clone()));
         conversation.progress_tools = tools::progress_tools();
+        conversation.stop_tools = artifact::STOP_TOOLS
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
         if let Some(prompt) = crate::runtime::deprecated_prompt(
             &conversation.agents,
             agents::PLAN_EDITOR,
@@ -135,17 +155,36 @@ impl Workbench {
         base.context = None;
         base.handoff_guard = None;
         let _ = tester.set(base);
+        let (resumed, history) = match &start {
+            Start::Resume(id) => {
+                let meta = store
+                    .get_thread(id)
+                    .await?
+                    .with_context(|| format!("no thread '{id}'"))?;
+                let history = crate::runtime::load_history(store.as_ref(), id).await?;
+                draft.lock().unwrap().network =
+                    replay::network(&history, &pipeline.drafted.tool_dirs);
+                (Some(meta), history)
+            }
+            _ => (None, Vec::new()),
+        };
+        let starting = resumed
+            .as_ref()
+            .map(|meta| meta.active.clone())
+            .unwrap_or_else(|| agents::starting_agent(&start, doc.as_ref()).to_string());
         let workbench = Workbench {
-            active: std::sync::Mutex::new(agents::starting_agent(&start, doc.as_ref()).to_string()),
+            active: std::sync::Mutex::new(starting),
+            thread: std::sync::Mutex::new(resumed.map(|meta| meta.id)),
             conversation,
             pipeline,
-            history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            history: Arc::new(tokio::sync::Mutex::new(history)),
             draft,
             catalog: visible_catalog,
             store,
             plans_dir,
             debug,
             tx,
+            root,
         };
         if let Some((kind, name)) = opening {
             artifact::open_existing(

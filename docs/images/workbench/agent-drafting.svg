@@ -83,7 +83,8 @@
 <text x="1009.2" y="175.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="34.8" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">→</text>
-<text x="51.6" y="193.5" textLength="193.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbench__set_artifact</text>
+<text x="51.6" y="193.5" textLength="168.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">agent__agent_drafter</text>
+<text x="228.0" y="193.5" textLength="109.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">release_notes</text>
 <text x="412.8" y="193.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="193.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││out</text>
 <text x="471.6" y="193.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">of</text>
@@ -102,23 +103,12 @@
 <text x="740.4" y="211.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">tooling</text>
 <text x="1009.2" y="211.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
-<text x="34.8" y="229.5" textLength="109.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">release_notes</text>
-<text x="152.4" y="229.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">is</text>
-<text x="177.6" y="229.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">drafted:</text>
-<text x="253.2" y="229.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">it</text>
-<text x="278.4" y="229.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">reads</text>
-<text x="328.8" y="229.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
+<text x="51.6" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">↳</text>
+<text x="68.4" y="229.5" textLength="193.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">workbench__set_artifact</text>
 <text x="412.8" y="229.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="229.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="1009.2" y="229.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="247.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
-<text x="34.8" y="247.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">commits</text>
-<text x="102.0" y="247.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">since</text>
-<text x="152.4" y="247.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
-<text x="186.0" y="247.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">tag</text>
-<text x="219.6" y="247.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">with</text>
-<text x="261.6" y="247.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">git_log</text>
-<text x="328.8" y="247.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">and</text>
 <text x="412.8" y="247.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="247.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="438.0" y="247.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">agent</text>
@@ -129,15 +119,9 @@
 <text x="706.8" y="247.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">chat</text>
 <text x="1009.2" y="247.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
-<text x="34.8" y="265.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">writes</text>
-<text x="93.6" y="265.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
-<text x="127.2" y="265.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">notes</text>
-<text x="177.6" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">in</text>
-<text x="202.8" y="265.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">one</text>
-<text x="236.4" y="265.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">turn</text>
-<text x="278.4" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">on</text>
-<text x="303.6" y="265.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
-<text x="337.2" y="265.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">chat</text>
+<text x="34.8" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">✓</text>
+<text x="51.6" y="265.5" textLength="168.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">agent__agent_drafter</text>
+<text x="228.0" y="265.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">0.0s</text>
 <text x="412.8" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="454.8" y="265.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">Reads</text>
@@ -153,14 +137,6 @@
 <text x="900.0" y="265.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">notes</text>
 <text x="1009.2" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="283.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
-<text x="34.8" y="283.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">role.</text>
-<text x="85.2" y="283.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">Want</text>
-<text x="127.2" y="283.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">me</text>
-<text x="152.4" y="283.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">to</text>
-<text x="177.6" y="283.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">test</text>
-<text x="219.6" y="283.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">it</text>
-<text x="244.8" y="283.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">on</text>
-<text x="270.0" y="283.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">v0.15.0?</text>
 <text x="412.8" y="283.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="283.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="454.8" y="283.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">Plans</text>
@@ -168,16 +144,38 @@
 <text x="564.0" y="283.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">agents</text>
 <text x="1009.2" y="283.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="301.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
+<text x="34.8" y="301.5" textLength="109.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">release_notes</text>
+<text x="152.4" y="301.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">is</text>
+<text x="177.6" y="301.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">drafted:</text>
+<text x="253.2" y="301.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">it</text>
+<text x="278.4" y="301.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">reads</text>
+<text x="328.8" y="301.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
 <text x="412.8" y="301.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="301.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="1009.2" y="301.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="319.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
+<text x="34.8" y="319.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">commits</text>
+<text x="102.0" y="319.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">since</text>
+<text x="152.4" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
+<text x="186.0" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">tag</text>
+<text x="219.6" y="319.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">with</text>
+<text x="261.6" y="319.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">git_log</text>
+<text x="328.8" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">and</text>
 <text x="412.8" y="319.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="319.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="438.0" y="319.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#56b6c2" font-weight="600">agent</text>
 <text x="488.4" y="319.5" textLength="109.2" lengthAdjust="spacingAndGlyphs" fill="#56b6c2" font-weight="600">release_notes</text>
 <text x="1009.2" y="319.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="337.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
+<text x="34.8" y="337.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">writes</text>
+<text x="93.6" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
+<text x="127.2" y="337.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">notes</text>
+<text x="177.6" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">in</text>
+<text x="202.8" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">one</text>
+<text x="236.4" y="337.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">turn</text>
+<text x="278.4" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">on</text>
+<text x="303.6" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
+<text x="337.2" y="337.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">chat</text>
 <text x="412.8" y="337.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="337.5" textLength="117.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││description:</text>
 <text x="547.2" y="337.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">Writes</text>
@@ -189,6 +187,14 @@
 <text x="933.6" y="337.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">commits</text>
 <text x="1009.2" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="355.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
+<text x="34.8" y="355.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">role.</text>
+<text x="85.2" y="355.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">Want</text>
+<text x="127.2" y="355.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">me</text>
+<text x="152.4" y="355.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">to</text>
+<text x="177.6" y="355.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">test</text>
+<text x="219.6" y="355.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">it</text>
+<text x="244.8" y="355.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">on</text>
+<text x="270.0" y="355.5" textLength="67.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">v0.15.0?</text>
 <text x="412.8" y="355.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="355.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="438.0" y="355.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">since</text>

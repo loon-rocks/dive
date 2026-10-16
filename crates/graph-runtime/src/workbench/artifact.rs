@@ -25,6 +25,8 @@ pub const TEST_NETWORK: &str = "workbench__test_network";
 pub const FAIL_TEST: &str = "workbench__fail_test";
 pub const SAVE_NETWORK: &str = "workbench__save_network";
 pub const DISCARD_NETWORK: &str = "workbench__discard_network";
+pub const SET_INTERVIEW: &str = "workbench__set_interview";
+pub const PROPOSE_DESIGNS: &str = "workbench__propose_designs";
 
 pub const ARTIFACT_TOOLS: [&str; 7] = [
     SET_ARTIFACT,
@@ -36,19 +38,55 @@ pub const ARTIFACT_TOOLS: [&str; 7] = [
     SHOW_ARTIFACT,
 ];
 
-pub const NETWORK_TOOLS: [&str; 5] = [
+pub const NETWORK_TOOLS: [&str; 7] = [
     SET_SKETCH,
     TEST_NETWORK,
     FAIL_TEST,
     SAVE_NETWORK,
     DISCARD_NETWORK,
+    SET_INTERVIEW,
+    PROPOSE_DESIGNS,
 ];
+
+pub const STOP_TOOLS: [&str; 2] = [SET_INTERVIEW, PROPOSE_DESIGNS];
+
+pub fn set_interview(
+    draft: &SharedDraft,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    input: &Value,
+) -> ToolOutcome {
+    let applied = draft.lock().unwrap().network.set_interview(input);
+    match applied {
+        Ok(result) => {
+            publish(draft, tx);
+            outcome(result, false)
+        }
+        Err(refusal) => error(refusal),
+    }
+}
+
+pub fn propose_designs(
+    draft: &SharedDraft,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    input: &Value,
+) -> ToolOutcome {
+    let applied = draft.lock().unwrap().network.propose_designs(input);
+    match applied {
+        Ok(result) => {
+            publish(draft, tx);
+            outcome(result, false)
+        }
+        Err(refusal) => error(refusal),
+    }
+}
 
 pub const NETWORK_DRAFTER: &str = "network_drafter";
 pub const TOOL_DRAFTER: &str = "tool_drafter";
 pub const AGENT_DRAFTER: &str = "agent_drafter";
 
 pub type Tester = Arc<OnceLock<Conversation>>;
+
+const TEST_LIMIT: std::time::Duration = std::time::Duration::from_secs(90);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArtifactKind {
@@ -454,17 +492,13 @@ pub fn fail_test(
         })
         .unwrap_or_default();
     let reason = input["reason"].as_str().unwrap_or_default().to_string();
+    if !draft
+        .lock()
+        .unwrap()
+        .network
+        .fail_last_test(&reason, &nodes)
     {
-        let mut state = draft.lock().unwrap();
-        let Some(last) = state.network.tests.last_mut() else {
-            return error("there is no test run to fail; run workbench__test_network first");
-        };
-        last.passed = false;
-        if !reason.is_empty() {
-            last.answer = format!("{} (failed: {reason})", last.answer);
-        }
-        state.network.untest();
-        state.network.mark_failed(&nodes);
+        return error("there is no test run to fail; run workbench__test_network first");
     }
     publish(draft, tx);
     outcome(json!({"failed": nodes, "reason": reason}), false)
@@ -559,6 +593,9 @@ pub async fn test_network(
         ArtifactKind::Agent => format!("send \"{message}\" to {}", node.name),
         _ => format!("run {} with {plan_input}", node.catalog_name()),
     };
+    if node.kind == ArtifactKind::Agent && message.trim().is_empty() {
+        return error("`message` is required to test an agent");
+    }
     if let Err(refusal) = ask_yes(
         tx,
         "test_network",
@@ -569,11 +606,33 @@ pub async fn test_network(
     {
         return error(format!("not tested: {refusal}"));
     }
+    draft.lock().unwrap().network.start_test(&node.name);
+    publish(draft, tx);
     let asking = pipeline
         .clone()
         .with_interlocutor(Arc::new(UiInterlocutor::new(tx.clone())));
     let over = Arc::new(network::overlay(&asking, &network));
     let run = match node.kind {
+        ArtifactKind::Tool => {
+            let called = over
+                .registry
+                .invoke(&node.catalog_name(), plan_input.clone())
+                .await;
+            let (passed, answer) = match called {
+                Ok(outcome) => (
+                    !outcome.is_error,
+                    serde_json::to_string(&outcome.result).unwrap_or_default(),
+                ),
+                Err(failure) => (false, failure.to_string()),
+            };
+            TestRun {
+                entry: node.catalog_name(),
+                message: plan_input.to_string(),
+                passed,
+                ran: vec![node.catalog_name()],
+                answer,
+            }
+        }
         ArtifactKind::Agent => {
             let Some(base) = tester.get() else {
                 return error("network tests need the workbench conversation");
@@ -597,7 +656,16 @@ pub async fn test_network(
             conversation.handoff_guard = None;
             conversation.prompt_overrides.clear();
             conversation.events = Arc::new(NullSink);
-            match conversation.run_turn(&[], &node.name, &message).await {
+            let turn =
+                tokio::time::timeout(TEST_LIMIT, conversation.run_turn(&[], &node.name, &message))
+                    .await
+                    .unwrap_or_else(|_| {
+                        Err(graph_core::agent::conversation::ConversationError::Setup {
+                            agent: node.name.clone(),
+                            message: format!("the test ran longer than {}s", TEST_LIMIT.as_secs()),
+                        })
+                    });
+            match turn {
                 Ok(turn) => TestRun {
                     entry: node.name.clone(),
                     message: message.clone(),
@@ -615,7 +683,19 @@ pub async fn test_network(
             }
         }
         _ => {
-            let call = over.call_plan(&node.name, plan_input.clone()).await;
+            let call = match tokio::time::timeout(
+                TEST_LIMIT,
+                over.call_plan(&node.name, plan_input.clone()),
+            )
+            .await
+            {
+                Ok(call) => call,
+                Err(_) => graph_core::pipeline::PlanCall {
+                    result: json!({"error": format!("the test ran longer than {}s; test with a smaller input", TEST_LIMIT.as_secs())}),
+                    is_error: true,
+                    aborted: false,
+                },
+            };
             TestRun {
                 entry: node.catalog_name(),
                 message: plan_input.to_string(),
@@ -636,13 +716,76 @@ pub async fn test_network(
     outcome(report, false)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    Configured,
+    Project,
+    Everywhere,
+}
+
+impl Scope {
+    pub fn parse(text: Option<&str>) -> Self {
+        match text {
+            Some("project") => Self::Project,
+            Some("everywhere") => Self::Everywhere,
+            _ => Self::Configured,
+        }
+    }
+}
+
+pub struct SaveRequest<'a> {
+    pub plans_dir: Option<&'a Path>,
+    pub root: Option<&'a Path>,
+    pub scope: Scope,
+    pub skip: Vec<String>,
+    pub untested: bool,
+    pub confirm: bool,
+}
+
+impl SaveRequest<'_> {
+    pub fn unattended() -> Self {
+        Self {
+            plans_dir: None,
+            root: None,
+            scope: Scope::Configured,
+            skip: Vec::new(),
+            untested: true,
+            confirm: false,
+        }
+    }
+}
+
+fn scoped_dir(scope: Scope, root: Option<&Path>) -> Option<PathBuf> {
+    match scope {
+        Scope::Configured => None,
+        Scope::Project => root.map(|root| root.join(".graph")),
+        Scope::Everywhere => graph_config::global_config_path()
+            .parent()
+            .map(Path::to_path_buf),
+    }
+}
+
+fn kind_dir(kind: ArtifactKind) -> &'static str {
+    match kind {
+        ArtifactKind::Tool => "tools",
+        ArtifactKind::Plan => "plans",
+        ArtifactKind::Agent => "agents",
+    }
+}
+
 fn target(
     node: &network::Node,
     pipeline: &Pipeline,
     plans_dir: Option<&Path>,
+    scoped: Option<&Path>,
 ) -> Result<PathBuf, String> {
     if let Some(path) = &node.editing {
         return Ok(path.clone());
+    }
+    if let Some(dir) = scoped {
+        return Ok(dir
+            .join(kind_dir(node.kind))
+            .join(format!("{}.yaml", node.name)));
     }
     match node.kind {
         ArtifactKind::Tool => pipeline
@@ -668,10 +811,17 @@ pub async fn save_network(
     draft: &SharedDraft,
     pipeline: &Pipeline,
     tx: &UnboundedSender<WorkbenchEvent>,
-    plans_dir: Option<&Path>,
-    untested: bool,
-    confirm: bool,
+    request: SaveRequest<'_>,
 ) -> Result<String, String> {
+    let SaveRequest {
+        plans_dir,
+        root,
+        scope,
+        skip,
+        untested,
+        confirm,
+    } = request;
+    let scoped = scoped_dir(scope, root);
     let network = draft.lock().unwrap().network.clone();
     if network.in_save_order().is_empty() {
         return Err("there is nothing drafted to save".to_string());
@@ -695,7 +845,16 @@ pub async fn save_network(
     }
     let mut plan = Vec::new();
     for node in network.in_save_order() {
-        plan.push((node.clone(), target(node, pipeline, plans_dir)?));
+        if skip.contains(&node.name) {
+            continue;
+        }
+        plan.push((
+            node.clone(),
+            target(node, pipeline, plans_dir, scoped.as_deref())?,
+        ));
+    }
+    if plan.is_empty() {
+        return Err("every drafted file was left out of the save".to_string());
     }
     if confirm {
         let listing: Vec<String> = plan
@@ -721,10 +880,14 @@ pub async fn save_network(
     for (node, path) in &plan {
         let yaml = node.yaml.clone().unwrap_or_default();
         let replacing = node.editing.is_some();
+        let at = node
+            .editing
+            .clone()
+            .or_else(|| scoped.as_ref().map(|_| path.clone()));
         let result = match node.kind {
             ArtifactKind::Tool => {
                 let saved = pipeline
-                    .save_tool_file_at(&yaml, true, replacing, false, node.editing.as_deref())
+                    .save_tool_file_at(&yaml, true, replacing, false, at.as_deref())
                     .await;
                 saved["path"]
                     .as_str()
@@ -733,7 +896,7 @@ pub async fn save_network(
             }
             ArtifactKind::Agent => {
                 let saved = over
-                    .save_agent_file_at(&yaml, replacing, false, node.editing.as_deref())
+                    .save_agent_file_at(&yaml, replacing, false, at.as_deref())
                     .await;
                 saved["path"]
                     .as_str()
@@ -989,7 +1152,10 @@ pub fn tool_defs() -> Vec<ToolDef> {
                                 "kind": {"type": "string", "enum": ["agent", "plan", "tool"]},
                                 "job": {"type": "string", "description": "What this node does, in one sentence"},
                                 "model": {"type": "string", "description": "The model role it runs on (agents, prompt tools, and plan steps that call a model); omit when it calls no model"},
-                                "principles": {"type": "array", "items": {"type": "string"}, "description": "The design principles this node applies"}
+                                "principles": {"type": "array", "items": {"type": "string"}, "description": "The design principles this node applies"},
+                                "takes": {"type": "string", "description": "Its input, field by field, as the nodes that call it will pass it"},
+                                "returns": {"type": "string", "description": "Its output, field by field, as the nodes that read it expect it"},
+                                "proposed": {"type": "boolean", "description": "True for a node a pending question would add"}
                             }
                         }
                     },
@@ -1063,12 +1229,84 @@ pub fn tool_defs() -> Vec<ToolDef> {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "untested": {"type": "boolean", "description": "Save without a passing test, only when the user said not to test it"}
+                    "untested": {"type": "boolean", "description": "Save without a passing test, only when the user said not to test it"},
+                    "scope": {"type": "string", "enum": ["project", "everywhere"], "description": "This project's .graph, or the global config for every project; omit for the configured directories"},
+                    "skip": {"type": "array", "items": {"type": "string"}, "description": "Node names the user chose not to save"}
                 }
             }),
             output_schema: None,
             output_example: None,
             read_only: Some(false),
+        },
+        ToolDef {
+            name: SET_INTERVIEW.to_string(),
+            description: "Ask the user your next interview question and end your turn. `reply` \
+                          is your whole reply as the user reads it; the pane shows the interview: \
+                          your confidence, what is still missing, the question with your guess, \
+                          and what you know so far as facts (known, guess, asking, missing). Use \
+                          it for every interview reply, including the restate you ask the user \
+                          to confirm (confirmed: false until they say yes)."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["reply", "confidence", "facts"],
+                "properties": {
+                    "reply": {"type": "string", "description": "Your whole reply to the user, as they read it in the chat: your read of the request, the question and your guess, or the restate"},
+                    "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "missing": {"type": "string", "description": "What you still don't know, in a few words; empty when nothing is"},
+                    "question": {"type": "string", "description": "The one question you're asking now, when you're asking one"},
+                    "guess": {"type": "string", "description": "Your guess at its answer, with the reasoning"},
+                    "facts": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["label", "text", "state"],
+                            "properties": {
+                                "label": {"type": "string", "description": "Outcome, Who, Where, Success, Constraint, Out of scope, or a topic of this request"},
+                                "text": {"type": "string"},
+                                "state": {"type": "string", "enum": ["known", "guess", "asking", "missing"]},
+                                "previous": {"type": "string", "description": "When feedback reopens a confirmed fact: what it said before"}
+                            }
+                        }
+                    },
+                    "confirmed": {"type": "boolean", "description": "True once the user said yes to the restate"}
+                }
+            }),
+            output_schema: None,
+            output_example: Some(json!({"confidence": 55, "shown": true})),
+            read_only: Some(true),
+        },
+        ToolDef {
+            name: PROPOSE_DESIGNS.to_string(),
+            description: "Push back on a wasteful design: show the user's design and your better \
+                          one side by side in the pane, and end your turn. Put the pushback in \
+                          your response text and ask which they want."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "required": ["reply", "yours", "suggested"],
+                "properties": {
+                    "reply": {"type": "string", "description": "Your pushback as the user reads it, ending with the question which design they want"},
+                    "yours": {"$ref": "#/$defs/design"},
+                    "suggested": {"$ref": "#/$defs/design"}
+                },
+                "$defs": {
+                    "design": {
+                        "type": "object",
+                        "required": ["title", "nodes", "lines"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "model": {"type": "string", "description": "The model it mostly runs on, when one dominates"},
+                            "nodes": {"type": "array", "items": {"type": "object", "required": ["kind", "name"], "properties": {"kind": {"type": "string", "enum": ["agent", "plan", "tool"]}, "name": {"type": "string"}}}},
+                            "lines": {"type": "array", "items": {"type": "string"}, "description": "Short facts: what it is, the calls per request, how it's tested"},
+                            "principles": {"type": "array", "items": {"type": "string"}}
+                        }
+                    }
+                }
+            }),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(true),
         },
         ToolDef {
             name: DISCARD_NETWORK.to_string(),

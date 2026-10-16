@@ -73,6 +73,8 @@ const WORKBENCH_TOOL_GROUPS: &[(&str, &[&str])] = &[
     (
         "Networks",
         &[
+            "workbench__set_interview",
+            "workbench__propose_designs",
             "workbench__set_sketch",
             "workbench__test_network",
             "workbench__fail_test",

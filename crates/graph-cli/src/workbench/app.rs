@@ -377,6 +377,42 @@ fn on_event(app: &mut App, event: WorkbenchEvent) -> Vec<Effect> {
             }
             Vec::new()
         }
+        WorkbenchEvent::SubagentStarted { agent, input, .. } => {
+            let node = input["node"]
+                .as_str()
+                .map(|node| format!(" {node}"))
+                .unwrap_or_default();
+            app.chat
+                .entries
+                .push(ChatEntry::Activity(format!("→ agent__{agent}{node}")));
+            Vec::new()
+        }
+        WorkbenchEvent::SubagentTool { name, finished, .. } => {
+            match finished {
+                None => app
+                    .chat
+                    .entries
+                    .push(ChatEntry::Activity(format!("  ↳ {name}"))),
+                Some(false) => app
+                    .chat
+                    .entries
+                    .push(ChatEntry::Activity(format!("  ✗ {name} failed"))),
+                Some(true) => {}
+            }
+            Vec::new()
+        }
+        WorkbenchEvent::SubagentFinished {
+            agent,
+            is_error,
+            seconds,
+            ..
+        } => {
+            let mark = if is_error { "✗" } else { "✓" };
+            app.chat.entries.push(ChatEntry::Activity(format!(
+                "{mark} agent__{agent} {seconds:.1}s"
+            )));
+            Vec::new()
+        }
         WorkbenchEvent::ActiveAgent { name, note } => {
             app.agent = name;
             if let Some(note) = note {
@@ -1834,11 +1870,15 @@ steps:
                     job: String::new(),
                     model: None,
                     principles: Vec::new(),
+                    takes: String::new(),
+                    returns: String::new(),
                     sketched: false,
                     status: NodeStatus::Drafted,
                     yaml: Some("name: triager\n".to_string()),
                     problems: Vec::new(),
                     last_run: None,
+                    builder: None,
+                    note: None,
                 }],
                 ..NetworkView::default()
             })),
