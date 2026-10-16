@@ -748,11 +748,42 @@ impl Workspace {
         &self.root
     }
 
+    pub fn is_global(&self) -> bool {
+        is_global_dir(&self.root)
+    }
+
+    pub fn project_dir(&self) -> PathBuf {
+        if self.is_global() {
+            global_config_dir()
+        } else {
+            self.root.join(".graph")
+        }
+    }
+
     pub fn config_paths(&self) -> Vec<PathBuf> {
-        vec![
-            graph_config::global_config_path(),
-            self.root.join(".graph").join("config.toml"),
-        ]
+        if self.is_global() {
+            vec![graph_config::global_config_path()]
+        } else {
+            vec![
+                graph_config::global_config_path(),
+                self.root.join(".graph").join("config.toml"),
+            ]
+        }
+    }
+}
+
+pub fn global_config_dir() -> PathBuf {
+    graph_config::expand_tilde(&graph_config::global_config_path())
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default()
+}
+
+pub fn is_global_dir(dir: &Path) -> bool {
+    let global = global_config_dir();
+    match (dir.canonicalize(), global.canonicalize()) {
+        (Ok(dir), Ok(global)) => dir == global,
+        _ => dir == global,
     }
 }
 
@@ -785,6 +816,17 @@ mod tests {
             workspace.config_paths()[1],
             PathBuf::from("/work/site/.graph/config.toml")
         );
+    }
+
+    #[test]
+    fn the_global_config_dir_as_a_workspace_has_no_project_layer() {
+        let workspace = Workspace::new(global_config_dir());
+        assert!(workspace.is_global());
+        assert_eq!(
+            workspace.config_paths(),
+            vec![graph_config::global_config_path()]
+        );
+        assert_eq!(workspace.project_dir(), global_config_dir());
     }
 
     #[test]

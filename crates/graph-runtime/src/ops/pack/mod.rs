@@ -73,7 +73,7 @@ pub fn global_dir() -> PathBuf {
 }
 
 pub fn project_dir(workspace: &Workspace) -> PathBuf {
-    workspace.root().join(".graph")
+    workspace.project_dir()
 }
 
 pub fn layer_at(kind: LayerKind, dir: PathBuf, flag: String) -> Layer {

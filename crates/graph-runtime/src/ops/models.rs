@@ -138,9 +138,7 @@ pub struct Layers {
 impl Layers {
     pub fn of(workspace: &Workspace) -> Self {
         let global = graph_config::expand_tilde(&graph_config::global_config_path());
-        let global_workspace = global
-            .parent()
-            .is_some_and(|dir| same_dir(dir, workspace.root()));
+        let global_workspace = workspace.is_global();
         let file = if global_workspace {
             global.clone()
         } else {
@@ -168,13 +166,6 @@ impl Layers {
                 (self.file.clone(), Origin::Workspace),
             ]
         }
-    }
-}
-
-fn same_dir(a: &Path, b: &Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => a == b,
     }
 }
 
