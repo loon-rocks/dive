@@ -758,7 +758,7 @@ impl SaveRequest<'_> {
 fn scoped_dir(scope: Scope, root: Option<&Path>) -> Option<PathBuf> {
     match scope {
         Scope::Configured => None,
-        Scope::Project => root.map(|root| root.join(".graph")),
+        Scope::Project => root.map(|root| crate::runtime::Workspace::new(root).project_dir()),
         Scope::Everywhere => graph_config::global_config_path()
             .parent()
             .map(Path::to_path_buf),
