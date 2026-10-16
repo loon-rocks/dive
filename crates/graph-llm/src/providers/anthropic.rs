@@ -2,6 +2,8 @@
 //!
 //! Structured output is enforced by forcing a single synthetic tool
 //! (`tool_choice: {type: "tool"}`) whose input schema is the response schema.
+//! Models that refuse a forced tool choice get `auto` and an instruction to
+//! call that tool instead; the refusal is remembered per model.
 
 use crate::types::*;
 use crate::{ChatProvider, LlmError};
@@ -25,6 +27,33 @@ pub struct AnthropicProvider {
     client: reqwest::Client,
     base_url: String,
     api_key: String,
+    unforced: std::sync::Mutex<std::collections::HashSet<String>>,
+}
+
+const STRUCTURED_NUDGE: &str =
+    "Give your answer by calling the structured_output tool with the final object, not as text.";
+
+fn unforce_tool_choice(body: &mut Value) {
+    let Some(map) = body.as_object_mut() else {
+        return;
+    };
+    map.insert("tool_choice".into(), json!({"type": "auto"}));
+    match map.get_mut("system") {
+        Some(Value::String(system)) => {
+            system.push_str("\n\n");
+            system.push_str(STRUCTURED_NUDGE);
+        }
+        Some(Value::Array(blocks)) => {
+            blocks.push(json!({"type": "text", "text": STRUCTURED_NUDGE}))
+        }
+        _ => {
+            map.insert("system".into(), json!(STRUCTURED_NUDGE));
+        }
+    }
+}
+
+fn forced_tool_choice(body: &Value) -> bool {
+    body["tool_choice"]["type"] == json!("tool")
 }
 
 impl AnthropicProvider {
@@ -33,6 +62,7 @@ impl AnthropicProvider {
             client: reqwest::Client::new(),
             base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string()),
             api_key,
+            unforced: std::sync::Mutex::default(),
         }
     }
 
@@ -108,7 +138,11 @@ impl AnthropicProvider {
         if stream {
             body.insert("stream".into(), json!(true));
         }
-        Value::Object(body)
+        let mut body = Value::Object(body);
+        if req.response_schema.is_some() && self.unforced.lock().unwrap().contains(&req.model) {
+            unforce_tool_choice(&mut body);
+        }
+        body
     }
 
     async fn post_once(&self, body: &Value) -> Result<reqwest::Response, LlmError> {
@@ -135,18 +169,31 @@ impl AnthropicProvider {
     /// (newer models deprecate the parameter; per-role config may still set
     /// it for models that accept it).
     async fn post_with_retry(&self, mut body: Value) -> Result<reqwest::Response, LlmError> {
-        match self.post(&body).await {
-            Err(LlmError::Api {
-                status: 400,
-                body: message,
-                ..
-            }) if message.contains("temperature") && body.get("temperature").is_some() => {
-                body.as_object_mut().unwrap().remove("temperature");
-                tracing::debug!("model rejected temperature; retrying without it");
-                self.post(&body).await
+        for _ in 0..2 {
+            match self.post(&body).await {
+                Err(LlmError::Api {
+                    status: 400,
+                    body: message,
+                    ..
+                }) if message.contains("temperature") && body.get("temperature").is_some() => {
+                    body.as_object_mut().unwrap().remove("temperature");
+                    tracing::debug!("model rejected temperature; retrying without it");
+                }
+                Err(LlmError::Api {
+                    status: 400,
+                    body: message,
+                    ..
+                }) if message.contains("tool_choice") && forced_tool_choice(&body) => {
+                    if let Some(model) = body["model"].as_str() {
+                        self.unforced.lock().unwrap().insert(model.to_string());
+                    }
+                    unforce_tool_choice(&mut body);
+                    tracing::debug!("model rejected a forced tool choice; retrying with auto");
+                }
+                other => return other,
             }
-            other => other,
         }
+        self.post(&body).await
     }
 }
 
@@ -543,6 +590,33 @@ mod tests {
             provider().build_body(&explicit, true)["max_tokens"],
             json!(1024)
         );
+    }
+
+    #[test]
+    fn a_model_that_refuses_forced_tools_is_told_to_call_the_structured_tool() {
+        let provider = AnthropicProvider::new("k".into(), None);
+        let request = ChatRequest {
+            model: "m".into(),
+            system: "Be brief.".into(),
+            messages: vec![ChatMessage::User {
+                content: "hi".into(),
+            }],
+            response_schema: Some(ResponseSchema {
+                name: "answer".into(),
+                schema: json!({"type": "object"}),
+            }),
+            ..Default::default()
+        };
+        let mut body = provider.build_body(&request, false);
+        assert!(forced_tool_choice(&body));
+        unforce_tool_choice(&mut body);
+        assert_eq!(body["tool_choice"], json!({"type": "auto"}));
+        assert!(body.to_string().contains(STRUCTURED_NUDGE));
+
+        provider.unforced.lock().unwrap().insert("m".into());
+        let remembered = provider.build_body(&request, false);
+        assert_eq!(remembered["tool_choice"], json!({"type": "auto"}));
+        assert_eq!(remembered["tools"][0]["name"], STRUCTURED_TOOL);
     }
 
     #[test]
