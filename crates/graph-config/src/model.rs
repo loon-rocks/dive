@@ -383,6 +383,7 @@ pub struct ModelRoles(BTreeMap<String, ModelChoice>);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
     Chat,
+    Drafter,
     Planner,
     Outliner,
     Solver,
@@ -392,8 +393,9 @@ pub enum Role {
 }
 
 impl Role {
-    pub const ALL: [Role; 7] = [
+    pub const ALL: [Role; 8] = [
         Role::Chat,
+        Role::Drafter,
         Role::Planner,
         Role::Outliner,
         Role::Solver,
@@ -405,6 +407,7 @@ impl Role {
     pub fn as_str(self) -> &'static str {
         match self {
             Role::Chat => "chat",
+            Role::Drafter => "drafter",
             Role::Planner => "planner",
             Role::Outliner => "outliner",
             Role::Solver => "solver",
@@ -432,6 +435,7 @@ impl Role {
     pub fn fallback(self) -> Option<Role> {
         match self {
             Role::Outliner => Some(Role::Planner),
+            Role::Drafter => Some(Role::Chat),
             _ => None,
         }
     }

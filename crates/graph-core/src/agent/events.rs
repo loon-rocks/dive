@@ -57,6 +57,22 @@ pub trait EventSink: Send + Sync {
         _elapsed: Duration,
     ) {
     }
+    fn subagent_started(&self, _run: u64, _agent: &str, _caller: &str, _input: &Value) {}
+    fn subagent_finished(
+        &self,
+        _run: u64,
+        _agent: &str,
+        _output: &Value,
+        _is_error: bool,
+        _elapsed: Duration,
+    ) {
+    }
+    fn subagent_tool_started(&self, _run: u64, name: &str, args: &Value) {
+        self.tool_started(name, args);
+    }
+    fn subagent_tool_finished(&self, _run: u64, name: &str, elapsed: Duration, is_error: bool) {
+        self.tool_finished(name, elapsed, is_error);
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -156,6 +172,86 @@ impl EventSink for TeeSink {
         self.sinks
             .iter()
             .for_each(|s| s.step_finished(call_stack, path, tool, result, is_error, elapsed));
+    }
+
+    fn subagent_started(&self, run: u64, agent: &str, caller: &str, input: &Value) {
+        self.sinks
+            .iter()
+            .for_each(|s| s.subagent_started(run, agent, caller, input));
+    }
+
+    fn subagent_finished(
+        &self,
+        run: u64,
+        agent: &str,
+        output: &Value,
+        is_error: bool,
+        elapsed: Duration,
+    ) {
+        self.sinks
+            .iter()
+            .for_each(|s| s.subagent_finished(run, agent, output, is_error, elapsed));
+    }
+
+    fn subagent_tool_started(&self, run: u64, name: &str, args: &Value) {
+        self.sinks
+            .iter()
+            .for_each(|s| s.subagent_tool_started(run, name, args));
+    }
+
+    fn subagent_tool_finished(&self, run: u64, name: &str, elapsed: Duration, is_error: bool) {
+        self.sinks
+            .iter()
+            .for_each(|s| s.subagent_tool_finished(run, name, elapsed, is_error));
+    }
+}
+
+pub struct SubagentSink {
+    pub inner: Arc<dyn EventSink>,
+    pub run: u64,
+}
+
+impl EventSink for SubagentSink {
+    fn model_call(&self, call: &ModelCallEvent) {
+        self.inner.model_call(call);
+    }
+
+    fn iteration(&self, n: u32) {
+        self.inner.iteration(n);
+    }
+
+    fn tool_started(&self, name: &str, args: &Value) {
+        self.inner.subagent_tool_started(self.run, name, args);
+    }
+
+    fn tool_finished(&self, name: &str, elapsed: Duration, is_error: bool) {
+        self.inner
+            .subagent_tool_finished(self.run, name, elapsed, is_error);
+    }
+
+    fn subagent_started(&self, run: u64, agent: &str, caller: &str, input: &Value) {
+        self.inner.subagent_started(run, agent, caller, input);
+    }
+
+    fn subagent_finished(
+        &self,
+        run: u64,
+        agent: &str,
+        output: &Value,
+        is_error: bool,
+        elapsed: Duration,
+    ) {
+        self.inner
+            .subagent_finished(run, agent, output, is_error, elapsed);
+    }
+
+    fn subagent_tool_started(&self, run: u64, name: &str, args: &Value) {
+        self.inner.subagent_tool_started(run, name, args);
+    }
+
+    fn subagent_tool_finished(&self, run: u64, name: &str, elapsed: Duration, is_error: bool) {
+        self.inner
+            .subagent_tool_finished(run, name, elapsed, is_error);
     }
 }
 

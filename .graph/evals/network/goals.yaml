@@ -1,0 +1,49 @@
+- id: release_briefing
+  request: Something that tells the team what changed since the last release of this repo and flags anything risky. We'd ask it in chat before shipping.
+  answers:
+    - Risky means config keys, file formats, CLI flags or packs changed.
+    - Use the latest GitHub release as the baseline.
+  test: What changed since the last release, and is anything risky?
+
+- id: pr_summary_agent
+  request: An agent I can ask about a pull request number in this repo that tells me what it changes and why, in a few bullets.
+  answers:
+    - Just this repository. Bullets are fine, no need to post anywhere.
+  test: Summarize PR 197.
+
+- id: changed_files_plan
+  request: A plan that takes a PR number and a path prefix and lists the files that PR changed under that path.
+  answers:
+    - Output the list of files, nothing else.
+  test: '{"pr": 197, "path": "crates/"}'
+
+- id: word_count_tool
+  request: A tool that counts the words in a text I give it.
+  answers:
+    - Plain whitespace-separated words is fine. Return the count as a number.
+  test: '{"text": "one two three"}'
+
+- id: commit_digest
+  request: A daily digest of the commits merged to main in the last day, grouped by area of the codebase, for me to read in chat.
+  answers:
+    - Area means the top-level directory or crate a commit touched.
+    - Last 24 hours of commits.
+  test: What was merged in the last day?
+
+- id: release_qa_network
+  request: A triage agent for release questions that hands anything about a specific PR to a PR specialist agent, and answers general "what shipped" questions itself from the git log.
+  answers:
+    - Just this repo. The specialist can read the PR's metadata and diff.
+  test: What does PR 199 change?
+
+- id: grep_explainer
+  request: An agent that finds where a config key is read in this repo and explains what it controls.
+  answers:
+    - Search the code with git grep and read the surrounding file. Answer in chat.
+  test: Where is max_agent_iterations read and what does it control?
+
+- id: risky_diff_check
+  request: A plan that takes a PR number and says whether it changes any file format, with the files and a one-line reason each.
+  answers:
+    - File format means the plan, tool, agent or config file schemas, or the data directory format.
+  test: '{"pr": 194}'

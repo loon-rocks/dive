@@ -224,6 +224,7 @@ pub fn agent_dirs() -> Vec<PathBuf> {
 pub fn global_fragments() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
         ("control_steps", crate::pipeline::CONTROL_STEP_RULES),
+        ("composing", crate::pipeline::COMPOSING_RULES),
         ("templating", crate::pipeline::TEMPLATING_RULES),
         ("tool_format", crate::prompts::TOOL_FORMAT),
         ("agent_format", crate::prompts::AGENT_FORMAT),

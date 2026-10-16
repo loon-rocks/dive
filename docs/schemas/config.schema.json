@@ -174,7 +174,7 @@
         ],
         "type": "object"
       },
-      "description": "Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.",
+      "description": "Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.",
       "type": "object"
     },
     "packs": {

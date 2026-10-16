@@ -110,6 +110,7 @@ pub struct WorkbenchTools {
     debug: Arc<DebugControls>,
     tx: UnboundedSender<WorkbenchEvent>,
     tester: super::artifact::Tester,
+    root: Option<PathBuf>,
 }
 
 impl WorkbenchTools {
@@ -127,7 +128,13 @@ impl WorkbenchTools {
             debug,
             tx,
             tester: Arc::new(std::sync::OnceLock::new()),
+            root: None,
         }
+    }
+
+    pub fn with_root(mut self, root: PathBuf) -> Self {
+        self.root = Some(root);
+        self
     }
 
     pub fn with_tester(mut self, tester: super::artifact::Tester) -> Self {
@@ -689,9 +696,23 @@ impl WorkbenchTools {
                 &self.draft,
                 &self.pipeline,
                 &self.tx,
-                self.plans_dir.as_deref(),
-                input["untested"].as_bool().unwrap_or(false),
-                true,
+                file::SaveRequest {
+                    plans_dir: self.plans_dir.as_deref(),
+                    root: self.root.as_deref(),
+                    scope: file::Scope::parse(input["scope"].as_str()),
+                    skip: input["skip"]
+                        .as_array()
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_string)
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    untested: input["untested"].as_bool().unwrap_or(false),
+                    confirm: true,
+                },
             )
             .await
             {
@@ -701,6 +722,8 @@ impl WorkbenchTools {
                 },
                 Err(error) => error_outcome(&error),
             },
+            file::SET_INTERVIEW => file::set_interview(&self.draft, &self.tx, input),
+            file::PROPOSE_DESIGNS => file::propose_designs(&self.draft, &self.tx, input),
             file::DISCARD_NETWORK => match file::discard_network(&self.draft, &self.tx) {
                 Some(message) => ToolOutcome {
                     result: json!({ "discarded": message }),
@@ -2339,9 +2362,14 @@ steps:
             Some("triager".to_string()),
             Vec::new(),
         );
-        save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
-            .await
-            .unwrap();
+        save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tx,
+            crate::workbench::artifact::SaveRequest::unattended(),
+        )
+        .await
+        .unwrap();
         assert!(std::fs::read_to_string(&opened)
             .unwrap()
             .contains("You triage."));
@@ -2356,9 +2384,14 @@ steps:
             .network
             .put_draft(ArtifactKind::Agent, "other", yaml("other"), Vec::new())
             .unwrap();
-        let refused = save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
-            .await
-            .unwrap_err();
+        let refused = save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tx,
+            crate::workbench::artifact::SaveRequest::unattended(),
+        )
+        .await
+        .unwrap_err();
         assert!(refused.contains("already exists"), "{refused}");
         assert_eq!(
             std::fs::read_to_string(dir.path().join("agents/other.yaml")).unwrap(),
@@ -2402,9 +2435,14 @@ steps:
                 )
                 .unwrap();
         }
-        let stopped = save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
-            .await
-            .unwrap_err();
+        let stopped = save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tx,
+            crate::workbench::artifact::SaveRequest::unattended(),
+        )
+        .await
+        .unwrap_err();
         assert!(
             stopped.starts_with("saved 1 of 2; agent desk was not saved"),
             "{stopped}"
@@ -2417,9 +2455,14 @@ steps:
         );
 
         std::fs::remove_file(dir.path().join("agents/desk.yaml")).unwrap();
-        save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
-            .await
-            .unwrap();
+        save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tx,
+            crate::workbench::artifact::SaveRequest::unattended(),
+        )
+        .await
+        .unwrap();
         assert!(dir.path().join("agents/desk.yaml").exists());
         assert!(tools.draft.lock().unwrap().network.is_empty());
     }

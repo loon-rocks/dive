@@ -1,0 +1,78 @@
+---
+title: "workbench__set_interview"
+sidebarTitle: "workbench__set_interview"
+description: "Shows the architect's interview in the pane and ends its turn with its question."
+playground: "none"
+keywords: ["workbench__set_interview"]
+---
+
+## Behavior
+
+- Carries the reply you read, the architect's confidence, what's still missing, the question with its guess, and the facts so far, each known, a guess, being asked or missing.
+- Ends the architect's turn, so a question costs one model call.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Read-only |
+
+## Input
+
+<ParamField body="confidence" type="integer" required>
+</ParamField>
+
+<ParamField body="confirmed" type="boolean">
+  True once the user said yes to the restate
+</ParamField>
+
+<ParamField body="facts" type="object[]" required>
+</ParamField>
+
+<ParamField body="facts.[].label" type="string" required>
+  Outcome, Who, Where, Success, Constraint, Out of scope, or a topic of this request
+</ParamField>
+
+<ParamField body="facts.[].previous" type="string">
+  When feedback reopens a confirmed fact: what it said before
+</ParamField>
+
+<ParamField body="facts.[].state" type="enum<string>" required>
+  Available options: `known`, `guess`, `asking`, `missing`
+</ParamField>
+
+<ParamField body="facts.[].text" type="string" required>
+</ParamField>
+
+<ParamField body="guess" type="string">
+  Your guess at its answer, with the reasoning
+</ParamField>
+
+<ParamField body="missing" type="string">
+  What you still don't know, in a few words; empty when nothing is
+</ParamField>
+
+<ParamField body="question" type="string">
+  The one question you're asking now, when you're asking one
+</ParamField>
+
+<ParamField body="reply" type="string" required>
+  Your whole reply to the user, as they read it in the chat: your read of the request, the question and your guess, or the restate
+</ParamField>
+
+## Output
+
+<ResponseField name="confidence" type="integer">
+</ResponseField>
+
+<ResponseField name="shown" type="boolean">
+</ResponseField>
+
+<ResponseExample>
+
+```json Output
+{
+  "confidence": 55,
+  "shown": true
+}
+```
+
+</ResponseExample>

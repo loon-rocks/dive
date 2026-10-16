@@ -37,6 +37,23 @@ pub enum WorkbenchEvent {
         note: Option<String>,
     },
     AgentNotice(String),
+    SubagentStarted {
+        run: u64,
+        agent: String,
+        input: Value,
+    },
+    SubagentFinished {
+        run: u64,
+        agent: String,
+        output: Value,
+        is_error: bool,
+        seconds: f64,
+    },
+    SubagentTool {
+        run: u64,
+        name: String,
+        finished: Option<bool>,
+    },
     // Draft changes published by the workbench tools; `dirty` is false
     // when the draft came straight from disk (load), true for edits.
     DraftReplaced {
@@ -127,6 +144,23 @@ impl WorkbenchEvent {
             },
             WorkbenchEvent::ActiveAgent { name, .. } => format!("active agent: {name}"),
             WorkbenchEvent::AgentNotice(text) => format!("agent notice: {text}"),
+            WorkbenchEvent::SubagentStarted { run, agent, .. } => {
+                format!("subagent {run} started: {agent}")
+            }
+            WorkbenchEvent::SubagentFinished {
+                run,
+                agent,
+                is_error,
+                seconds,
+                ..
+            } => format!("subagent {run} finished: {agent} in {seconds:.1}s (is_error={is_error})"),
+            WorkbenchEvent::SubagentTool {
+                run,
+                name,
+                finished,
+            } => {
+                format!("subagent {run} tool {name}: {finished:?}")
+            }
             WorkbenchEvent::DraftReplaced { doc, dirty } => format!(
                 "draft replaced: '{}' ({} steps, dirty={dirty})",
                 doc.identifier,
