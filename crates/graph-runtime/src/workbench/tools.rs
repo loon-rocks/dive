@@ -684,10 +684,46 @@ impl WorkbenchTools {
         }
     }
 
+    async fn sketch_catalog(&self, sketch: &Value) -> Vec<(String, String)> {
+        let text = sketch.to_string();
+        let words: std::collections::BTreeSet<&str> = text
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .filter(|word| word.len() > 3)
+            .collect();
+        let defs = self.pipeline.planner_tool_defs().await;
+        let mut found = Vec::new();
+        for def in defs {
+            let short = def.name.rsplit("__").next().unwrap_or(&def.name);
+            if !(words.contains(def.name.as_str()) || words.contains(short)) {
+                continue;
+            }
+            if def.name.starts_with("workbench__") || found.len() >= 12 {
+                continue;
+            }
+            let output = def
+                .output_schema
+                .as_ref()
+                .map(|schema| format!("; returns {schema}"))
+                .unwrap_or_default();
+            found.push((
+                def.name.clone(),
+                format!("takes {}{output}", def.input_schema),
+            ));
+        }
+        found
+    }
+
     async fn network_tool(&self, name: &str, input: &Value) -> ToolOutcome {
         use super::artifact as file;
         match name {
-            file::SET_SKETCH => file::set_sketch(&self.draft, &self.tx, input),
+            file::SET_SKETCH => {
+                let outcome = file::set_sketch(&self.draft, &self.tx, input);
+                if !outcome.is_error {
+                    let catalog = self.sketch_catalog(input).await;
+                    self.draft.lock().unwrap().network.catalog = catalog;
+                }
+                outcome
+            }
             file::TEST_NETWORK => {
                 file::test_network(&self.draft, &self.pipeline, &self.tester, &self.tx, input).await
             }
