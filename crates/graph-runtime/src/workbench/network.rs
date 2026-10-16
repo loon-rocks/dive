@@ -225,6 +225,7 @@ pub struct Network {
     pub interview: Option<Interview>,
     pub designs: Option<Designs>,
     pub testing: Option<String>,
+    pub catalog: Vec<(String, String)>,
     revision: u64,
     tested: Option<u64>,
 }
@@ -887,6 +888,12 @@ impl Network {
             }
             if let Some(run) = &node.last_run {
                 section.push_str(&format!("Its last test run: {run}\n"));
+            }
+        }
+        if !self.catalog.is_empty() {
+            section.push_str("\nCatalog tools the sketch uses (call them exactly as named):\n");
+            for (name, shape) in &self.catalog {
+                section.push_str(&format!("- {name}: {shape}\n"));
             }
         }
         if let Some(test) = self.tests.last() {
