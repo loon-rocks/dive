@@ -288,7 +288,7 @@ pub fn project_id(workspace: &Workspace) -> Option<String> {
 }
 
 fn project_config(workspace: &Workspace) -> PathBuf {
-    workspace.root().join(".graph").join("config.toml")
+    workspace.project_dir().join("config.toml")
 }
 
 struct Collected {
