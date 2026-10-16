@@ -377,3 +377,90 @@ fn an_unavailable_store_is_reported_and_every_name_falls_back_to_the_environment
     assert!(set(&secrets, &workspace, "SET", "x", SecretScope::Project).is_err());
     assert!(!workspace.root().join(".graph").exists());
 }
+
+#[test]
+fn stored_names_are_listed_even_when_nothing_references_them() {
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        "config.toml",
+        "version = 5\n[project]\nid = \"p1\"\n",
+    );
+    let secrets = secrets(
+        MemorySecrets::env(),
+        MemorySecrets::store()
+            .with("SHARED_ONLY", "shared-value")
+            .with_project("MINE", "p1", "project-value")
+            .with_project("THEIRS", "p2", "other-value"),
+    );
+    let list = listed(
+        collect_layers(&[dir.path().join("config.toml")], Path::new("."), &secrets),
+        &secrets,
+    );
+    let names: Vec<(&str, Option<Layer>, usize)> = list
+        .secrets
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.in_use, entry.references.len()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("MINE", Some(Layer::Project), 0),
+            ("SHARED_ONLY", Some(Layer::Shared), 0),
+        ]
+    );
+}
+
+#[derive(Debug)]
+struct Locked;
+
+impl graph_core::secrets::SecretSource for Locked {
+    fn resolve(&self, _name: &str) -> Option<graph_core::secrets::Resolved> {
+        None
+    }
+}
+
+impl SecretStore for Locked {
+    fn status(&self) -> Result<(), graph_core::secrets::StoreError> {
+        Ok(())
+    }
+
+    fn get_in(
+        &self,
+        _name: &str,
+        _project: Option<&str>,
+    ) -> Result<Option<String>, graph_core::secrets::StoreError> {
+        Err(graph_core::secrets::StoreError::Failed(
+            "User interaction is not allowed.".to_string(),
+        ))
+    }
+
+    fn set_in(
+        &self,
+        _name: &str,
+        _project: Option<&str>,
+        _value: &str,
+    ) -> Result<(), graph_core::secrets::StoreError> {
+        Ok(())
+    }
+
+    fn remove_in(
+        &self,
+        _name: &str,
+        _project: Option<&str>,
+    ) -> Result<bool, graph_core::secrets::StoreError> {
+        Ok(false)
+    }
+}
+
+#[test]
+fn an_entry_the_store_refuses_to_read_says_so_rather_than_missing() {
+    let (_dir, workspace) = project_workspace(None);
+    let secrets = Secrets::new(Arc::new(MemorySecrets::env()), Arc::new(Locked));
+    let shown = show(&workspace, &secrets, "SYSTEMONE_API_KEY").unwrap();
+    assert_eq!(shown.status, SecretStatus::Missing);
+    assert!(shown
+        .read_error
+        .unwrap()
+        .contains("User interaction is not allowed"));
+}

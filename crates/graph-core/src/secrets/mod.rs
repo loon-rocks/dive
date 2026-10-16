@@ -28,6 +28,10 @@ pub trait SecretStore: SecretSource {
     fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError>;
     fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError>;
 
+    fn accounts(&self) -> Result<Vec<String>, StoreError> {
+        Ok(Vec::new())
+    }
+
     fn get(&self, name: &str) -> Result<Option<String>, StoreError> {
         self.get_in(name, None)
     }
@@ -57,6 +61,18 @@ impl<T: SecretStore + ?Sized> SecretStore for Arc<T> {
     fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError> {
         (**self).remove_in(name, project)
     }
+
+    fn accounts(&self) -> Result<Vec<String>, StoreError> {
+        (**self).accounts()
+    }
+}
+
+pub fn split_account(account: &str) -> Option<(&str, Option<&str>)> {
+    let (name, project) = match account.split_once('@') {
+        Some((name, project)) => (name, Some(project)),
+        None => (account, None),
+    };
+    (is_secret_name(name) && project.is_none_or(is_project_id)).then_some((name, project))
 }
 
 pub fn store_account(name: &str, project: Option<&str>) -> Result<String, StoreError> {

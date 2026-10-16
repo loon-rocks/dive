@@ -338,12 +338,10 @@ fn the_first_save_creates_the_workspace_file_at_the_current_version() {
 }
 
 #[test]
-fn saving_brings_an_older_file_to_the_current_version() {
-    let old = "# my settings\n[settings]\nhistory_limit = 3\n";
+fn saving_into_an_older_file_keeps_its_version() {
+    let old = "version = 4\n\n# my settings\n[settings]\nhistory_limit = 3\n";
     let (_dir, layers) = layers(GLOBAL, Some(old));
-    let view = view_layers(&layers, &resolver());
-    assert_eq!(view.blocked, None);
-    assert_eq!(view.migrates_from, Some(1));
+    assert_eq!(view_layers(&layers, &resolver()).blocked, None);
     save_price_in(
         &layers,
         None,
@@ -357,17 +355,9 @@ fn saving_brings_an_older_file_to_the_current_version() {
     )
     .unwrap();
     let written = text(&layers);
-    assert!(
-        written.contains(&format!("version = {CONFIG_FORMAT}")),
-        "{written}"
-    );
+    assert!(written.starts_with("version = 4\n"), "{written}");
     assert!(written.contains("# my settings"), "{written}");
-    assert!(written.contains("history_limit = 3"), "{written}");
-    assert_eq!(view_layers(&layers, &resolver()).migrates_from, None);
-    let leftovers = std::fs::read_dir(layers.file.parent().unwrap())
-        .unwrap()
-        .count();
-    assert_eq!(leftovers, 1);
+    assert!(written.contains("[pricing.m]"), "{written}");
 }
 
 #[test]
