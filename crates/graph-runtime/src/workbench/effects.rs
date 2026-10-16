@@ -34,6 +34,8 @@ pub struct Workbench {
     /// Shared debugger state (breakpoints, continue mode) read by the gate.
     pub debug: Arc<DebugControls>,
     pub tx: UnboundedSender<WorkbenchEvent>,
+    pub root: PathBuf,
+    pub thread: std::sync::Mutex<Option<String>>,
 }
 
 impl Workbench {
@@ -78,7 +80,13 @@ impl Workbench {
             }
         }
         let result = match result {
-            Ok(turn) => {
+            Ok(mut turn) => {
+                if turn.text.trim().is_empty() {
+                    if let Some(reply) = super::replay::last_reply(&turn.entries) {
+                        turn.text = reply;
+                    }
+                }
+                ctx.persist(&message, &active, &turn).await;
                 history.extend(turn.entries);
                 if turn.active != active {
                     *ctx.active.lock().unwrap() = turn.active.clone();
@@ -114,6 +122,42 @@ impl Workbench {
         );
         let _ = ctx.tx.send(WorkbenchEvent::TurnFinished(result.clone()));
         result
+    }
+
+    pub fn thread_id(&self) -> Option<String> {
+        self.thread.lock().unwrap().clone()
+    }
+
+    async fn persist(
+        &self,
+        first_message: &str,
+        active: &str,
+        turn: &graph_core::agent::conversation::ConversationTurn,
+    ) {
+        let existing = self.thread.lock().unwrap().clone();
+        let id = match existing {
+            Some(id) => id,
+            None => match self
+                .store
+                .create_thread(&crate::runtime::title_from(first_message), active)
+                .await
+            {
+                Ok(meta) => {
+                    *self.thread.lock().unwrap() = Some(meta.id.clone());
+                    meta.id
+                }
+                Err(error) => {
+                    tracing::warn!("couldn't save the draft session as a thread: {error}");
+                    return;
+                }
+            },
+        };
+        if let Err(error) = self.store.append_entries(&id, &turn.entries).await {
+            tracing::warn!("couldn't save the draft turn: {error}");
+        }
+        if turn.active != active {
+            let _ = self.store.set_active_agent(&id, &turn.active).await;
+        }
     }
 
     pub fn select_agent(&self, name: Option<String>) {
@@ -265,14 +309,27 @@ impl Workbench {
     }
 
     pub async fn save_network(&self) -> Result<String, String> {
+        self.save_network_to(None, Vec::new()).await
+    }
+
+    pub async fn save_network_to(
+        &self,
+        scope: Option<&str>,
+        skip: Vec<String>,
+    ) -> Result<String, String> {
         let ctx = self;
         let saved = super::artifact::save_network(
             &ctx.draft,
             &ctx.pipeline,
             &ctx.tx,
-            ctx.plans_dir.as_deref(),
-            true,
-            false,
+            super::artifact::SaveRequest {
+                plans_dir: ctx.plans_dir.as_deref(),
+                root: Some(&ctx.root),
+                scope: super::artifact::Scope::parse(scope),
+                skip,
+                untested: true,
+                confirm: false,
+            },
         )
         .await;
         let status = match &saved {

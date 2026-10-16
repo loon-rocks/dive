@@ -30,6 +30,8 @@ pub type ContextHook = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
 
 pub type HandoffGuard = Arc<dyn Fn(&str, &str) -> Option<String> + Send + Sync>;
 
+static SUBAGENT_RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Clone)]
 pub struct Conversation {
     pub agents: Arc<AgentSet>,
@@ -41,6 +43,7 @@ pub struct Conversation {
     pub context: Option<ContextHook>,
     pub default_max_iterations: u32,
     pub progress_tools: Vec<String>,
+    pub stop_tools: Vec<String>,
     pub handoff_guard: Option<HandoffGuard>,
 }
 
@@ -251,7 +254,11 @@ impl Conversation {
             provider,
             model: choice.model.clone(),
             temperature: choice.temperature,
-            stop_tools: tools.handoff_tools(),
+            stop_tools: tools
+                .handoff_tools()
+                .into_iter()
+                .chain(self.stop_tools.iter().cloned())
+                .collect(),
             registry: tools,
             events: self.events.clone(),
             system_prompt: self.system_prompt(doc)?,
@@ -323,18 +330,25 @@ impl Conversation {
             output_schema: doc.output_schema.clone(),
         };
         let site = CallSite::role(doc.model.clone()).at(format!("agent:{caller}/agent__{name}"));
+        let run_id = SUBAGENT_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let sink = super::events::SubagentSink {
+            inner: self.events.clone(),
+            run: run_id,
+        };
+        self.events.subagent_started(run_id, name, caller, &input);
+        let started = std::time::Instant::now();
         let runner = RegistryTools {
             registry: &tools,
-            events: self.events.as_ref(),
+            events: &sink,
         };
-        let run = run_task_agent(
-            &spec,
-            &self.pipeline.router,
-            &site,
-            self.events.as_ref(),
-            &runner,
-        )
-        .await;
+        let run = run_task_agent(&spec, &self.pipeline.router, &site, &sink, &runner).await;
+        let (finished, failed) = match &run {
+            Ok(outcome) => (outcome.output.clone(), !outcome.final_),
+            Err(TaskError::Failed(message)) => (json!({ "error": message }), true),
+            Err(TaskError::Aborted(_)) => (json!({ "error": "aborted" }), true),
+        };
+        self.events
+            .subagent_finished(run_id, name, &finished, failed, started.elapsed());
         let outcome = match run {
             Ok(outcome) => outcome,
             Err(TaskError::Failed(message)) => {
@@ -827,6 +841,7 @@ mod tests {
             context: None,
             default_max_iterations: 8,
             progress_tools: Vec::new(),
+            stop_tools: Vec::new(),
             handoff_guard: None,
         };
         (conversation, provider)

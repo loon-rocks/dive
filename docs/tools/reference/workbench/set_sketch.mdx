@@ -55,6 +55,18 @@ keywords: ["workbench__set_sketch"]
   The design principles this node applies
 </ParamField>
 
+<ParamField body="nodes.[].proposed" type="boolean">
+  True for a node a pending question would add
+</ParamField>
+
+<ParamField body="nodes.[].returns" type="string">
+  Its output, field by field, as the nodes that read it expect it
+</ParamField>
+
+<ParamField body="nodes.[].takes" type="string">
+  Its input, field by field, as the nodes that call it will pass it
+</ParamField>
+
 <ParamField body="restate" type="object" required>
 </ParamField>
 

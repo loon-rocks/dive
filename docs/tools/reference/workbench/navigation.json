@@ -16,6 +16,8 @@
     {
       "group": "Networks",
       "pages": [
+        "tools/reference/workbench/set_interview",
+        "tools/reference/workbench/propose_designs",
         "tools/reference/workbench/set_sketch",
         "tools/reference/workbench/test_network",
         "tools/reference/workbench/fail_test",

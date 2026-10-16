@@ -53,6 +53,10 @@ pub struct Edge {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeStatus {
     Sketched,
+    Proposed,
+    Changed,
+    Drafting,
+    Question,
     Drafted,
     Ready,
     Failed,
@@ -62,11 +66,77 @@ impl NodeStatus {
     pub fn label(self) -> &'static str {
         match self {
             Self::Sketched => "sketched",
+            Self::Proposed => "proposed",
+            Self::Changed => "changed",
+            Self::Drafting => "drafting",
+            Self::Question => "question",
             Self::Drafted => "drafted",
             Self::Ready => "ready",
             Self::Failed => "failed",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactState {
+    Known,
+    Guess,
+    Asking,
+    Missing,
+}
+
+impl FactState {
+    fn parse(text: &str) -> Self {
+        match text {
+            "known" => Self::Known,
+            "guess" => Self::Guess,
+            "asking" => Self::Asking,
+            _ => Self::Missing,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Known => "known",
+            Self::Guess => "guess",
+            Self::Asking => "asking",
+            Self::Missing => "missing",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fact {
+    pub label: String,
+    pub text: String,
+    pub state: FactState,
+    pub previous: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Interview {
+    pub reply: String,
+    pub confidence: u8,
+    pub missing: String,
+    pub question: Option<String>,
+    pub guess: Option<String>,
+    pub facts: Vec<Fact>,
+    pub confirmed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Design {
+    pub title: String,
+    pub model: Option<String>,
+    pub nodes: Vec<(ArtifactKind, String)>,
+    pub lines: Vec<String>,
+    pub principles: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Designs {
+    pub yours: Design,
+    pub suggested: Design,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +146,8 @@ pub struct Node {
     pub job: String,
     pub model: Option<String>,
     pub principles: Vec<String>,
+    pub takes: String,
+    pub returns: String,
     pub sketched: bool,
     pub status: NodeStatus,
     pub yaml: Option<String>,
@@ -83,6 +155,8 @@ pub struct Node {
     pub last_run: Option<Value>,
     pub editing: Option<PathBuf>,
     pub original: Option<String>,
+    pub builder: Option<String>,
+    pub note: Option<String>,
 }
 
 impl Node {
@@ -93,6 +167,8 @@ impl Node {
             job,
             model: None,
             principles: Vec::new(),
+            takes: String::new(),
+            returns: String::new(),
             sketched: true,
             status: NodeStatus::Sketched,
             yaml: None,
@@ -100,6 +176,8 @@ impl Node {
             last_run: None,
             editing: None,
             original: None,
+            builder: None,
+            note: None,
         }
     }
 
@@ -144,6 +222,9 @@ pub struct Network {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
     pub tests: Vec<TestRun>,
+    pub interview: Option<Interview>,
+    pub designs: Option<Designs>,
+    pub testing: Option<String>,
     revision: u64,
     tested: Option<u64>,
 }
@@ -155,11 +236,15 @@ pub struct NodeView {
     pub job: String,
     pub model: Option<String>,
     pub principles: Vec<String>,
+    pub takes: String,
+    pub returns: String,
     pub sketched: bool,
     pub status: NodeStatus,
     pub yaml: Option<String>,
     pub problems: Vec<String>,
     pub last_run: Option<Value>,
+    pub builder: Option<String>,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -169,11 +254,17 @@ pub struct NetworkView {
     pub edges: Vec<Edge>,
     pub tests: Vec<TestRun>,
     pub tested: bool,
+    pub interview: Option<Interview>,
+    pub designs: Option<Designs>,
+    pub testing: Option<String>,
 }
 
 impl NetworkView {
     pub fn is_empty(&self) -> bool {
-        self.restate.is_none() && self.nodes.is_empty()
+        self.restate.is_none()
+            && self.nodes.is_empty()
+            && self.interview.is_none()
+            && self.designs.is_none()
     }
 
     pub fn unsaved(&self) -> usize {
@@ -200,7 +291,133 @@ fn text(value: &Value, key: &str) -> String {
 
 impl Network {
     pub fn is_empty(&self) -> bool {
-        self.restate.is_none() && self.nodes.is_empty()
+        self.restate.is_none()
+            && self.nodes.is_empty()
+            && self.interview.is_none()
+            && self.designs.is_none()
+    }
+
+    pub fn set_interview(&mut self, input: &Value) -> Result<Value, String> {
+        let confidence = input["confidence"]
+            .as_u64()
+            .ok_or("confidence is required: a whole number from 0 to 100")?
+            .min(100) as u8;
+        let facts = input["facts"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|fact| Fact {
+                label: text(fact, "label"),
+                text: text(fact, "text"),
+                state: FactState::parse(fact["state"].as_str().unwrap_or_default()),
+                previous: fact["previous"]
+                    .as_str()
+                    .map(str::to_string)
+                    .filter(|previous| !previous.is_empty()),
+            })
+            .filter(|fact| !fact.label.is_empty())
+            .collect();
+        let optional = |key: &str| {
+            input[key]
+                .as_str()
+                .map(str::to_string)
+                .filter(|value| !value.trim().is_empty())
+        };
+        self.interview = Some(Interview {
+            reply: text(input, "reply"),
+            confidence,
+            missing: text(input, "missing"),
+            question: optional("question"),
+            guess: optional("guess"),
+            facts,
+            confirmed: input["confirmed"].as_bool().unwrap_or(false),
+        });
+        self.changed();
+        Ok(json!({"confidence": confidence, "shown": true}))
+    }
+
+    pub fn propose_designs(&mut self, input: &Value) -> Result<Value, String> {
+        let design = |value: &Value| -> Result<Design, String> {
+            let title = text(value, "title");
+            if title.is_empty() {
+                return Err("each design needs a title".to_string());
+            }
+            Ok(Design {
+                title,
+                model: value["model"].as_str().map(str::to_string),
+                nodes: value["nodes"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|node| {
+                        let kind = ArtifactKind::parse(node["kind"].as_str()?)?;
+                        Some((kind, bare_name(kind, node["name"].as_str()?)))
+                    })
+                    .collect(),
+                lines: strings(&value["lines"]),
+                principles: strings(&value["principles"]),
+            })
+        };
+        self.designs = Some(Designs {
+            yours: design(&input["yours"])?,
+            suggested: design(&input["suggested"])?,
+        });
+        self.changed();
+        Ok(json!({"shown": true}))
+    }
+
+    pub fn builder_started(&mut self, node: &str, builder: &str) {
+        if let Some(found) = self.nodes.iter_mut().find(|found| found.name == node) {
+            found.status = NodeStatus::Drafting;
+            found.builder = Some(builder.to_string());
+            found.note = Some(format!("{builder} is drafting it"));
+        }
+    }
+
+    pub fn builder_finished(&mut self, node: &str, builder: &str, output: &Value, failed: bool) {
+        let Some(found) = self.nodes.iter_mut().find(|found| found.name == node) else {
+            return;
+        };
+        let summary = output["summary"].as_str().unwrap_or_default().to_string();
+        let (status, note) = match (failed, output["status"].as_str()) {
+            (true, _) | (_, Some("failed")) => (
+                NodeStatus::Failed,
+                if summary.is_empty() {
+                    format!("{builder} couldn't build it")
+                } else {
+                    format!("{builder} couldn't build it: {summary}")
+                },
+            ),
+            (_, Some("question")) => (
+                NodeStatus::Question,
+                format!("{builder} is waiting on your answer"),
+            ),
+            _ if found.yaml.is_some() => (
+                if found.problems.is_empty() {
+                    NodeStatus::Drafted
+                } else {
+                    NodeStatus::Failed
+                },
+                if summary.is_empty() {
+                    builder.to_string()
+                } else {
+                    format!("{builder} · {summary}")
+                },
+            ),
+            _ => (
+                NodeStatus::Sketched,
+                format!("{builder} returned without a draft"),
+            ),
+        };
+        found.status = status;
+        found.builder = Some(builder.to_string());
+        found.note = Some(note);
+    }
+
+    pub fn start_test(&mut self, entry: &str) {
+        self.testing = Some(entry.to_string());
     }
 
     pub fn node(&self, kind: ArtifactKind, name: &str) -> Option<&Node> {
@@ -295,13 +512,34 @@ impl Network {
                 .find(|node| node.kind == *kind && node.name == name)
                 .cloned()
                 .unwrap_or_else(|| Node::sketched(name.clone(), *kind, String::new()));
-            node.job = text(raw, "job");
-            node.model = raw["model"]
+            let job = text(raw, "job");
+            let model = raw["model"]
                 .as_str()
                 .map(str::to_string)
                 .filter(|m| !m.is_empty());
-            node.principles = strings(&raw["principles"]);
+            let principles = strings(&raw["principles"]);
+            let existed = self.restate.is_some()
+                && self
+                    .nodes
+                    .iter()
+                    .any(|old| old.kind == *kind && old.name == name);
+            let revised = existed
+                && (node.job != job || node.model != model || node.principles != principles);
+            node.job = job;
+            node.model = model;
+            node.principles = principles;
+            node.takes = text(raw, "takes");
+            node.returns = text(raw, "returns");
             node.sketched = true;
+            if raw["proposed"].as_bool().unwrap_or(false) && !node.drafted() {
+                node.status = NodeStatus::Proposed;
+            } else if revised && !node.drafted() {
+                node.status = NodeStatus::Changed;
+            } else if !node.drafted()
+                && matches!(node.status, NodeStatus::Proposed | NodeStatus::Changed)
+            {
+                node.status = NodeStatus::Sketched;
+            }
             nodes.push(node);
         }
         let mut unsketched = Vec::new();
@@ -319,6 +557,7 @@ impl Network {
         self.restate = Some(restate);
         self.nodes = nodes;
         self.edges = edges;
+        self.designs = None;
         self.changed();
         let mut summary = json!({
             "nodes": self.nodes.iter().filter(|node| node.sketched).count(),
@@ -345,7 +584,9 @@ impl Network {
                 node.yaml = Some(yaml);
                 node.problems = problems;
                 node.last_run = None;
-                node.status = NodeStatus::Drafted;
+                if node.status != NodeStatus::Drafting {
+                    node.status = NodeStatus::Drafted;
+                }
             }
             None if sketch => {
                 let names: Vec<String> = self
@@ -439,6 +680,7 @@ impl Network {
     }
 
     pub fn record_test(&mut self, run: TestRun) {
+        self.testing = None;
         if run.passed {
             self.tested = Some(self.revision);
             for node in &mut self.nodes {
@@ -453,6 +695,19 @@ impl Network {
             }
         }
         self.tests.push(run);
+    }
+
+    pub fn fail_last_test(&mut self, reason: &str, nodes: &[String]) -> bool {
+        let Some(last) = self.tests.last_mut() else {
+            return false;
+        };
+        last.passed = false;
+        if !reason.is_empty() {
+            last.answer = format!("{} (failed: {reason})", last.answer);
+        }
+        self.untest();
+        self.mark_failed(nodes);
+        true
     }
 
     pub fn mark_failed(&mut self, names: &[String]) {
@@ -475,16 +730,23 @@ impl Network {
                     job: node.job.clone(),
                     model: node.model.clone(),
                     principles: node.principles.clone(),
+                    takes: node.takes.clone(),
+                    returns: node.returns.clone(),
                     sketched: node.sketched,
                     status: node.status,
                     yaml: node.yaml.clone(),
                     problems: node.problems.clone(),
                     last_run: node.last_run.clone(),
+                    builder: node.builder.clone(),
+                    note: node.note.clone(),
                 })
                 .collect(),
             edges: self.edges.clone(),
             tests: self.tests.clone(),
             tested: self.tested(),
+            interview: self.interview.clone(),
+            designs: self.designs.clone(),
+            testing: self.testing.clone(),
         }
     }
 
@@ -578,6 +840,24 @@ impl Network {
                     ", not in the sketch"
                 },
             ));
+            if !node.takes.is_empty() || !node.returns.is_empty() {
+                section.push_str(&format!(
+                    "  takes: {} · returns: {}\n",
+                    if node.takes.is_empty() {
+                        "nothing"
+                    } else {
+                        &node.takes
+                    },
+                    if node.returns.is_empty() {
+                        "nothing"
+                    } else {
+                        &node.returns
+                    }
+                ));
+            }
+            if let Some(note) = &node.note {
+                section.push_str(&format!("  {note}\n"));
+            }
         }
         if !self.edges.is_empty() {
             section.push_str("Edges:\n");
@@ -950,5 +1230,114 @@ mod tests {
         assert!(section.contains("plan__release_digest"));
         assert!(section.contains("### tool changelog_section draft"));
         assert!(section.contains("- bad"));
+    }
+
+    #[test]
+    fn builders_report_progress_on_their_node() {
+        let mut network = Network::default();
+        network.set_sketch(&sketch()).unwrap();
+        network.builder_started("changelog_section", "tool_drafter");
+        assert_eq!(
+            network
+                .node(ArtifactKind::Tool, "changelog_section")
+                .unwrap()
+                .status,
+            NodeStatus::Drafting
+        );
+        network
+            .put_draft(
+                ArtifactKind::Tool,
+                "changelog_section",
+                "name: changelog_section".into(),
+                Vec::new(),
+            )
+            .unwrap();
+        network.builder_finished(
+            "changelog_section",
+            "tool_drafter",
+            &json!({"status": "drafted", "summary": "reads a section"}),
+            false,
+        );
+        let node = network
+            .node(ArtifactKind::Tool, "changelog_section")
+            .unwrap();
+        assert_eq!(node.status, NodeStatus::Drafted);
+        assert_eq!(node.note.as_deref(), Some("tool_drafter · reads a section"));
+        network.builder_finished(
+            "release_desk",
+            "agent_drafter",
+            &json!({"status": "question"}),
+            false,
+        );
+        assert_eq!(
+            network
+                .node(ArtifactKind::Agent, "release_desk")
+                .unwrap()
+                .status,
+            NodeStatus::Question
+        );
+    }
+
+    #[test]
+    fn a_revised_sketch_marks_changed_and_proposed_nodes() {
+        let mut network = Network::default();
+        network.set_sketch(&sketch()).unwrap();
+        let mut revised = sketch();
+        revised["nodes"][1]["job"] = json!("Briefing with a risk section");
+        revised["nodes"].as_array_mut().unwrap().push(
+            json!({"name": "post_message", "kind": "tool", "job": "Posts", "proposed": true}),
+        );
+        network.set_sketch(&revised).unwrap();
+        assert_eq!(
+            network
+                .node(ArtifactKind::Plan, "release_digest")
+                .unwrap()
+                .status,
+            NodeStatus::Changed
+        );
+        assert_eq!(
+            network
+                .node(ArtifactKind::Tool, "post_message")
+                .unwrap()
+                .status,
+            NodeStatus::Proposed
+        );
+    }
+
+    #[test]
+    fn the_interview_and_designs_reach_the_view() {
+        let mut network = Network::default();
+        network
+            .set_interview(&json!({
+                "reply": "r",
+                "confidence": 55,
+                "missing": "what counts as risky",
+                "question": "What makes a change risky?",
+                "guess": "Config changes",
+                "facts": [{"label": "Outcome", "text": "A briefing", "state": "known"}, {"label": "Risky", "text": "", "state": "asking", "previous": "anything"}]
+            }))
+            .unwrap();
+        network
+            .propose_designs(&json!({
+                "yours": {"title": "One big agent", "nodes": [{"kind": "agent", "name": "release_agent"}], "lines": ["1 large turn"]},
+                "suggested": {"title": "Digest plan", "nodes": [{"kind": "plan", "name": "plan__release_digest"}], "lines": ["38 small calls"], "principles": ["Map/reduce"]}
+            }))
+            .unwrap();
+        let view = network.view();
+        let interview = view.interview.clone().unwrap();
+        assert_eq!(interview.confidence, 55);
+        assert_eq!(interview.facts[1].state, FactState::Asking);
+        assert_eq!(interview.facts[1].previous.as_deref(), Some("anything"));
+        let designs = view.designs.clone().unwrap();
+        assert_eq!(
+            designs.suggested.nodes,
+            [(ArtifactKind::Plan, "release_digest".to_string())]
+        );
+        assert!(!view.is_empty() && view.restate.is_none());
+        network.set_sketch(&sketch()).unwrap();
+        assert!(
+            network.designs.is_none(),
+            "a sketch settles the design question"
+        );
     }
 }

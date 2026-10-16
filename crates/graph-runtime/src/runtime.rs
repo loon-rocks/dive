@@ -497,6 +497,7 @@ impl Runtime {
             context: None,
             default_max_iterations: self.config.settings.max_agent_iterations,
             progress_tools: Vec::new(),
+            stop_tools: Vec::new(),
             handoff_guard: None,
         }
     }

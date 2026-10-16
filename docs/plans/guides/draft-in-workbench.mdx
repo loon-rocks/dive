@@ -22,20 +22,19 @@ keywords: ["workbench", "network_drafter", "plan drafter", "compose_plan", "draf
     files it changed
     ```
 
-    The drafting architect asks what it can't settle, one question at a time with its guess, and restates what it'll build for you to confirm. It then sketches the plan in the workspace with the model role and design principles it uses: here a map that fetches each commit's changed files in parallel, and one small-model call for all the notes.
+    The drafting architect asks what it can't settle, one question at a time with its guess and its confidence. The workspace shows what it knows so far.
+
+    <Frame caption="The architect's question, with its guess and what it knows so far.">
+      <img src="/images/workbench/plan-drafting-questions.svg" alt="The workbench with network_drafter asking whether merge commits should get a note of their own, guessing no, and the workspace showing the interview at 75% confidence with the outcome and source known and merge commits being asked about." />
+    </Frame>
+
+    It restates what it'll build for you to confirm, then sketches the plan in the workspace with the model role and design principles it uses: here a map that fetches each commit's changed files in parallel, and one small-model call for all the notes.
   </Step>
   <Step title="Build it">
-    Tell the architect to build. The plan drafter finds the tools for each part of the goal, writes the plan, checks it, and puts it in the workspace:
+    Tell the architect to build. The plan drafter writes down the steps the sketch lists, checks the plan, and puts it in the workspace. The architect then test-runs it and tells you how the test went:
 
     <Frame caption="The drafted plan in the workspace: the release, the commits since it, each commit's changed files, and one infer step that writes the notes.">
       <img src="/images/workbench/plan-drafted.svg" alt="The workbench after building: the architect's summary on the left, and on the right the restate and the unreleased_changes plan with steps release, commits, a file_changes map and notes, with no problems." />
-    </Frame>
-  </Step>
-  <Step title="Answer its questions">
-    When the plan turns on a value it would have to guess, a form asks you. Each field starts at its guess.
-
-    <Frame caption="The plan drafter's questions, each filled in with its guess.">
-      <img src="/images/workbench/plan-drafting-questions.svg" alt="The workbench's answer form over the chat, asking whether merge commits should get a release note (no) and whether to leave out commits that only change .github/, with a field for anything else the planner should know." />
     </Frame>
   </Step>
   <Step title="Save">

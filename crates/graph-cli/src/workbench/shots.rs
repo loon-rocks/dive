@@ -475,6 +475,10 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         context: Some(super::agents::context_hook(draft.clone(), pipeline.clone())),
         default_max_iterations: 8,
         progress_tools: progress_tools(),
+        stop_tools: super::artifact::STOP_TOOLS
+            .iter()
+            .map(|name| name.to_string())
+            .collect(),
         handoff_guard: None,
     };
 
@@ -492,6 +496,8 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         plans_dir: None,
         debug,
         tx: tx.clone(),
+        root: root.to_path_buf(),
+        thread: Mutex::new(None),
     });
 
     // Boot exactly like `run_plan_workbench`, then type the chat message

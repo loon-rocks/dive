@@ -546,7 +546,10 @@ description = "fast and cheap"
         assert!(models.resolve("bogus").is_none());
         assert_eq!(
             models.known_names(),
-            vec!["chat", "default", "judge", "nano", "outliner", "planner", "repair", "solver"]
+            vec![
+                "chat", "default", "drafter", "judge", "nano", "outliner", "planner", "repair",
+                "solver"
+            ]
         );
         let no_default = ModelRoles::from([("nano", models.get("nano").unwrap().clone())]);
         assert_eq!(no_default.known_names(), vec!["nano"]);

@@ -17,102 +17,14 @@ llm:
       nodes:
         - name: unreleased_changes
           kind: plan
-          job: Lists the commits since the latest release, gets each one's changed files in parallel, and writes the notes
+          job: gh_release → git_log since its tag → map git_changed_files per commit, 8 at a time → one infer for every note → output {release_tag, release_notes, commits}
           model: default
           principles: [Map/reduce, Concurrency, Smallest model]
+          takes: nothing
+          returns: release_tag, release_notes [{sha, short_sha, note}], commits
   - call: agent__plan_drafter
     input:
       node: unreleased_changes
-  - call: plan__compose_plan
-    input:
-      goal: List the commits merged since the latest GitHub release, and write a one-line release note for each commit from its subject and the files it changed.
-  - structured:
-      inputs: []
-      capabilities:
-        - { does: Find the latest GitHub release, kind: data }
-        - { does: List the commits merged since a git ref, kind: data }
-        - { does: List the files a commit changed, kind: data }
-        - { does: Write a one-line release note per commit, kind: judgment }
-      details: []
-  - structured:
-      yaml: |
-        version: 2
-        identifier: unreleased_changes
-        name: Unreleased changes
-        description: Lists commits merged since the latest GitHub release and writes a one-line release note for each based on its subject and changed files.
-        input_schema:
-          properties: {}
-          required: []
-          type: object
-        steps:
-        - id: release
-          tool_name: github__tool__gh_release
-          input:
-            tag: ''
-        - id: commits
-          tool_name: github__tool__git_log
-          input:
-            base: '{{release.tag}}'
-            head: HEAD
-        - id: file_changes
-          tool_name: map
-          input:
-            concurrency: 8
-            do:
-            - id: changed
-              input:
-                base: '{{item.sha}}~1'
-                head: '{{item.sha}}'
-                prefix: ''
-              tool_name: github__tool__git_changed_files
-            - id: row
-              input:
-                shape:
-                  author: '{{item.author}}'
-                  date: '{{item.date}}'
-                  files: '{{changed.files}}'
-                  pr: '{{item.pr}}'
-                  sha: '{{item.sha}}'
-                  short_sha: '{{item.short_sha}}'
-                  subject: '{{item.subject}}'
-              tool_name: builtin__reshape
-            over: '{{commits.commits}}'
-        - id: notes
-          tool_name: builtin__infer
-          input:
-            instruction: |-
-              For each commit below, write one short release-note line (a single sentence, no trailing period required) based on its subject and the files it changed. Return the notes in the same order as the commits, one per commit, prefixed with the commit's short sha.
-
-              Commits (sha, subject, changed files):
-              {{#file_changes.results}}
-              - {{short_sha}} | subject: {{subject}} | files: {{files}}
-              {{/file_changes.results}}
-            output_schema:
-              properties:
-                notes:
-                  items:
-                    properties:
-                      note:
-                        type: string
-                      sha:
-                        type: string
-                      short_sha:
-                        type: string
-                    required:
-                    - sha
-                    - short_sha
-                    - note
-                    type: object
-                  type: array
-              required:
-              - notes
-              type: object
-        finish:
-          output:
-            commits: '{{file_changes.results}}'
-            release_notes: '{{notes.notes}}'
-            release_tag: '{{release.tag}}'
-      questions: []
   - call: workbench__set_artifact
     input:
       kind: plan
@@ -196,9 +108,8 @@ llm:
   - text: '{"name": "unreleased_changes", "status": "drafted", "summary": "Finds the latest release, maps over the commits since it for their changed files, and writes every note in one infer call", "problems": []}'
   - text: >-
       unreleased_changes is drafted. It finds the latest GitHub release, gets the files each
-      commit changed eight at a time, and writes every note in one small-model call. Want me
-      to test it?
+      commit changed eight at a time, and writes every note in one small-model call.
 
 capture:
   at: loaded
-  turn_seconds: 31
+  turn_seconds: 9

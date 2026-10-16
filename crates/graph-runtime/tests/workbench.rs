@@ -191,8 +191,10 @@ async fn the_architect_sketches_a_builder_drafts_and_tries_and_the_network_saves
         collector.await.unwrap(),
         vec![
             Seen::Shown(0),
+            Seen::Shown(0),
             Seen::Shown(1),
             Seen::Asked,
+            Seen::Shown(1),
             Seen::Shown(1),
             Seen::Turn(Ok("drafted and tested".to_string())),
             Seen::Shown(0),

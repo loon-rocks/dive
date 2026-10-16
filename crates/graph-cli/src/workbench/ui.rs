@@ -1620,6 +1620,52 @@ fn node_lines(node: &graph_runtime::workbench::NodeView, lines: &mut Vec<Line<'s
 fn network_lines(view: &graph_runtime::workbench::NetworkView) -> Vec<Line<'static>> {
     use graph_runtime::workbench::NodeStatus;
     let mut lines = Vec::new();
+    if let Some(interview) = view.interview.as_ref().filter(|_| view.restate.is_none()) {
+        let filled = (interview.confidence as usize * 20) / 100;
+        lines.push(Line::styled(
+            format!(
+                "Interview · {}{} {}% confident",
+                "█".repeat(filled),
+                "░".repeat(20 - filled),
+                interview.confidence
+            ),
+            ACCENT.add_modifier(Modifier::BOLD),
+        ));
+        if !interview.missing.is_empty() {
+            lines.push(Line::styled(format!("missing: {}", interview.missing), DIM));
+        }
+        lines.push(Line::default());
+        for fact in &interview.facts {
+            let (mark, style) = match fact.state {
+                graph_runtime::workbench::FactState::Known => ("✓", OK),
+                graph_runtime::workbench::FactState::Guess => ("~", Style::default()),
+                graph_runtime::workbench::FactState::Asking => ("?", ACCENT),
+                graph_runtime::workbench::FactState::Missing => ("·", DIM),
+            };
+            let previous = fact
+                .previous
+                .as_ref()
+                .map(|previous| format!(" (was: {previous})"))
+                .unwrap_or_default();
+            lines.push(Line::styled(
+                format!("{mark} {}: {}{previous}", fact.label, fact.text),
+                style,
+            ));
+        }
+        lines.push(Line::default());
+    }
+    if let Some(designs) = &view.designs {
+        for (label, design) in [("yours", &designs.yours), ("suggested", &designs.suggested)] {
+            lines.push(Line::styled(
+                format!("{label}: {}", design.title),
+                ACCENT.add_modifier(Modifier::BOLD),
+            ));
+            for line in &design.lines {
+                lines.push(Line::styled(format!("  {line}"), DIM));
+            }
+        }
+        lines.push(Line::default());
+    }
     if let Some(restate) = &view.restate {
         lines.push(Line::styled(
             restate.outcome.clone(),
@@ -1642,8 +1688,11 @@ fn network_lines(view: &graph_runtime::workbench::NetworkView) -> Vec<Line<'stat
         let style = match node.status {
             NodeStatus::Ready => OK,
             NodeStatus::Failed => ERROR,
-            NodeStatus::Sketched => DIM,
-            NodeStatus::Drafted => Style::default(),
+            NodeStatus::Sketched | NodeStatus::Proposed => DIM,
+            NodeStatus::Changed
+            | NodeStatus::Drafting
+            | NodeStatus::Question
+            | NodeStatus::Drafted => Style::default(),
         };
         let mut line = format!(
             "{} {} · {}",
