@@ -12,11 +12,16 @@ keywords: ["Workbench tools"]
 | --- | --- |
 | [`workbench__list_artifacts`](/tools/reference/workbench/list_artifacts) | Lists the plans, agents or tools that exist. |
 | [`workbench__show_artifact`](/tools/reference/workbench/show_artifact) | Returns an existing plan, agent or user tool as YAML, without opening it in the pane. |
-| [`workbench__load_artifact`](/tools/reference/workbench/load_artifact) | Opens an existing plan, agent or user tool in the pane for editing. |
-| [`workbench__set_artifact`](/tools/reference/workbench/set_artifact) | Puts a whole plan, agent or tool file in the pane as the current draft. |
-| [`workbench__try_artifact`](/tools/reference/workbench/try_artifact) | Runs the plan or tool draft in the pane. |
-| [`workbench__save_artifact`](/tools/reference/workbench/save_artifact) | Saves the draft in the pane to the project. |
-| [`workbench__discard_artifact`](/tools/reference/workbench/discard_artifact) | Discards the agent or tool draft in the pane. |
+| [`workbench__load_artifact`](/tools/reference/workbench/load_artifact) | Opens an existing plan in the plan pane, or an existing agent or user tool as a node of the network draft. |
+| [`workbench__set_artifact`](/tools/reference/workbench/set_artifact) | Puts a whole agent, tool or plan file in the network draft as the draft of the sketch node it names. |
+| [`workbench__try_artifact`](/tools/reference/workbench/try_artifact) | Runs a tool draft, or the plan in the plan pane. |
+| [`workbench__save_artifact`](/tools/reference/workbench/save_artifact) | Saves the plan in the plan pane. |
+| [`workbench__discard_artifact`](/tools/reference/workbench/discard_artifact) | Discards one agent, tool or plan draft in the network. |
+| [`workbench__set_sketch`](/tools/reference/workbench/set_sketch) | Puts the design sketch of the network in the pane, replacing the previous one. |
+| [`workbench__test_network`](/tools/reference/workbench/test_network) | Tests the drafted, unsaved network once, after you approve the run. |
+| [`workbench__fail_test`](/tools/reference/workbench/fail_test) | Marks the last network test as failed when its answer falls short of the restate. |
+| [`workbench__save_network`](/tools/reference/workbench/save_network) | Saves every drafted node of the network after you confirm the list of files. |
+| [`workbench__discard_network`](/tools/reference/workbench/discard_network) | Discards the whole network draft, sketch and drafts. |
 | [`workbench__update_metadata`](/tools/reference/workbench/update_metadata) | Updates the plan draft's top-level fields. |
 | [`workbench__add_step`](/tools/reference/workbench/add_step) | Adds one top-level step to the plan draft. |
 | [`workbench__update_step`](/tools/reference/workbench/update_step) | Updates one top-level step in the plan draft. |

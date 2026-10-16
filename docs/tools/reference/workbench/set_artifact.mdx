@@ -1,16 +1,16 @@
 ---
 title: "workbench__set_artifact"
 sidebarTitle: "workbench__set_artifact"
-description: "Puts a whole plan, agent or tool file in the pane as the current draft."
+description: "Puts a whole agent, tool or plan file in the network draft as the draft of the sketch node it names."
 playground: "none"
 keywords: ["workbench__set_artifact"]
 ---
 
 ## Behavior
 
-- Checks the draft right away and returns any problems. Nothing is written to disk.
-- For a plan, omit `yaml` to use the plan `plan__compose_plan` last returned.
-- Replacing a plan draft with unsaved changes fails unless `overwrite_draft` is true.
+- Checks the draft right away and returns any problems. Nodes of the sketch that aren't drafted yet count as existing. Nothing is written to disk.
+- Once there's a sketch, a file whose name isn't a node of it is refused.
+- For a plan, omit `yaml` to use the plan `plan__compose_plan` last returned. With no network in progress, a plan goes to the plan pane, and replacing one with unsaved changes fails unless `overwrite_draft` is true.
 
 | Available to | Effect |
 | --- | --- |
@@ -25,31 +25,31 @@ keywords: ["workbench__set_artifact"]
 </ParamField>
 
 <ParamField body="overwrite_draft" type="boolean">
-  Plans only: discard unsaved changes to the current plan draft, only after the user confirms
+  Plan pane only: discard unsaved changes to the current plan draft, only after the user confirms
 </ParamField>
 
 <ParamField body="yaml" type="string">
-  The whole file. Required for an agent or tool; omit it for a plan to publish what plan__compose_plan returned
+  The whole file. Required for an agent or tool; omit it for a plan to use what plan__compose_plan returned
 </ParamField>
 
 ## Output
 
-<ResponseField name="identifier" type="string">
+<ResponseField name="kind" type="string">
 </ResponseField>
 
-<ResponseField name="steps" type="integer">
+<ResponseField name="name" type="string">
 </ResponseField>
 
-<ResponseField name="validation" type="string">
+<ResponseField name="problems" type="any[]">
 </ResponseField>
 
 <ResponseExample>
 
 ```json Output
 {
-  "identifier": "sprint_report",
-  "steps": 3,
-  "validation": "ok"
+  "kind": "tool",
+  "name": "changelog_section",
+  "problems": []
 }
 ```
 

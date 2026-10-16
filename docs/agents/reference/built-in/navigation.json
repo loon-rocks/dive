@@ -13,6 +13,7 @@
       "group": "Workbench",
       "pages": [
         "agents/reference/built-in/workbench/front_desk",
+        "agents/reference/built-in/workbench/network_drafter",
         "agents/reference/built-in/workbench/plan_drafter",
         "agents/reference/built-in/workbench/plan_loader",
         "agents/reference/built-in/workbench/plan_editor",

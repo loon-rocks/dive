@@ -1,37 +1,35 @@
 name: agent-missing-tool
-title: graph workbench — drafting an agent
+title: graph workbench — sketching an agent network
 grid: { cols: 120, rows: 36 }
 
-agent: agent_drafter
+agent: network_drafter
 
-chat: "it should also post the notes to our changelog page"
+chat: "yes, and it posts the notes to our changelog page"
 
 llm:
-  - call: workbench__set_artifact
+  - call: workbench__set_sketch
     input:
-      kind: agent
-      yaml: |
-        name: release_notes
-        description: Writes customer-facing release notes from the commits since a tag and posts them to the changelog page.
-        model: chat
-        tools: [github__tool__git_log]
-        input_schema:
-          type: object
-          required: [since]
-          properties:
-            since: { type: string, description: The tag to start from, such as v0.15.0 }
-        output_schema:
-          type: object
-          required: [notes]
-          properties:
-            notes: { type: string, description: The release notes in markdown }
-        system_prompt: |
-          You write release notes for one release. Read the commits since the given tag with
-          github__tool__git_log, group them into features and fixes, and write short, customer-facing
-          notes. Leave out internal changes such as CI and tooling.
+      restate:
+        outcome: Release notes written from the commits since a tag and posted to the changelog page
+        success: Short, customer-facing notes, published, with the entry's URL back
+        constraint: One agent turn per release
+        out_of_scope: [Internal changes such as CI and tooling]
+      nodes:
+        - name: post_changelog
+          kind: tool
+          job: Publishes notes to the changelog page and returns the entry's URL
+          principles: [No model needed]
+        - name: release_notes
+          kind: agent
+          job: Writes the notes from the commits since a tag, then posts them
+          model: chat
+          principles: [Plans before agents]
+      edges:
+        - { from: release_notes, to: post_changelog, kind: calls }
   - text: >-
-      None of your tools can post to the changelog page yet. Should I draft one now? It would
-      take the notes and the version, and return the published entry's URL.
+      None of your tools can post to the changelog page, so the sketch has a tool node for it:
+      post_changelog, a plain API call with no model. release_notes calls it once the notes
+      are written. Build it?
 
 capture:
   at: loaded

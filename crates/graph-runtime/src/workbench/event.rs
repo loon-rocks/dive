@@ -1,4 +1,4 @@
-use super::artifact::ArtifactView;
+use super::network::NetworkView;
 use super::runner::UiDecision;
 use graph_core::pipeline::doc::PlanDoc;
 use graph_core::{ToolDef, ToolShape};
@@ -94,7 +94,7 @@ pub enum WorkbenchEvent {
         shapes: Vec<ToolShape>,
     },
     Saved(Result<String, String>),
-    ArtifactChanged(Option<Box<ArtifactView>>),
+    NetworkChanged(Box<NetworkView>),
     /// A one-line status from the effect executor (e.g. an undo miss).
     Status(String),
     EditOutcome {
@@ -182,10 +182,11 @@ impl WorkbenchEvent {
                 Err(error) => format!("save failed: {error}"),
             },
             WorkbenchEvent::Status(text) => format!("status: {text}"),
-            WorkbenchEvent::ArtifactChanged(view) => match view {
-                Some(view) => format!("artifact: {} draft shown", view.kind.label()),
-                None => "artifact: none".to_string(),
-            },
+            WorkbenchEvent::NetworkChanged(view) => format!(
+                "network: {} nodes, {} drafted",
+                view.nodes.len(),
+                view.unsaved()
+            ),
             WorkbenchEvent::EditOutcome {
                 committed,
                 introduced,

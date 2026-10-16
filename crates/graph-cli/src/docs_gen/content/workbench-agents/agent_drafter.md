@@ -1,6 +1,6 @@
 ---
-summary: Drafts a new agent with you in the workbench pane and saves it when you say so.
+summary: Builds one agent node of the architect's sketch as an agent file.
 ---
 
-- Starts when you run `graph wb agent`.
-- Hands off to `tool_drafter` when the agent needs a tool that doesn't exist, then picks up where it left off.
+- `network_drafter` runs it as a subagent; it never talks to you.
+- Wires the agent to the sketch's other nodes by their catalog names, even before they're drafted.

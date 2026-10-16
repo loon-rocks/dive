@@ -3,14 +3,16 @@ pub mod artifact;
 mod effects;
 pub mod event;
 pub mod fs_tools;
+pub mod network;
 pub mod runner;
 pub mod sink;
 pub mod tools;
 
 pub use agents::Start;
-pub use artifact::{ArtifactKind, ArtifactView};
+pub use artifact::ArtifactKind;
 pub use effects::{save_draft, Workbench};
 pub use event::{GateKind, WorkbenchEvent};
+pub use network::{EdgeKind, NetworkView, NodeStatus, NodeView, Restate, TestRun};
 pub use runner::{DebugControls, UiDecision};
 pub use tools::DraftState;
 
@@ -71,13 +73,17 @@ impl Workbench {
         ));
         let plans_dir = runtime.plans_dir();
         let debug = Arc::new(DebugControls::default());
-        let workbench_tools = Arc::new(tools::WorkbenchTools::new(
-            draft.clone(),
-            pipeline.clone(),
-            plans_dir.clone(),
-            debug.clone(),
-            tx.clone(),
-        ));
+        let tester: artifact::Tester = Arc::new(std::sync::OnceLock::new());
+        let workbench_tools = Arc::new(
+            tools::WorkbenchTools::new(
+                draft.clone(),
+                pipeline.clone(),
+                plans_dir.clone(),
+                debug.clone(),
+                tx.clone(),
+            )
+            .with_tester(tester.clone()),
+        );
         let fs_tools = Arc::new(
             fs_tools::FsTools::new(root.into())
                 .context("failed to resolve the workbench project directory")?,
@@ -101,11 +107,7 @@ impl Workbench {
         let mut conversation =
             runtime.conversation_over(Arc::new(agent_set), registry, pipeline.clone(), agent_sink);
         conversation.context = Some(agents::context_hook(draft.clone(), pipeline.clone()));
-        conversation.handoff_guard = Some(artifact::handoff_guard(
-            draft.clone(),
-            pipeline.clone(),
-            tx.clone(),
-        ));
+        conversation.handoff_guard = Some(artifact::handoff_guard(draft.clone()));
         conversation.progress_tools = tools::progress_tools();
         if let Some(prompt) = crate::runtime::deprecated_prompt(
             &conversation.agents,
@@ -128,6 +130,11 @@ impl Workbench {
             }
         }
 
+        let mut base = conversation.clone();
+        base.catalog = Arc::new(CompositeRegistry::new(Vec::new()));
+        base.context = None;
+        base.handoff_guard = None;
+        let _ = tester.set(base);
         let workbench = Workbench {
             active: std::sync::Mutex::new(agents::starting_agent(&start, doc.as_ref()).to_string()),
             conversation,

@@ -1,0 +1,22 @@
+---
+title: "workbench__save_network"
+sidebarTitle: "workbench__save_network"
+description: "Saves every drafted node of the network after you confirm the list of files."
+playground: "none"
+keywords: ["workbench__save_network"]
+---
+
+## Behavior
+
+- Writes tools first, then plans, then agents.
+- Needs every node drafted without problems, and a passing test since the network last changed unless `untested` is true.
+
+| Available to | Effect |
+| --- | --- |
+| Workbench agents only | Has side effects |
+
+## Input
+
+<ParamField body="untested" type="boolean">
+  Save without a passing test, only when the user said not to test it
+</ParamField>

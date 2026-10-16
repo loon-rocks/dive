@@ -28,6 +28,7 @@ pub const RESTORE_DRAFT: &str = "workbench__restore_draft";
 pub fn progress_tools() -> Vec<String> {
     [
         super::artifact::SET_ARTIFACT,
+        super::artifact::SET_SKETCH,
         UPDATE_METADATA,
         ADD_STEP,
         UPDATE_STEP,
@@ -57,8 +58,7 @@ pub struct DraftState {
     /// it with the current draft, so calling it twice is redo.
     pub undo: Option<(PlanDoc, bool)>,
     pub composed: Option<Value>,
-    pub artifact: Option<super::artifact::Artifact>,
-    pub parked: Option<super::artifact::Artifact>,
+    pub network: super::network::Network,
 }
 
 impl DraftState {
@@ -68,8 +68,7 @@ impl DraftState {
             dirty: false,
             undo: None,
             composed: None,
-            artifact: None,
-            parked: None,
+            network: super::network::Network::default(),
         }
     }
 
@@ -110,6 +109,7 @@ pub struct WorkbenchTools {
     plans_dir: Option<PathBuf>,
     debug: Arc<DebugControls>,
     tx: UnboundedSender<WorkbenchEvent>,
+    tester: super::artifact::Tester,
 }
 
 impl WorkbenchTools {
@@ -126,7 +126,13 @@ impl WorkbenchTools {
             plans_dir,
             debug,
             tx,
+            tester: Arc::new(std::sync::OnceLock::new()),
         }
+    }
+
+    pub fn with_tester(mut self, tester: super::artifact::Tester) -> Self {
+        self.tester = tester;
+        self
     }
 
     fn current(&self) -> Option<PlanDoc> {
@@ -400,7 +406,36 @@ impl WorkbenchTools {
         }
     }
 
-    fn set_plan(&self, input: &Value) -> ToolOutcome {
+    async fn plan_into_network(&self, doc: &PlanDoc) -> Option<ToolOutcome> {
+        let in_network = {
+            let state = self.draft.lock().unwrap();
+            state.network.restate.is_some()
+                || state
+                    .network
+                    .node(super::artifact::ArtifactKind::Plan, &doc.identifier)
+                    .is_some()
+        };
+        if !in_network {
+            return None;
+        }
+        let yaml = match authoring::to_yaml(doc) {
+            Ok(yaml) => yaml,
+            Err(error) => return Some(error_outcome(&error.to_string())),
+        };
+        Some(
+            super::artifact::put(
+                &self.draft,
+                &self.pipeline,
+                &self.tx,
+                super::artifact::ArtifactKind::Plan,
+                &doc.identifier,
+                &yaml,
+            )
+            .await,
+        )
+    }
+
+    async fn set_plan(&self, input: &Value) -> ToolOutcome {
         let plan = match input["yaml"]
             .as_str()
             .filter(|yaml| !yaml.trim().is_empty())
@@ -422,6 +457,9 @@ impl WorkbenchTools {
             Ok(doc) => doc,
             Err(error) => return error_outcome(&format!("not a plan document: {error}")),
         };
+        if let Some(outcome) = self.plan_into_network(&doc).await {
+            return outcome;
+        }
         let overwrite = input
             .get("overwrite_draft")
             .and_then(Value::as_bool)
@@ -567,9 +605,9 @@ impl WorkbenchTools {
     async fn artifact_tool(&self, name: &str, target: Target, input: &Value) -> ToolOutcome {
         use super::artifact as file;
         match (name, target) {
-            (file::SET_ARTIFACT, Target::Plan) => self.set_plan(input),
-            (file::SET_ARTIFACT, Target::File(_)) => {
-                file::set_artifact(&self.draft, &self.pipeline, &self.tx, input).await
+            (file::SET_ARTIFACT, Target::Plan) => self.set_plan(input).await,
+            (file::SET_ARTIFACT, Target::File(kind)) => {
+                file::set_artifact(&self.draft, &self.pipeline, &self.tx, kind, input).await
             }
             (file::LOAD_ARTIFACT, Target::Plan) => self.load_plan(input),
             (file::LOAD_ARTIFACT, Target::File(kind)) => match file::open_existing(
@@ -588,60 +626,48 @@ impl WorkbenchTools {
                 Err(error) => error_outcome(&error),
             },
             (file::TRY_ARTIFACT, Target::Plan) => self.run_plan(input).await,
-            (file::TRY_ARTIFACT, Target::File(kind)) => match self.open_mismatch(kind) {
-                Some(outcome) => outcome,
-                None => file::try_artifact(&self.draft, &self.pipeline, &self.tx, input).await,
-            },
+            (file::TRY_ARTIFACT, Target::File(file::ArtifactKind::Tool)) => {
+                file::try_artifact(&self.draft, &self.pipeline, &self.tx, input).await
+            }
+            (file::TRY_ARTIFACT, Target::File(_)) => error_outcome(
+                "an agent draft is tried with workbench__test_network, once every node of the network is drafted",
+            ),
             (file::SAVE_ARTIFACT, Target::Plan) => self.save_plan(),
-            (file::SAVE_ARTIFACT, Target::File(kind)) => {
-                if let Some(outcome) = self.open_mismatch(kind) {
-                    return outcome;
-                }
-                match file::save_artifact(
-                    &self.draft,
-                    &self.pipeline,
-                    &self.tx,
-                    input["overwrite"].as_bool().unwrap_or(false),
-                    input["untested"].as_bool().unwrap_or(false),
-                    true,
-                )
-                .await
-                {
+            (file::SAVE_ARTIFACT, Target::File(_)) => error_outcome(
+                "agent and tool drafts are saved together with workbench__save_network",
+            ),
+            (file::DISCARD_ARTIFACT, Target::Plan) => {
+                let named = input["name"].as_str();
+                match file::discard_artifact(&self.draft, &self.tx, file::ArtifactKind::Plan, named) {
                     Ok(message) => ToolOutcome {
-                        result: json!({ "saved": message }),
+                        result: json!({ "discarded": message }),
+                        is_error: false,
+                    },
+                    Err(_) => error_outcome(
+                        "the plan pane's plan can't be discarded; it stays until another plan replaces it",
+                    ),
+                }
+            }
+            (file::DISCARD_ARTIFACT, Target::File(kind)) => {
+                match file::discard_artifact(&self.draft, &self.tx, kind, input["name"].as_str()) {
+                    Ok(message) => ToolOutcome {
+                        result: json!({ "discarded": message }),
                         is_error: false,
                     },
                     Err(error) => error_outcome(&error),
                 }
             }
-            (file::DISCARD_ARTIFACT, Target::Plan) => error_outcome(
-                "a plan draft can't be discarded; it stays in the pane until another plan replaces it",
-            ),
-            (file::DISCARD_ARTIFACT, Target::File(kind)) => {
-                if let Some(outcome) = self.open_mismatch(kind) {
-                    return outcome;
-                }
-                match file::discard_artifact(&self.draft, &self.pipeline, &self.tx) {
-                    Some(message) => ToolOutcome {
-                        result: json!({ "discarded": message }),
-                        is_error: false,
-                    },
-                    None => error_outcome("there is no draft to discard"),
-                }
-            }
             (file::LIST_ARTIFACTS, Target::Plan) => self.list_plans(),
-            (file::LIST_ARTIFACTS, Target::File(file::ArtifactKind::Agent)) => {
-                file::list_agents(&self.pipeline)
-            }
             (file::LIST_ARTIFACTS, Target::File(file::ArtifactKind::Tool)) => {
                 file::list_tools(&self.pipeline).await
             }
+            (file::LIST_ARTIFACTS, Target::File(_)) => file::list_agents(&self.pipeline),
             (file::SHOW_ARTIFACT, Target::Plan) => self.show_plan(input),
             (file::SHOW_ARTIFACT, Target::File(kind)) => {
                 let name = input["name"].as_str().unwrap_or_default();
                 match file::existing(kind, name, &self.pipeline.drafted.tool_dirs) {
-                    Ok(artifact) => ToolOutcome {
-                        result: json!({"name": artifact.name(), "yaml": artifact.yaml}),
+                    Ok(found) => ToolOutcome {
+                        result: json!({"name": found.name, "yaml": found.yaml}),
                         is_error: false,
                     },
                     Err(error) => error_outcome(&error),
@@ -651,16 +677,39 @@ impl WorkbenchTools {
         }
     }
 
-    fn open_mismatch(&self, kind: super::artifact::ArtifactKind) -> Option<ToolOutcome> {
-        let state = self.draft.lock().unwrap();
-        let open = state.artifact.as_ref()?;
-        (open.kind != kind).then(|| {
-            error_outcome(&format!(
-                "the pane holds a {} draft, not a {}",
-                open.kind.label(),
-                kind.label()
-            ))
-        })
+    async fn network_tool(&self, name: &str, input: &Value) -> ToolOutcome {
+        use super::artifact as file;
+        match name {
+            file::SET_SKETCH => file::set_sketch(&self.draft, &self.tx, input),
+            file::TEST_NETWORK => {
+                file::test_network(&self.draft, &self.pipeline, &self.tester, &self.tx, input).await
+            }
+            file::FAIL_TEST => file::fail_test(&self.draft, &self.tx, input),
+            file::SAVE_NETWORK => match file::save_network(
+                &self.draft,
+                &self.pipeline,
+                &self.tx,
+                self.plans_dir.as_deref(),
+                input["untested"].as_bool().unwrap_or(false),
+                true,
+            )
+            .await
+            {
+                Ok(message) => ToolOutcome {
+                    result: json!({ "saved": message }),
+                    is_error: false,
+                },
+                Err(error) => error_outcome(&error),
+            },
+            file::DISCARD_NETWORK => match file::discard_network(&self.draft, &self.tx) {
+                Some(message) => ToolOutcome {
+                    result: json!({ "discarded": message }),
+                    is_error: false,
+                },
+                None => error_outcome("there is no network draft to discard"),
+            },
+            other => error_outcome(&format!("unknown network tool '{other}'")),
+        }
     }
 }
 
@@ -914,6 +963,7 @@ impl ToolRegistry for WorkbenchTools {
             DESCRIBE_TOOL | UPDATE_METADATA | ADD_STEP | UPDATE_STEP | DELETE_STEP
             | RESTORE_DRAFT => {}
             name if super::artifact::ARTIFACT_TOOLS.contains(&name) => {}
+            name if super::artifact::NETWORK_TOOLS.contains(&name) => {}
             // Not ours: stay silent, or the composite registry's fallthrough
             // (the fs tools are also workbench__*) double-logs the call.
             other => return Err(ToolError::Unknown(other.to_string())),
@@ -931,6 +981,9 @@ impl ToolRegistry for WorkbenchTools {
             UPDATE_STEP => Ok(self.update_step(&input)),
             DELETE_STEP => Ok(self.delete_step(&input)),
             RESTORE_DRAFT => Ok(self.restore_draft()),
+            network_tool if super::artifact::NETWORK_TOOLS.contains(&network_tool) => {
+                Ok(self.network_tool(network_tool, &input).await)
+            }
             artifact_tool => Ok(match Target::of(&input) {
                 Ok(target) => self.artifact_tool(artifact_tool, target, &input).await,
                 Err(outcome) => outcome,
@@ -2155,87 +2208,22 @@ steps:
         (tools, rx, dir)
     }
 
-    fn shown(rx: &mut tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>) -> Option<bool> {
+    fn shown(rx: &mut tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>) -> Option<usize> {
         let mut last = None;
         while let Ok(msg) = rx.try_recv() {
-            if let WorkbenchEvent::ArtifactChanged(view) = msg {
-                last = Some(view.is_some());
+            if let WorkbenchEvent::NetworkChanged(view) = msg {
+                last = Some(view.unsaved());
             }
         }
         last
     }
 
-    #[tokio::test]
-    async fn a_tool_draft_lives_in_the_pane_until_it_is_saved() {
-        let (tools, mut rx, dir) = drafting_tools();
-        let set = tools
-            .invoke(
-                crate::workbench::artifact::SET_ARTIFACT,
-                json!({"kind": "tool", "yaml": WEATHER_TOOL}),
-            )
-            .await
-            .unwrap();
-        assert!(!set.is_error, "{}", set.result);
-        assert_eq!(set.result["problems"], json!([]));
-        assert_eq!(shown(&mut rx), Some(true));
-
-        let refused = tools
-            .invoke(
-                crate::workbench::artifact::SAVE_ARTIFACT,
-                json!({"kind": "tool"}),
-            )
-            .await
-            .unwrap();
-        assert!(refused.is_error);
-        assert!(
-            refused.result.to_string().contains("test run"),
-            "{}",
-            refused.result
-        );
-        assert!(!dir.path().join("tools/weather.yaml").exists());
-
-        let saving = tools.invoke(
-            crate::workbench::artifact::SAVE_ARTIFACT,
-            json!({"kind": "tool", "untested": true}),
-        );
-        let answering = async {
-            while let Some(msg) = rx.recv().await {
-                if let WorkbenchEvent::GateAsk { reply, input, .. } = msg {
-                    assert!(input["prompt"]
-                        .as_str()
-                        .unwrap()
-                        .starts_with("Save user__weather"));
-                    reply
-                        .send(crate::workbench::runner::UiDecision::Skip {
-                            result: json!({"save": true}),
-                        })
-                        .unwrap();
-                    break;
-                }
-            }
-        };
-        let (saved, ()) = tokio::join!(saving, answering);
-        let saved = saved.unwrap();
-        assert!(!saved.is_error, "{}", saved.result);
-        assert!(dir.path().join("tools/weather.yaml").exists());
-        assert!(tools.draft.lock().unwrap().artifact.is_none());
-        assert_eq!(shown(&mut rx), Some(false));
-    }
-
-    #[tokio::test]
-    async fn saving_an_opened_agent_replaces_that_file_and_a_renamed_one_is_saved_beside_it() {
-        use crate::workbench::artifact::{save_artifact, Artifact, ArtifactKind};
-        let dir = tempfile::tempdir().unwrap();
-        let mut pipeline = (*test_pipeline(Vec::new())).clone();
-        pipeline.drafted = Arc::new(graph_core::pipeline::Drafted::new(
-            Some(dir.path().join("tools")),
-            Some(dir.path().join("agents")),
-        ));
+    fn mock_router() -> Arc<graph_llm::ModelRouter> {
         let provider: Arc<dyn graph_llm::ChatProvider> = Arc::new(ScriptedProvider {
             responses: Mutex::new(Vec::new()),
             requests: Mutex::new(Vec::new()),
         });
-        pipeline.router = Arc::new(graph_llm::ModelRouter::with_providers(
+        Arc::new(graph_llm::ModelRouter::with_providers(
             std::collections::HashMap::from([("mock".to_string(), provider)]),
             graph_config::ModelRoles::from_iter([(
                 "default".to_string(),
@@ -2248,28 +2236,110 @@ steps:
                     context_window: None,
                 },
             )]),
+        ))
+    }
+
+    async fn answer_yes(
+        rx: &mut tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>,
+        starts: &str,
+        key: &str,
+    ) {
+        while let Some(msg) = rx.recv().await {
+            if let WorkbenchEvent::GateAsk { reply, input, .. } = msg {
+                let prompt = input["prompt"].as_str().unwrap().to_string();
+                assert!(prompt.starts_with(starts), "{prompt}");
+                reply
+                    .send(crate::workbench::runner::UiDecision::Skip {
+                        result: json!({ key: true }),
+                    })
+                    .unwrap();
+                break;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_tool_draft_waits_in_the_network_until_the_network_is_saved() {
+        let (tools, mut rx, dir) = drafting_tools();
+        let set = tools
+            .invoke(
+                crate::workbench::artifact::SET_ARTIFACT,
+                json!({"kind": "tool", "yaml": WEATHER_TOOL}),
+            )
+            .await
+            .unwrap();
+        assert!(!set.is_error, "{}", set.result);
+        assert_eq!(set.result["problems"], json!([]));
+        assert_eq!(shown(&mut rx), Some(1));
+
+        let single = tools
+            .invoke(
+                crate::workbench::artifact::SAVE_ARTIFACT,
+                json!({"kind": "tool"}),
+            )
+            .await
+            .unwrap();
+        assert!(single
+            .result
+            .to_string()
+            .contains("workbench__save_network"));
+
+        let untested = tools
+            .invoke(crate::workbench::artifact::SAVE_NETWORK, json!({}))
+            .await
+            .unwrap();
+        assert!(untested.is_error);
+        assert!(
+            untested.result.to_string().contains("test"),
+            "{}",
+            untested.result
+        );
+        assert!(!dir.path().join("tools/weather.yaml").exists());
+
+        let saving = tools.invoke(
+            crate::workbench::artifact::SAVE_NETWORK,
+            json!({"untested": true}),
+        );
+        let (saved, ()) = tokio::join!(
+            saving,
+            answer_yes(&mut rx, "Save the network: 1 files?", "save")
+        );
+        let saved = saved.unwrap();
+        assert!(!saved.is_error, "{}", saved.result);
+        assert!(dir.path().join("tools/weather.yaml").exists());
+        assert!(tools.draft.lock().unwrap().network.is_empty());
+        assert_eq!(shown(&mut rx), Some(0));
+    }
+
+    #[tokio::test]
+    async fn saving_an_opened_agent_replaces_that_file_and_a_new_one_never_replaces_another() {
+        use crate::workbench::artifact::{save_network, ArtifactKind};
+        let dir = tempfile::tempdir().unwrap();
+        let mut pipeline = (*test_pipeline(Vec::new())).clone();
+        pipeline.drafted = Arc::new(graph_core::pipeline::Drafted::new(
+            Some(dir.path().join("tools")),
+            Some(dir.path().join("agents")),
         ));
+        pipeline.router = mock_router();
         let (tools, _rx) = draft_tools(Arc::new(pipeline));
         let global = dir.path().join("global");
         std::fs::create_dir_all(&global).unwrap();
         let opened = global.join("triager.yaml");
         std::fs::write(&opened, "name: triager\n").unwrap();
-        let agent = |name: &str| {
-            Artifact {
-            kind: ArtifactKind::Agent,
-            yaml: format!(
-                "name: {name}\ndescription: Triages issues\nmodel: default\ntools: []\nsystem_prompt: You triage.\n"
-            ),
-            problems: Vec::new(),
-            last_run: None,
-            editing: Some(opened.clone()),
-            original: Some("triager".to_string()),
-        }
+        let yaml = |name: &str| {
+            format!("name: {name}\ndescription: Triages issues\nmodel: default\ntools: []\nsystem_prompt: You triage.\n")
         };
         let (tx, _rx2) = tokio::sync::mpsc::unbounded_channel();
 
-        tools.draft.lock().unwrap().artifact = Some(agent("triager"));
-        save_artifact(&tools.draft, &tools.pipeline, &tx, false, false, false)
+        tools.draft.lock().unwrap().network.open(
+            ArtifactKind::Agent,
+            "triager",
+            yaml("triager"),
+            Some(opened.clone()),
+            Some("triager".to_string()),
+            Vec::new(),
+        );
+        save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
             .await
             .unwrap();
         assert!(std::fs::read_to_string(&opened)
@@ -2279,50 +2349,186 @@ steps:
 
         std::fs::create_dir_all(dir.path().join("agents")).unwrap();
         std::fs::write(dir.path().join("agents/other.yaml"), "name: other\n").unwrap();
-        tools.draft.lock().unwrap().artifact = Some(agent("other"));
-        let refused = save_artifact(&tools.draft, &tools.pipeline, &tx, false, false, false)
+        tools
+            .draft
+            .lock()
+            .unwrap()
+            .network
+            .put_draft(ArtifactKind::Agent, "other", yaml("other"), Vec::new())
+            .unwrap();
+        let refused = save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
             .await
             .unwrap_err();
         assert!(refused.contains("already exists"), "{refused}");
         assert_eq!(
             std::fs::read_to_string(dir.path().join("agents/other.yaml")).unwrap(),
             "name: other\n",
-            "a renamed draft never replaces another agent's file"
+            "a new draft never replaces another agent's file"
         );
     }
 
     #[tokio::test]
-    async fn an_open_draft_is_never_swapped_for_a_different_one() {
+    async fn a_save_that_stops_partway_says_what_was_written_and_a_retry_replaces_it() {
+        use crate::workbench::artifact::{save_network, ArtifactKind};
+        let dir = tempfile::tempdir().unwrap();
+        let mut pipeline = (*test_pipeline(Vec::new())).clone();
+        pipeline.drafted = Arc::new(graph_core::pipeline::Drafted::new(
+            Some(dir.path().join("tools")),
+            Some(dir.path().join("agents")),
+        ));
+        pipeline.router = mock_router();
+        let (tools, _rx) = draft_tools(Arc::new(pipeline));
+        let (tx, _rx2) = tokio::sync::mpsc::unbounded_channel();
+        std::fs::create_dir_all(dir.path().join("agents")).unwrap();
+        std::fs::write(dir.path().join("agents/desk.yaml"), "name: desk\n").unwrap();
+        {
+            let mut state = tools.draft.lock().unwrap();
+            state
+                .network
+                .put_draft(
+                    ArtifactKind::Tool,
+                    "weather",
+                    WEATHER_TOOL.into(),
+                    Vec::new(),
+                )
+                .unwrap();
+            state
+                .network
+                .put_draft(
+                    ArtifactKind::Agent,
+                    "desk",
+                    "name: desk\ndescription: Answers\nmodel: default\ntools: [user__weather]\nsystem_prompt: You answer.\n".into(),
+                    Vec::new(),
+                )
+                .unwrap();
+        }
+        let stopped = save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
+            .await
+            .unwrap_err();
+        assert!(
+            stopped.starts_with("saved 1 of 2; agent desk was not saved"),
+            "{stopped}"
+        );
+        assert!(dir.path().join("tools/weather.yaml").exists());
+        assert_eq!(
+            tools.draft.lock().unwrap().network.nodes.len(),
+            2,
+            "the drafts stay"
+        );
+
+        std::fs::remove_file(dir.path().join("agents/desk.yaml")).unwrap();
+        save_network(&tools.draft, &tools.pipeline, &tx, None, true, false)
+            .await
+            .unwrap();
+        assert!(dir.path().join("agents/desk.yaml").exists());
+        assert!(tools.draft.lock().unwrap().network.is_empty());
+    }
+
+    #[tokio::test]
+    async fn several_drafts_live_side_by_side_and_a_try_names_which() {
         let (tools, _rx, _dir) = drafting_tools();
-        tools
+        for yaml in [
+            WEATHER_TOOL.to_string(),
+            WEATHER_TOOL.replace("name: weather", "name: forecast"),
+        ] {
+            let set = tools
+                .invoke(
+                    crate::workbench::artifact::SET_ARTIFACT,
+                    json!({"kind": "tool", "yaml": yaml}),
+                )
+                .await
+                .unwrap();
+            assert!(!set.is_error, "{}", set.result);
+        }
+        assert_eq!(tools.draft.lock().unwrap().network.nodes.len(), 2);
+        let ambiguous = tools
+            .invoke(
+                crate::workbench::artifact::TRY_ARTIFACT,
+                json!({"kind": "tool"}),
+            )
+            .await
+            .unwrap();
+        assert!(ambiguous.is_error);
+        assert!(ambiguous.result.to_string().contains("several tool drafts"));
+    }
+
+    #[tokio::test]
+    async fn a_sketch_lets_drafts_name_nodes_that_are_not_drafted_yet() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut pipeline = (*test_pipeline(Vec::new())).clone();
+        pipeline.drafted = Arc::new(graph_core::pipeline::Drafted::new(
+            Some(dir.path().join("tools")),
+            Some(dir.path().join("agents")),
+        ));
+        pipeline.router = mock_router();
+        pipeline.catalog = Some(Arc::new(graph_core::pipeline::ToolCatalog::default()));
+        let (tools, _rx) = draft_tools(Arc::new(pipeline));
+        let sketch = tools
+            .invoke(
+                crate::workbench::artifact::SET_SKETCH,
+                json!({
+                    "restate": {"outcome": "Weather in chat", "success": "An answer", "constraint": "Small models", "out_of_scope": []},
+                    "nodes": [
+                        {"name": "desk", "kind": "agent", "job": "Answers", "model": "default"},
+                        {"name": "lookup", "kind": "tool", "job": "Looks it up"},
+                        {"name": "report", "kind": "plan", "job": "Reports"}
+                    ],
+                    "edges": [{"from": "desk", "to": "lookup", "kind": "calls"}]
+                }),
+            )
+            .await
+            .unwrap();
+        assert!(!sketch.is_error, "{}", sketch.result);
+        let agent = tools
+            .invoke(
+                crate::workbench::artifact::SET_ARTIFACT,
+                json!({"kind": "agent", "yaml": "name: desk\ndescription: Answers\nmodel: default\ntools: [user__lookup, plan__report]\nsystem_prompt: You answer.\n"}),
+            )
+            .await
+            .unwrap();
+        assert!(!agent.is_error, "{}", agent.result);
+        assert_eq!(agent.result["problems"], json!([]), "{}", agent.result);
+
+        let stray = tools
             .invoke(
                 crate::workbench::artifact::SET_ARTIFACT,
                 json!({"kind": "tool", "yaml": WEATHER_TOOL}),
             )
             .await
             .unwrap();
-        let other = WEATHER_TOOL.replace("name: weather", "name: forecast");
-        let refused = tools
+        assert!(stray.is_error);
+        assert!(
+            stray.result.to_string().contains("lookup"),
+            "{}",
+            stray.result
+        );
+
+        let plan = tools
             .invoke(
                 crate::workbench::artifact::SET_ARTIFACT,
-                json!({"kind": "tool", "yaml": other}),
+                json!({"kind": "plan", "yaml": "identifier: report\nname: Report\ndescription: Reports\nsteps:\n  - id: E0\n    tool_name: user__lookup\n    input: {}\nfinish: silent\n"}),
             )
             .await
             .unwrap();
-        assert!(refused.is_error);
-        assert!(refused.result["error"]
-            .as_str()
-            .unwrap()
-            .contains("'weather' is still open"));
-        let edited = WEATHER_TOOL.replace("Current weather", "Weather now");
-        let kept = tools
+        assert!(!plan.is_error, "{}", plan.result);
+        assert!(
+            tools.draft.lock().unwrap().doc.is_none(),
+            "a sketched plan never lands in the plan pane"
+        );
+        let network = tools.draft.lock().unwrap().network.clone();
+        assert_eq!(network.missing(), ["tool lookup"]);
+
+        let untestable = tools
             .invoke(
-                crate::workbench::artifact::SET_ARTIFACT,
-                json!({"kind": "tool", "yaml": edited}),
+                crate::workbench::artifact::TEST_NETWORK,
+                json!({"entry": "desk", "message": "hi"}),
             )
             .await
             .unwrap();
-        assert!(!kept.is_error, "editing the same draft is fine");
+        assert!(untestable
+            .result
+            .to_string()
+            .contains("not every node is drafted"));
     }
 
     #[tokio::test]
@@ -2364,14 +2570,20 @@ steps:
         let plan_discard = invoke(DISCARD_ARTIFACT, json!({"kind": "plan"})).await;
         assert!(plan_discard.is_error);
 
-        let set = invoke(SET_ARTIFACT, json!({"kind": "tool", "yaml": WEATHER_TOOL})).await;
-        assert!(!set.is_error, "{}", set.result);
+        let opened = invoke(LOAD_ARTIFACT, json!({"kind": "tool", "name": "weather"})).await;
+        assert!(!opened.is_error, "{}", opened.result);
         let wrong = invoke(DISCARD_ARTIFACT, json!({"kind": "agent"})).await;
         assert!(wrong.is_error);
-        assert!(wrong.result.to_string().contains("holds a tool draft"));
-        assert!(tools.draft.lock().unwrap().artifact.is_some());
+        assert!(wrong.result.to_string().contains("no agent draft"));
+        assert!(tools
+            .draft
+            .lock()
+            .unwrap()
+            .network
+            .node(crate::workbench::ArtifactKind::Tool, "weather")
+            .is_some());
         let tried = invoke(TRY_ARTIFACT, json!({"kind": "agent"})).await;
-        assert!(tried.is_error);
+        assert!(tried.result.to_string().contains("workbench__test_network"));
     }
 
     #[tokio::test]
@@ -2393,54 +2605,28 @@ steps:
             .await
             .unwrap();
         assert!(!discarded.is_error);
-        assert_eq!(shown(&mut rx), Some(false));
+        assert_eq!(shown(&mut rx), Some(0));
     }
 
     #[test]
-    fn the_guard_parks_an_agent_draft_for_the_tool_drafter_and_restores_it() {
-        use crate::workbench::artifact::{handoff_guard, Artifact, ArtifactKind};
+    fn the_architect_cannot_hand_off_while_the_network_has_unsaved_drafts() {
+        use crate::workbench::artifact::{handoff_guard, ArtifactKind};
         let (tools, _rx) = draft_tools(test_pipeline(Vec::new()));
         let draft = tools.draft.clone();
-        let (tx, _rx2) = tokio::sync::mpsc::unbounded_channel();
-        let guard = handoff_guard(draft.clone(), test_pipeline(Vec::new()), tx);
-        let agent = Artifact {
-            kind: ArtifactKind::Agent,
-            yaml: "name: triager\n".to_string(),
-            problems: Vec::new(),
-            last_run: None,
-            editing: None,
-            original: None,
-        };
-        draft.lock().unwrap().artifact = Some(agent);
-
-        assert!(
-            guard("agent_drafter", "plan_drafter").is_some(),
-            "an open draft blocks leaving"
-        );
-        assert!(guard("agent_drafter", "tool_drafter").is_none());
-        assert!(draft.lock().unwrap().artifact.is_none());
-        assert_eq!(
-            draft.lock().unwrap().parked.as_ref().unwrap().name(),
-            "triager"
-        );
-
-        draft.lock().unwrap().artifact = Some(Artifact {
-            kind: ArtifactKind::Tool,
-            yaml: "name: lookup\n".to_string(),
-            problems: Vec::new(),
-            last_run: None,
-            editing: None,
-            original: None,
-        });
-        assert!(
-            guard("tool_drafter", "agent_drafter").is_some(),
-            "the tool draft has to be saved or discarded first"
-        );
-
-        draft.lock().unwrap().artifact = None;
-        assert!(guard("tool_drafter", "agent_drafter").is_none());
-        let state = draft.lock().unwrap();
-        assert_eq!(state.artifact.as_ref().unwrap().name(), "triager");
-        assert!(state.parked.is_none());
+        let guard = handoff_guard(draft.clone());
+        assert!(guard("network_drafter", "plan_editor").is_none());
+        draft
+            .lock()
+            .unwrap()
+            .network
+            .put_draft(
+                ArtifactKind::Tool,
+                "lookup",
+                "name: lookup\n".into(),
+                Vec::new(),
+            )
+            .unwrap();
+        assert!(guard("network_drafter", "plan_editor").is_some());
+        assert!(guard("front_desk", "network_drafter").is_none());
     }
 }

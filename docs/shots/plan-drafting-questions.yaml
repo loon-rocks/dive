@@ -2,9 +2,27 @@ name: plan-drafting-questions
 title: graph workbench — drafting a plan
 grid: { cols: 120, rows: 36 }
 
-chat: "a plan that writes a one-line release note for each commit since the latest GitHub release, from its subject and the files it changed"
+agent: network_drafter
+
+chat: "yes, build it"
 
 llm:
+  - call: workbench__set_sketch
+    input:
+      restate:
+        outcome: A one-line release note for each commit since the latest GitHub release
+        success: Every commit gets a note written from its subject and the files it changed
+        constraint: One small model call for all the notes
+        out_of_scope: [Posting the notes anywhere]
+      nodes:
+        - name: unreleased_changes
+          kind: plan
+          job: Lists the commits since the latest release, gets each one's changed files in parallel, and writes the notes
+          model: default
+          principles: [Map/reduce, Concurrency, Smallest model]
+  - call: agent__plan_drafter
+    input:
+      node: unreleased_changes
   - call: plan__compose_plan
     input:
       goal: List the commits merged since the latest GitHub release, and write a one-line release note for each commit from its subject and the files it changed.
@@ -19,8 +37,8 @@ llm:
   - structured:
       yaml: |
         version: 2
-        identifier: release_notes_since_latest_release
-        name: Release notes since latest release
+        identifier: unreleased_changes
+        name: Unreleased changes
         description: Lists commits merged since the latest GitHub release and writes a one-line release note for each based on its subject and changed files.
         input_schema:
           properties: {}
