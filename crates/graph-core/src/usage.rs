@@ -69,7 +69,7 @@ impl CallSite {
 
     /// The current call site, or a bare `unknown` role outside any scope —
     /// a bare test pipeline meters fine, it just cannot say where from.
-    fn current() -> CallSite {
+    pub(crate) fn current() -> CallSite {
         CALL_SITE
             .try_with(Clone::clone)
             .unwrap_or_else(|_| CallSite::role("unknown"))
