@@ -2,7 +2,7 @@
 //! Nothing survives the process.
 
 use graph_core::store::{
-    EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta, ToolShape,
+    Attachment, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta, ToolShape,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -42,6 +42,7 @@ impl Store for MemoryStore {
             message_count: 0,
             owner: owner.to_string(),
             active: owner.to_string(),
+            attachments: Vec::new(),
         };
         self.inner
             .lock()
@@ -130,6 +131,21 @@ impl Store for MemoryStore {
             .get_mut(thread_id)
             .ok_or_else(|| StoreError(format!("no thread {thread_id}")))?;
         meta.active = agent.to_string();
+        meta.updated_at = now_ms();
+        Ok(())
+    }
+
+    async fn set_attachments(
+        &self,
+        thread_id: &str,
+        attachments: &[Attachment],
+    ) -> Result<(), StoreError> {
+        let mut inner = self.inner.lock().unwrap();
+        let (meta, _) = inner
+            .threads
+            .get_mut(thread_id)
+            .ok_or_else(|| StoreError(format!("no thread {thread_id}")))?;
+        meta.attachments = attachments.to_vec();
         meta.updated_at = now_ms();
         Ok(())
     }

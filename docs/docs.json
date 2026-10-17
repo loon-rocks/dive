@@ -401,8 +401,8 @@
     "config_file_version": "5",
     "plan_file_version": "2",
     "tool_file_version": "2",
-    "agent_file_version": "1",
-    "data_directory_version": "4",
+    "agent_file_version": "2",
+    "data_directory_version": "5",
     "pack_file_version": "1",
     "pack_lock_version": "1"
   }

@@ -543,6 +543,13 @@ impl crate::store::Store for ShapeOnlyStore {
     async fn set_active_agent(&self, _: &str, _: &str) -> Result<(), crate::store::StoreError> {
         unimplemented!()
     }
+    async fn set_attachments(
+        &self,
+        _: &str,
+        _: &[crate::store::Attachment],
+    ) -> Result<(), crate::store::StoreError> {
+        unimplemented!()
+    }
     async fn record_tool_shape(
         &self,
         tool: &str,
