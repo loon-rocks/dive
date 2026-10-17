@@ -19,7 +19,8 @@
 
 use fs4::fs_std::FileExt;
 use graph_core::store::{
-    message_entries, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta, ToolShape,
+    message_entries, Attachment, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta,
+    ToolShape,
 };
 use graph_llm::types::ChatMessage;
 use serde::de::DeserializeOwned;
@@ -29,7 +30,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub const STORE_FORMAT: u32 = 4;
+pub const STORE_FORMAT: u32 = 5;
 
 pub const STORE_FORMAT_OLDEST: u32 = 1;
 
@@ -62,6 +63,8 @@ struct MetaFile {
     owner: String,
     #[serde(default = "legacy_agent")]
     active: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attachments: Vec<Attachment>,
 }
 
 fn legacy_agent() -> String {
@@ -78,6 +81,7 @@ impl From<MetaFile> for ThreadMeta {
             message_count: m.message_count,
             owner: m.owner,
             active: m.active,
+            attachments: m.attachments,
         }
     }
 }
@@ -193,7 +197,7 @@ fn migrate(root: &Path) -> Result<(), StoreError> {
     while found < STORE_FORMAT {
         match found {
             1 => migrate_threads_v1(&root.join("threads"))?,
-            2 | 3 => {}
+            2..=4 => {}
             other => {
                 return Err(StoreError(format!(
                     "no migration from store version {other}"
@@ -429,6 +433,7 @@ impl Store for FileStore {
                 entry_count: 0,
                 active: owner.clone(),
                 owner,
+                attachments: Vec::new(),
             };
             write_meta(&dir, &meta)?;
             Ok(meta.into())
@@ -513,6 +518,23 @@ impl Store for FileStore {
         self.blocking(move || {
             let (_lock, mut meta) = lock_existing_thread(&dir, &thread_id)?;
             meta.active = agent;
+            meta.updated_at = meta.updated_at.max(now_ms());
+            write_meta(&dir, &meta)
+        })
+        .await
+    }
+
+    async fn set_attachments(
+        &self,
+        thread_id: &str,
+        attachments: &[Attachment],
+    ) -> Result<(), StoreError> {
+        let thread_id = thread_id.to_string();
+        let attachments = attachments.to_vec();
+        let dir = self.thread_dir(&thread_id);
+        self.blocking(move || {
+            let (_lock, mut meta) = lock_existing_thread(&dir, &thread_id)?;
+            meta.attachments = attachments;
             meta.updated_at = meta.updated_at.max(now_ms());
             write_meta(&dir, &meta)
         })

@@ -11,13 +11,23 @@ graph keeps its runtime state in one directory, `~/.local/share/graph` by defaul
 | Path | Contents |
 | --- | --- |
 | `FORMAT` | The directory's [file version](/reference/file-versions), as a single number. |
-| `threads/<id>/meta.json` | A thread's title, timestamps, message count, and the agent that owns it and the one that's active. |
+| `threads/<id>/meta.json` | A thread's title, timestamps, message count, the agent that owns it and the one that's active, and its attachments. |
 | `threads/<id>/entries.jsonl` | A thread's history, one entry per line: messages, handoffs between agents, and subagent runs. |
 | `threads/<id>/.lock` | A lock file that keeps concurrent writers in order. |
 | `shapes/<tool>.json` | The observed output of one tool: an inferred schema, an example, and how many times it was seen. |
 | `workbench.log` | The workbench's log, appended across sessions. |
 
 Every file is plain JSON or JSONL, so `cat` and `jq` can read it. Thread IDs are 12 hex characters. In a shape file name, any character other than a letter, digit, `_`, `.` or `-` is percent-encoded.
+
+## Thread attachments
+
+`meta.json` lists the things a thread works on under `attachments`, left out when there are none. Each attachment has a `kind`, plus fields of its own. A thread carries one attachment at most for now.
+
+| Kind | Fields |
+| --- | --- |
+| `network` | The network draft of tools, plans and agents the drafting agents build in the thread. `state` is `open`, `saved` or `discarded`, and `saved`, when present, says what was written where. The draft itself isn't stored: it's rebuilt from the thread's entries when the thread is opened again. |
+
+A thread gets a `network` attachment when its first message goes to an agent that reads networks (`attachments: [network]` in the [agent file](/agents/reference/agent-file)).
 
 ## Thread entries
 
