@@ -110,6 +110,7 @@ impl Agent {
             stamps.push(Stamp {
                 ms: Some(millis(called.elapsed())),
                 usage: Some(EntryUsage::new(&self.model, &response.usage)),
+                calls: Vec::new(),
             });
 
             messages.push(ChatMessage::Assistant {
@@ -144,7 +145,7 @@ impl Agent {
                     tools_used.push(call.name.clone());
                 }
             }
-            let (results, durations): (Vec<ChatMessage>, Vec<u64>) = self
+            let (results, tool_stamps): (Vec<ChatMessage>, Vec<Stamp>) = self
                 .execute_calls(&response.tool_calls)
                 .await
                 .into_iter()
@@ -163,10 +164,7 @@ impl Agent {
                 .find(|(call, msg)| self.stop_tools.contains(&call.name) && !is_error_result(msg))
                 .map(|(call, _)| call.name.clone());
             messages.extend(results);
-            stamps.extend(durations.into_iter().map(|ms| Stamp {
-                ms: Some(ms),
-                usage: None,
-            }));
+            stamps.extend(tool_stamps);
             if stopped_by.is_some() {
                 return Ok(TurnOutcome {
                     text: response.content.unwrap_or_default(),
@@ -223,28 +221,37 @@ impl Agent {
 
     /// Execute one round of tool calls concurrently, preserving call order
     /// in the returned messages.
-    async fn execute_calls(&self, calls: &[ToolCall]) -> Vec<(ChatMessage, u64)> {
+    async fn execute_calls(&self, calls: &[ToolCall]) -> Vec<(ChatMessage, Stamp)> {
         let futures = calls.iter().map(|call| async {
-            self.events.tool_started(&call.name, &call.arguments);
-            let started = Instant::now();
-            let outcome = self
-                .registry
-                .invoke(&call.name, call.arguments.clone())
-                .await
-                .unwrap_or_else(|e| ToolOutcome {
-                    result: json!({ "error": e.to_string() }),
-                    is_error: true,
-                });
-            let elapsed = started.elapsed();
-            self.events
-                .tool_finished(&call.name, elapsed, outcome.is_error);
+            let (outcome, traced) = crate::trace::tool(crate::trace::FrameKind::Tool, async {
+                self.events.tool_started(&call.name, &call.arguments);
+                let started = Instant::now();
+                let outcome = self
+                    .registry
+                    .invoke(&call.name, call.arguments.clone())
+                    .await
+                    .unwrap_or_else(|e| ToolOutcome {
+                        result: json!({ "error": e.to_string() }),
+                        is_error: true,
+                    });
+                self.events
+                    .tool_finished(&call.name, started.elapsed(), outcome.is_error);
+                outcome
+            })
+            .await;
+            let ms = traced.ms();
+            let inner = traced.finish(&call.name, outcome.is_error);
             (
                 ChatMessage::ToolResult {
                     tool_call_id: call.id.clone(),
                     content: outcome.result,
                     is_error: outcome.is_error,
                 },
-                millis(elapsed),
+                Stamp {
+                    ms: Some(ms),
+                    usage: None,
+                    calls: inner,
+                },
             )
         });
         futures::future::join_all(futures).await

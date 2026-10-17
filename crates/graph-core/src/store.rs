@@ -32,6 +32,8 @@ pub struct ThreadEntry {
     pub ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<EntryUsage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<crate::trace::Call>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +63,7 @@ impl EntryUsage {
 pub struct Stamp {
     pub ms: Option<u64>,
     pub usage: Option<EntryUsage>,
+    pub calls: Vec<crate::trace::Call>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +96,7 @@ pub struct NewEntry {
     pub body: EntryBody,
     pub ms: Option<u64>,
     pub usage: Option<EntryUsage>,
+    pub calls: Vec<crate::trace::Call>,
 }
 
 impl NewEntry {
@@ -102,6 +106,7 @@ impl NewEntry {
             body,
             ms: None,
             usage: None,
+            calls: Vec::new(),
         }
     }
 
@@ -113,6 +118,7 @@ impl NewEntry {
         Self {
             ms: stamp.ms,
             usage: stamp.usage,
+            calls: stamp.calls,
             ..self
         }
     }
@@ -125,6 +131,7 @@ impl NewEntry {
             body: self.body,
             ms: self.ms,
             usage: self.usage,
+            calls: self.calls,
         }
     }
 }
@@ -136,6 +143,7 @@ impl From<ThreadEntry> for NewEntry {
             body: entry.body,
             ms: entry.ms,
             usage: entry.usage,
+            calls: entry.calls,
         }
     }
 }
@@ -220,6 +228,7 @@ mod tests {
             },
             ms: None,
             usage: None,
+            calls: Vec::new(),
         };
         let value = serde_json::to_value(&entry).unwrap();
         assert_eq!(
@@ -246,6 +255,7 @@ mod tests {
             },
             ms: None,
             usage: None,
+            calls: Vec::new(),
         };
         let value = serde_json::to_value(&run).unwrap();
         assert_eq!(value["kind"], json!("subagent_run"));

@@ -1,6 +1,6 @@
 use graph_config::TelemetryConfig;
 use graph_core::usage::{ModelCallEvent, UsageReport};
-use graph_core::{EventSink, RunStart, TeeSink};
+use graph_core::{trace, EventSink, RunStart, TeeSink};
 use opentelemetry::trace::{
     Span as _, SpanBuilder, SpanKind, Status, TraceContextExt, Tracer as _, TracerProvider as _,
 };
@@ -352,6 +352,7 @@ pub struct OtlpSink {
 struct State {
     root: Option<Context>,
     steps: Vec<(String, Context)>,
+    frames: HashMap<u64, Context>,
     run: Option<RunStart>,
 }
 
@@ -486,6 +487,9 @@ impl OtlpSink {
                 }
             }
         }
+        if let Some(cx) = enclosing(state, &trace::lineage(), 1) {
+            return cx;
+        }
         if let Some((_, cx)) = state.steps.last() {
             return cx.clone();
         }
@@ -514,6 +518,7 @@ impl OtlpSink {
 
     fn end_all(&self, state: &mut State) {
         let now = SystemTime::now();
+        state.frames.clear();
         for (_, cx) in state.steps.drain(..) {
             cx.span().end_with_timestamp(now);
         }
@@ -521,6 +526,13 @@ impl OtlpSink {
             root.span().end_with_timestamp(now);
         }
     }
+}
+
+fn enclosing(state: &State, lineage: &[trace::FrameInfo], skip: usize) -> Option<Context> {
+    lineage
+        .iter()
+        .skip(skip)
+        .find_map(|frame| state.frames.get(&frame.id).cloned())
 }
 
 fn qualify(call_stack: &[String], path: &str) -> String {
@@ -572,7 +584,13 @@ impl EventSink for OtlpSink {
                 .with_attributes(attributes),
             &parent,
         );
-        state.steps.push((key, parent.with_span(span)));
+        let cx = parent.with_span(span);
+        if let Some(frame) = trace::lineage().first() {
+            if frame.kind == trace::FrameKind::Step {
+                state.frames.insert(frame.id, cx.clone());
+            }
+        }
+        state.steps.push((key, cx));
     }
 
     fn step_finished(
@@ -610,11 +628,17 @@ impl EventSink for OtlpSink {
         if is_bare_control(name) {
             return;
         }
+        let lineage = trace::lineage();
         let mut state = self.state.lock().unwrap();
-        if !state.steps.is_empty() {
-            return;
-        }
-        let parent = self.root(&mut state);
+        let parent = match lineage.first() {
+            Some(frame) if frame.kind == trace::FrameKind::Step => return,
+            Some(_) => match enclosing(&state, &lineage, 1) {
+                Some(cx) => cx,
+                None => self.root(&mut state),
+            },
+            None if !state.steps.is_empty() => return,
+            None => self.root(&mut state),
+        };
         let mut attributes = self.attrs(&state);
         attributes.extend([
             KeyValue::new("langfuse.observation.type", observation_type(name)),
@@ -627,21 +651,35 @@ impl EventSink for OtlpSink {
                 .with_attributes(attributes),
             &parent,
         );
-        state
-            .steps
-            .push((format!("tool:{name}"), parent.with_span(span)));
+        let cx = parent.with_span(span);
+        match lineage.first() {
+            Some(frame) => {
+                state.frames.insert(frame.id, cx);
+            }
+            None => state.steps.push((format!("tool:{name}"), cx)),
+        }
     }
 
     fn tool_finished(&self, name: &str, _elapsed: Duration, is_error: bool) {
         if is_bare_control(name) {
             return;
         }
-        let key = format!("tool:{name}");
+        let lineage = trace::lineage();
         let mut state = self.state.lock().unwrap();
-        let Some(index) = state.steps.iter().rposition(|(k, _)| *k == key) else {
-            return;
+        let cx = match lineage.first() {
+            Some(frame) if frame.kind == trace::FrameKind::Step => return,
+            Some(frame) => match state.frames.remove(&frame.id) {
+                Some(cx) => cx,
+                None => return,
+            },
+            None => {
+                let key = format!("tool:{name}");
+                let Some(index) = state.steps.iter().rposition(|(k, _)| *k == key) else {
+                    return;
+                };
+                state.steps.remove(index).1
+            }
         };
-        let (_, cx) = state.steps.remove(index);
         let span = cx.span();
         if is_error {
             span.set_attribute(KeyValue::new("langfuse.observation.level", "ERROR"));
@@ -653,8 +691,12 @@ impl EventSink for OtlpSink {
     fn model_call(&self, call: &ModelCallEvent) {
         let now = SystemTime::now();
         let started = now.checked_sub(call.elapsed).unwrap_or(now);
+        let lineage = trace::lineage();
         let mut state = self.state.lock().unwrap();
-        let parent = self.step_context(&mut state, &call.site);
+        let parent = match enclosing(&state, &lineage, 0) {
+            Some(cx) => cx,
+            None => self.step_context(&mut state, &call.site),
+        };
         let usage = &call.usage;
         let usage_details = serde_json::json!({
             "input": usage.input_tokens,
@@ -1050,6 +1092,81 @@ mod tests {
         assert_eq!(step.parent_span_id, call.span_context.span_id());
         let reshape = by_name(&spans, "builtin__reshape");
         assert_eq!(reshape.parent_span_id, root.span_context.span_id());
+    }
+
+    #[tokio::test]
+    async fn parallel_and_subagent_tool_calls_each_get_a_span_under_their_caller() {
+        use graph_core::trace::{tool, FrameKind};
+        let (sink, exporter, provider) = harness(RunInfo::conversation("ask", None), true);
+        let builder = |agent: &'static str, inner: &'static str| {
+            let sink = &sink;
+            async move {
+                let ((), traced) = tool(FrameKind::Tool, async {
+                    sink.tool_started(agent, &json!({}));
+                    tokio::task::yield_now().await;
+                    sink.model_call(&call(agent, None));
+                    let ((), inner_traced) = tool(FrameKind::Tool, async {
+                        sink.subagent_tool_started(1, inner, &json!({}));
+                        tokio::task::yield_now().await;
+                        sink.model_call(&call(inner, None));
+                        sink.subagent_tool_finished(1, inner, Duration::ZERO, false);
+                    })
+                    .await;
+                    inner_traced.finish(inner, false);
+                    sink.tool_finished(agent, Duration::ZERO, false);
+                })
+                .await;
+                traced.finish(agent, false);
+            }
+        };
+        futures::join!(
+            builder("agent__tool_drafter", "builtin__try_tool"),
+            builder("agent__plan_drafter", "builtin__check_plan")
+        );
+        drop(sink);
+        provider.force_flush().unwrap();
+
+        let spans = exporter.get_finished_spans().unwrap();
+        let root = by_name(&spans, "ask");
+        for (agent, inner) in [
+            ("agent__tool_drafter", "builtin__try_tool"),
+            ("agent__plan_drafter", "builtin__check_plan"),
+        ] {
+            let agent_span = by_name(&spans, agent);
+            assert_eq!(
+                agent_span.parent_span_id,
+                root.span_context.span_id(),
+                "{agent}"
+            );
+            let inner_span = by_name(&spans, inner);
+            assert_eq!(
+                inner_span.parent_span_id,
+                agent_span.span_context.span_id(),
+                "{inner}"
+            );
+            let generations: Vec<&SpanData> = spans
+                .iter()
+                .filter(|span| {
+                    attribute(span, "graph.site") == Some(&OtelValue::from(agent.to_string()))
+                        || attribute(span, "graph.site")
+                            == Some(&OtelValue::from(inner.to_string()))
+                })
+                .collect();
+            assert_eq!(generations.len(), 2, "{agent}");
+            for generation in generations {
+                let site = attribute(generation, "graph.site").unwrap().to_string();
+                let parent = if site == agent {
+                    agent_span
+                } else {
+                    inner_span
+                };
+                assert_eq!(
+                    generation.parent_span_id,
+                    parent.span_context.span_id(),
+                    "{site}"
+                );
+            }
+        }
     }
 
     #[test]
