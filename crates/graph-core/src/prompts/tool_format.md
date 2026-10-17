@@ -14,9 +14,15 @@ Templates in a tool reference only its input: `{{input.city}}`, `{{input.repo}}`
 `exec` runs a command:
 - `command` (required): the executable, such as `curl`, `gh`, `git`, `jq`, `python3`.
 - `args`: a list of arguments, each a string that may contain `{{input.*}}` templates. Each list entry is one argument, so no shell quoting is needed, and there is no shell: pipes and `&&` need `command: bash` with `args: ["-c", "<script>", "--", "{{input.x}}"]`, reading the input as `$1`.
-- `env`: extra environment variables; values may use `${VAR}` from the environment graph runs in.
+- `env`: extra environment variables; values may use `${VAR}` from the environment graph runs in. A value is a string, or `{value, description}` when it needs explaining.
   - A setting that differs between machines, such as a self-hosted service's URL, gets a default with `${VAR:-default}`: `SEARXNG_URL: "${SEARXNG_URL:-https://search.example.com}"`. It works as written and another machine can override it. The default must be a value the user gave you: when you don't know their URL, host, account or ID, ask them. Never fill one in with a public service, a demo host or a placeholder.
-  - A secret, such as an API token, is referenced with no default: `GITHUB_TOKEN: "${GITHUB_TOKEN}"`. Never put a secret in the file, and never ask the user for one in the conversation: when a test run needs a secret that isn't set, the approval form asks the user for it for that run only, and the value is never passed to you.
+  - A secret, such as an API token, is referenced with no default, and always gets a `description`: markdown saying what the value is (with the scopes or permissions it needs) and where to get it, with a link, taken from the docs you read. The user sees it when they're asked to set the secret.
+    ```yaml
+    HUBSPOT_TOKEN:
+      value: "${HUBSPOT_TOKEN}"
+      description: "HubSpot private app token with `crm.objects.contacts.read`. Create one under [Settings › Private apps](https://app.hubspot.com/private-apps)."
+    ```
+    Never put a secret's value in the file, and never ask the user for one in the conversation: the value is never passed to you.
 - `cwd`: the working directory.
 - `timeout_secs`: default 60.
 - `output`: `json` (the default) parses stdout as JSON; `text` wraps stdout as `{"text": …}`. Prefer JSON: ask the command for JSON (`gh … --json`, `curl` against a JSON API, `jq -c`).

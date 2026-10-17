@@ -33,7 +33,7 @@
           "kind": "exec",
           "name": "open_prs",
           "read_only": true,
-          "version": 2
+          "version": 3
         }
       ],
       "properties": {
@@ -54,9 +54,31 @@
         },
         "env": {
           "additionalProperties": {
-            "type": "string"
+            "oneOf": [
+              {
+                "description": "The value.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "description": {
+                    "description": "Markdown saying what the value is and where to get it, links included. Shown wherever the secret is asked for, and by `graph secret list`.",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value, exactly as the plain string form takes it.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "type": "object"
+              }
+            ]
           },
-          "description": "Extra environment variables. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store. `${VAR:-default}` falls back to the default when neither has a value. A tool from an installed pack also gets `GRAPH_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.",
+          "description": "Extra environment variables. Each value is a string, or `{value, description}` to say what a secret is and where to get it. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store (the project's value first, then the global one). `${VAR:-default}` falls back to the default when neither has a value; a `${VAR}` with no default is a secret the tool needs. A tool from an installed pack also gets `GRAPH_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.",
           "type": "object"
         },
         "kind": {
@@ -121,7 +143,7 @@
             "type": "object"
           },
           "prompt": "Summarize into one sentence and three keywords: {{input.text}}",
-          "version": 2
+          "version": 3
         }
       ],
       "properties": {
@@ -186,7 +208,7 @@
             "number": "{{input.pr.number}}",
             "title": "{{input.pr.title}}"
           },
-          "version": 2
+          "version": 3
         }
       ],
       "properties": {
@@ -241,7 +263,7 @@
           "state": {
             "ticket": "{{input.ticket}}"
           },
-          "version": 2
+          "version": 3
         }
       ],
       "properties": {

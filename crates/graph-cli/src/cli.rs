@@ -626,7 +626,7 @@ pub enum SecretCommand {
     },
     #[command(
         about = "List every variable name the config, tools and packs reference, and where each resolves from",
-        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is the first of `env`, `project` and `shared` that sets it, followed by the sources it shadows, or `missing`. Names stored in the OS credential store for this project or for every project are listed too, even when nothing references them. Values are never printed.\n\nExamples:\n  graph secret list\n  graph secret list --json"
+        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is the first of `env`, `project` and `shared` that sets it, followed by the sources it shadows, or `missing`. Names stored in the OS credential store for this project or for every project are listed too, even when nothing references them. A name a tool's `env` describes (`{value, description}`) shows its description below it. Values are never printed.\n\nExamples:\n  graph secret list\n  graph secret list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -634,7 +634,7 @@ pub enum SecretCommand {
     },
     #[command(
         about = "Show where one name resolves from and what references it",
-        after_long_help = "Prints the environment, project and shared values in resolution order, marks the one in use, and lists the references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  graph secret show ANTHROPIC_API_KEY"
+        after_long_help = "Prints the environment, project and shared values in resolution order, marks the one in use, shows the description a tool's `env` gives it, and lists the references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  graph secret show ANTHROPIC_API_KEY"
     )]
     Show {
         #[arg(help = "The variable name, as `${NAME}` references it")]

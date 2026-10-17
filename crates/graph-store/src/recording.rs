@@ -36,6 +36,10 @@ impl ToolRegistry for RecordingRegistry {
         self.inner.server_identity(server).await
     }
 
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<graph_core::secrets::NeededSecret>> {
+        self.inner.needed_secrets(name).await
+    }
+
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {
         let outcome = self.inner.invoke(name, input).await?;
         if !outcome.is_error {

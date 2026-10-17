@@ -115,6 +115,10 @@ pub trait ToolRegistry: Send + Sync {
     async fn server_identity(&self, _server: &str) -> Option<Result<ServerIdentity, String>> {
         None
     }
+
+    async fn needed_secrets(&self, _name: &str) -> Option<Vec<crate::secrets::NeededSecret>> {
+        None
+    }
 }
 
 /// Merge several registries into one catalog. Invocation tries each in
@@ -169,6 +173,15 @@ impl ToolRegistry for CompositeRegistry {
         }
         None
     }
+
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<crate::secrets::NeededSecret>> {
+        for registry in &self.registries {
+            if let Some(needed) = registry.needed_secrets(name).await {
+                return Some(needed);
+            }
+        }
+        None
+    }
 }
 
 /// Wraps a registry and hides a fixed set of tool names from `tools()`,
@@ -204,6 +217,12 @@ impl ToolRegistry for ExcludingRegistry {
     }
     async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
         self.inner.server_identity(server).await
+    }
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<crate::secrets::NeededSecret>> {
+        if self.hidden.iter().any(|h| h == name) {
+            return None;
+        }
+        self.inner.needed_secrets(name).await
     }
 }
 
@@ -242,6 +261,12 @@ impl ToolRegistry for AllowlistRegistry {
     }
     async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
         self.inner.server_identity(server).await
+    }
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<crate::secrets::NeededSecret>> {
+        if !self.allows(name) {
+            return None;
+        }
+        self.inner.needed_secrets(name).await
     }
 }
 

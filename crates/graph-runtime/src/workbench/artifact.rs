@@ -256,6 +256,19 @@ pub async fn try_artifact(
         Ok(found) => found,
         Err(refusal) => return error(refusal),
     };
+    let needed: Vec<super::secrets::TestSecret> = graph_core::user_tools::parse_tool_source(&yaml)
+        .map(|doc| graph_core::user_tools::needed_secrets(&doc))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|secret| super::secrets::TestSecret {
+            name: secret.name,
+            tools: vec![network::catalog_name(ArtifactKind::Tool, &name)],
+            description: secret.description,
+        })
+        .collect();
+    if let Some(report) = wait_for_secrets(draft, pipeline, tx, needed) {
+        return outcome(report, false);
+    }
     let asking = pipeline
         .clone()
         .with_interlocutor(interlocutor_for(pipeline, tx));
@@ -533,6 +546,23 @@ async fn ask_yes(
     }
 }
 
+fn wait_for_secrets(
+    draft: &SharedDraft,
+    pipeline: &Pipeline,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    needed: Vec<super::secrets::TestSecret>,
+) -> Option<Value> {
+    let missing = super::secrets::missing(&needed, pipeline.drafted.secrets.as_ref());
+    if missing.is_empty() {
+        draft.lock().unwrap().network.checked_secrets(needed);
+        return None;
+    }
+    let report = super::secrets::missing_report(&needed, &missing);
+    draft.lock().unwrap().network.wait_on_secrets(needed);
+    publish(draft, tx);
+    Some(report)
+}
+
 fn ran_in(entries: &[graph_core::NewEntry], tools_used: &[String]) -> Vec<String> {
     let mut ran = BTreeSet::new();
     for entry in entries {
@@ -597,6 +627,21 @@ pub async fn test_network(
     };
     if node.kind == ArtifactKind::Agent && message.trim().is_empty() {
         return error("`message` is required to test an agent");
+    }
+    let own: Vec<String> = network
+        .nodes
+        .iter()
+        .filter(|node| node.kind == ArtifactKind::Tool && node.drafted())
+        .map(|node| node.catalog_name())
+        .collect();
+    let needed = super::secrets::needed(
+        &network::overlay(pipeline, &network),
+        &node.catalog_name(),
+        &own,
+    )
+    .await;
+    if let Some(report) = wait_for_secrets(draft, pipeline, tx, needed) {
+        return outcome(report, false);
     }
     if let Err(refusal) = ask_yes(
         pipeline,
@@ -859,6 +904,7 @@ pub async fn save_network(
     if plan.is_empty() {
         return Err("every drafted file was left out of the save".to_string());
     }
+    let untested = untested && !network.tested();
     if confirm {
         let listing: Vec<String> = plan
             .iter()
@@ -871,7 +917,8 @@ pub async fn save_network(
             tx,
             "save_network",
             format!(
-                "Save the network: {} files?\n{}",
+                "Save the network{}: {} files?\n{}",
+                if untested { " untested" } else { "" },
                 plan.len(),
                 listing.join("\n")
             ),
@@ -938,12 +985,13 @@ pub async fn save_network(
     draft.lock().unwrap().network.clear();
     publish(draft, tx);
     Ok(format!(
-        "saved {}",
+        "saved {}{}",
         saved
             .iter()
             .map(|(_, _, path)| path.clone())
             .collect::<Vec<_>>()
-            .join(", ")
+            .join(", "),
+        if untested { " (untested)" } else { "" }
     ))
 }
 
@@ -1014,7 +1062,8 @@ pub fn tool_defs() -> Vec<ToolDef> {
                           debug run that pauses for the USER's decision (step / continue / skip \
                           / abort) and breaks on any failing call, and `breakpoints` (top-level \
                           step ids, implies gated) run freely to those steps. Agents and network \
-                          plans are tried with workbench__test_network."
+                          plans are tried with workbench__test_network. A tool that needs a \
+                          secret that isn't set doesn't run: it returns status missing_secrets."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -1187,7 +1236,10 @@ pub fn tool_defs() -> Vec<ToolDef> {
                           conversation turn starting at an agent node with `message`, or one run \
                           of a plan node with `input`. Every agent runs on its own model and \
                           tools run for real; nothing is saved. Returns which nodes ran and the \
-                          answer. Every node has to be drafted without problems first."
+                          answer. Every node has to be drafted without problems first. When a \
+                          tool the test would call needs a secret that isn't set, nothing runs \
+                          and it returns status missing_secrets with each missing secret, the \
+                          tools that need it and its description."
                 .to_string(),
             input_schema: json!({
                 "type": "object",

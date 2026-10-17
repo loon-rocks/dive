@@ -127,6 +127,10 @@ impl ToolRegistry for Tracked {
     async fn server_identity(&self, server: &str) -> Option<Result<ServerIdentity, String>> {
         self.inner.server_identity(server).await
     }
+
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<graph_core::secrets::NeededSecret>> {
+        self.inner.needed_secrets(name).await
+    }
 }
 
 pub struct CancelGate {
