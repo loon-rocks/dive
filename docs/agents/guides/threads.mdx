@@ -14,6 +14,14 @@ graph thread list
 169a26420daf  2026-10-13 13:46    4 msgs  What is the latest stable version of Rust?
 ```
 
+A thread belongs to the project it was started in: the current directory when it has a `.graph` folder. `graph thread list` lists the threads of the project you're in, or the global threads outside one. Add `--all` to list every thread:
+
+```bash
+graph thread list --all
+```
+
+The other `graph thread` commands take a thread's id, so they work on any thread from anywhere.
+
 ## Read it
 
 ```bash

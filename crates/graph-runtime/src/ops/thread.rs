@@ -11,6 +11,7 @@ pub struct ThreadSummary {
     pub updated_at: i64,
     pub owner: String,
     pub active: String,
+    pub project: Option<String>,
 }
 
 impl From<&ThreadMeta> for ThreadSummary {
@@ -22,6 +23,7 @@ impl From<&ThreadMeta> for ThreadSummary {
             updated_at: meta.updated_at,
             owner: meta.owner.clone(),
             active: meta.active.clone(),
+            project: meta.project.clone(),
         }
     }
 }
@@ -45,10 +47,19 @@ pub struct ThreadDeleted {
 }
 
 pub async fn list(store: &dyn Store) -> Result<ThreadList> {
+    listed(store, |_| true).await
+}
+
+pub async fn list_in(store: &dyn Store, project: Option<&str>) -> Result<ThreadList> {
+    listed(store, |meta| meta.in_project(project)).await
+}
+
+async fn listed(store: &dyn Store, keep: impl Fn(&ThreadMeta) -> bool) -> Result<ThreadList> {
     let threads: Vec<ThreadSummary> = store
         .list_threads()
         .await?
         .iter()
+        .filter(|meta| keep(meta))
         .map(ThreadSummary::from)
         .collect();
     Ok(ThreadList {
@@ -105,5 +116,42 @@ mod tests {
         let missing = delete(&store, &meta.id).await.unwrap_err().to_string();
         assert_eq!(missing, format!("no thread with id {}", meta.id));
         assert!(show(&store, &meta.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_project_listing_holds_only_that_projects_threads_and_global_only_global_ones() {
+        let store = MemoryStore::new();
+        let global = store.create_thread("global", "chat", None).await.unwrap();
+        let site = store
+            .create_thread("site", "chat", Some("/work/site"))
+            .await
+            .unwrap();
+        let other = store
+            .create_thread("other", "chat", Some("/work/other"))
+            .await
+            .unwrap();
+        let ids = |list: ThreadList| -> Vec<String> {
+            list.threads.into_iter().map(|thread| thread.id).collect()
+        };
+
+        assert_eq!(
+            ids(list_in(&store, Some("/work/site")).await.unwrap()),
+            [site.id.as_str()]
+        );
+        assert_eq!(
+            ids(list_in(&store, None).await.unwrap()),
+            [global.id.as_str()]
+        );
+        let mut all = ids(list(&store).await.unwrap());
+        all.sort();
+        let mut expected = vec![global.id, site.id, other.id];
+        expected.sort();
+        assert_eq!(all, expected);
+
+        let listed =
+            serde_json::to_value(list_in(&store, Some("/work/site")).await.unwrap()).unwrap();
+        assert_eq!(listed["threads"][0]["project"], "/work/site");
+        let listed = serde_json::to_value(list_in(&store, None).await.unwrap()).unwrap();
+        assert_eq!(listed["threads"][0]["project"], json!(null));
     }
 }

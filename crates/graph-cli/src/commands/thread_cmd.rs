@@ -8,6 +8,7 @@ use anyhow::Result;
 use graph_core::{EntryBody, Store, ThreadEntry};
 use graph_llm::types::ChatMessage;
 use graph_runtime::ops::thread as ops;
+use graph_runtime::runtime::Workspace;
 use std::sync::Arc;
 
 pub async fn run(command: ThreadCommand) -> Result<()> {
@@ -15,18 +16,33 @@ pub async fn run(command: ThreadCommand) -> Result<()> {
     let store = open_store(&config)?;
 
     match command {
-        ThreadCommand::List { json } => report(list(&store).await?, json),
+        ThreadCommand::List { all, json } => {
+            let project = Workspace::current().project();
+            report(list(&store, all, project.as_deref()).await?, json)
+        }
         ThreadCommand::Show { id, state, json } => report(show(&store, &id, state).await?, json),
         ThreadCommand::Rm { id, json } => report(rm(&store, &id).await?, json),
     }
 }
 
-async fn list(store: &Arc<dyn Store>) -> Result<Outcome> {
-    let listed = ops::list(store.as_ref()).await?;
+async fn list(store: &Arc<dyn Store>, all: bool, project: Option<&str>) -> Result<Outcome> {
+    let listed = if all {
+        ops::list(store.as_ref()).await?
+    } else {
+        ops::list_in(store.as_ref(), project).await?
+    };
     let body = serde_json::to_value(&listed)?;
     if listed.threads.is_empty() {
-        return Ok(Outcome::raw(String::new(), body)
-            .with_note("no threads yet — run `graph ask` or `graph chat`"));
+        let note = match (all, project) {
+            (false, Some(_)) => {
+                "no threads yet in this project — run `graph ask` or `graph chat`, or `graph thread list --all` for every thread"
+            }
+            (false, None) => {
+                "no threads yet outside a project — run `graph ask` or `graph chat`, or `graph thread list --all` for every thread"
+            }
+            (true, _) => "no threads yet — run `graph ask` or `graph chat`",
+        };
+        return Ok(Outcome::raw(String::new(), body).with_note(note));
     }
     let text = listed
         .threads
@@ -142,5 +158,45 @@ fn render_message(author: &str, message: &ChatMessage) -> String {
             let marker = if *is_error { "✗" } else { "✓" };
             format!("  {marker} {preview}\n")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graph_store::MemoryStore;
+
+    fn titles(outcome: &Outcome) -> Vec<String> {
+        let mut titles: Vec<String> = outcome.body["threads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|thread| thread["title"].as_str().unwrap().to_string())
+            .collect();
+        titles.sort();
+        titles
+    }
+
+    #[tokio::test]
+    async fn thread_list_shows_the_current_project_by_default_and_every_thread_with_all() {
+        let store: Arc<dyn Store> = Arc::new(MemoryStore::new());
+        store.create_thread("global", "chat", None).await.unwrap();
+        store
+            .create_thread("site", "chat", Some("/work/site"))
+            .await
+            .unwrap();
+        store
+            .create_thread("other", "chat", Some("/work/other"))
+            .await
+            .unwrap();
+
+        let in_site = list(&store, false, Some("/work/site")).await.unwrap();
+        assert_eq!(titles(&in_site), ["site"]);
+        let global = list(&store, false, None).await.unwrap();
+        assert_eq!(titles(&global), ["global"]);
+        let all = list(&store, true, Some("/work/site")).await.unwrap();
+        assert_eq!(titles(&all), ["global", "other", "site"]);
+        let empty = list(&store, false, Some("/work/none")).await.unwrap();
+        assert!(titles(&empty).is_empty());
     }
 }

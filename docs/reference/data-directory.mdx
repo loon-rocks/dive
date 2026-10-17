@@ -21,7 +21,7 @@ Every file is plain JSON or JSONL, so `cat` and `jq` can read it. Thread IDs are
 
 ## Thread projects
 
-`meta.json` records the project a thread was started in under `project`: the absolute path of the project's root folder, with symlinks resolved. A folder is a project when it has a `.graph` folder. A thread started anywhere else, or in `~/.config/graph`, is global and has no `project`, and so does every thread written before projects were recorded.
+`meta.json` records the project a thread was started in under `project`: the absolute path of the project's root folder, with symlinks resolved. A folder is a project when it has a `.graph` folder. A thread started anywhere else, or in `~/.config/graph`, is global and has no `project`, and so does every thread written before projects were recorded. `graph thread list` lists the current directory's threads; `--all` lists them all.
 
 ## Thread attachments
 
