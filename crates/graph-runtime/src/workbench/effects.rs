@@ -140,7 +140,7 @@ impl Workbench {
             Some(id) => id,
             None => match self
                 .store
-                .create_thread(&crate::runtime::title_from(first_message), active)
+                .create_thread(&crate::runtime::title_from(first_message), active, None)
                 .await
             {
                 Ok(meta) => {

@@ -1,0 +1,2 @@
+{"seq":0,"at":1767225900000,"author":"user","kind":"message","message":{"kind":"user","content":"what changed in the site this week?"}}
+{"seq":1,"at":1767225960000,"author":"chat","kind":"message","message":{"kind":"assistant","content":"Two pages moved and the nav was rebuilt."},"ms":700,"usage":{"model":"claude-sonnet-4-5","input_tokens":800,"output_tokens":12,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}

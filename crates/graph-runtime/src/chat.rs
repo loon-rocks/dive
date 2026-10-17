@@ -485,7 +485,7 @@ async fn create_thread(
     active: &str,
 ) -> Result<ThreadMeta> {
     let mut meta = store
-        .create_thread(&title_from(first_message), owner)
+        .create_thread(&title_from(first_message), owner, None)
         .await?;
     if meta.active != active && store.set_active_agent(&meta.id, active).await.is_ok() {
         meta.active = active.to_string();
@@ -972,7 +972,7 @@ mod tests {
         let runtime = file_runtime(dir.path(), Vec::new());
         let store = runtime.store().unwrap();
         let meta = store
-            .create_thread("a tool that counts words", "network_drafter")
+            .create_thread("a tool that counts words", "network_drafter", None)
             .await
             .unwrap();
         store
@@ -1011,7 +1011,7 @@ mod tests {
         let runtime = file_runtime(dir.path(), Vec::new());
         let store = runtime.store().unwrap();
         let meta = store
-            .create_thread("old draft", "network_drafter")
+            .create_thread("old draft", "network_drafter", None)
             .await
             .unwrap();
         store
