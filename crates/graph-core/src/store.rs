@@ -27,6 +27,14 @@ pub struct ThreadMeta {
     pub active: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+}
+
+impl ThreadMeta {
+    pub fn in_project(&self, project: Option<&str>) -> bool {
+        self.project.as_deref() == project
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -219,7 +227,12 @@ pub struct StoreError(pub String);
 
 #[async_trait]
 pub trait Store: Send + Sync {
-    async fn create_thread(&self, title: &str, owner: &str) -> Result<ThreadMeta, StoreError>;
+    async fn create_thread(
+        &self,
+        title: &str,
+        owner: &str,
+        project: Option<&str>,
+    ) -> Result<ThreadMeta, StoreError>;
     async fn get_thread(&self, id: &str) -> Result<Option<ThreadMeta>, StoreError>;
     /// Most recently updated thread, if any.
     async fn latest_thread(&self) -> Result<Option<ThreadMeta>, StoreError>;
@@ -314,6 +327,39 @@ mod tests {
             .unwrap()
             .get("attachments")
             .is_none());
+    }
+
+    #[test]
+    fn thread_meta_written_before_projects_loads_as_global() {
+        let meta: ThreadMeta = serde_json::from_value(json!({
+            "id": "a1b2c3d4e5f6", "title": "t", "created_at": 1, "updated_at": 2,
+            "message_count": 0, "owner": "chat", "active": "chat"
+        }))
+        .unwrap();
+        assert_eq!(meta.project, None);
+        assert!(meta.in_project(None));
+        assert!(!meta.in_project(Some("/work/site")));
+        assert!(serde_json::to_value(&meta)
+            .unwrap()
+            .get("project")
+            .is_none());
+    }
+
+    #[test]
+    fn a_thread_belongs_only_to_the_project_it_records() {
+        let meta: ThreadMeta = serde_json::from_value(json!({
+            "id": "a1b2c3d4e5f6", "title": "t", "created_at": 1, "updated_at": 2,
+            "message_count": 0, "owner": "chat", "active": "chat",
+            "project": "/work/site"
+        }))
+        .unwrap();
+        assert!(meta.in_project(Some("/work/site")));
+        assert!(!meta.in_project(Some("/work/other")));
+        assert!(!meta.in_project(None));
+        assert_eq!(
+            serde_json::to_value(&meta).unwrap()["project"],
+            "/work/site"
+        );
     }
 
     #[test]

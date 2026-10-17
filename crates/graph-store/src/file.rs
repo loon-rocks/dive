@@ -30,7 +30,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub const STORE_FORMAT: u32 = 5;
+pub const STORE_FORMAT: u32 = 6;
 
 pub const STORE_FORMAT_OLDEST: u32 = 1;
 
@@ -65,6 +65,8 @@ struct MetaFile {
     active: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project: Option<String>,
 }
 
 fn legacy_agent() -> String {
@@ -82,6 +84,7 @@ impl From<MetaFile> for ThreadMeta {
             owner: m.owner,
             active: m.active,
             attachments: m.attachments,
+            project: m.project,
         }
     }
 }
@@ -197,7 +200,7 @@ fn migrate(root: &Path) -> Result<(), StoreError> {
     while found < STORE_FORMAT {
         match found {
             1 => migrate_threads_v1(&root.join("threads"))?,
-            2..=4 => {}
+            2..=5 => {}
             other => {
                 return Err(StoreError(format!(
                     "no migration from store version {other}"
@@ -413,9 +416,15 @@ fn encode_tool_filename(tool: &str) -> String {
 
 #[async_trait::async_trait]
 impl Store for FileStore {
-    async fn create_thread(&self, title: &str, owner: &str) -> Result<ThreadMeta, StoreError> {
+    async fn create_thread(
+        &self,
+        title: &str,
+        owner: &str,
+        project: Option<&str>,
+    ) -> Result<ThreadMeta, StoreError> {
         let title = title.to_string();
         let owner = owner.to_string();
+        let project = project.map(str::to_string);
         let threads_dir = self.threads_dir.clone();
         self.blocking(move || {
             let id = new_thread_id();
@@ -434,6 +443,7 @@ impl Store for FileStore {
                 active: owner.clone(),
                 owner,
                 attachments: Vec::new(),
+                project,
             };
             write_meta(&dir, &meta)?;
             Ok(meta.into())
@@ -829,7 +839,10 @@ mod tests {
     async fn entries_keep_their_authors_order_and_kinds() {
         let root = tempfile::tempdir().unwrap();
         let store = FileStore::open(root.path()).unwrap();
-        let meta = store.create_thread("t", "orchestrator").await.unwrap();
+        let meta = store
+            .create_thread("t", "orchestrator", None)
+            .await
+            .unwrap();
         assert_eq!(
             (meta.owner.as_str(), meta.active.as_str()),
             ("orchestrator", "orchestrator")
@@ -897,7 +910,7 @@ mod tests {
     async fn concurrent_appends_number_entries_without_gaps() {
         let root = tempfile::tempdir().unwrap();
         let store = std::sync::Arc::new(FileStore::open(root.path()).unwrap());
-        let meta = store.create_thread("t", "chat").await.unwrap();
+        let meta = store.create_thread("t", "chat", None).await.unwrap();
         let tasks: Vec<_> = (0..8)
             .map(|i| {
                 let store = store.clone();

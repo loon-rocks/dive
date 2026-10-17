@@ -21,7 +21,10 @@ fn backends(dir: &tempfile::TempDir) -> Vec<(&'static str, Arc<dyn Store>)> {
 async fn thread_lifecycle_and_message_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
     for (name, store) in backends(&dir) {
-        let thread = store.create_thread("first thread", "chat").await.unwrap();
+        let thread = store
+            .create_thread("first thread", "chat", None)
+            .await
+            .unwrap();
         let messages = vec![
             ChatMessage::User {
                 content: "list my PRs".into(),
@@ -108,9 +111,9 @@ async fn append_to_missing_thread_errors() {
 async fn latest_and_list_order_by_recency() {
     let dir = tempfile::tempdir().unwrap();
     for (name, store) in backends(&dir) {
-        let a = store.create_thread("a", "chat").await.unwrap();
+        let a = store.create_thread("a", "chat", None).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        let b = store.create_thread("b", "chat").await.unwrap();
+        let b = store.create_thread("b", "chat", None).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         // Touching A with a message makes it the most recent.
@@ -164,7 +167,7 @@ async fn threads_record_owner_active_agent_and_every_entry_kind() {
     let dir = tempfile::tempdir().unwrap();
     for (name, store) in backends(&dir) {
         let thread = store
-            .create_thread("network", "orchestrator")
+            .create_thread("network", "orchestrator", None)
             .await
             .unwrap();
         assert_eq!(thread.owner, "orchestrator", "{name}");
@@ -254,7 +257,7 @@ async fn entries_keep_their_duration_and_model_usage() {
         }],
     }];
     for (name, store) in backends(&dir) {
-        let thread = store.create_thread("t", "chat").await.unwrap();
+        let thread = store.create_thread("t", "chat", None).await.unwrap();
         let entries = vec![
             NewEntry::message(
                 "user",
@@ -326,7 +329,7 @@ async fn attachments_replace_the_threads_list_and_survive_appends() {
     let dir = tempfile::tempdir().unwrap();
     for (name, store) in backends(&dir) {
         let thread = store
-            .create_thread("draft", "network_drafter")
+            .create_thread("draft", "network_drafter", None)
             .await
             .unwrap();
         assert!(thread.attachments.is_empty(), "{name}");
