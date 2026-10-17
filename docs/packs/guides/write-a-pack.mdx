@@ -56,6 +56,15 @@ graph pack run tool__word_count --input file=files/README.md --path files
 }
 ```
 
+### Ship files with the pack
+
+A pack's exec tools run with `GRAPH_PACK_DIR` set to the pack's installed directory, so a tool can run a script or binary the pack ships instead of one on `PATH`:
+
+```yaml
+command: bash
+args: ["-c", 'exec "$GRAPH_PACK_DIR/bin/word-count" "$1"', "word_count", "{{input.file}}"]
+```
+
 ## Check and test
 
 ```bash

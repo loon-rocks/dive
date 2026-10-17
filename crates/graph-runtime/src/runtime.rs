@@ -168,7 +168,8 @@ impl Runtime {
         for (source, tools) in docs.packs {
             sources.push(Arc::new(
                 UserToolRegistry::pack(&source.name, tools, self.router.clone())
-                    .with_secrets(self.secrets()),
+                    .with_secrets(self.secrets())
+                    .with_pack_dir(&source.dir),
             ));
         }
         let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
