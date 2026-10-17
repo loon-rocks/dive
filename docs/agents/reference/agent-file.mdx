@@ -53,6 +53,10 @@ Unknown keys are a load error. For completion in your editor, start the file wit
   A cap on model rounds. Omitted means no cap as a subagent; in a conversation, `[settings].max_agent_iterations` applies.
 </ParamField>
 
+<ParamField body="attachments" type="enum<string>[]">
+  The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network`. A new thread whose first message goes to an agent that reads `network` gets a network attachment. Omitted means none.
+</ParamField>
+
 <ParamField body="system_prompt" type="string" required>
   The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `templating`, `tool_format`, `agent_format`), and nothing else.
 </ParamField>
@@ -60,7 +64,7 @@ Unknown keys are a load error. For completion in your editor, start the file wit
 <RequestExample>
 
 ```yaml Example
-version: 1
+version: 2
 name: release_notes
 description: Answers questions about what shipped, from the repo's commit history.
 model: chat
