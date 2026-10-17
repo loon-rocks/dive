@@ -1,3 +1,4 @@
+pub mod attachment;
 pub mod cancel;
 pub mod chat;
 pub mod ops;

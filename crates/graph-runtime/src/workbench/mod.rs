@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod artifact;
+pub mod attachment;
 mod effects;
 pub mod event;
 pub mod fs_tools;
@@ -11,6 +12,7 @@ pub mod tools;
 
 pub use agents::Start;
 pub use artifact::ArtifactKind;
+pub use attachment::{NetworkAttachment, NetworkAttachmentView, NetworkSetup, NetworkState};
 pub use effects::{save_draft, Workbench};
 pub use event::{GateKind, WorkbenchEvent};
 pub use network::{
@@ -20,10 +22,11 @@ pub use network::{
 pub use runner::{DebugControls, UiDecision};
 pub use tools::DraftState;
 
+use crate::attachment::AttachmentHost;
 use crate::runtime::{PipelineHooks, Runtime};
 use anyhow::{Context, Result};
 use graph_core::pipeline::doc::{load_plan_doc, PlanDoc};
-use graph_core::{CompositeRegistry, EventSink, ExcludingRegistry, ToolRegistry};
+use graph_core::{EventSink, ExcludingRegistry, ToolRegistry};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -59,21 +62,20 @@ impl Workbench {
         );
         runtime.usage.attach_events(run_sink.clone());
         let pipeline = runtime.pipeline(&store, run_sink).await?;
-
-        let draft = Arc::new(std::sync::Mutex::new(DraftState::new(doc.clone())));
-
-        let progress: Arc<dyn EventSink> = Arc::new(sink::NetworkProgress {
-            draft: draft.clone(),
+        let plans_dir = runtime.plans_dir();
+        let root: PathBuf = root.into();
+        let attachment = Arc::new(NetworkAttachment::new(NetworkSetup {
+            pipeline: pipeline.clone(),
             tx: tx.clone(),
-            builders: &["tool_drafter", "plan_drafter", "agent_drafter"],
-        });
-        let agent_sink: Arc<dyn EventSink> = crate::telemetry::tee(
-            Arc::new(graph_core::TeeSink::new(vec![
-                Arc::new(sink::ChannelSink::agent(tx.clone())),
-                progress,
-            ])),
-            exporter,
-        );
+            plans_dir: plans_dir.clone(),
+            root: root.clone(),
+            doc: doc.clone(),
+        })?);
+        let mut agent_sinks: Vec<Arc<dyn EventSink>> =
+            vec![Arc::new(sink::ChannelSink::agent(tx.clone()))];
+        agent_sinks.extend(attachment.observer());
+        let agent_sink: Arc<dyn EventSink> =
+            crate::telemetry::tee(Arc::new(graph_core::TeeSink::new(agent_sinks)), exporter);
         let hooks = PipelineHooks {
             interlocutor: Some(Arc::new(runner::UiInterlocutor::new(tx.clone()))),
             ..Default::default()
@@ -85,33 +87,7 @@ impl Workbench {
             toolbox.clone() as Arc<dyn ToolRegistry>,
             vec!["plan_and_execute".to_string()],
         ));
-        let plans_dir = runtime.plans_dir();
-        let root: PathBuf = root.into();
-        let debug = Arc::new(DebugControls::default());
-        let tester: artifact::Tester = Arc::new(std::sync::OnceLock::new());
-        let workbench_tools = Arc::new(
-            tools::WorkbenchTools::new(
-                draft.clone(),
-                pipeline.clone(),
-                plans_dir.clone(),
-                debug.clone(),
-                tx.clone(),
-            )
-            .with_tester(tester.clone())
-            .with_root(root.clone()),
-        );
-        let fs_tools = Arc::new(
-            fs_tools::FsTools::new(root.clone())
-                .context("failed to resolve the workbench project directory")?,
-        );
-        let registry: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(vec![
-            Arc::new(tools::ComposedCapture::new(
-                visible_catalog.clone(),
-                draft.clone(),
-            )),
-            workbench_tools,
-            fs_tools,
-        ]));
+        let registry = attachment.tools(toolbox as Arc<dyn ToolRegistry>);
         let (agent_set, errors) = graph_core::agent::doc::AgentSet::load(
             &agents::builtin_sources(),
             &graph_core::agent::doc::agent_dirs(),
@@ -122,13 +98,10 @@ impl Workbench {
         }
         let mut conversation =
             runtime.conversation_over(Arc::new(agent_set), registry, pipeline.clone(), agent_sink);
-        conversation.context = Some(agents::context_hook(draft.clone(), pipeline.clone()));
-        conversation.handoff_guard = Some(artifact::handoff_guard(draft.clone()));
-        conversation.progress_tools = tools::progress_tools();
-        conversation.stop_tools = artifact::STOP_TOOLS
-            .iter()
-            .map(|name| name.to_string())
-            .collect();
+        conversation.context = Some(crate::attachment::context_hook(
+            conversation.agents.clone(),
+            vec![attachment.clone() as Arc<dyn AttachmentHost>],
+        ));
         if let Some(prompt) = crate::runtime::deprecated_prompt(
             &conversation.agents,
             agents::PLAN_EDITOR,
@@ -149,12 +122,7 @@ impl Workbench {
                 }
             }
         }
-
-        let mut base = conversation.clone();
-        base.catalog = Arc::new(CompositeRegistry::new(Vec::new()));
-        base.context = None;
-        base.handoff_guard = None;
-        let _ = tester.set(base);
+        attachment.wire(&mut conversation);
         let (resumed, history) = match &start {
             Start::Resume(id) => {
                 let meta = store
@@ -162,8 +130,14 @@ impl Workbench {
                     .await?
                     .with_context(|| format!("no thread '{id}'"))?;
                 let history = crate::runtime::load_history(store.as_ref(), id).await?;
-                draft.lock().unwrap().network =
-                    replay::network(&history, &pipeline.drafted.tool_dirs);
+                attachment.restore(&history);
+                if let Some(recorded) = meta
+                    .attachments
+                    .iter()
+                    .find(|recorded| recorded.kind == attachment.kind())
+                {
+                    attachment.recall(recorded);
+                }
                 (Some(meta), history)
             }
             _ => (None, Vec::new()),
@@ -178,30 +152,27 @@ impl Workbench {
             conversation,
             pipeline,
             history: Arc::new(tokio::sync::Mutex::new(history)),
-            draft,
+            draft: attachment.draft.clone(),
             catalog: visible_catalog,
             store,
             plans_dir,
-            debug,
+            debug: attachment.debug.clone(),
             tx,
             root,
+            attachment,
         };
         if let Some((kind, name)) = opening {
-            artifact::open_existing(
-                &workbench.draft,
-                &workbench.pipeline,
-                &workbench.tx,
-                kind,
-                &name,
-            )
-            .await
-            .map_err(anyhow::Error::msg)?;
+            workbench
+                .attachment
+                .open_existing(kind, &name)
+                .await
+                .map_err(anyhow::Error::msg)?;
         }
         Ok(workbench)
     }
 }
 
-fn resolve_doc(runtime: &Runtime, name_or_path: &str) -> Result<PlanDoc> {
+pub(crate) fn resolve_doc(runtime: &Runtime, name_or_path: &str) -> Result<PlanDoc> {
     let path = std::path::Path::new(name_or_path);
     if path.exists() {
         return load_plan_doc(path).context("failed to load plan file");

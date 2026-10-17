@@ -3,7 +3,7 @@
 //! truth. Registered under `workbench__` alongside the normal catalog.
 
 use super::event::WorkbenchEvent;
-use super::runner::{DebugControls, UiGate, UiInterlocutor};
+use super::runner::{DebugControls, UiGate};
 use async_trait::async_trait;
 use graph_core::pipeline::authoring;
 use graph_core::pipeline::doc::{apply_schema_defaults, load_plan_doc, validate_input, PlanDoc};
@@ -372,7 +372,7 @@ impl WorkbenchTools {
         // question is the plan asking for input, not a debugger pause.
         let mut pipeline = (*self.pipeline)
             .clone()
-            .with_interlocutor(Arc::new(UiInterlocutor::new(self.tx.clone())));
+            .with_interlocutor(super::runner::interlocutor_for(&self.pipeline, &self.tx));
         if gated {
             pipeline =
                 pipeline.with_gate(Arc::new(UiGate::new(self.tx.clone(), self.debug.clone())));
