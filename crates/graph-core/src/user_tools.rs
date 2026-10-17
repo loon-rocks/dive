@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 pub const USER_TOOL_PREFIX: &str = "user__";
 pub const BUILTIN_TOOL_PREFIX: &str = "builtin__";
+pub const PACK_DIR_ENV: &str = "GRAPH_PACK_DIR";
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 // Note: no deny_unknown_fields — serde can't combine it with #[serde(flatten)].
@@ -448,6 +449,7 @@ pub struct UserToolRegistry {
     router: Arc<ModelRouter>,
     prefix: String,
     secrets: Arc<dyn SecretSource>,
+    pack_dir: Option<PathBuf>,
 }
 
 impl UserToolRegistry {
@@ -457,11 +459,17 @@ impl UserToolRegistry {
             router,
             prefix: USER_TOOL_PREFIX.to_string(),
             secrets: Arc::new(crate::secrets::system()),
+            pack_dir: None,
         }
     }
 
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretSource>) -> Self {
         self.secrets = secrets;
+        self
+    }
+
+    pub fn with_pack_dir(mut self, dir: &Path) -> Self {
+        self.pack_dir = Some(std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf()));
         self
     }
 
@@ -472,6 +480,7 @@ impl UserToolRegistry {
             router,
             prefix: BUILTIN_TOOL_PREFIX.to_string(),
             secrets: Arc::new(crate::secrets::system()),
+            pack_dir: None,
         }
     }
 
@@ -481,6 +490,7 @@ impl UserToolRegistry {
             router,
             prefix: crate::packs::catalog_name(pack, crate::packs::ItemKind::Tool, ""),
             secrets: Arc::new(crate::secrets::system()),
+            pack_dir: None,
         }
     }
 
@@ -689,6 +699,9 @@ impl UserToolRegistry {
 
         let mut cmd = tokio::process::Command::new(command);
         cmd.args(&rendered_args);
+        if let Some(dir) = &self.pack_dir {
+            cmd.env(PACK_DIR_ENV, dir);
+        }
         for (key, value) in env {
             let expanded =
                 expand_env(value, self.secrets.as_ref()).map_err(ToolError::Transport)?;

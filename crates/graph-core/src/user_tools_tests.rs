@@ -1992,3 +1992,26 @@ fn an_env_reference_can_carry_a_default_for_settings() {
         "${GRAPH_TEST_NEVER_SET_URL:-https://search.example}"
     );
 }
+
+#[tokio::test]
+async fn pack_exec_tools_see_their_pack_directory_and_user_tools_do_not() {
+    let doc = parse_tool_source(
+        "name: where\ndescription: d\nkind: exec\ncommand: sh\nargs: [\"-c\", 'printf %s \"${GRAPH_PACK_DIR-unset}\"']\noutput: text\n",
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let pack =
+        UserToolRegistry::pack("example", vec![doc.clone()], router()).with_pack_dir(dir.path());
+    let outcome = pack
+        .invoke("example__tool__where", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.result,
+        json!({"text": dir.path().display().to_string()})
+    );
+
+    let user = UserToolRegistry::new(vec![doc], router());
+    let outcome = user.invoke("user__where", json!({})).await.unwrap();
+    assert_eq!(outcome.result, json!({"text": "unset"}));
+}

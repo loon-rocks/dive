@@ -511,6 +511,30 @@ fn run_runs_a_private_migration_tool_and_a_migration_plan_under_the_manifest_nam
         .stderr_contains("pack 'example' has no item 'tool__nope'");
 }
 
+const BUNDLED_TOOL: &str = r#"version: 2
+name: bundled
+description: Reads a file shipped in the pack
+kind: exec
+command: sh
+args: ["-c", 'cat "$GRAPH_PACK_DIR/data/answer.json"']
+"#;
+
+#[test]
+fn run_gives_a_pack_exec_tool_its_pack_directory() {
+    let scratch = Scratch::new();
+    let pack = scratch.path().join("pack");
+    write(&pack, "pack.toml", MANIFEST);
+    write(&pack, "tools/bundled.yaml", BUNDLED_TOOL);
+    write(&pack, "data/answer.json", r#"{"answer": 42}"#);
+
+    let run = graph(
+        &scratch,
+        &["pack", "run", "tool__bundled", "--path", "pack", "--json"],
+    );
+    run.code_is(0);
+    assert_eq!(run.json()["result"]["answer"], 42);
+}
+
 #[test]
 fn test_runs_each_migration_over_its_samples_and_catches_one_that_leaves_a_v1_name() {
     let scratch = Scratch::new();
