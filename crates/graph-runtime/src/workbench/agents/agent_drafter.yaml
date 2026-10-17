@@ -6,6 +6,8 @@ tools:
   - workbench__set_artifact
   - workbench__show_artifact
   - workbench__describe_tool
+  - web__tool__search
+  - web__tool__fetch
 input_schema:
   type: object
   required: [node]
