@@ -6,7 +6,13 @@ playground: "none"
 keywords: ["graph thread list"]
 ---
 
+Lists the threads started in the current directory's project, or the global threads when the directory has no `.graph` folder. `--all` lists every thread.
+
 ## Options
+
+<ParamField query="--all" type="boolean">
+  List every thread, whatever project it was started in
+</ParamField>
 
 <ParamField query="--json" type="boolean">
   Print a JSON envelope instead of text
@@ -24,8 +30,12 @@ keywords: ["graph thread list"]
 graph thread list [OPTIONS]
 ```
 
-```bash Example
+```bash Example 1
 graph thread list
+```
+
+```bash Example 2
+graph thread list --all
 ```
 
 </RequestExample>

@@ -38,6 +38,7 @@ pub struct Runtime {
     drafted: Arc<graph_core::pipeline::Drafted>,
     pub packs: Arc<crate::packs::InstalledPacks>,
     options: RuntimeOptions,
+    project: Option<String>,
 }
 
 impl Runtime {
@@ -48,7 +49,16 @@ impl Runtime {
     pub fn open(workspace: &Workspace, options: RuntimeOptions) -> Result<Self> {
         let loaded = load_config(workspace)?;
         let packs = load_packs(&loaded)?;
-        Self::with_packs(loaded.config, packs, options)
+        Ok(Self::with_packs(loaded.config, packs, options)?.in_project(workspace.project()))
+    }
+
+    pub fn in_project(mut self, project: Option<String>) -> Self {
+        self.project = project;
+        self
+    }
+
+    pub fn project(&self) -> Option<&str> {
+        self.project.as_deref()
     }
 
     /// Build a runtime over an already-resolved config.
@@ -117,6 +127,7 @@ impl Runtime {
             drafted,
             packs: Arc::new(packs),
             options,
+            project: None,
         })
     }
 
@@ -760,6 +771,17 @@ impl Workspace {
         is_global_dir(&self.root)
     }
 
+    pub fn project(&self) -> Option<String> {
+        if self.is_global() || !self.root.join(".graph").is_dir() {
+            return None;
+        }
+        let root = self
+            .root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone());
+        Some(root.to_string_lossy().into_owned())
+    }
+
     pub fn project_dir(&self) -> PathBuf {
         if self.is_global() {
             global_config_dir()
@@ -835,6 +857,26 @@ mod tests {
             vec![graph_config::global_config_path()]
         );
         assert_eq!(workspace.project_dir(), global_config_dir());
+    }
+
+    #[test]
+    fn a_workspace_with_a_graph_folder_is_a_project_named_by_its_canonical_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("site");
+        std::fs::create_dir_all(root.join(".graph")).unwrap();
+        let expected = root.canonicalize().unwrap().to_string_lossy().into_owned();
+        assert_eq!(Workspace::new(&root).project(), Some(expected.clone()));
+        assert_eq!(
+            Workspace::new(root.join(".graph").join("..")).project(),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn a_folder_without_a_graph_folder_and_the_global_dir_are_global() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(Workspace::new(dir.path()).project(), None);
+        assert_eq!(Workspace::new(global_config_dir()).project(), None);
     }
 
     #[test]
