@@ -17,6 +17,8 @@ A bare name installs that directory of [tylerdavis/graph-packs](https://github.c
 
 graph copies the pack into `./.graph/packs/github/`, adds a `[packs.github]` entry to `config.toml` and records the release in `./.graph/packs.lock`. Commit all three, and everyone who clones the project gets the same pack without installing anything. `--global` installs into `~/.config/graph/` instead.
 
+A `[packs.<name>]` entry without its copy under `packs/` still loads. graph warns that the pack's items are unavailable and names the `graph pack add` command that installs it. If a global copy is installed, graph uses that copy until the project's copy is installed.
+
 ## Names
 
 A pack's items are called as `<pack>__<kind>__<item>`:
