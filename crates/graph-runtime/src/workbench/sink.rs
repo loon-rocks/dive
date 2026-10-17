@@ -126,12 +126,19 @@ impl EventSink for ChannelSink {
         }
     }
 
-    fn tool_finished(&self, name: &str, _elapsed: Duration, is_error: bool) {
+    fn tool_finished(&self, name: &str, elapsed: Duration, is_error: bool) {
         if matches!(self.kind, SinkKind::AgentTurn) {
             self.send(WorkbenchEvent::AgentToolFinished {
                 name: name.to_string(),
                 is_error,
+                elapsed,
             });
+        }
+    }
+
+    fn model_call(&self, call: &graph_core::usage::ModelCallEvent) {
+        if matches!(self.kind, SinkKind::AgentTurn) {
+            self.send(WorkbenchEvent::AgentModelCall(Box::new(call.clone())));
         }
     }
 
@@ -284,5 +291,40 @@ mod tests {
                 _ => panic!("expected WorkbenchEvent::RunUsage"),
             }
         }
+    }
+
+    #[test]
+    fn agent_turns_report_model_calls_and_tool_durations() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sink = ChannelSink::agent(tx);
+        sink.model_call(&graph_core::usage::ModelCallEvent {
+            kind: graph_config::ModelKind::Chat,
+            site: "agent:network_drafter".to_string(),
+            role: "chat".to_string(),
+            provider: "anthropic".to_string(),
+            model: "haiku".to_string(),
+            usage: Usage::default(),
+            elapsed: Duration::from_millis(1200),
+            cost_usd: None,
+            input: None,
+            output: None,
+        });
+        sink.tool_finished("workbench__set_sketch", Duration::from_millis(30), false);
+        match rx.try_recv().expect("a model call") {
+            WorkbenchEvent::AgentModelCall(call) => {
+                assert_eq!(call.site, "agent:network_drafter");
+                assert_eq!(call.elapsed, Duration::from_millis(1200));
+            }
+            _ => panic!("expected WorkbenchEvent::AgentModelCall"),
+        }
+        match rx.try_recv().expect("a finished tool") {
+            WorkbenchEvent::AgentToolFinished { elapsed, .. } => {
+                assert_eq!(elapsed, Duration::from_millis(30))
+            }
+            _ => panic!("expected WorkbenchEvent::AgentToolFinished"),
+        }
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        ChannelSink::plan_run(tx).tool_finished("x", Duration::ZERO, false);
+        assert!(rx.try_recv().is_err());
     }
 }
