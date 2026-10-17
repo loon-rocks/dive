@@ -313,9 +313,10 @@ fn gh_pr_ticket_with(dir: &std::path::Path, pr_json: &str) -> UserToolDoc {
             "{}:{}",
             dir.display(),
             std::env::var("PATH").unwrap_or_default()
-        ),
+        )
+        .into(),
     );
-    env.insert("FAKE_PR".to_string(), pr_json.to_string());
+    env.insert("FAKE_PR".to_string(), pr_json.to_string().into());
     doc
 }
 
@@ -1367,15 +1368,16 @@ fn slack_tool_with(dir: &std::path::Path, post: &str, permalink: &str) -> UserTo
             "{}:{}",
             dir.display(),
             std::env::var("PATH").unwrap_or_default()
-        ),
+        )
+        .into(),
     );
-    env.insert("SLACK_BOT_TOKEN".to_string(), "xoxb-test-token".to_string());
+    env.insert("SLACK_BOT_TOKEN".to_string(), "xoxb-test-token".into());
     env.insert(
         "CURL_LOG".to_string(),
-        dir.join("curl.log").display().to_string(),
+        dir.join("curl.log").display().to_string().into(),
     );
-    env.insert("FAKE_POST".to_string(), post.to_string());
-    env.insert("FAKE_PERMALINK".to_string(), permalink.to_string());
+    env.insert("FAKE_POST".to_string(), post.to_string().into());
+    env.insert("FAKE_PERMALINK".to_string(), permalink.to_string().into());
     doc
 }
 
@@ -1557,7 +1559,7 @@ async fn slack_post_message_without_a_token_never_calls_slack() {
     };
     // Explicitly empty rather than absent: the child inherits the parent
     // environment, so a developer's exported token must not decide this.
-    env.insert("SLACK_BOT_TOKEN".to_string(), String::new());
+    env.insert("SLACK_BOT_TOKEN".to_string(), String::new().into());
 
     let outcome = slack_registry(doc)
         .invoke(
@@ -1986,9 +1988,9 @@ fn an_env_reference_can_carry_a_default_for_settings() {
     let crate::user_tools::ToolKind::Exec { env, .. } = &supplied.kind else {
         panic!("exec tool");
     };
-    assert_eq!(env["KEY"], "k");
+    assert_eq!(env["KEY"].value(), "k");
     assert_eq!(
-        env["URL"],
+        env["URL"].value(),
         "${GRAPH_TEST_NEVER_SET_URL:-https://search.example}"
     );
 }

@@ -103,7 +103,9 @@ impl NetworkAttachment {
             root,
             doc,
         } = setup;
-        let draft = Arc::new(Mutex::new(DraftState::new(doc)));
+        let mut state = DraftState::new(doc);
+        state.network.secrets = Some(pipeline.drafted.secrets.clone());
+        let draft = Arc::new(Mutex::new(state));
         let debug = Arc::new(DebugControls::default());
         let tester: Tester = Arc::new(std::sync::OnceLock::new());
         let workbench_tools = Arc::new(
@@ -346,8 +348,9 @@ impl AttachmentHost for NetworkAttachment {
     }
 
     fn restore(&self, history: &[NewEntry]) {
-        self.draft.lock().unwrap().network =
-            super::replay::network(history, &self.pipeline.drafted.tool_dirs);
+        let mut network = super::replay::network(history, &self.pipeline.drafted.tool_dirs);
+        network.secrets = Some(self.pipeline.drafted.secrets.clone());
+        self.draft.lock().unwrap().network = network;
     }
 
     fn view(&self) -> Value {

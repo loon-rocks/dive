@@ -201,8 +201,18 @@ fn render_list(listed: &SecretList) -> String {
             source,
             places.join("; "),
         ));
+        if let Some(description) = &entry.description {
+            text.push_str(&indented(description, "    "));
+        }
     }
     text
+}
+
+fn indented(text: &str, prefix: &str) -> String {
+    text.trim()
+        .lines()
+        .map(|line| format!("{prefix}{line}\n"))
+        .collect()
 }
 
 pub fn show(workspace: &Workspace, secrets: &Secrets, name: &str) -> Result<Outcome> {
@@ -237,6 +247,10 @@ fn render_detail(detail: &SecretDetail) -> String {
     }
     if let Some(error) = &detail.read_error {
         text.push_str(&format!("  couldn't read the credential store: {error}\n"));
+    }
+    if let Some(description) = &detail.description {
+        text.push_str("  about:\n");
+        text.push_str(&indented(description, "    "));
     }
     if detail.references.is_empty() {
         text.push_str("  not referenced by config.toml, user tools or installed packs\n");

@@ -22,6 +22,8 @@ pub struct Reference {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pack: Option<String>,
     pub has_default: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 impl Reference {
@@ -57,6 +59,7 @@ pub fn in_config(path: &Path, text: &str) -> Result<Vec<Reference>, String> {
                     field: field.to_string(),
                     pack: None,
                     has_default: false,
+                    description: None,
                 });
             }
         }
@@ -97,8 +100,8 @@ pub fn in_tool(doc: &UserToolDoc, pack: Option<&str>) -> Vec<Reference> {
         .as_ref()
         .map_or_else(|| doc.name.clone(), |path| path.display().to_string());
     let mut found = Vec::new();
-    for (key, value) in env {
-        for reference in env_references(value) {
+    for (key, entry) in env {
+        for reference in env_references(entry.value()) {
             if !is_secret_name(reference.name) {
                 continue;
             }
@@ -113,6 +116,7 @@ pub fn in_tool(doc: &UserToolDoc, pack: Option<&str>) -> Vec<Reference> {
                 field: format!("env.{key}"),
                 pack: pack.map(str::to_string),
                 has_default: reference.default.is_some(),
+                description: entry.description().map(str::to_string),
             });
         }
     }
@@ -130,6 +134,7 @@ pub fn in_requires(pack: &str, manifest: &Path, names: &[String]) -> Vec<Referen
             field: "requires.env".to_string(),
             pack: Some(pack.to_string()),
             has_default: false,
+            description: None,
         })
         .collect()
 }
@@ -174,5 +179,26 @@ mod tests {
         assert!(found
             .iter()
             .any(|r| r.name == "SEARCH_URL" && r.has_default));
+    }
+
+    #[test]
+    fn a_described_env_entry_carries_its_description_to_the_reference() {
+        let doc = crate::user_tools::parse_tool_source(
+            "version: 3\nname: crm\ndescription: x\nkind: exec\ncommand: echo\nenv:\n  TOKEN:\n    value: \"${CRM_TOKEN}\"\n    description: \"A token from [settings](https://crm.example/settings).\"\n  PLAIN: \"${CRM_PLAIN}\"\n",
+        )
+        .unwrap();
+        let found = in_tool(&doc, None);
+        let token = found.iter().find(|r| r.name == "CRM_TOKEN").unwrap();
+        assert_eq!(
+            token.description.as_deref(),
+            Some("A token from [settings](https://crm.example/settings).")
+        );
+        assert_eq!(token.field, "env.TOKEN");
+        let plain = found.iter().find(|r| r.name == "CRM_PLAIN").unwrap();
+        assert_eq!(plain.description, None);
+        assert!(serde_json::to_value(plain)
+            .unwrap()
+            .get("description")
+            .is_none());
     }
 }

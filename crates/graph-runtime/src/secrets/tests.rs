@@ -464,3 +464,50 @@ fn an_entry_the_store_refuses_to_read_says_so_rather_than_missing() {
         .unwrap()
         .contains("User interaction is not allowed"));
 }
+
+#[test]
+fn a_tool_env_description_reaches_the_listing_and_the_detail() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    write(
+        &project,
+        "config.toml",
+        &format!(
+            "version = 4\n[tools]\npaths = [\"{}\"]\n",
+            project.join("tools").display()
+        ),
+    );
+    write(
+        &project,
+        "tools/crm.yaml",
+        "version: 3\nname: crm\ndescription: Contacts\nkind: exec\ncommand: echo\nenv:\n  TOKEN:\n    value: \"${GRAPH_T_CRM_TOKEN}\"\n    description: \"A CRM token. Create one under [Settings](https://crm.example/settings).\"\n",
+    );
+    let paths = vec![project.join("config.toml")];
+    let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
+    let list = listed(collect_layers(&paths, Path::new("."), &secrets), &secrets);
+    assert!(list.problems.is_empty(), "{:?}", list.problems);
+    let entry = list
+        .secrets
+        .iter()
+        .find(|entry| entry.name == "GRAPH_T_CRM_TOKEN")
+        .unwrap();
+    assert_eq!(
+        entry.description.as_deref(),
+        Some("A CRM token. Create one under [Settings](https://crm.example/settings).")
+    );
+    assert_eq!(
+        entry.references[0].description, entry.description,
+        "the reference carries it too"
+    );
+    let detail = detail(
+        collect_layers(&paths, Path::new("."), &secrets),
+        &secrets,
+        "GRAPH_T_CRM_TOKEN",
+    );
+    assert_eq!(detail.description, entry.description);
+    let body = serde_json::to_value(&list).unwrap();
+    assert!(body["secrets"][0]["description"]
+        .as_str()
+        .unwrap()
+        .contains("crm.example"));
+}

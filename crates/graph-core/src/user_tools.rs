@@ -59,7 +59,7 @@ pub enum ToolKind {
         /// Environment for the process; values support `${VAR}` expansion
         /// from the parent environment at invoke time.
         #[serde(default)]
-        env: std::collections::BTreeMap<String, String>,
+        env: std::collections::BTreeMap<String, EnvEntry>,
         #[serde(default)]
         cwd: Option<PathBuf>,
         #[serde(default)]
@@ -134,6 +134,91 @@ pub enum ToolKind {
         #[serde(default)]
         caller_model: bool,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum EnvEntry {
+    Plain(String),
+    Described(DescribedEnv),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DescribedEnv {
+    pub value: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+pub(crate) const ENV_ENTRY_KEYS: &[&str] = &["value", "description"];
+
+impl EnvEntry {
+    pub fn value(&self) -> &str {
+        match self {
+            EnvEntry::Plain(value) => value,
+            EnvEntry::Described(described) => &described.value,
+        }
+    }
+
+    pub fn description(&self) -> Option<&str> {
+        match self {
+            EnvEntry::Plain(_) => None,
+            EnvEntry::Described(described) => described
+                .description
+                .as_deref()
+                .map(str::trim)
+                .filter(|text| !text.is_empty()),
+        }
+    }
+
+    fn value_mut(&mut self) -> &mut String {
+        match self {
+            EnvEntry::Plain(value) => value,
+            EnvEntry::Described(described) => &mut described.value,
+        }
+    }
+}
+
+impl From<String> for EnvEntry {
+    fn from(value: String) -> Self {
+        EnvEntry::Plain(value)
+    }
+}
+
+impl From<&str> for EnvEntry {
+    fn from(value: &str) -> Self {
+        EnvEntry::Plain(value.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for EnvEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = EnvEntry;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string, or a map with `value` and an optional `description`")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<EnvEntry, E> {
+                Ok(EnvEntry::Plain(value.to_string()))
+            }
+
+            fn visit_string<E: serde::de::Error>(self, value: String) -> Result<EnvEntry, E> {
+                Ok(EnvEntry::Plain(value))
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<EnvEntry, A::Error> {
+                DescribedEnv::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(EnvEntry::Described)
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -301,12 +386,30 @@ pub fn unknown_tool_keys(value: &serde_yaml::Value) -> Vec<String> {
         Some("decision") => DECISION_KEYS,
         _ => &[],
     };
-    mapping
+    let mut unknown: Vec<String> = mapping
         .keys()
         .filter_map(serde_yaml::Value::as_str)
         .filter(|key| !TOOL_KEYS.contains(key) && !kind_keys.contains(key))
         .map(str::to_string)
-        .collect()
+        .collect();
+    if kind_keys == EXEC_KEYS {
+        if let Some(env) = mapping.get("env").and_then(serde_yaml::Value::as_mapping) {
+            for (name, entry) in env {
+                let Some(entry) = entry.as_mapping() else {
+                    continue;
+                };
+                let name = name.as_str().unwrap_or_default();
+                unknown.extend(
+                    entry
+                        .keys()
+                        .filter_map(serde_yaml::Value::as_str)
+                        .filter(|key| !ENV_ENTRY_KEYS.contains(key))
+                        .map(|key| format!("env.{name}.{key}")),
+                );
+            }
+        }
+    }
+    unknown
 }
 
 pub fn parse_tool_source(raw: &str) -> Result<UserToolDoc, String> {
@@ -685,7 +788,7 @@ impl UserToolRegistry {
         &self,
         command: &str,
         args: &[String],
-        env: &std::collections::BTreeMap<String, String>,
+        env: &std::collections::BTreeMap<String, EnvEntry>,
         cwd: Option<&Path>,
         timeout_secs: Option<u64>,
         output: ExecOutput,
@@ -702,9 +805,9 @@ impl UserToolRegistry {
         if let Some(dir) = &self.pack_dir {
             cmd.env(PACK_DIR_ENV, dir);
         }
-        for (key, value) in env {
+        for (key, entry) in env {
             let expanded =
-                expand_env(value, self.secrets.as_ref()).map_err(ToolError::Transport)?;
+                expand_env(entry.value(), self.secrets.as_ref()).map_err(ToolError::Transport)?;
             cmd.env(key, expanded);
         }
         if let Some(cwd) = cwd {
@@ -1138,29 +1241,39 @@ pub fn expand_env(value: &str, secrets: &dyn SecretSource) -> Result<String, Str
     Ok(out)
 }
 
-pub fn unset_env_vars(doc: &UserToolDoc, secrets: &dyn SecretSource) -> Vec<String> {
+pub fn needed_secrets(doc: &UserToolDoc) -> Vec<crate::secrets::NeededSecret> {
     let ToolKind::Exec { env, .. } = &doc.kind else {
         return Vec::new();
     };
-    let mut unset = Vec::new();
-    for value in env.values() {
-        let mut rest = value.as_str();
-        while let Some(start) = rest.find("${") {
-            let after = &rest[start + 2..];
-            let Some(end) = after.find('}') else {
-                break;
-            };
-            let (var, default) = env_reference(&after[..end]);
-            if default.is_none()
-                && secrets.resolve(var).is_none()
-                && !unset.iter().any(|seen| seen == var)
-            {
-                unset.push(var.to_string());
+    let mut needed: Vec<crate::secrets::NeededSecret> = Vec::new();
+    for entry in env.values() {
+        for reference in crate::secrets::env_references(entry.value()) {
+            if reference.default.is_some() || !crate::secrets::is_secret_name(reference.name) {
+                continue;
             }
-            rest = &after[end + 1..];
+            let description = entry.description().map(str::to_string);
+            match needed.iter_mut().find(|seen| seen.name == reference.name) {
+                Some(seen) => {
+                    if seen.description.is_none() {
+                        seen.description = description;
+                    }
+                }
+                None => needed.push(crate::secrets::NeededSecret {
+                    name: reference.name.to_string(),
+                    description,
+                }),
+            }
         }
     }
-    unset
+    needed
+}
+
+pub fn unset_env_vars(doc: &UserToolDoc, secrets: &dyn SecretSource) -> Vec<String> {
+    needed_secrets(doc)
+        .into_iter()
+        .filter(|needed| !crate::secrets::is_set(secrets, &needed.name))
+        .map(|needed| needed.name)
+        .collect()
 }
 
 pub fn with_env_values(
@@ -1169,7 +1282,8 @@ pub fn with_env_values(
 ) -> UserToolDoc {
     let mut doc = doc.clone();
     if let ToolKind::Exec { env, .. } = &mut doc.kind {
-        for value in env.values_mut() {
+        for entry in env.values_mut() {
+            let value = entry.value_mut();
             for (var, supplied) in values {
                 *value = value.replace(&format!("${{{var}}}"), supplied);
             }
@@ -1234,5 +1348,13 @@ impl ToolRegistry for UserToolRegistry {
             return Err(ToolError::Unknown(name.to_string()));
         };
         self.run(doc, input).await
+    }
+
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<crate::secrets::NeededSecret>> {
+        let bare = name.strip_prefix(self.prefix.as_str())?;
+        self.tools
+            .iter()
+            .find(|doc| doc.name == bare)
+            .map(needed_secrets)
     }
 }

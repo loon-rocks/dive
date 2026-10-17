@@ -7,6 +7,7 @@ pub mod fs_tools;
 pub mod network;
 pub mod replay;
 pub mod runner;
+pub mod secrets;
 pub mod sink;
 pub mod tools;
 
@@ -16,10 +17,11 @@ pub use attachment::{NetworkAttachment, NetworkAttachmentView, NetworkSetup, Net
 pub use effects::{save_draft, Workbench};
 pub use event::{GateKind, WorkbenchEvent};
 pub use network::{
-    Design, Designs, EdgeKind, Fact, FactState, Interview, NetworkView, NodeStatus, NodeView,
-    Restate, TestRun,
+    Design, Designs, EdgeKind, Fact, FactState, Interview, NetworkView, NodeSecret, NodeStatus,
+    NodeView, Restate, TestRun,
 };
 pub use runner::{DebugControls, UiDecision};
+pub use secrets::{SecretState, TestSecret};
 pub use tools::DraftState;
 
 use crate::attachment::AttachmentHost;

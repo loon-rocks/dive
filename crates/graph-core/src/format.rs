@@ -8,7 +8,7 @@ pub const PLAN_FORMAT: u32 = 2;
 
 pub const PLAN_FORMAT_OLDEST: u32 = 1;
 
-pub const TOOL_FORMAT: u32 = 2;
+pub const TOOL_FORMAT: u32 = 3;
 
 pub const TOOL_FORMAT_OLDEST: u32 = 1;
 
@@ -86,9 +86,13 @@ fn decide_step_becomes_route(value: &mut Value) -> Result<Vec<String>, String> {
     })
 }
 
-const TOOL_MIGRATIONS: &[Migration] = &[decision_kind_added];
+const TOOL_MIGRATIONS: &[Migration] = &[decision_kind_added, env_descriptions_added];
 
 fn decision_kind_added(_value: &mut Value) -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
+
+fn env_descriptions_added(_value: &mut Value) -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 

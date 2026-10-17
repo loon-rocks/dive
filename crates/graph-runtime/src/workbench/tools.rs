@@ -2361,10 +2361,18 @@ steps:
         );
         let (saved, ()) = tokio::join!(
             saving,
-            answer_yes(&mut rx, "Save the network: 1 files?", "save")
+            answer_yes(&mut rx, "Save the network untested: 1 files?", "save")
         );
         let saved = saved.unwrap();
         assert!(!saved.is_error, "{}", saved.result);
+        assert!(
+            saved.result["saved"]
+                .as_str()
+                .unwrap()
+                .ends_with("(untested)"),
+            "{}",
+            saved.result
+        );
         assert!(dir.path().join("tools/weather.yaml").exists());
         assert!(tools.draft.lock().unwrap().network.is_empty());
         assert_eq!(shown(&mut rx), Some(0));
@@ -2707,5 +2715,291 @@ steps:
             .unwrap();
         assert!(guard("network_drafter", "plan_editor").is_some());
         assert!(guard("front_desk", "network_drafter").is_none());
+    }
+
+    struct Approves;
+
+    #[async_trait::async_trait]
+    impl graph_core::pipeline::Interlocutor for Approves {
+        async fn ask(
+            &self,
+            request: graph_core::pipeline::AskRequest,
+        ) -> graph_core::pipeline::AskOutcome {
+            let key = request.schema["required"][0]
+                .as_str()
+                .unwrap_or("run")
+                .to_string();
+            graph_core::pipeline::AskOutcome::Answered(json!({ key: true }))
+        }
+    }
+
+    const CRM_TOOL: &str = "version: 3\nname: crm_lookup\ndescription: Looks up a contact\nkind: exec\ncommand: printf\nargs: ['{\"ok\":true}']\nenv:\n  TOKEN:\n    value: \"${GRAPH_T_CRM}\"\n    description: \"A CRM token from [settings](https://crm.example/settings).\"\n";
+
+    fn notify_tool(mark: &std::path::Path) -> String {
+        format!(
+            "version: 3\nname: notify\ndescription: Notifies\nkind: exec\ncommand: sh\nargs: ['-c', 'touch \"$MARK\"']\noutput: text\nenv:\n  MARK: \"{}\"\n  HOOK:\n    value: \"${{GRAPH_T_NOTIFY}}\"\n    description: \"The webhook URL from [the hooks page](https://hooks.example).\"\n  LEVEL: \"${{GRAPH_T_LEVEL:-info}}\"\n",
+            mark.display()
+        )
+    }
+
+    const REPORT_PLAN: &str = "identifier: report\nname: Report\ndescription: Reports\nsteps:\n  - id: E0\n    tool_name: user__crm_lookup\n    input: {}\n  - id: E1\n    tool_name: user__notify\n    input: {}\nfinish: silent\n";
+
+    fn secret_network(
+        secrets: Arc<dyn graph_core::secrets::SecretSource>,
+    ) -> (
+        WorkbenchTools,
+        tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>,
+        tempfile::TempDir,
+    ) {
+        use crate::workbench::artifact::ArtifactKind;
+        let dir = tempfile::tempdir().unwrap();
+        let mut pipeline = (*test_pipeline(Vec::new())).clone();
+        pipeline.drafted = Arc::new(
+            graph_core::pipeline::Drafted::new(Some(dir.path().join("tools")), None)
+                .with_secrets(secrets.clone()),
+        );
+        pipeline.registry = Arc::new(
+            graph_core::user_tools::UserToolRegistry::new(
+                vec![graph_core::user_tools::parse_tool_source(CRM_TOOL).unwrap()],
+                pipeline.router.clone(),
+            )
+            .with_secrets(secrets.clone()),
+        );
+        pipeline.interlocutor = Some(Arc::new(Approves));
+        let (tools, rx) = draft_tools(Arc::new(pipeline));
+        {
+            let mut state = tools.draft.lock().unwrap();
+            state.network.secrets = Some(secrets);
+            state
+                .network
+                .put_draft(
+                    ArtifactKind::Tool,
+                    "notify",
+                    notify_tool(&dir.path().join("ran")),
+                    Vec::new(),
+                )
+                .unwrap();
+            state
+                .network
+                .put_draft(ArtifactKind::Plan, "report", REPORT_PLAN.into(), Vec::new())
+                .unwrap();
+        }
+        (tools, rx, dir)
+    }
+
+    #[tokio::test]
+    async fn a_test_with_missing_secrets_runs_nothing_and_says_which_are_needed() {
+        let (tools, _rx, dir) = secret_network(Arc::new(graph_core::secrets::MemorySecrets::env()));
+        let tested = tools
+            .invoke(
+                crate::workbench::artifact::TEST_NETWORK,
+                json!({"entry": "report", "input": {}}),
+            )
+            .await
+            .unwrap();
+        assert!(!tested.is_error, "{}", tested.result);
+        assert_eq!(tested.result["status"], "missing_secrets");
+        assert_eq!(tested.result["ran"], false);
+        let missing: Vec<(String, Vec<String>)> = tested.result["missing_secrets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|secret| {
+                (
+                    secret["name"].as_str().unwrap().to_string(),
+                    serde_json::from_value(secret["tools"].clone()).unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            missing,
+            [
+                (
+                    "GRAPH_T_CRM".to_string(),
+                    vec!["user__crm_lookup".to_string()]
+                ),
+                (
+                    "GRAPH_T_NOTIFY".to_string(),
+                    vec!["user__notify".to_string()]
+                ),
+            ],
+            "the existing tool's secret is included and a defaulted one is not"
+        );
+        assert!(tested.result["missing_secrets"][0]["description"]
+            .as_str()
+            .unwrap()
+            .contains("crm.example"));
+        assert!(!dir.path().join("ran").exists(), "nothing ran");
+
+        let view = crate::workbench::artifact::view(&tools.draft);
+        assert!(view.waiting_on_secrets);
+        assert!(view.tests.is_empty());
+        assert_eq!(view.test_secrets.len(), 2);
+        assert!(view.test_secrets.iter().all(|secret| !secret.set));
+        let notify = view
+            .nodes
+            .iter()
+            .find(|node| node.name == "notify")
+            .unwrap();
+        assert_eq!(notify.secrets.len(), 1);
+        assert_eq!(notify.secrets[0].name, "GRAPH_T_NOTIFY");
+        assert!(!notify.secrets[0].set);
+        assert!(notify.secrets[0]
+            .description
+            .as_deref()
+            .unwrap()
+            .contains("hooks.example"));
+        assert!(tools
+            .draft
+            .lock()
+            .unwrap()
+            .network
+            .context_section()
+            .contains("waiting on secrets"));
+
+        let replayed = crate::workbench::replay::network(
+            &[
+                graph_core::NewEntry::new(
+                    "network_drafter",
+                    graph_core::store::EntryBody::Message {
+                        message: graph_llm::types::ChatMessage::Assistant {
+                            content: None,
+                            thinking: Default::default(),
+                            tool_calls: vec![graph_llm::types::ToolCall {
+                                id: "t1".into(),
+                                name: crate::workbench::artifact::TEST_NETWORK.into(),
+                                arguments: json!({"entry": "report", "input": {}}),
+                            }],
+                        },
+                    },
+                ),
+                graph_core::NewEntry::new(
+                    "network_drafter",
+                    graph_core::store::EntryBody::Message {
+                        message: graph_llm::types::ChatMessage::ToolResult {
+                            tool_call_id: "t1".into(),
+                            content: tested.result.clone(),
+                            is_error: false,
+                        },
+                    },
+                ),
+            ],
+            &[],
+        );
+        assert!(replayed.waiting_on_secrets);
+        assert_eq!(replayed.test_secrets.len(), 2);
+        assert!(replayed.tests.is_empty());
+    }
+
+    #[tokio::test]
+    async fn secrets_set_in_the_environment_or_the_project_store_let_the_test_run() {
+        use graph_core::secrets::{ChainedSource, InProject, MemorySecrets};
+        let resolver = InProject::new(
+            ChainedSource::new(vec![
+                Arc::new(MemorySecrets::env().with("GRAPH_T_CRM", "crm-value")),
+                Arc::new(MemorySecrets::store().with_project(
+                    "GRAPH_T_NOTIFY",
+                    "p1",
+                    "https://hooks.example/1",
+                )),
+            ]),
+            Some("p1".to_string()),
+        );
+        let (tools, _rx, dir) = secret_network(Arc::new(resolver));
+        let tested = tools
+            .invoke(
+                crate::workbench::artifact::TEST_NETWORK,
+                json!({"entry": "report", "input": {}}),
+            )
+            .await
+            .unwrap();
+        assert!(tested.result.get("status").is_none(), "{}", tested.result);
+        assert!(dir.path().join("ran").exists(), "{}", tested.result);
+        let view = crate::workbench::artifact::view(&tools.draft);
+        assert!(!view.waiting_on_secrets);
+        assert!(view.test_secrets.iter().all(|secret| secret.set));
+        assert_eq!(view.tests.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn trying_a_tool_draft_waits_on_its_secrets_and_a_global_value_counts() {
+        use graph_core::secrets::{ChainedSource, InProject, MemorySecrets};
+        let (tools, _rx, dir) = secret_network(Arc::new(MemorySecrets::env()));
+        let tried = tools
+            .invoke(
+                crate::workbench::artifact::TRY_ARTIFACT,
+                json!({"kind": "tool", "name": "notify", "input": {}}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            tried.result["status"], "missing_secrets",
+            "{}",
+            tried.result
+        );
+        assert_eq!(tried.result["missing_secrets"][0]["name"], "GRAPH_T_NOTIFY");
+        assert!(!dir.path().join("ran").exists());
+        assert!(crate::workbench::artifact::view(&tools.draft).waiting_on_secrets);
+
+        let global: Arc<dyn graph_core::secrets::SecretSource> = Arc::new(InProject::new(
+            ChainedSource::new(vec![
+                Arc::new(MemorySecrets::env()),
+                Arc::new(MemorySecrets::store().with("GRAPH_T_NOTIFY", "https://hooks.example/g")),
+            ]),
+            Some("p1".to_string()),
+        ));
+        let (tools, _rx, dir) = secret_network(global);
+        let tried = tools
+            .invoke(
+                crate::workbench::artifact::TRY_ARTIFACT,
+                json!({"kind": "tool", "name": "notify", "input": {}}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(tried.result["ran"], true, "{}", tried.result);
+        assert!(dir.path().join("ran").exists());
+        let view = crate::workbench::artifact::view(&tools.draft);
+        assert!(!view.waiting_on_secrets);
+        let notify = view
+            .nodes
+            .iter()
+            .find(|node| node.name == "notify")
+            .unwrap();
+        assert!(notify.secrets[0].set);
+    }
+
+    #[tokio::test]
+    async fn an_agent_needs_the_secrets_of_the_tools_it_lists_and_its_subagents_use() {
+        use crate::workbench::artifact::ArtifactKind;
+        let (tools, _rx, _dir) =
+            secret_network(Arc::new(graph_core::secrets::MemorySecrets::env()));
+        {
+            let mut state = tools.draft.lock().unwrap();
+            for yaml in [
+                "name: desk\ndescription: Answers\nmodel: default\ntools: [\"*\"]\nsubagents: [helper]\nsystem_prompt: You answer.\n",
+                "name: helper\ndescription: Helps\nmodel: default\ntools: [user__crm_*]\nsystem_prompt: You help.\n",
+            ] {
+                let name = if yaml.starts_with("name: desk") { "desk" } else { "helper" };
+                state
+                    .network
+                    .put_draft(ArtifactKind::Agent, name, yaml.into(), Vec::new())
+                    .unwrap();
+            }
+        }
+        let network = tools.draft.lock().unwrap().network.clone();
+        let over = crate::workbench::network::overlay(&tools.pipeline, &network);
+        let names = |needed: Vec<crate::workbench::TestSecret>| -> Vec<String> {
+            needed.into_iter().map(|secret| secret.name).collect()
+        };
+        let own = vec!["user__notify".to_string()];
+        assert_eq!(
+            names(crate::workbench::secrets::needed(&over, "agent__helper", &own).await),
+            ["GRAPH_T_CRM"]
+        );
+        assert_eq!(
+            names(crate::workbench::secrets::needed(&over, "agent__desk", &own).await),
+            ["GRAPH_T_NOTIFY", "GRAPH_T_CRM"],
+            "a bare * covers the network's own tools, and the subagent's tools count"
+        );
     }
 }
