@@ -328,6 +328,16 @@ impl UiInterlocutor {
     }
 }
 
+pub fn interlocutor_for(
+    pipeline: &graph_core::pipeline::Pipeline,
+    tx: &UnboundedSender<WorkbenchEvent>,
+) -> std::sync::Arc<dyn Interlocutor> {
+    pipeline
+        .interlocutor
+        .clone()
+        .unwrap_or_else(|| std::sync::Arc::new(UiInterlocutor::new(tx.clone())))
+}
+
 #[async_trait]
 impl Interlocutor for UiInterlocutor {
     async fn ask(&self, request: AskRequest) -> AskOutcome {

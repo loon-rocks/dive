@@ -41,9 +41,8 @@ use graph_llm::types::{
     ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
 };
 use graph_llm::{ChatProvider, LlmError, ModelRouter};
-use graph_runtime::workbench::runner::DebugControls;
 use graph_runtime::workbench::sink::ChannelSink;
-use graph_runtime::workbench::tools::{progress_tools, DraftState, WorkbenchTools};
+use graph_runtime::workbench::tools::{progress_tools, WorkbenchTools};
 use graph_runtime::workbench::{Workbench, WorkbenchEvent};
 use graph_store::MemoryStore;
 use ratatui::backend::TestBackend;
@@ -439,8 +438,18 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         origin: Default::default(),
     });
 
-    let debug = Arc::new(DebugControls::default());
-    let draft = Arc::new(Mutex::new(DraftState::new(doc.clone())));
+    let attachment = Arc::new(
+        graph_runtime::workbench::NetworkAttachment::new(graph_runtime::workbench::NetworkSetup {
+            pipeline: pipeline.clone(),
+            tx: tx.clone(),
+            plans_dir: None,
+            root: root.to_path_buf(),
+            doc: doc.clone(),
+        })
+        .unwrap(),
+    );
+    let debug = attachment.debug.clone();
+    let draft = attachment.draft.clone();
     let workbench_tools = Arc::new(WorkbenchTools::new(
         draft.clone(),
         pipeline.clone(),
@@ -466,13 +475,16 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         Arc::new(CompositeRegistry::new(vec![toolbox, workbench_tools]));
 
     let conversation = Conversation {
-        agents: agent_set,
+        agents: agent_set.clone(),
         catalog: registry,
         pipeline: pipeline.clone(),
         events: Arc::new(ChannelSink::agent(tx.clone())),
         session: BTreeMap::from([("date", "2026-07-19".to_string()), ("user", String::new())]),
         prompt_overrides: BTreeMap::new(),
-        context: Some(super::agents::context_hook(draft.clone(), pipeline.clone())),
+        context: Some(graph_runtime::attachment::context_hook(
+            agent_set.clone(),
+            vec![attachment.clone() as Arc<dyn graph_runtime::attachment::AttachmentHost>],
+        )),
         default_max_iterations: 8,
         progress_tools: progress_tools(),
         stop_tools: super::artifact::STOP_TOOLS
@@ -498,6 +510,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         tx: tx.clone(),
         root: root.to_path_buf(),
         thread: Mutex::new(None),
+        attachment,
     });
 
     // Boot exactly like `run_plan_workbench`, then type the chat message
