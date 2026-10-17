@@ -12,8 +12,9 @@
 use crate::secrets::SecretSource;
 use crate::template::{render_input, render_str, Roots};
 use crate::tools::{ToolDef, ToolError, ToolOutcome, ToolRegistry};
+use crate::usage::CallSite;
 use async_trait::async_trait;
-use graph_config::ModelKind;
+use graph_config::{ModelKind, Role};
 use graph_llm::decision::{DecisionRequest, Question};
 use graph_llm::types::{ChatMessage, ChatRequest, ResponseSchema};
 use graph_llm::ModelRouter;
@@ -801,16 +802,13 @@ impl UserToolRegistry {
                 })
             }
         };
-        let response = self
-            .router
-            .decide_named(
-                model,
-                DecisionRequest {
-                    model: String::new(),
-                    state,
-                    questions,
-                },
-            )
+        let role = model.unwrap_or(Role::Decider.as_str());
+        let request = DecisionRequest {
+            model: String::new(),
+            state,
+            questions,
+        };
+        let response = CallSite::as_role(role, self.router.decide_named(model, request))
             .await
             .map_err(|e| ToolError::Transport(e.to_string()))?;
         Ok(ToolOutcome {
@@ -855,9 +853,8 @@ impl UserToolRegistry {
             }),
             ..Default::default()
         };
-        let response = self
-            .router
-            .chat_named(model.unwrap_or("chat"), request)
+        let role = model.unwrap_or(Role::Chat.as_str());
+        let response = CallSite::as_role(role, self.router.chat_named(role, request))
             .await
             .map_err(|e| ToolError::Transport(e.to_string()))?;
         let result = match response.structured {

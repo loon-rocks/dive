@@ -1583,6 +1583,7 @@ async fn slack_post_message_without_a_token_never_calls_slack() {
 
 struct EchoDecider {
     requests: std::sync::Mutex<Vec<graph_llm::decision::DecisionRequest>>,
+    roles: std::sync::Mutex<Vec<String>>,
 }
 
 #[async_trait]
@@ -1592,6 +1593,10 @@ impl graph_llm::DecisionProvider for EchoDecider {
         req: graph_llm::decision::DecisionRequest,
     ) -> Result<graph_llm::decision::DecisionResponse, LlmError> {
         self.requests.lock().unwrap().push(req.clone());
+        self.roles
+            .lock()
+            .unwrap()
+            .push(crate::usage::CallSite::current().role);
         let answers = req
             .questions
             .iter()
@@ -1624,6 +1629,7 @@ impl graph_llm::DecisionProvider for EchoDecider {
 fn decision_router(with_decider: bool) -> (Arc<ModelRouter>, Arc<EchoDecider>) {
     let decider = Arc::new(EchoDecider {
         requests: std::sync::Mutex::new(Vec::new()),
+        roles: std::sync::Mutex::new(Vec::new()),
     });
     let choice = |provider: &str, model: &str, description: Option<&str>| ModelChoice {
         provider: provider.into(),
@@ -1732,6 +1738,26 @@ async fn builtin_decide_answers_caller_questions_about_the_state() {
     let requests = decider.requests.lock().unwrap();
     assert_eq!(requests[0].model, "jev-latest");
     assert_eq!(requests[0].state, json!({"ticket": "payouts failing"}));
+}
+
+#[tokio::test]
+async fn builtin_decide_meters_its_call_under_the_decision_role_not_the_tool_name() {
+    let docs = load_builtin_tools().unwrap();
+    let (router, decider) = decision_router(true);
+    let registry = UserToolRegistry::builtins(docs, router);
+    let outcome = crate::usage::CallSite::role("builtin__decide")
+        .at("E1")
+        .scope(registry.invoke(
+            "builtin__decide",
+            json!({
+                "state": {"ticket": "payouts failing"},
+                "questions": {"urgent": {"type": "likelihood", "instructions": "Is it urgent?"}}
+            }),
+        ))
+        .await
+        .unwrap();
+    assert!(!outcome.is_error, "{}", outcome.result);
+    assert_eq!(*decider.roles.lock().unwrap(), ["decider"]);
 }
 
 #[tokio::test]
