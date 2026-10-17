@@ -880,6 +880,7 @@ mod tests {
             owner: owner.to_string(),
             active: active.to_string(),
             attachments: Vec::new(),
+            project: None,
         }
     }
 

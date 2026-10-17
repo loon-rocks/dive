@@ -174,7 +174,7 @@ mod tests {
     #[tokio::test]
     async fn a_thread_refuses_a_second_attachment() {
         let store = graph_store::MemoryStore::new();
-        let meta = store.create_thread("t", "chat").await.unwrap();
+        let meta = store.create_thread("t", "chat", None).await.unwrap();
         record(&store, &meta.id, &[Attachment::new(NETWORK_ATTACHMENT)])
             .await
             .unwrap();

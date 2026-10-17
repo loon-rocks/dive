@@ -505,6 +505,7 @@ impl crate::store::Store for ShapeOnlyStore {
         &self,
         _: &str,
         _: &str,
+        _: Option<&str>,
     ) -> Result<crate::store::ThreadMeta, crate::store::StoreError> {
         unimplemented!()
     }

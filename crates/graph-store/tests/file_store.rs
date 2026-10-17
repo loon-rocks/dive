@@ -25,7 +25,7 @@ async fn persists_across_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let thread_id = {
         let store = FileStore::open(dir.path()).unwrap();
-        let thread = store.create_thread("durable", "chat").await.unwrap();
+        let thread = store.create_thread("durable", "chat", None).await.unwrap();
         store
             .append_messages(&thread.id, &[user("hello")])
             .await
@@ -47,7 +47,7 @@ async fn persists_across_reopen() {
 async fn torn_final_line_is_dropped() {
     let dir = tempfile::tempdir().unwrap();
     let store = FileStore::open(dir.path()).unwrap();
-    let thread = store.create_thread("torn", "chat").await.unwrap();
+    let thread = store.create_thread("torn", "chat", None).await.unwrap();
     store
         .append_messages(&thread.id, &[user("one"), user("two")])
         .await
@@ -75,7 +75,7 @@ async fn torn_final_line_is_dropped() {
 async fn mid_file_corruption_errors() {
     let dir = tempfile::tempdir().unwrap();
     let store = FileStore::open(dir.path()).unwrap();
-    let thread = store.create_thread("corrupt", "chat").await.unwrap();
+    let thread = store.create_thread("corrupt", "chat", None).await.unwrap();
     store
         .append_messages(&thread.id, &[user("one")])
         .await
@@ -109,7 +109,7 @@ async fn concurrent_appends_from_separate_instances() {
     let dir = tempfile::tempdir().unwrap();
     let thread_id = FileStore::open(dir.path())
         .unwrap()
-        .create_thread("contended", "chat")
+        .create_thread("contended", "chat", None)
         .await
         .unwrap()
         .id;
@@ -191,7 +191,7 @@ async fn tool_name_encoding_roundtrips() {
 async fn scan_skips_incomplete_thread_dirs() {
     let dir = tempfile::tempdir().unwrap();
     let store = FileStore::open(dir.path()).unwrap();
-    store.create_thread("real", "chat").await.unwrap();
+    store.create_thread("real", "chat", None).await.unwrap();
     // A directory without meta.json (mid-create or mid-delete) is skipped.
     std::fs::create_dir_all(dir.path().join("threads").join("halfmade")).unwrap();
     assert_eq!(store.list_threads().await.unwrap().len(), 1);
@@ -293,7 +293,7 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
 
 #[test]
 fn entries_without_timing_round_trip_byte_for_byte() {
-    for version in ["v2", "v3", "v4", "v5"] {
+    for version in ["v2", "v3", "v4", "v5", "v6"] {
         let raw = std::fs::read_to_string(
             fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
         )
@@ -332,7 +332,7 @@ async fn attachments_are_set_and_kept_across_reopen() {
     let id = {
         let store = FileStore::open(dir.path()).unwrap();
         let meta = store
-            .create_thread("draft", "network_drafter")
+            .create_thread("draft", "network_drafter", None)
             .await
             .unwrap();
         assert!(meta.attachments.is_empty());
@@ -349,8 +349,45 @@ async fn attachments_are_set_and_kept_across_reopen() {
 }
 
 #[tokio::test]
-async fn a_frozen_version_5_data_directory_opens_as_is() {
+async fn a_frozen_version_5_data_directory_is_marked_current_and_otherwise_untouched() {
     let dir = copy_fixture("v5");
+    let store = FileStore::open(dir.path()).unwrap();
+    assert_matches_fixture_except_marker(dir.path(), "v5");
+    let threads = store.list_threads().await.unwrap();
+    assert_eq!(threads.len(), 3);
+    assert!(threads.iter().all(|meta| meta.project.is_none()));
+}
+
+#[tokio::test]
+async fn a_thread_keeps_the_project_it_was_created_in_across_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let (site, global) = {
+        let store = FileStore::open(dir.path()).unwrap();
+        let site = store
+            .create_thread("site", "chat", Some("/work/site"))
+            .await
+            .unwrap();
+        let global = store.create_thread("global", "chat", None).await.unwrap();
+        (site.id, global.id)
+    };
+    let store = FileStore::open(dir.path()).unwrap();
+    let site = store.get_thread(&site).await.unwrap().unwrap();
+    assert_eq!(site.project.as_deref(), Some("/work/site"));
+    let global = store.get_thread(&global).await.unwrap().unwrap();
+    assert_eq!(global.project, None);
+    let raw = std::fs::read_to_string(
+        dir.path()
+            .join("threads")
+            .join(&global.id)
+            .join("meta.json"),
+    )
+    .unwrap();
+    assert!(!raw.contains("project"));
+}
+
+#[tokio::test]
+async fn a_frozen_version_6_data_directory_opens_as_is() {
+    let dir = copy_fixture("v6");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
     assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
@@ -389,7 +426,12 @@ async fn a_frozen_version_5_data_directory_opens_as_is() {
         [Attachment::new("network").with("state", "open")]
     );
     assert!(thread.attachments.is_empty());
-    let expected = fixture_dir("v5");
+    assert_eq!(thread.project, None);
+    let site = store.get_thread("517e00000001").await.unwrap().unwrap();
+    assert_eq!(site.project.as_deref(), Some("/work/site"));
+    assert!(site.in_project(Some("/work/site")));
+    assert!(draft.in_project(None));
+    let expected = fixture_dir("v6");
     assert_eq!(
         data_files(dir.path()),
         data_files(&expected),

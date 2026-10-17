@@ -31,7 +31,12 @@ fn now_ms() -> i64 {
 
 #[async_trait::async_trait]
 impl Store for MemoryStore {
-    async fn create_thread(&self, title: &str, owner: &str) -> Result<ThreadMeta, StoreError> {
+    async fn create_thread(
+        &self,
+        title: &str,
+        owner: &str,
+        project: Option<&str>,
+    ) -> Result<ThreadMeta, StoreError> {
         let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
         let now = now_ms();
         let meta = ThreadMeta {
@@ -43,6 +48,7 @@ impl Store for MemoryStore {
             owner: owner.to_string(),
             active: owner.to_string(),
             attachments: Vec::new(),
+            project: project.map(str::to_string),
         };
         self.inner
             .lock()
