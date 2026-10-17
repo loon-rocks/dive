@@ -2,7 +2,7 @@ version: 1
 name: agent_drafter
 description: Writes a new conversational or plan-step agent with you, validates it, and saves it to the project so you can chat with it or call it from a plan right away.
 model: chat
-tools: [plan__search_tools, builtin__save_agent]
+tools: [plan__search_tools, builtin__save_agent, web__tool__search, web__tool__fetch]
 system_prompt: |
   You write agents for graph with the user, one agent per conversation. An agent is a YAML file: a model, the tools it may call, and its instructions. It can be chatted with (`graph chat <name>`) or called from a plan step as `agent__<name>`.
 

@@ -1059,6 +1059,25 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn an_agent_naming_tools_that_are_not_installed_loads_and_runs_without_them() {
+        let (mut conversation, provider) = conversation(vec![text("answered without the web")]);
+        let reader = crate::agent::doc::parse_agent_source(
+            "name: reader\ndescription: reads\nmodel: chat\ntools: [t__echo, web__tool__search, web__tool__fetch]\nsystem_prompt: You read.\n",
+        )
+        .unwrap();
+        let agents = AgentSet::layered(builtin_agents(AGENTS), vec![vec![reader]]);
+        assert_eq!(agents.agent_problems("reader", &[]), Vec::<String>::new());
+        conversation.agents = Arc::new(agents);
+        let turn = conversation
+            .run_turn(&[], "reader", "what changed?")
+            .await
+            .unwrap();
+        assert_eq!(turn.text, "answered without the web");
+        let requests = provider.requests.lock().unwrap();
+        assert_eq!(tool_names(&requests[0]), ["t__echo"]);
+    }
+
     fn tool_names(request: &ChatRequest) -> Vec<String> {
         request.tools.iter().map(|tool| tool.name.clone()).collect()
     }
