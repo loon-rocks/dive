@@ -253,10 +253,18 @@ impl Runtime {
     }
 
     pub fn agent_set(&self) -> graph_core::agent::doc::AgentSet {
-        let (set, errors) = graph_core::agent::doc::AgentSet::load(
-            graph_core::agent::doc::BUILTINS,
-            &graph_core::agent::doc::agent_dirs(),
+        self.agent_set_for(None)
+    }
+
+    pub fn agent_set_for(&self, attachment: Option<&str>) -> graph_core::agent::doc::AgentSet {
+        let mut sources = graph_core::agent::doc::BUILTINS.to_vec();
+        sources.extend(
+            attachment
+                .map(crate::attachment::agent_sources)
+                .unwrap_or_default(),
         );
+        let (set, errors) =
+            graph_core::agent::doc::AgentSet::load(&sources, &graph_core::agent::doc::agent_dirs());
         for error in errors {
             tracing::warn!("skipping agent file — {error}");
         }
@@ -524,7 +532,7 @@ impl Runtime {
         self.toolbox_over(store, &pipeline, cancel.as_ref())
     }
 
-    fn toolbox_over(
+    pub(crate) fn toolbox_over(
         &self,
         store: &Arc<dyn Store>,
         pipeline: &Arc<Pipeline>,
@@ -871,6 +879,7 @@ mod tests {
             message_count: 0,
             owner: owner.to_string(),
             active: active.to_string(),
+            attachments: Vec::new(),
         }
     }
 

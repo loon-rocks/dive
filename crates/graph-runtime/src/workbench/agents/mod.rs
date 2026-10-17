@@ -1,9 +1,6 @@
-use super::tools::DraftState;
-use graph_core::agent::conversation::ContextHook;
 use graph_core::pipeline::authoring;
 use graph_core::pipeline::doc::PlanDoc;
 use graph_core::pipeline::Pipeline;
-use std::sync::{Arc, Mutex};
 
 pub const WORKBENCH_AGENTS: &[&str] = &[
     include_str!("front_desk.yaml"),
@@ -64,36 +61,6 @@ pub fn starting_agent(start: &Start, doc: Option<&PlanDoc>) -> &'static str {
     }
 }
 
-enum Section {
-    CurrentDraft,
-    Network,
-    Models,
-}
-
-fn sections(agent: &str) -> &'static [Section] {
-    match agent {
-        "plan_editor" => &[Section::CurrentDraft],
-        "network_drafter" | "plan_drafter" | "tool_drafter" | "agent_drafter" => {
-            &[Section::Models, Section::Network]
-        }
-        _ => &[],
-    }
-}
-
-pub fn context_hook(draft: Arc<Mutex<DraftState>>, pipeline: Arc<Pipeline>) -> ContextHook {
-    Arc::new(move |agent: &str| {
-        let doc = draft.lock().unwrap().doc.clone();
-        sections(agent)
-            .iter()
-            .map(|section| match section {
-                Section::CurrentDraft => current_draft(&pipeline, &doc),
-                Section::Network => super::artifact::context_section(&draft),
-                Section::Models => model_roles(&pipeline),
-            })
-            .collect()
-    })
-}
-
 pub fn model_roles(pipeline: &Pipeline) -> String {
     let roles = pipeline.router.roles();
     let mut section = String::from(
@@ -117,7 +84,7 @@ pub fn model_roles(pipeline: &Pipeline) -> String {
     section
 }
 
-fn current_draft(pipeline: &Pipeline, doc: &Option<PlanDoc>) -> String {
+pub(crate) fn current_draft(pipeline: &Pipeline, doc: &Option<PlanDoc>) -> String {
     let mut section = String::from("## Current draft\n");
     match doc {
         Some(doc) => {
@@ -147,7 +114,10 @@ fn current_draft(pipeline: &Pipeline, doc: &Option<PlanDoc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attachment::{context_hook, AttachmentHost};
+    use crate::workbench::attachment::{NetworkAttachment, NetworkSetup};
     use graph_core::agent::doc::{global_fragments, AgentSet};
+    use std::sync::Arc;
 
     #[test]
     fn the_workbench_agents_load_and_validate_together() {
@@ -213,9 +183,21 @@ steps:
     }
 
     #[test]
-    fn each_agent_gets_its_context_sections() {
-        let draft = Arc::new(Mutex::new(DraftState::new(None)));
-        let hook = context_hook(draft, super::super::tools::tests::test_pipeline(Vec::new()));
+    fn each_agent_gets_the_sections_of_the_attachment_kinds_it_reads() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let root = tempfile::tempdir().unwrap();
+        let host: Arc<dyn AttachmentHost> = Arc::new(
+            NetworkAttachment::new(NetworkSetup {
+                pipeline: super::super::tools::tests::test_pipeline(Vec::new()),
+                tx,
+                plans_dir: None,
+                root: root.path().to_path_buf(),
+                doc: None,
+            })
+            .unwrap(),
+        );
+        let (set, _) = AgentSet::load(&builtin_sources(), &[]);
+        let hook = context_hook(Arc::new(set), vec![host]);
         for builder in [
             "network_drafter",
             "plan_drafter",
@@ -223,9 +205,11 @@ steps:
             "agent_drafter",
         ] {
             let sections = hook(builder);
+            assert_eq!(sections.len(), 2, "{builder}");
             assert!(sections[0].starts_with("## Model roles"), "{builder}");
             assert!(sections[1].starts_with("## The network draft"), "{builder}");
         }
+        assert_eq!(hook("plan_editor").len(), 1);
         assert!(hook("plan_editor")[0].starts_with("## Current draft"));
         assert!(hook("plan_loader").is_empty());
         assert!(hook("front_desk").is_empty());

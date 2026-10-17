@@ -36,6 +36,7 @@ pub struct Workbench {
     pub tx: UnboundedSender<WorkbenchEvent>,
     pub root: PathBuf,
     pub thread: std::sync::Mutex<Option<String>>,
+    pub attachment: Arc<super::attachment::NetworkAttachment>,
 }
 
 impl Workbench {
@@ -144,6 +145,13 @@ impl Workbench {
             {
                 Ok(meta) => {
                     *self.thread.lock().unwrap() = Some(meta.id.clone());
+                    let record =
+                        crate::attachment::AttachmentHost::record(self.attachment.as_ref());
+                    if let Err(error) = self.store.set_attachments(&meta.id, &[record]).await {
+                        tracing::warn!(
+                            "couldn't record the draft's network on its thread: {error}"
+                        );
+                    }
                     meta.id
                 }
                 Err(error) => {

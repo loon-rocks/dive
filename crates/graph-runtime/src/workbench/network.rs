@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 pub struct Restate {
     pub outcome: String,
     pub success: String,
@@ -17,7 +17,8 @@ pub struct Restate {
     pub out_of_scope: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EdgeKind {
     Handoff,
     Subagent,
@@ -43,14 +44,15 @@ impl EdgeKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Edge {
     pub from: String,
     pub to: String,
     pub kind: EdgeKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NodeStatus {
     Sketched,
     Proposed,
@@ -77,7 +79,8 @@ impl NodeStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FactState {
     Known,
     Guess,
@@ -105,7 +108,7 @@ impl FactState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Fact {
     pub label: String,
     pub text: String,
@@ -113,7 +116,7 @@ pub struct Fact {
     pub previous: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 pub struct Interview {
     pub reply: String,
     pub confidence: u8,
@@ -124,7 +127,7 @@ pub struct Interview {
     pub confirmed: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 pub struct Design {
     pub title: String,
     pub model: Option<String>,
@@ -133,7 +136,7 @@ pub struct Design {
     pub principles: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 pub struct Designs {
     pub yours: Design,
     pub suggested: Design,
@@ -207,7 +210,7 @@ pub fn bare_name(kind: ArtifactKind, name: &str) -> String {
     name.strip_prefix(prefix).unwrap_or(name).to_string()
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct TestRun {
     pub entry: String,
     pub message: String,
@@ -230,7 +233,7 @@ pub struct Network {
     tested: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct NodeView {
     pub name: String,
     pub kind: ArtifactKind,
@@ -248,7 +251,7 @@ pub struct NodeView {
     pub note: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 pub struct NetworkView {
     pub restate: Option<Restate>,
     pub nodes: Vec<NodeView>,
