@@ -15,10 +15,21 @@
         "plan__weekly_changes",
         "github__tool__git_log"
       ],
-      "version": 1
+      "version": 2
     }
   ],
   "properties": {
+    "attachments": {
+      "description": "The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network`. A new thread whose first message goes to an agent that reads `network` gets a network attachment. Omitted means none.",
+      "items": {
+        "enum": [
+          "network",
+          "plan"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
     "description": {
       "description": "What the agent is for, written for the people and agents choosing it.",
       "type": "string"

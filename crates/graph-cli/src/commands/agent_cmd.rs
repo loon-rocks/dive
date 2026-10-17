@@ -146,7 +146,10 @@ mod tests {
         );
         let outcome = show(&[dir.path().to_path_buf()], &[], "chat").unwrap();
         let yaml = outcome.raw.unwrap();
-        assert!(yaml.starts_with("version: 1\n"), "{yaml}");
+        assert!(
+            yaml.starts_with(&format!("version: {}\n", graph_core::format::AGENT_FORMAT)),
+            "{yaml}"
+        );
         assert!(yaml.contains("description: mine"));
         assert!(outcome.body["source"]
             .as_str()
@@ -181,10 +184,10 @@ mod tests {
             "name: a\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: hi\n",
         );
         let outcome = migrate(&path).unwrap();
-        assert_eq!(outcome.body["to"], 1);
+        assert_eq!(outcome.body["to"], graph_core::format::AGENT_FORMAT);
         assert!(std::fs::read_to_string(&path)
             .unwrap()
-            .starts_with("version: 1\n"));
+            .starts_with(&format!("version: {}\n", graph_core::format::AGENT_FORMAT)));
     }
 
     #[test]
