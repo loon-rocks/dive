@@ -29,7 +29,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub const STORE_FORMAT: u32 = 3;
+pub const STORE_FORMAT: u32 = 4;
 
 pub const STORE_FORMAT_OLDEST: u32 = 1;
 
@@ -193,7 +193,7 @@ fn migrate(root: &Path) -> Result<(), StoreError> {
     while found < STORE_FORMAT {
         match found {
             1 => migrate_threads_v1(&root.join("threads"))?,
-            2 => {}
+            2 | 3 => {}
             other => {
                 return Err(StoreError(format!(
                     "no migration from store version {other}"
