@@ -159,6 +159,7 @@ impl Workbench {
             debug: attachment.debug.clone(),
             tx,
             root,
+            project: runtime.project().map(str::to_string),
             attachment,
         };
         if let Some((kind, name)) = opening {

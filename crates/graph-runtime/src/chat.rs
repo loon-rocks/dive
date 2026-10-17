@@ -62,6 +62,7 @@ pub struct ChatStart {
     attachment: Option<String>,
     seed: Seed,
     root: Option<PathBuf>,
+    project: Option<String>,
 }
 
 impl ChatStart {
@@ -99,6 +100,7 @@ impl ChatStart {
             attachment,
             seed: Seed::default(),
             root: None,
+            project: runtime.project().map(str::to_string),
         })
     }
 
@@ -133,6 +135,7 @@ impl ChatStart {
             attachment: Some(NETWORK_ATTACHMENT.to_string()),
             seed: Seed { doc, opening },
             root: None,
+            project: runtime.project().map(str::to_string),
         })
     }
 
@@ -159,6 +162,7 @@ impl ChatStart {
             first_message,
             &self.owner,
             &self.active,
+            self.project.as_deref(),
         )
         .await?;
         self.fresh_thread = true;
@@ -280,6 +284,7 @@ impl ChatStart {
             history,
             attachments: Vec::new(),
             recorded,
+            project: self.project,
         })
     }
 }
@@ -309,6 +314,7 @@ pub struct ChatSession {
     history: Vec<NewEntry>,
     attachments: Vec<Arc<dyn AttachmentHost>>,
     recorded: Vec<Attachment>,
+    project: Option<String>,
 }
 
 pub struct TurnReport {
@@ -398,7 +404,15 @@ impl ChatSession {
     pub async fn send(&mut self, message: &str) -> Result<TurnReport> {
         let mut thread_error = None;
         if self.thread.is_none() {
-            match create_thread(self.store.as_ref(), message, &self.owner, &self.active).await {
+            match create_thread(
+                self.store.as_ref(),
+                message,
+                &self.owner,
+                &self.active,
+                self.project.as_deref(),
+            )
+            .await
+            {
                 Ok(meta) => {
                     self.thread = Some(meta);
                     self.fresh_thread = true;
@@ -483,9 +497,10 @@ async fn create_thread(
     first_message: &str,
     owner: &str,
     active: &str,
+    project: Option<&str>,
 ) -> Result<ThreadMeta> {
     let mut meta = store
-        .create_thread(&title_from(first_message), owner, None)
+        .create_thread(&title_from(first_message), owner, project)
         .await?;
     if meta.active != active && store.set_active_agent(&meta.id, active).await.is_ok() {
         meta.active = active.to_string();
@@ -631,6 +646,41 @@ mod tests {
         let persisted = load_history(store.as_ref(), &meta.id).await.unwrap();
         assert_eq!(persisted.len(), chat.history().len());
         assert_eq!(persisted.len(), 4, "two user messages and two replies");
+    }
+
+    #[tokio::test]
+    async fn a_project_runtime_records_its_root_on_the_threads_it_creates() {
+        let runtime = runtime(vec![text("hello")]).in_project(Some("/work/site".to_string()));
+        let store = runtime.store().unwrap();
+        let mut chat = session(&runtime, &store, None).await;
+        chat.send("hi").await.unwrap();
+        let meta = chat.thread().cloned().unwrap();
+        assert_eq!(meta.project.as_deref(), Some("/work/site"));
+        let stored = store.get_thread(&meta.id).await.unwrap().unwrap();
+        assert_eq!(stored.project.as_deref(), Some("/work/site"));
+    }
+
+    #[tokio::test]
+    async fn a_global_runtime_creates_global_threads() {
+        let runtime = runtime(vec![text("hello")]);
+        assert_eq!(runtime.project(), None);
+        let store = runtime.store().unwrap();
+        let mut chat = session(&runtime, &store, None).await;
+        chat.send("hi").await.unwrap();
+        let id = chat.thread().unwrap().id.clone();
+        assert_eq!(store.get_thread(&id).await.unwrap().unwrap().project, None);
+    }
+
+    #[tokio::test]
+    async fn a_thread_created_before_the_first_turn_records_the_project_too() {
+        let runtime = runtime(Vec::new()).in_project(Some("/work/site".to_string()));
+        let store = runtime.store().unwrap();
+        let mut start = ChatStart::resolve(&runtime, store.clone(), None, None)
+            .await
+            .unwrap();
+        let id = start.create_thread("hi").await.unwrap().id.clone();
+        let stored = store.get_thread(&id).await.unwrap().unwrap();
+        assert_eq!(stored.project.as_deref(), Some("/work/site"));
     }
 
     #[tokio::test]

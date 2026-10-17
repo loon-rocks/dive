@@ -23,7 +23,8 @@ pub fn load_config() -> Result<graph_config::LoadedConfig> {
 pub fn runtime() -> Result<Runtime> {
     let loaded = load_config()?;
     let packs = runtime::load_packs(&loaded)?;
-    Runtime::with_packs(loaded.config, packs, options())
+    Ok(Runtime::with_packs(loaded.config, packs, options())?
+        .in_project(Workspace::current().project()))
 }
 
 pub fn open_store(config: &graph_config::Config) -> Result<Arc<dyn graph_core::Store>> {

@@ -36,6 +36,7 @@ pub struct Workbench {
     pub tx: UnboundedSender<WorkbenchEvent>,
     pub root: PathBuf,
     pub thread: std::sync::Mutex<Option<String>>,
+    pub project: Option<String>,
     pub attachment: Arc<super::attachment::NetworkAttachment>,
 }
 
@@ -140,7 +141,11 @@ impl Workbench {
             Some(id) => id,
             None => match self
                 .store
-                .create_thread(&crate::runtime::title_from(first_message), active, None)
+                .create_thread(
+                    &crate::runtime::title_from(first_message),
+                    active,
+                    self.project.as_deref(),
+                )
                 .await
             {
                 Ok(meta) => {
