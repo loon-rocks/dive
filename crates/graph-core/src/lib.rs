@@ -15,6 +15,7 @@ pub mod store;
 pub mod template;
 pub mod toolbox;
 pub mod tools;
+pub mod trace;
 pub mod usage;
 pub mod user_tools;
 #[cfg(test)]

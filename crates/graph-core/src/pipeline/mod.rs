@@ -1111,68 +1111,80 @@ impl Pipeline {
             }
         }
 
-        self.events
-            .step_started(&self.call_stack, &path_text, tool_name, &rendered);
-        self.events.tool_started(tool_name, &rendered);
         let started = std::time::Instant::now();
-        let outcome = if let Some(message) = self.packs.refusal(&self.origin, tool_name) {
-            native_tools::tool_error(message)
-        } else if let Some(identifier) = self.packs.plan_target(tool_name) {
-            let call = self.call_plan(identifier, rendered).await;
-            if call.aborted {
-                // A nested abort is already a gate decision — never re-ask.
-                return Err(DispatchError::Aborted {
-                    error: Some(call.result),
-                });
+        let (invoked, traced) = crate::trace::tool(crate::trace::FrameKind::Step, async {
+            self.events
+                .step_started(&self.call_stack, &path_text, tool_name, &rendered);
+            self.events.tool_started(tool_name, &rendered);
+            let outcome = if let Some(message) = self.packs.refusal(&self.origin, tool_name) {
+                native_tools::tool_error(message)
+            } else if let Some(identifier) = self.packs.plan_target(tool_name) {
+                let call = self.call_plan(identifier, rendered).await;
+                if call.aborted {
+                    // A nested abort is already a gate decision — never re-ask.
+                    return Err(DispatchError::Aborted {
+                        error: Some(call.result),
+                    });
+                }
+                ToolOutcome {
+                    result: call.result,
+                    is_error: call.is_error,
+                }
+            } else if let Some(name) = self.packs.agent_target(tool_name) {
+                self.call_agent(path, name, rendered).await?
+            } else if is_native_tool(tool_name) {
+                CallSite::role("planner")
+                    .at(&path_text)
+                    .in_plans(&self.call_stack)
+                    .scope(self.call_native(tool_name, rendered))
+                    .await
+            } else if tool_name == "plan_and_execute" {
+                let call = self.call_planner(&rendered).await;
+                if call.aborted {
+                    return Err(DispatchError::Aborted {
+                        error: Some(call.result),
+                    });
+                }
+                ToolOutcome {
+                    result: call.result,
+                    is_error: call.is_error,
+                }
+            } else {
+                // Prompt tools (`builtin__infer`, user tools with a `prompt`)
+                // make model calls from inside the registry, where there is no
+                // step context. Scoping the dispatch is what attributes them —
+                // and it covers every prompt tool at every depth at once, rather
+                // than one edit per tool implementation. Tools that never call a
+                // model just carry an unused scope.
+                //
+                // The `plan__`/`plan_and_execute` branches above are deliberately
+                // left unscoped: a nested plan sets its own scopes at its own
+                // inference sites, which is what keeps its steps distinct.
+                CallSite::role(tool_name)
+                    .at(&path_text)
+                    .in_plans(&self.call_stack)
+                    .scope(self.registry.invoke(tool_name, rendered))
+                    .await
+                    .unwrap_or_else(|e| ToolOutcome {
+                        result: json!({"error": e.to_string()}),
+                        is_error: true,
+                    })
+            };
+            self.events
+                .tool_finished(tool_name, started.elapsed(), outcome.is_error);
+            Ok(outcome)
+        })
+        .await;
+        let outcome = match invoked {
+            Ok(outcome) => {
+                traced.finish(tool_name, outcome.is_error);
+                outcome
             }
-            ToolOutcome {
-                result: call.result,
-                is_error: call.is_error,
+            Err(error) => {
+                traced.finish(tool_name, true);
+                return Err(error);
             }
-        } else if let Some(name) = self.packs.agent_target(tool_name) {
-            self.call_agent(path, name, rendered).await?
-        } else if is_native_tool(tool_name) {
-            CallSite::role("planner")
-                .at(&path_text)
-                .in_plans(&self.call_stack)
-                .scope(self.call_native(tool_name, rendered))
-                .await
-        } else if tool_name == "plan_and_execute" {
-            let call = self.call_planner(&rendered).await;
-            if call.aborted {
-                return Err(DispatchError::Aborted {
-                    error: Some(call.result),
-                });
-            }
-            ToolOutcome {
-                result: call.result,
-                is_error: call.is_error,
-            }
-        } else {
-            // Prompt tools (`builtin__infer`, user tools with a `prompt`)
-            // make model calls from inside the registry, where there is no
-            // step context. Scoping the dispatch is what attributes them —
-            // and it covers every prompt tool at every depth at once, rather
-            // than one edit per tool implementation. Tools that never call a
-            // model just carry an unused scope.
-            //
-            // The `plan__`/`plan_and_execute` branches above are deliberately
-            // left unscoped: a nested plan sets its own scopes at its own
-            // inference sites, which is what keeps its steps distinct.
-            CallSite::role(tool_name)
-                .at(&path_text)
-                .in_plans(&self.call_stack)
-                .scope(self.registry.invoke(tool_name, rendered))
-                .await
-                .unwrap_or_else(|e| ToolOutcome {
-                    result: json!({"error": e.to_string()}),
-                    is_error: true,
-                })
         };
-        // tool_finished always describes the real call; when a gate
-        // replaces an error below, step_finished carries the resolution.
-        self.events
-            .tool_finished(tool_name, started.elapsed(), outcome.is_error);
 
         if outcome.is_error {
             if let (Some(gate), Some(snapshot)) = (&self.gate, &rendered_snapshot) {

@@ -241,6 +241,18 @@ async fn entries_keep_their_duration_and_model_usage() {
         cache_creation_input_tokens: 3,
         cache_read_input_tokens: 4,
     };
+    let nested = vec![graph_core::trace::Call::Tool {
+        name: "plan__digest".into(),
+        ms: 6,
+        is_error: false,
+        calls: vec![graph_core::trace::Call::Model {
+            role: "judge".into(),
+            site: "plan__digest/E1".into(),
+            decision: false,
+            ms: 4,
+            usage: usage.clone(),
+        }],
+    }];
     for (name, store) in backends(&dir) {
         let thread = store.create_thread("t", "chat").await.unwrap();
         let entries = vec![
@@ -261,6 +273,7 @@ async fn entries_keep_their_duration_and_model_usage() {
             .stamped(Stamp {
                 ms: Some(120),
                 usage: Some(usage.clone()),
+                calls: Vec::new(),
             }),
             NewEntry::message(
                 "chat",
@@ -273,6 +286,7 @@ async fn entries_keep_their_duration_and_model_usage() {
             .stamped(Stamp {
                 ms: Some(7),
                 usage: None,
+                calls: nested.clone(),
             }),
         ];
         store.append_entries(&thread.id, &entries).await.unwrap();
@@ -292,9 +306,12 @@ async fn entries_keep_their_duration_and_model_usage() {
         );
         let first = serde_json::to_value(&loaded[0]).unwrap();
         assert!(
-            first.get("ms").is_none() && first.get("usage").is_none(),
+            first.get("ms").is_none()
+                && first.get("usage").is_none()
+                && first.get("calls").is_none(),
             "{name}"
         );
+        assert_eq!(loaded[2].calls, nested, "{name}");
         let back = NewEntry::from(loaded[1].clone());
         assert_eq!(
             (back.ms, back.usage),

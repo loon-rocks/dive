@@ -7,6 +7,7 @@ mod common;
 
 use common::MessageLog;
 use graph_core::store::{EntryUsage, Store, ThreadEntry};
+use graph_core::trace::Call;
 use graph_llm::types::ChatMessage;
 use graph_store::{FileStore, STORE_FORMAT};
 use serde_json::json;
@@ -292,7 +293,7 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
 
 #[test]
 fn entries_without_timing_round_trip_byte_for_byte() {
-    for version in ["v2", "v3"] {
+    for version in ["v2", "v3", "v4"] {
         let raw = std::fs::read_to_string(
             fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
         )
@@ -305,8 +306,19 @@ fn entries_without_timing_round_trip_byte_for_byte() {
 }
 
 #[tokio::test]
-async fn a_frozen_version_3_data_directory_opens_as_is() {
+async fn a_frozen_version_3_data_directory_is_marked_current_and_otherwise_untouched() {
     let dir = copy_fixture("v3");
+    let store = FileStore::open(dir.path()).unwrap();
+    assert_matches_fixture_except_marker(dir.path(), "v3");
+    let entries = store.load_entries("a1b2c3d4e5f6").await.unwrap();
+    let ms: Vec<Option<u64>> = entries.iter().map(|entry| entry.ms).collect();
+    assert_eq!(ms, [None, Some(1840), Some(5230), Some(910)]);
+    assert!(entries.iter().all(|entry| entry.calls.is_empty()));
+}
+
+#[tokio::test]
+async fn a_frozen_version_4_data_directory_opens_as_is() {
+    let dir = copy_fixture("v4");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
     assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
@@ -324,8 +336,22 @@ async fn a_frozen_version_3_data_directory_opens_as_is() {
         })
     );
     assert!(entries[2].usage.is_none());
+    match entries[2].calls.as_slice() {
+        [Call::Tool { name: first, .. }, Call::Tool {
+            name: second,
+            calls,
+            ..
+        }] => {
+            assert_eq!(
+                (first.as_str(), second.as_str()),
+                ("linear__list_issues", "builtin__infer")
+            );
+            assert!(matches!(calls.as_slice(), [Call::Model { role, .. }] if role == "judge"));
+        }
+        other => panic!("expected two nested tool calls, got {other:?}"),
+    }
     assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
-    let expected = fixture_dir("v3");
+    let expected = fixture_dir("v4");
     assert_eq!(
         data_files(dir.path()),
         data_files(&expected),

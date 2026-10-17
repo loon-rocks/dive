@@ -446,18 +446,23 @@ impl TaskTools for RegistryTools<'_> {
         _round: u32,
     ) -> Result<Vec<ChatMessage>, TaskError> {
         let runs = calls.iter().map(|call| async {
-            self.events.tool_started(&call.name, &call.arguments);
-            let started = std::time::Instant::now();
-            let outcome = self
-                .registry
-                .invoke(&call.name, call.arguments.clone())
-                .await
-                .unwrap_or_else(|e| ToolOutcome {
-                    result: json!({ "error": e.to_string() }),
-                    is_error: true,
-                });
-            self.events
-                .tool_finished(&call.name, started.elapsed(), outcome.is_error);
+            let (outcome, traced) = crate::trace::tool(crate::trace::FrameKind::Tool, async {
+                self.events.tool_started(&call.name, &call.arguments);
+                let started = std::time::Instant::now();
+                let outcome = self
+                    .registry
+                    .invoke(&call.name, call.arguments.clone())
+                    .await
+                    .unwrap_or_else(|e| ToolOutcome {
+                        result: json!({ "error": e.to_string() }),
+                        is_error: true,
+                    });
+                self.events
+                    .tool_finished(&call.name, started.elapsed(), outcome.is_error);
+                outcome
+            })
+            .await;
+            traced.finish(&call.name, outcome.is_error);
             ChatMessage::ToolResult {
                 tool_call_id: call.id.clone(),
                 content: outcome.result,
@@ -792,8 +797,16 @@ mod tests {
             responses: Mutex::new(responses),
             requests: Mutex::new(Vec::new()),
         });
+        let ledger = Arc::new(crate::usage::UsageLedger::unpriced());
         let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
-        providers.insert("mock".into(), provider.clone());
+        providers.insert(
+            "mock".into(),
+            Arc::new(graph_llm::MeteredProvider::new(
+                provider.clone(),
+                "mock".into(),
+                ledger.clone(),
+            )),
+        );
         let router = Arc::new(graph_llm::ModelRouter::with_providers(
             providers,
             ModelRoles::from([(
@@ -823,7 +836,7 @@ mod tests {
             current_date: "2026-09-30".into(),
             max_attempts: 1,
             max_agent_iterations: 15,
-            usage: Arc::new(crate::usage::UsageLedger::unpriced()),
+            usage: ledger,
             agents: agents.clone(),
             agent_depth: 0,
             always_loaded: Default::default(),
@@ -1288,6 +1301,53 @@ mod tests {
             "earlier turns are a stable prefix"
         );
         assert!(user_text(&requests[2]).contains("## Current draft\nv2"));
+    }
+
+    #[tokio::test]
+    async fn a_subagent_s_model_and_tool_calls_land_on_the_caller_s_tool_result() {
+        let (conversation, _) = conversation(vec![
+            call("c1", "agent__helper", json!({"prompt": "look it up"})),
+            call("c2", "t__echo", json!({"q": "x"})),
+            text("found it"),
+            text("the answer"),
+        ]);
+        let turn = conversation
+            .run_turn(&[], "front", "question")
+            .await
+            .unwrap();
+        let result = turn
+            .entries
+            .iter()
+            .find(|entry| {
+                matches!(
+                    &entry.body,
+                    EntryBody::Message {
+                        message: ChatMessage::ToolResult { tool_call_id, .. }
+                    } if tool_call_id == "c1"
+                )
+            })
+            .expect("the subagent's tool result");
+        let kinds: Vec<String> = result
+            .calls
+            .iter()
+            .map(|call| match call {
+                crate::trace::Call::Model { site, .. } => format!("model {site}"),
+                crate::trace::Call::Tool { name, .. } => format!("tool {name}"),
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "model agent:front/agent__helper",
+                "tool t__echo",
+                "model agent:front/agent__helper"
+            ]
+        );
+        assert!(turn
+            .entries
+            .iter()
+            .filter(|entry| entry.usage.is_some())
+            .all(|entry| entry.calls.is_empty()));
     }
 
     #[tokio::test]
