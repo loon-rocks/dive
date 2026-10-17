@@ -260,6 +260,13 @@ impl UsageMeter for UsageLedger {
             input: call.input,
             output: call.output,
         };
+        crate::trace::record(crate::trace::Call::Model {
+            role: event.role.clone(),
+            site: event.site.clone(),
+            decision: event.kind == graph_config::ModelKind::Decision,
+            ms: u64::try_from(event.elapsed.as_millis()).unwrap_or(u64::MAX),
+            usage: crate::store::EntryUsage::new(&event.model, &event.usage),
+        });
         self.calls.lock().unwrap().push(CallRecord {
             provider: call.provider,
             model: call.model,
