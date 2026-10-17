@@ -12,7 +12,7 @@ pub const TOOL_FORMAT: u32 = 2;
 
 pub const TOOL_FORMAT_OLDEST: u32 = 1;
 
-pub const AGENT_FORMAT: u32 = 1;
+pub const AGENT_FORMAT: u32 = 2;
 
 pub const AGENT_FORMAT_OLDEST: u32 = 1;
 
@@ -92,7 +92,11 @@ fn decision_kind_added(_value: &mut Value) -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 
-const AGENT_MIGRATIONS: &[Migration] = &[];
+const AGENT_MIGRATIONS: &[Migration] = &[attachments_added];
+
+fn attachments_added(_value: &mut Value) -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {

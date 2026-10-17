@@ -73,6 +73,7 @@ pub trait EventSink: Send + Sync {
     fn subagent_tool_finished(&self, _run: u64, name: &str, elapsed: Duration, is_error: bool) {
         self.tool_finished(name, elapsed, is_error);
     }
+    fn attachment_changed(&self, _kind: &str, _view: &Value) {}
 }
 
 #[derive(Debug, Clone, Default)]
@@ -203,6 +204,12 @@ impl EventSink for TeeSink {
         self.sinks
             .iter()
             .for_each(|s| s.subagent_tool_finished(run, name, elapsed, is_error));
+    }
+
+    fn attachment_changed(&self, kind: &str, view: &Value) {
+        self.sinks
+            .iter()
+            .for_each(|s| s.attachment_changed(kind, view));
     }
 }
 

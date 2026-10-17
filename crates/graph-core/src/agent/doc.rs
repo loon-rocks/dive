@@ -39,6 +39,7 @@ pub(crate) const AGENT_KEYS: &[&str] = &[
     "input_schema",
     "output_schema",
     "max_iterations",
+    "attachments",
     "system_prompt",
 ];
 
@@ -87,12 +88,18 @@ pub struct AgentDoc {
     pub output_schema: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_iterations: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<String>,
     pub system_prompt: String,
     #[serde(skip)]
     pub source: AgentSource,
 }
 
 impl AgentDoc {
+    pub fn reads(&self, kind: &str) -> bool {
+        self.attachments.iter().any(|read| read == kind)
+    }
+
     pub fn tool_name(&self) -> String {
         match self.source.pack() {
             Some(_) => self.name.clone(),
@@ -460,6 +467,14 @@ pub fn validate_doc(doc: &AgentDoc, fragments: &[&str]) -> Vec<String> {
     for pattern in &doc.tools {
         problems.extend(tool_pattern_problem(pattern));
     }
+    for kind in &doc.attachments {
+        if !crate::store::ATTACHMENT_KINDS.contains(&kind.as_str()) {
+            problems.push(format!(
+                "attachments: '{kind}' is not an attachment kind (known: {})",
+                crate::store::ATTACHMENT_KINDS.join(", ")
+            ));
+        }
+    }
     if let Some(schema) = &doc.input_schema {
         problems.extend(input_schema_problems(schema));
     }
@@ -630,8 +645,34 @@ mod tests {
 
     #[test]
     fn a_newer_version_is_refused() {
-        let err = parse_agent_source(&format!("version: 2\n{}", minimal("a", ""))).unwrap_err();
+        let err = parse_agent_source(&format!(
+            "version: {}\n{}",
+            crate::format::AGENT_FORMAT + 1,
+            minimal("a", "")
+        ))
+        .unwrap_err();
         assert!(err.contains("agent"), "{err}");
+    }
+
+    #[test]
+    fn attachments_declare_known_kinds_and_default_to_none() {
+        let plain = doc(&minimal("a", ""));
+        assert!(plain.attachments.is_empty());
+        assert!(!plain.reads("network"));
+        let reader = doc(&minimal("b", "attachments: [network]\n"));
+        assert!(reader.reads("network") && !reader.reads("plan"));
+        assert!(serde_yaml::to_string(&plain)
+            .unwrap()
+            .find("attachments")
+            .is_none());
+        let unknown = doc(&minimal("c", "attachments: [spreadsheet]\n"));
+        let problems = AgentSet::layered(vec![unknown], vec![]).validate(&[]);
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("'spreadsheet' is not an attachment kind")),
+            "{problems:?}"
+        );
     }
 
     #[test]
