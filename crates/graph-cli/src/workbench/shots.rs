@@ -510,6 +510,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         tx: tx.clone(),
         root: root.to_path_buf(),
         thread: Mutex::new(None),
+        project: None,
         attachment,
     });
 

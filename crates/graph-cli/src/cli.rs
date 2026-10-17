@@ -566,8 +566,12 @@ pub enum AgentCommand {
 #[derive(Subcommand)]
 pub enum ThreadCommand {
     /// List threads
-    #[command(after_long_help = "Examples:\n  graph thread list")]
+    #[command(
+        after_long_help = "Lists the threads started in the current directory's project, or the global threads when the directory has no `.graph` folder. `--all` lists every thread.\n\nExamples:\n  graph thread list\n  graph thread list --all"
+    )]
     List {
+        #[arg(long, help = "List every thread, whatever project it was started in")]
+        all: bool,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
