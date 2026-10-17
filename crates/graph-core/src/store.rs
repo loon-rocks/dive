@@ -9,7 +9,13 @@ use serde_json::Value;
 
 pub const USER_AUTHOR: &str = "user";
 
-#[derive(Debug, Clone)]
+pub const NETWORK_ATTACHMENT: &str = "network";
+
+pub const PLAN_ATTACHMENT: &str = "plan";
+
+pub const ATTACHMENT_KINDS: &[&str] = &[NETWORK_ATTACHMENT, PLAN_ATTACHMENT];
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadMeta {
     pub id: String,
     pub title: String,
@@ -19,6 +25,33 @@ pub struct ThreadMeta {
     pub message_count: i64,
     pub owner: String,
     pub active: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Attachment {
+    pub kind: String,
+    #[serde(flatten)]
+    pub fields: serde_json::Map<String, Value>,
+}
+
+impl Attachment {
+    pub fn new(kind: &str) -> Self {
+        Self {
+            kind: kind.to_string(),
+            fields: serde_json::Map::new(),
+        }
+    }
+
+    pub fn with(mut self, key: &str, value: impl Into<Value>) -> Self {
+        self.fields.insert(key.to_string(), value.into());
+        self
+    }
+
+    pub fn field(&self, key: &str) -> Option<&str> {
+        self.fields.get(key).and_then(Value::as_str)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +231,11 @@ pub trait Store: Send + Sync {
         -> Result<(), StoreError>;
     async fn load_entries(&self, thread_id: &str) -> Result<Vec<ThreadEntry>, StoreError>;
     async fn set_active_agent(&self, thread_id: &str, agent: &str) -> Result<(), StoreError>;
+    async fn set_attachments(
+        &self,
+        thread_id: &str,
+        attachments: &[Attachment],
+    ) -> Result<(), StoreError>;
 
     /// Record an observed output shape for a tool (upsert; bumps seen_count).
     async fn record_tool_shape(
@@ -262,6 +300,30 @@ mod tests {
         assert_eq!(value["final"], json!(true));
         let back: ThreadEntry = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(back).unwrap(), value);
+    }
+
+    #[test]
+    fn thread_meta_written_before_attachments_loads_with_none() {
+        let meta: ThreadMeta = serde_json::from_value(json!({
+            "id": "a1b2c3d4e5f6", "title": "t", "created_at": 1, "updated_at": 2,
+            "message_count": 0, "owner": "chat", "active": "chat"
+        }))
+        .unwrap();
+        assert!(meta.attachments.is_empty());
+        assert!(serde_json::to_value(&meta)
+            .unwrap()
+            .get("attachments")
+            .is_none());
+    }
+
+    #[test]
+    fn an_attachment_keeps_its_kind_specific_fields_flat() {
+        let attachment = Attachment::new("network").with("state", "saved");
+        let value = serde_json::to_value(&attachment).unwrap();
+        assert_eq!(value, json!({"kind": "network", "state": "saved"}));
+        let back: Attachment = serde_json::from_value(value).unwrap();
+        assert_eq!(back, attachment);
+        assert_eq!(back.field("state"), Some("saved"));
     }
 
     #[test]
