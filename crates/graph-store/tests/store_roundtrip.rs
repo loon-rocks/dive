@@ -4,7 +4,7 @@
 mod common;
 
 use common::MessageLog;
-use graph_core::store::{conversation, EntryBody, EntryUsage, NewEntry, Stamp, Store};
+use graph_core::store::{conversation, Attachment, EntryBody, EntryUsage, NewEntry, Stamp, Store};
 use graph_llm::types::{ChatMessage, ToolCall};
 use graph_store::{FileStore, MemoryStore};
 use serde_json::json;
@@ -318,5 +318,36 @@ async fn entries_keep_their_duration_and_model_usage() {
             (Some(120), Some(usage.clone())),
             "{name}"
         );
+    }
+}
+
+#[tokio::test]
+async fn attachments_replace_the_threads_list_and_survive_appends() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, store) in backends(&dir) {
+        let thread = store
+            .create_thread("draft", "network_drafter")
+            .await
+            .unwrap();
+        assert!(thread.attachments.is_empty(), "{name}");
+        let network = Attachment::new("network").with("state", "open");
+        store
+            .set_attachments(&thread.id, std::slice::from_ref(&network))
+            .await
+            .unwrap();
+        store
+            .append_messages(
+                &thread.id,
+                &[ChatMessage::User {
+                    content: "hi".into(),
+                }],
+            )
+            .await
+            .unwrap();
+        let meta = store.get_thread(&thread.id).await.unwrap().unwrap();
+        assert_eq!(meta.attachments, [network], "{name}");
+        store.set_attachments(&thread.id, &[]).await.unwrap();
+        let meta = store.get_thread(&thread.id).await.unwrap().unwrap();
+        assert!(meta.attachments.is_empty(), "{name}");
     }
 }

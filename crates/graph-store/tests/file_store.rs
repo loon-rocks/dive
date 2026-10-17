@@ -6,7 +6,7 @@
 mod common;
 
 use common::MessageLog;
-use graph_core::store::{EntryUsage, Store, ThreadEntry};
+use graph_core::store::{Attachment, EntryUsage, Store, ThreadEntry};
 use graph_core::trace::Call;
 use graph_llm::types::ChatMessage;
 use graph_store::{FileStore, STORE_FORMAT};
@@ -293,7 +293,7 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
 
 #[test]
 fn entries_without_timing_round_trip_byte_for_byte() {
-    for version in ["v2", "v3", "v4"] {
+    for version in ["v2", "v3", "v4", "v5"] {
         let raw = std::fs::read_to_string(
             fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
         )
@@ -317,8 +317,40 @@ async fn a_frozen_version_3_data_directory_is_marked_current_and_otherwise_untou
 }
 
 #[tokio::test]
-async fn a_frozen_version_4_data_directory_opens_as_is() {
+async fn a_frozen_version_4_data_directory_is_marked_current_and_otherwise_untouched() {
     let dir = copy_fixture("v4");
+    let store = FileStore::open(dir.path()).unwrap();
+    assert_matches_fixture_except_marker(dir.path(), "v4");
+    let threads = store.list_threads().await.unwrap();
+    assert_eq!(threads.len(), 2);
+    assert!(threads.iter().all(|meta| meta.attachments.is_empty()));
+}
+
+#[tokio::test]
+async fn attachments_are_set_and_kept_across_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let id = {
+        let store = FileStore::open(dir.path()).unwrap();
+        let meta = store
+            .create_thread("draft", "network_drafter")
+            .await
+            .unwrap();
+        assert!(meta.attachments.is_empty());
+        store
+            .set_attachments(&meta.id, &[Attachment::new("network")])
+            .await
+            .unwrap();
+        meta.id
+    };
+    let store = FileStore::open(dir.path()).unwrap();
+    let meta = store.get_thread(&id).await.unwrap().unwrap();
+    assert_eq!(meta.attachments, [Attachment::new("network")]);
+    assert!(store.set_attachments("missing0000", &[]).await.is_err());
+}
+
+#[tokio::test]
+async fn a_frozen_version_5_data_directory_opens_as_is() {
+    let dir = copy_fixture("v5");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
     assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
@@ -351,7 +383,13 @@ async fn a_frozen_version_4_data_directory_opens_as_is() {
         other => panic!("expected two nested tool calls, got {other:?}"),
     }
     assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
-    let expected = fixture_dir("v4");
+    let draft = store.get_thread("c0ffee000001").await.unwrap().unwrap();
+    assert_eq!(
+        draft.attachments,
+        [Attachment::new("network").with("state", "open")]
+    );
+    assert!(thread.attachments.is_empty());
+    let expected = fixture_dir("v5");
     assert_eq!(
         data_files(dir.path()),
         data_files(&expected),
