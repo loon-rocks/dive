@@ -86,7 +86,10 @@ mod tests {
     async fn threads_list_show_and_delete_with_the_cli_json_shapes() {
         let store = MemoryStore::new();
         assert_eq!(list(&store).await.unwrap().count, 0);
-        let meta = store.create_thread("Release notes", "chat").await.unwrap();
+        let meta = store
+            .create_thread("Release notes", "chat", None)
+            .await
+            .unwrap();
 
         let listed = serde_json::to_value(list(&store).await.unwrap()).unwrap();
         assert_eq!(listed["count"], 1);

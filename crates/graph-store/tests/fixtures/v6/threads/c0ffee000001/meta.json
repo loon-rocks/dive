@@ -1,0 +1,17 @@
+{
+  "version": 5,
+  "id": "c0ffee000001",
+  "title": "a tool that greets",
+  "created_at": 1767225800000,
+  "updated_at": 1767225860000,
+  "message_count": 2,
+  "entry_count": 2,
+  "owner": "network_drafter",
+  "active": "network_drafter",
+  "attachments": [
+    {
+      "kind": "network",
+      "state": "open"
+    }
+  ]
+}
