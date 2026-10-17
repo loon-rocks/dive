@@ -363,13 +363,14 @@ fn on_event(app: &mut App, event: WorkbenchEvent) -> Vec<Effect> {
             app.chat.scroll.set(0);
             Vec::new()
         }
+        WorkbenchEvent::AgentModelCall(_) => Vec::new(),
         WorkbenchEvent::AgentToolStarted(name) => {
             app.chat
                 .entries
                 .push(ChatEntry::Activity(format!("→ {name}")));
             Vec::new()
         }
-        WorkbenchEvent::AgentToolFinished { name, is_error } => {
+        WorkbenchEvent::AgentToolFinished { name, is_error, .. } => {
             if is_error {
                 app.chat
                     .entries

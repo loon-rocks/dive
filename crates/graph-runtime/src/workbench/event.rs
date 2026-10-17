@@ -28,7 +28,9 @@ pub enum WorkbenchEvent {
     AgentToolFinished {
         name: String,
         is_error: bool,
+        elapsed: std::time::Duration,
     },
+    AgentModelCall(Box<graph_core::usage::ModelCallEvent>),
     /// Ok carries the turn's final assistant text — the completed
     /// response is canonical; deltas are just its live preview.
     TurnFinished(Result<String, String>),
@@ -132,10 +134,16 @@ impl WorkbenchEvent {
                 return (Level::TRACE, format!("solver delta ({} chars)", text.len()))
             }
             WorkbenchEvent::AgentToolStarted(name) => format!("agent tool started: {name}"),
-            WorkbenchEvent::AgentToolFinished { name, is_error } => {
+            WorkbenchEvent::AgentToolFinished { name, is_error, .. } => {
                 format!(
                     "agent tool finished: {name}{}",
                     if *is_error { " (error)" } else { "" }
+                )
+            }
+            WorkbenchEvent::AgentModelCall(call) => {
+                return (
+                    Level::TRACE,
+                    format!("agent model call: {} {}", call.site, call.model),
                 )
             }
             WorkbenchEvent::TurnFinished(result) => match result {
