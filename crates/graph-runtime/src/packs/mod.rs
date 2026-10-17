@@ -132,11 +132,9 @@ impl InstalledPacks {
             }
             for (name, entry) in &layer.packs {
                 let dir = packs_dir.join(name);
-                if let Some(by) = layers[index + 1..]
-                    .iter()
-                    .rev()
-                    .find(|later| later.packs.contains_key(name))
-                {
+                if let Some(by) = layers[index + 1..].iter().rev().find(|later| {
+                    later.packs.contains_key(name) && later.packs_dir().join(name).is_dir()
+                }) {
                     installed.shadowed.push(ShadowedPack {
                         name: name.clone(),
                         entry: entry.clone(),
@@ -151,8 +149,8 @@ impl InstalledPacks {
                     continue;
                 }
                 if !dir.is_dir() {
-                    problems.push(format!(
-                        "pack '{name}' is configured in {} but not installed at {}; run `{}`",
+                    installed.warnings.push(format!(
+                        "pack '{name}' is configured in {} but not installed at {}, so its tools, plans and agents are unavailable; run `{}`",
                         config.display(),
                         dir.display(),
                         add_command(name, layer.kind)

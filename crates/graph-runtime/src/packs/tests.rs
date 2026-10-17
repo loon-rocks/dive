@@ -82,15 +82,44 @@ fn an_installed_pack_loads_with_its_lock_tag() {
 }
 
 #[test]
-fn a_configured_pack_with_no_copy_names_the_add_command() {
+fn a_configured_pack_with_no_copy_loads_with_a_warning_naming_the_add_command() {
     let dir = tempfile::tempdir().unwrap();
-    let error = InstalledPacks::load(
+    let installed = InstalledPacks::load(
         &[layer(LayerKind::Global, dir.path(), &["example"])],
         &no_servers(),
     )
-    .unwrap_err()
-    .to_string();
-    assert!(error.contains("graph pack add example --global"), "{error}");
+    .unwrap();
+    assert!(installed.packs.is_empty());
+    assert_eq!(installed.warnings.len(), 1);
+    assert!(
+        installed.warnings[0].contains("graph pack add example --global"),
+        "{:?}",
+        installed.warnings
+    );
+}
+
+#[test]
+fn a_project_entry_with_no_copy_leaves_the_global_copy_loaded() {
+    let global = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    install(global.path(), "example", "v1.0.0", true);
+    let installed = InstalledPacks::load(
+        &[
+            layer(LayerKind::Global, global.path(), &["example"]),
+            layer(LayerKind::Project, project.path(), &["example"]),
+        ],
+        &no_servers(),
+    )
+    .unwrap();
+    assert_eq!(installed.packs.len(), 1);
+    assert_eq!(installed.packs[0].loaded.source.layer, LayerKind::Global);
+    assert!(installed.shadowed.is_empty());
+    assert_eq!(installed.warnings.len(), 1);
+    assert!(
+        installed.warnings[0].contains("run `graph pack add example`"),
+        "{:?}",
+        installed.warnings
+    );
 }
 
 #[test]
