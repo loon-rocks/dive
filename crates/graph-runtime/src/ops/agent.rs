@@ -234,7 +234,13 @@ mod tests {
     #[test]
     fn show_stamps_the_yaml_and_names_unknown_agents() {
         let detail = show(&[], &[], &[workbench_agent()], "wb_helper").unwrap();
-        assert!(detail.yaml.starts_with("version: 1\n"), "{}", detail.yaml);
+        assert!(
+            detail
+                .yaml
+                .starts_with(&format!("version: {}\n", graph_core::format::AGENT_FORMAT)),
+            "{}",
+            detail.yaml
+        );
         assert_eq!(detail.label, "built-in, workbench only (graph wb)");
         let value = serde_json::to_value(&detail).unwrap();
         assert_eq!(value["agent"]["name"], "wb_helper");
@@ -272,9 +278,9 @@ mod tests {
             "a.yaml",
             "name: a\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: hi\n",
         );
-        assert_eq!(migrate(&path).unwrap().to, 1);
+        assert_eq!(migrate(&path).unwrap().to, graph_core::format::AGENT_FORMAT);
         assert!(std::fs::read_to_string(&path)
             .unwrap()
-            .starts_with("version: 1\n"));
+            .starts_with(&format!("version: {}\n", graph_core::format::AGENT_FORMAT)));
     }
 }
