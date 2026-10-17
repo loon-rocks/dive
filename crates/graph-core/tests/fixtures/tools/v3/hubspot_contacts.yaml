@@ -1,0 +1,21 @@
+version: 3
+name: hubspot_contacts
+description: Recent HubSpot contacts, newest first.
+kind: exec
+command: bash
+args:
+  - "-c"
+  - 'curl -sf -H "Authorization: Bearer $HUBSPOT_TOKEN" "$HUBSPOT_URL/crm/v3/objects/contacts?limit=$1"'
+  - "--"
+  - "{{input.limit}}"
+env:
+  HUBSPOT_URL: "${HUBSPOT_URL:-https://api.hubapi.com}"
+  HUBSPOT_TOKEN:
+    value: "${HUBSPOT_TOKEN}"
+    description: "HubSpot private app token with `crm.objects.contacts.read`. Create one under [Settings › Private apps](https://app.hubspot.com/private-apps)."
+read_only: true
+input_schema:
+  type: object
+  required: [limit]
+  properties:
+    limit: { type: integer, description: How many contacts to return }

@@ -169,6 +169,19 @@ pub fn store_resolve_in(
         })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NeededSecret {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+pub fn is_set(source: &dyn SecretSource, name: &str) -> bool {
+    source
+        .resolve(name)
+        .is_some_and(|found| !found.value.is_empty())
+}
+
 pub fn env_references(text: &str) -> Vec<EnvReference<'_>> {
     let mut found = Vec::new();
     let mut rest = text;

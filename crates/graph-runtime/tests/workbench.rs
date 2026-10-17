@@ -178,7 +178,7 @@ async fn the_architect_sketches_a_builder_drafts_and_tries_and_the_network_saves
 
     let saved = workbench.save_network().await.unwrap();
     let path = root.path().join("tools/shout.yaml");
-    assert!(saved.ends_with("tools/shout.yaml"), "{saved}");
+    assert!(saved.ends_with("tools/shout.yaml (untested)"), "{saved}");
     assert!(std::fs::read_to_string(&path)
         .unwrap()
         .contains("name: shout"));

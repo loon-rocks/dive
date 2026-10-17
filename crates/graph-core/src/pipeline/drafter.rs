@@ -120,6 +120,10 @@ impl ToolRegistry for DraftedTools {
     async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {
         self.registry().invoke(name, input).await
     }
+
+    async fn needed_secrets(&self, name: &str) -> Option<Vec<crate::secrets::NeededSecret>> {
+        self.registry().needed_secrets(name).await
+    }
 }
 
 pub fn drafter_tool_defs() -> Vec<ToolDef> {
@@ -276,8 +280,8 @@ fn stored_values(
     let ToolKind::Exec { env, .. } = &doc.kind else {
         return hidden;
     };
-    for value in env.values() {
-        for reference in crate::secrets::env_references(value) {
+    for entry in env.values() {
+        for reference in crate::secrets::env_references(entry.value()) {
             if hidden.contains_key(reference.name) {
                 continue;
             }
