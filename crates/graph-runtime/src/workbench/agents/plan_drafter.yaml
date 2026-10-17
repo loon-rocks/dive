@@ -5,6 +5,8 @@ model: drafter
 tools:
   - workbench__describe_tool
   - workbench__set_artifact
+  - web__tool__search
+  - web__tool__fetch
 input_schema:
   type: object
   required: [node]

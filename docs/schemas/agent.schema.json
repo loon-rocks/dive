@@ -75,7 +75,7 @@
       "type": "string"
     },
     "tools": {
-      "description": "Catalog tools the agent may call, as exact names or `*` globs such as `linear__*`. `[]` means none and `[\"*\"]` means the whole catalog. Control step names and generated `agent__` and `transfer_to_` names aren't allowed.",
+      "description": "Catalog tools the agent may call, as exact names or `*` globs such as `linear__*`. `[]` means none and `[\"*\"]` means the whole catalog. Control step names and generated `agent__` and `transfer_to_` names aren't allowed. A name that matches no tool, such as a tool from a pack that isn't installed, is skipped, so the agent still loads and runs without it.",
       "items": {
         "type": "string"
       },
