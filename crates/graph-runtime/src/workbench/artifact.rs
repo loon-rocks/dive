@@ -1,9 +1,9 @@
 use super::event::WorkbenchEvent;
 use super::network::{self, Network, NetworkView, TestRun};
-use super::runner::UiInterlocutor;
+use super::runner::interlocutor_for;
 use super::tools::SharedDraft;
 use graph_core::agent::conversation::{Conversation, HandoffGuard};
-use graph_core::pipeline::{AskOutcome, AskRequest, Interlocutor, Pipeline, StepPath};
+use graph_core::pipeline::{AskOutcome, AskRequest, Pipeline, StepPath};
 use graph_core::store::EntryBody;
 use graph_core::toolbox::AgentToolbox;
 use graph_core::{ExcludingRegistry, NullSink, ToolDef, ToolOutcome};
@@ -88,7 +88,8 @@ pub type Tester = Arc<OnceLock<Conversation>>;
 
 const TEST_LIMIT: std::time::Duration = std::time::Duration::from_secs(90);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ArtifactKind {
     Agent,
     Plan,
@@ -257,7 +258,7 @@ pub async fn try_artifact(
     };
     let asking = pipeline
         .clone()
-        .with_interlocutor(Arc::new(UiInterlocutor::new(tx.clone())));
+        .with_interlocutor(interlocutor_for(pipeline, tx));
     let sample = match &input["input"] {
         Value::Object(_) => input["input"].clone(),
         _ => json!({}),
@@ -505,12 +506,13 @@ pub fn fail_test(
 }
 
 async fn ask_yes(
+    pipeline: &Pipeline,
     tx: &UnboundedSender<WorkbenchEvent>,
     what: &str,
     prompt: String,
     key: &str,
 ) -> Result<(), String> {
-    let interlocutor = UiInterlocutor::new(tx.clone());
+    let interlocutor = interlocutor_for(pipeline, tx);
     let answer = interlocutor
         .ask(AskRequest {
             path: StepPath::top(what),
@@ -597,6 +599,7 @@ pub async fn test_network(
         return error("`message` is required to test an agent");
     }
     if let Err(refusal) = ask_yes(
+        pipeline,
         tx,
         "test_network",
         format!("Test the network: {what}? Tools in it run for real, on each agent's own model, and nothing is saved."),
@@ -610,7 +613,7 @@ pub async fn test_network(
     publish(draft, tx);
     let asking = pipeline
         .clone()
-        .with_interlocutor(Arc::new(UiInterlocutor::new(tx.clone())));
+        .with_interlocutor(interlocutor_for(pipeline, tx));
     let over = Arc::new(network::overlay(&asking, &network));
     let run = match node.kind {
         ArtifactKind::Tool => {
@@ -864,6 +867,7 @@ pub async fn save_network(
             })
             .collect();
         ask_yes(
+            pipeline,
             tx,
             "save_network",
             format!(
