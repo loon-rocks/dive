@@ -69,6 +69,15 @@ impl Replay {
             return;
         }
         let kind = input["kind"].as_str().and_then(ArtifactKind::parse);
+        if let Some((needed, _)) = super::secrets::parse_report(result) {
+            if matches!(
+                call.name.as_str(),
+                artifact::TEST_NETWORK | artifact::TRY_ARTIFACT
+            ) {
+                self.network.wait_on_secrets(needed);
+            }
+            return;
+        }
         match call.name.as_str() {
             "plan__compose_plan" => {
                 self.composed = result.get("plan").filter(|plan| plan.is_object()).cloned();
@@ -148,6 +157,7 @@ impl Replay {
                 self.network.clear();
             }
             artifact::TEST_NETWORK => {
+                self.network.waiting_on_secrets = false;
                 self.network.record_test(TestRun {
                     entry: input["entry"].as_str().unwrap_or_default().to_string(),
                     message: input["message"]

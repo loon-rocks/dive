@@ -93,3 +93,62 @@ fn a_newer_tool_format_is_refused_before_the_schema_is_consulted() {
     );
     assert!(!err.contains("unknown field"), "{err}");
 }
+
+#[test]
+fn an_env_entry_is_a_string_or_a_value_with_a_description() {
+    let path = fixture_dir(3).join("hubspot_contacts.yaml");
+    let raw = std::fs::read_to_string(&path).unwrap();
+    let doc = parse_tool_source(&raw).unwrap();
+    let graph_core::user_tools::ToolKind::Exec { env, .. } = &doc.kind else {
+        panic!("hubspot_contacts is an exec tool");
+    };
+    assert_eq!(
+        env["HUBSPOT_URL"].value(),
+        "${HUBSPOT_URL:-https://api.hubapi.com}"
+    );
+    assert_eq!(env["HUBSPOT_URL"].description(), None);
+    assert_eq!(env["HUBSPOT_TOKEN"].value(), "${HUBSPOT_TOKEN}");
+    assert!(env["HUBSPOT_TOKEN"]
+        .description()
+        .unwrap()
+        .contains("https://app.hubspot.com/private-apps"));
+
+    let written = serde_yaml::to_string(&doc).unwrap();
+    let again = parse_tool_source(&written).unwrap();
+    assert_eq!(
+        serde_json::to_value(&doc).unwrap(),
+        serde_json::to_value(&again).unwrap()
+    );
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["env"]["HUBSPOT_URL"],
+        "${HUBSPOT_URL:-https://api.hubapi.com}"
+    );
+    assert_eq!(value["env"]["HUBSPOT_TOKEN"]["value"], "${HUBSPOT_TOKEN}");
+}
+
+#[test]
+fn an_env_entry_object_needs_a_value_and_takes_no_other_keys() {
+    let base = "version: 3\nname: t\ndescription: d\nkind: exec\ncommand: echo\nenv:\n  KEY:\n";
+    let unknown = parse_tool_source(&format!(
+        "{base}    value: \"${{KEY}}\"\n    link: https://x\n"
+    ))
+    .unwrap_err();
+    assert!(unknown.contains("env.KEY.link"), "{unknown}");
+    let no_value = parse_tool_source(&format!("{base}    description: d\n")).unwrap_err();
+    assert!(no_value.contains("value"), "{no_value}");
+}
+
+#[test]
+fn a_tool_v2_file_with_plain_env_strings_still_loads() {
+    let raw = std::fs::read_to_string(fixture_dir(2).join("web_search.yaml")).unwrap();
+    let doc = parse_tool_source(&raw).unwrap();
+    let needed = graph_core::user_tools::needed_secrets(&doc);
+    assert_eq!(
+        needed,
+        [graph_core::secrets::NeededSecret {
+            name: "SEARCH_TOKEN".to_string(),
+            description: None
+        }]
+    );
+}

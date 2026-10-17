@@ -1880,6 +1880,7 @@ steps:
                     last_run: None,
                     builder: None,
                     note: None,
+                    secrets: Vec::new(),
                 }],
                 ..NetworkView::default()
             })),

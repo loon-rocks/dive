@@ -1,8 +1,10 @@
 use super::artifact::ArtifactKind;
+use super::secrets::{SecretState, TestSecret};
 use async_trait::async_trait;
 use graph_core::agent::doc::{parse_agent_source, AgentDoc, AgentSet};
 use graph_core::pipeline::doc::PlanDoc;
 use graph_core::pipeline::Pipeline;
+use graph_core::secrets::SecretSource;
 use graph_core::user_tools::{UserToolDoc, UserToolRegistry, USER_TOOL_PREFIX};
 use graph_core::{CompositeRegistry, ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use serde_json::{json, Value};
@@ -229,8 +231,18 @@ pub struct Network {
     pub designs: Option<Designs>,
     pub testing: Option<String>,
     pub catalog: Vec<(String, String)>,
+    pub secrets: Option<Arc<dyn SecretSource>>,
+    pub test_secrets: Vec<TestSecret>,
+    pub waiting_on_secrets: bool,
     revision: u64,
     tested: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct NodeSecret {
+    pub name: String,
+    pub description: Option<String>,
+    pub set: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -249,6 +261,7 @@ pub struct NodeView {
     pub last_run: Option<Value>,
     pub builder: Option<String>,
     pub note: Option<String>,
+    pub secrets: Vec<NodeSecret>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
@@ -261,6 +274,8 @@ pub struct NetworkView {
     pub interview: Option<Interview>,
     pub designs: Option<Designs>,
     pub testing: Option<String>,
+    pub test_secrets: Vec<SecretState>,
+    pub waiting_on_secrets: bool,
 }
 
 impl NetworkView {
@@ -422,6 +437,42 @@ impl Network {
 
     pub fn start_test(&mut self, entry: &str) {
         self.testing = Some(entry.to_string());
+        self.waiting_on_secrets = false;
+    }
+
+    pub fn checked_secrets(&mut self, needed: Vec<TestSecret>) {
+        self.test_secrets = needed;
+        self.waiting_on_secrets = false;
+    }
+
+    pub fn wait_on_secrets(&mut self, needed: Vec<TestSecret>) {
+        self.test_secrets = needed;
+        self.waiting_on_secrets = true;
+        self.testing = None;
+    }
+
+    fn node_secrets(&self, node: &Node) -> Vec<NodeSecret> {
+        if node.kind != ArtifactKind::Tool {
+            return Vec::new();
+        }
+        let Some(doc) = node
+            .yaml
+            .as_deref()
+            .and_then(|yaml| graph_core::user_tools::parse_tool_source(yaml).ok())
+        else {
+            return Vec::new();
+        };
+        graph_core::user_tools::needed_secrets(&doc)
+            .into_iter()
+            .map(|needed| NodeSecret {
+                set: self
+                    .secrets
+                    .as_deref()
+                    .is_some_and(|source| graph_core::secrets::is_set(source, &needed.name)),
+                name: needed.name,
+                description: needed.description,
+            })
+            .collect()
     }
 
     pub fn node(&self, kind: ArtifactKind, name: &str) -> Option<&Node> {
@@ -743,6 +794,7 @@ impl Network {
                     last_run: node.last_run.clone(),
                     builder: node.builder.clone(),
                     note: node.note.clone(),
+                    secrets: self.node_secrets(node),
                 })
                 .collect(),
             edges: self.edges.clone(),
@@ -751,6 +803,8 @@ impl Network {
             interview: self.interview.clone(),
             designs: self.designs.clone(),
             testing: self.testing.clone(),
+            test_secrets: super::secrets::with_state(&self.test_secrets, self.secrets.as_deref()),
+            waiting_on_secrets: self.waiting_on_secrets,
         }
     }
 
@@ -792,6 +846,7 @@ impl Network {
         let drafted = self.nodes.iter().filter(|node| node.drafted()).count();
         *self = Network {
             revision: self.revision + 1,
+            secrets: self.secrets.take(),
             ..Network::default()
         };
         drafted
@@ -913,6 +968,22 @@ impl Network {
                     "The network changed after that test; test it again before saving.\n",
                 );
             }
+        }
+        if self.waiting_on_secrets {
+            let missing: Vec<String> =
+                super::secrets::with_state(&self.test_secrets, self.secrets.as_deref())
+                    .into_iter()
+                    .filter(|secret| !secret.set)
+                    .map(|secret| format!("{} ({})", secret.name, secret.tools.join(", ")))
+                    .collect();
+            section.push_str(&format!(
+                "\nTesting is waiting on secrets the user has to set: {}. Run the test again only when the user says they're set.\n",
+                if missing.is_empty() {
+                    "all of them are set now".to_string()
+                } else {
+                    missing.join(", ")
+                }
+            ));
         }
         section
     }

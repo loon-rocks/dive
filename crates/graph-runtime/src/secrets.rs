@@ -206,6 +206,8 @@ pub struct SecretEntry {
     pub project_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shared_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub references: Vec<Reference>,
 }
 
@@ -235,6 +237,8 @@ pub struct SecretDetail {
     pub shared_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub references: Vec<Reference>,
     pub store: StoreState,
     pub problems: Vec<String>,
@@ -265,6 +269,12 @@ pub struct SecretRemoved {
     pub name: String,
     pub scope: SecretScope,
     pub removed: bool,
+}
+
+pub fn description(references: &[Reference]) -> Option<String> {
+    references
+        .iter()
+        .find_map(|reference| reference.description.clone())
 }
 
 pub fn mask(value: &str) -> String {
@@ -416,6 +426,7 @@ fn listed(mut collected: Collected, secrets: &Secrets) -> SecretList {
                 env_value: values.masked(Layer::Env),
                 project_value: values.masked(Layer::Project),
                 shared_value: values.masked(Layer::Shared),
+                description: description(&references),
                 name,
                 references,
             }
@@ -437,6 +448,7 @@ pub fn show(workspace: &Workspace, secrets: &Secrets, name: &str) -> Result<Secr
 
 fn detail(mut collected: Collected, secrets: &Secrets, name: &str) -> SecretDetail {
     let values = secrets.values(name, collected.project.as_deref());
+    let references = collected.references.remove(name).unwrap_or_default();
     SecretDetail {
         name: name.to_string(),
         status: values.status(),
@@ -446,7 +458,8 @@ fn detail(mut collected: Collected, secrets: &Secrets, name: &str) -> SecretDeta
         project_value: values.masked(Layer::Project),
         shared_value: values.masked(Layer::Shared),
         project: collected.project.take(),
-        references: collected.references.remove(name).unwrap_or_default(),
+        description: description(&references),
+        references,
         store: secrets.store_state(),
         problems: collected.problems,
     }

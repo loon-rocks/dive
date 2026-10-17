@@ -20,8 +20,8 @@ These fields go alongside the [common fields](/tools/reference/tool-file#common-
   Arguments, as templates over `{{input.*}}`.
 </ParamField>
 
-<ParamField body="env" type="map<string, string>">
-  Extra environment variables. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store. `${VAR:-default}` falls back to the default when neither has a value. A tool from an installed pack also gets `GRAPH_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.
+<ParamField body="env" type="map<string, string | object>">
+  Extra environment variables. Each value is a string, or `{value, description}` to say what a secret is and where to get it. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store (the project's value first, then the global one). `${VAR:-default}` falls back to the default when neither has a value; a `${VAR}` with no default is a secret the tool needs. A tool from an installed pack also gets `GRAPH_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.
 </ParamField>
 
 <ParamField body="cwd" type="string">
@@ -41,7 +41,7 @@ These fields go alongside the [common fields](/tools/reference/tool-file#common-
 <RequestExample>
 
 ```yaml Example
-version: 2
+version: 3
 name: open_prs
 description: Open pull requests in the current repository, newest first.
 kind: exec
