@@ -15,16 +15,17 @@
         "plan__weekly_changes",
         "github__tool__git_log"
       ],
-      "version": 2
+      "version": 3
     }
   ],
   "properties": {
     "attachments": {
-      "description": "The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network`. A new thread whose first message goes to an agent that reads `network` gets a network attachment. Omitted means none.",
+      "description": "The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network` or the call an edit session is about for `evidence`. A new thread whose first message goes to an agent that reads `network` gets a network attachment; an `evidence` attachment comes only with an edit session started from a call. Omitted means none.",
       "items": {
         "enum": [
           "network",
-          "plan"
+          "plan",
+          "evidence"
         ],
         "type": "string"
       },

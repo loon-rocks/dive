@@ -13,7 +13,9 @@ pub const NETWORK_ATTACHMENT: &str = "network";
 
 pub const PLAN_ATTACHMENT: &str = "plan";
 
-pub const ATTACHMENT_KINDS: &[&str] = &[NETWORK_ATTACHMENT, PLAN_ATTACHMENT];
+pub const EVIDENCE_ATTACHMENT: &str = "evidence";
+
+pub const ATTACHMENT_KINDS: &[&str] = &[NETWORK_ATTACHMENT, PLAN_ATTACHMENT, EVIDENCE_ATTACHMENT];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadMeta {

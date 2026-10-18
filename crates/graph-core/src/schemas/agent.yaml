@@ -51,13 +51,13 @@ properties:
     type: array
     items:
       type: string
-      enum: [network, plan]
-    description: The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network`. A new thread whose first message goes to an agent that reads `network` gets a network attachment. Omitted means none.
+      enum: [network, plan, evidence]
+    description: The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network` or the call an edit session is about for `evidence`. A new thread whose first message goes to an agent that reads `network` gets a network attachment; an `evidence` attachment comes only with an edit session started from a call. Omitted means none.
   system_prompt:
     type: string
     description: The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `templating`, `tool_format`, `agent_format`), and nothing else.
 examples:
-  - version: 2
+  - version: 3
     name: release_notes
     description: Answers questions about what shipped, from the repo's commit history.
     model: chat
