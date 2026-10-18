@@ -89,7 +89,47 @@ pub fn model_roles(pipeline: &Pipeline) -> String {
             .unwrap_or_default();
         section.push_str(&format!("- {name} → {}{kind}{description}\n", choice.model));
     }
+    section.push_str(&decision_line(pipeline));
     section
+}
+
+fn decision_line(pipeline: &Pipeline) -> String {
+    let deciders: Vec<String> = pipeline
+        .router
+        .roles()
+        .known_names()
+        .into_iter()
+        .filter(|name| {
+            pipeline.router.kind_of_role(name) == Some(graph_config::ModelKind::Decision)
+        })
+        .map(|name| format!("`{name}`"))
+        .collect();
+    if deciders.is_empty() {
+        return "Decision model: none configured. Use `infer` on the judge role for classification, yes/no checks, choices and scores; never write a `decide` gate, a builtin__decide step or a decision tool.\n".to_string();
+    }
+    let default = if deciders.iter().any(|name| name == "`decider`") {
+        "decide gates, builtin__decide and decision tools use `decider` by default"
+    } else {
+        "name it as `model` on decide gates, builtin__decide and decision tools, which default to `decider`"
+    };
+    format!(
+        "Decision model: available as {}; {default}. Use it for every classification, yes/no check, choice and score.\n",
+        deciders.join(", ")
+    )
+}
+
+pub fn design_context(
+    agents: std::sync::Arc<graph_core::agent::doc::AgentSet>,
+    pipeline: std::sync::Arc<Pipeline>,
+) -> graph_core::agent::conversation::ContextHook {
+    std::sync::Arc::new(move |agent: &str| match agents.get(agent) {
+        Some(doc) if reads_design_rules(&doc) => vec![model_roles(&pipeline)],
+        _ => Vec::new(),
+    })
+}
+
+pub fn reads_design_rules(doc: &graph_core::agent::doc::AgentDoc) -> bool {
+    doc.system_prompt.contains("{{rules.design}}")
 }
 
 pub(crate) fn current_draft(pipeline: &Pipeline, doc: &Option<PlanDoc>) -> String {
@@ -201,6 +241,114 @@ steps:
         assert!(current_draft(&pipeline, &None).contains("none yet"));
     }
 
+    struct NoDecider;
+
+    #[async_trait::async_trait]
+    impl graph_llm::DecisionProvider for NoDecider {
+        async fn decide(
+            &self,
+            _req: graph_llm::decision::DecisionRequest,
+        ) -> Result<graph_llm::decision::DecisionResponse, graph_llm::LlmError> {
+            Err(graph_llm::LlmError::Unsupported("not in tests".to_string()))
+        }
+    }
+
+    fn choice(provider: &str) -> graph_config::ModelChoice {
+        graph_config::ModelChoice {
+            provider: provider.to_string(),
+            model: format!("{provider}-model"),
+            temperature: None,
+            description: None,
+            fallbacks: Vec::new(),
+            context_window: None,
+        }
+    }
+
+    fn pipeline_with_roles(roles: &[(&str, &str)]) -> Pipeline {
+        let router = graph_llm::ModelRouter::with_providers(
+            std::collections::HashMap::new(),
+            roles
+                .iter()
+                .map(|(role, provider)| (role.to_string(), choice(provider)))
+                .collect(),
+        )
+        .with_deciders(std::collections::HashMap::from([(
+            "ts".to_string(),
+            Arc::new(NoDecider) as Arc<dyn graph_llm::DecisionProvider>,
+        )]));
+        let mut pipeline = (*super::super::tools::tests::test_pipeline(Vec::new())).clone();
+        pipeline.router = Arc::new(router);
+        pipeline
+    }
+
+    #[test]
+    fn the_model_roles_section_says_whether_a_decision_model_is_available() {
+        let with = model_roles(&pipeline_with_roles(&[("default", "p"), ("decider", "ts")]));
+        assert!(
+            with.contains("Decision model: available as `decider`; decide gates, builtin__decide and decision tools use `decider` by default."),
+            "{with}"
+        );
+        let custom = model_roles(&pipeline_with_roles(&[("default", "p"), ("triage", "ts")]));
+        assert!(
+            custom.contains("Decision model: available as `triage`; name it as `model`"),
+            "{custom}"
+        );
+        let without = model_roles(&pipeline_with_roles(&[("default", "p")]));
+        assert!(
+            without.contains("Decision model: none configured. Use `infer` on the judge role"),
+            "{without}"
+        );
+        assert!(!without.contains("available as"), "{without}");
+    }
+
+    #[test]
+    fn the_design_principles_reach_every_agent_that_designs() {
+        let (set, _) = AgentSet::load(&builtin_sources(), &[]);
+        let workbench = AgentSet::load(WORKBENCH_AGENTS, &[]).0;
+        let globals = AgentSet::load(graph_core::agent::doc::BUILTINS, &[]).0;
+        let session = std::collections::BTreeMap::from([
+            ("date", "today".to_string()),
+            ("user", String::new()),
+        ]);
+        let fragments = global_fragments();
+        let design = graph_core::prompts::DESIGN_RULES;
+        assert!(design.contains("Decision models first"));
+        for (agents, name) in [
+            (&workbench, "network_drafter"),
+            (&workbench, "network_editor"),
+            (&workbench, "tool_drafter"),
+            (&workbench, "plan_drafter"),
+            (&workbench, "agent_drafter"),
+            (&globals, "tool_drafter"),
+            (&globals, "agent_drafter"),
+        ] {
+            let doc = agents.get(name).unwrap();
+            let rendered =
+                graph_core::agent::doc::render_system_prompt(&doc, &fragments, &session).unwrap();
+            assert!(rendered.contains(design), "{name}");
+            assert!(reads_design_rules(&doc), "{name}");
+        }
+        assert!(!reads_design_rules(&set.get("chat").unwrap()));
+        assert!(!reads_design_rules(&set.get("front_desk").unwrap()));
+    }
+
+    #[test]
+    fn agents_outside_the_workbench_that_read_the_design_rules_get_the_model_roles() {
+        let globals = Arc::new(AgentSet::load(graph_core::agent::doc::BUILTINS, &[]).0);
+        let hook = design_context(
+            globals,
+            Arc::new(pipeline_with_roles(&[("default", "p"), ("decider", "ts")])),
+        );
+        for name in ["tool_drafter", "agent_drafter"] {
+            let sections = hook(name);
+            assert_eq!(sections.len(), 1, "{name}");
+            assert!(sections[0].starts_with("## Model roles"), "{name}");
+            assert!(sections[0].contains("Decision model: available"), "{name}");
+        }
+        assert!(hook("chat").is_empty());
+        assert!(hook("nobody").is_empty());
+    }
+
     #[test]
     fn each_agent_gets_the_sections_of_the_attachment_kinds_it_reads() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -229,6 +377,8 @@ steps:
             assert!(sections[1].starts_with("## The network draft"), "{builder}");
         }
         let editor = hook("network_editor");
+        assert!(editor[0].starts_with("## Model roles"));
+        assert!(editor[0].contains("Decision model: none configured"));
         assert_eq!(
             editor.len(),
             2,

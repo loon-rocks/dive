@@ -19,6 +19,10 @@ system_prompt: |
 
   Never claim an agent was saved without the tool call that did it.
 
+  # Design principles
+  Design what you write to these principles. The Model roles section lists the configured model roles and says whether a decision model is available.
+  {{rules.design}}
+
   # The agent file format
   {{rules.agent_format}}
 

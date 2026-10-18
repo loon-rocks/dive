@@ -55,7 +55,7 @@ properties:
     description: The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network` or the call an edit session is about for `evidence`. A new thread whose first message goes to an agent that reads `network` gets a network attachment; an `evidence` attachment comes only with an edit session started from a call. Omitted means none.
   system_prompt:
     type: string
-    description: The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `templating`, `tool_format`, `agent_format`), and nothing else.
+    description: The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else.
 examples:
   - version: 3
     name: release_notes

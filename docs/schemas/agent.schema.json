@@ -72,7 +72,7 @@
       "type": "array"
     },
     "system_prompt": {
-      "description": "The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `templating`, `tool_format`, `agent_format`), and nothing else.",
+      "description": "The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else.",
       "type": "string"
     },
     "tools": {

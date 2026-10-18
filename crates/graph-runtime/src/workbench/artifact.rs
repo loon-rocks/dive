@@ -1597,9 +1597,10 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: PROPOSE_DESIGNS.to_string(),
-            description: "Push back on a wasteful design: show the user's design and your better \
-                          one side by side in the pane, and end your turn. Put the pushback in \
-                          your response text and ask which they want."
+            description: "Show two designs side by side in the pane and end your turn: the \
+                          user's wasteful design and your better one, or in an edit the patch \
+                          and the rework that beats it. Put the pushback in `reply` and ask \
+                          which they want."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
