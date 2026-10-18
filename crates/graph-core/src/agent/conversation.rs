@@ -123,6 +123,7 @@ impl Conversation {
                 .as_ref()
                 .map(|outcome| outcome.stamps.clone())
                 .unwrap_or_default();
+            let start = entries.len();
             entries.extend(
                 messages[before..]
                     .iter()
@@ -133,7 +134,7 @@ impl Conversation {
                             .stamped(stamps.get(i).cloned().unwrap_or_default())
                     }),
             );
-            entries.extend(tools.take_runs());
+            place_runs(&mut entries, start, tools.take_runs());
             let outcome = result.map_err(|source| ConversationError::Turn {
                 agent: active.clone(),
                 source,
@@ -383,6 +384,43 @@ impl Conversation {
         );
         (result, Some(entry))
     }
+}
+
+pub fn starts_run(call: &ToolCall, agent: &str, input: &Value) -> bool {
+    call.name.strip_prefix(AGENT_TOOL_PREFIX) == Some(agent) && call.arguments == *input
+}
+
+fn call_of(entry: &NewEntry, run: &NewEntry) -> Option<usize> {
+    let (
+        EntryBody::Message {
+            message: ChatMessage::Assistant { tool_calls, .. },
+        },
+        EntryBody::SubagentRun { agent, input, .. },
+    ) = (&entry.body, &run.body)
+    else {
+        return None;
+    };
+    tool_calls
+        .iter()
+        .position(|call| starts_run(call, agent, input))
+}
+
+fn place_runs(entries: &mut Vec<NewEntry>, start: usize, runs: Vec<NewEntry>) {
+    let mut placed: Vec<((usize, usize), NewEntry)> = Vec::new();
+    let mut unmatched = Vec::new();
+    for run in runs {
+        let found =
+            (start..entries.len()).find_map(|i| call_of(&entries[i], &run).map(|call| (i, call)));
+        match found {
+            Some(at) => placed.push((at, run)),
+            None => unmatched.push(run),
+        }
+    }
+    placed.sort_by_key(|(at, _)| *at);
+    for (offset, ((at, _), run)) in placed.into_iter().enumerate() {
+        entries.insert(at + 1 + offset, run);
+    }
+    entries.extend(unmatched);
 }
 
 pub fn view<'a>(agent: &str, entries: impl Iterator<Item = &'a NewEntry>) -> Vec<ChatMessage> {
@@ -1250,6 +1288,25 @@ mod tests {
             })
             .expect("the subagent run is recorded");
         assert_eq!((agent.as_str(), caller.as_str()), ("helper", "front"));
+        let order: Vec<&str> = turn
+            .entries
+            .iter()
+            .map(|entry| match &entry.body {
+                EntryBody::SubagentRun { .. } => "run",
+                EntryBody::Message {
+                    message: ChatMessage::Assistant { tool_calls, .. },
+                } if !tool_calls.is_empty() => "call",
+                EntryBody::Message {
+                    message: ChatMessage::ToolResult { .. },
+                } => "result",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(
+            order,
+            ["other", "call", "run", "result", "other"],
+            "the run is recorded right after the message that started it"
+        );
         assert_eq!(output, json!({"result": "found it"}));
         assert!(final_);
         assert_eq!(count, 2);
