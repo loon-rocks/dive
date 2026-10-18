@@ -616,22 +616,22 @@ impl WorkbenchTools {
             (file::SET_ARTIFACT, Target::File(kind)) => {
                 file::set_artifact(&self.draft, &self.pipeline, &self.tx, kind, input).await
             }
-            (file::LOAD_ARTIFACT, Target::Plan) => self.load_plan(input),
-            (file::LOAD_ARTIFACT, Target::File(kind)) => match file::open_existing(
-                &self.draft,
-                &self.pipeline,
-                &self.tx,
-                kind,
-                input["name"].as_str().unwrap_or_default(),
-            )
-            .await
-            {
-                Ok(name) => ToolOutcome {
-                    result: json!({ "opened": name }),
-                    is_error: false,
-                },
-                Err(error) => error_outcome(&error),
-            },
+            (file::LOAD_ARTIFACT, Target::Plan) if !self.plans_open_as_nodes() => {
+                self.load_plan(input)
+            }
+            (file::LOAD_ARTIFACT, Target::Plan) => {
+                file::load_node(
+                    &self.draft,
+                    &self.pipeline,
+                    &self.tx,
+                    file::ArtifactKind::Plan,
+                    input,
+                )
+                .await
+            }
+            (file::LOAD_ARTIFACT, Target::File(kind)) => {
+                file::load_node(&self.draft, &self.pipeline, &self.tx, kind, input).await
+            }
             (file::TRY_ARTIFACT, Target::Plan) => self.run_plan(input).await,
             (file::TRY_ARTIFACT, Target::File(file::ArtifactKind::Tool)) => {
                 file::try_artifact(&self.draft, &self.pipeline, &self.tx, input).await
@@ -672,7 +672,7 @@ impl WorkbenchTools {
             (file::SHOW_ARTIFACT, Target::Plan) => self.show_plan(input),
             (file::SHOW_ARTIFACT, Target::File(kind)) => {
                 let name = input["name"].as_str().unwrap_or_default();
-                match file::existing(kind, name, &self.pipeline.drafted.tool_dirs) {
+                match file::existing(kind, name, &self.pipeline) {
                     Ok(found) => ToolOutcome {
                         result: json!({"name": found.name, "yaml": found.yaml}),
                         is_error: false,
@@ -682,6 +682,11 @@ impl WorkbenchTools {
             }
             (other, _) => error_outcome(&format!("unknown artifact tool '{other}'")),
         }
+    }
+
+    fn plans_open_as_nodes(&self) -> bool {
+        let network = &self.draft.lock().unwrap().network;
+        network.restate.is_some() || network.is_edit()
     }
 
     async fn sketch_catalog(&self, sketch: &Value) -> Vec<(String, String)> {
@@ -752,8 +757,8 @@ impl WorkbenchTools {
             )
             .await
             {
-                Ok(message) => ToolOutcome {
-                    result: json!({ "saved": message }),
+                Ok(saved) => ToolOutcome {
+                    result: serde_json::to_value(saved).unwrap_or_default(),
                     is_error: false,
                 },
                 Err(error) => error_outcome(&error),
@@ -2398,14 +2403,22 @@ steps:
         };
         let (tx, _rx2) = tokio::sync::mpsc::unbounded_channel();
 
-        tools.draft.lock().unwrap().network.open(
-            ArtifactKind::Agent,
-            "triager",
-            yaml("triager"),
-            Some(opened.clone()),
-            Some("triager".to_string()),
-            Vec::new(),
-        );
+        {
+            let network = &mut tools.draft.lock().unwrap().network;
+            network.open(
+                ArtifactKind::Agent,
+                crate::workbench::artifact::Existing {
+                    yaml: "name: triager\n".to_string(),
+                    editing: Some(opened.clone()),
+                    name: "triager".to_string(),
+                    origin: crate::workbench::network::Origin::File,
+                },
+                Vec::new(),
+            );
+            network
+                .put_draft(ArtifactKind::Agent, "triager", yaml("triager"), Vec::new())
+                .unwrap();
+        }
         save_network(
             &tools.draft,
             &tools.pipeline,
@@ -2885,6 +2898,7 @@ steps:
                 ),
             ],
             &[],
+            &|_, _| None,
         );
         assert!(replayed.waiting_on_secrets);
         assert_eq!(replayed.test_secrets.len(), 2);
@@ -3000,6 +3014,206 @@ steps:
             names(crate::workbench::secrets::needed(&over, "agent__desk", &own).await),
             ["GRAPH_T_NOTIFY", "GRAPH_T_CRM"],
             "a bare * covers the network's own tools, and the subagent's tools count"
+        );
+    }
+
+    fn item_tools(
+        packs: Vec<graph_core::packs::PackSource>,
+        plans: Vec<PlanDoc>,
+    ) -> (
+        WorkbenchTools,
+        tokio::sync::mpsc::UnboundedReceiver<WorkbenchEvent>,
+        tempfile::TempDir,
+    ) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut pipeline = (*test_pipeline(plans)).clone();
+        pipeline.drafted = Arc::new(
+            graph_core::pipeline::Drafted::new(
+                Some(dir.path().join("tools")),
+                Some(dir.path().join("agents")),
+            )
+            .with_tool_dirs(vec![dir.path().join("tools")])
+            .with_pack_sources(packs),
+        );
+        let (tools, rx) = draft_tools(Arc::new(pipeline));
+        (tools, rx, dir)
+    }
+
+    #[tokio::test]
+    async fn a_built_in_tool_opens_as_a_node_and_saves_as_a_project_override() {
+        use crate::workbench::artifact::{existing, save_network, ArtifactKind, SaveRequest};
+        let (tools, mut rx, dir) = item_tools(Vec::new(), Vec::new());
+        let opened = tools
+            .invoke(
+                crate::workbench::artifact::LOAD_ARTIFACT,
+                json!({"kind": "tool", "name": "builtin__reshape"}),
+            )
+            .await
+            .unwrap();
+        assert!(!opened.is_error, "{}", opened.result);
+        assert_eq!(opened.result["opened"], json!("reshape"));
+        let view = tools.draft.lock().unwrap().network.view();
+        assert_eq!(view.nodes[0].origin, "builtin");
+        assert!(!view.nodes[0].changed);
+        assert_eq!(view.unsaved(), 0);
+        assert_eq!(shown(&mut rx), Some(0));
+
+        let unchanged = save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tools.tx,
+            SaveRequest::unattended(),
+        )
+        .await
+        .unwrap_err();
+        assert!(unchanged.contains("nothing has changed"), "{unchanged}");
+
+        let base = view.nodes[0].base.clone().unwrap();
+        let edited = base.replacen("name: reshape", "name: reshape\nread_only: true", 1);
+        tools
+            .draft
+            .lock()
+            .unwrap()
+            .network
+            .put_draft(ArtifactKind::Tool, "reshape", edited.clone(), Vec::new())
+            .unwrap();
+        assert!(tools.draft.lock().unwrap().network.view().nodes[0].changed);
+        let saved = save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tools.tx,
+            SaveRequest::unattended(),
+        )
+        .await
+        .unwrap();
+        let path = dir.path().join("tools/builtin/reshape.yaml");
+        assert_eq!(saved.files.len(), 1);
+        assert_eq!(saved.files[0].destination, "override");
+        assert_eq!(saved.files[0].path, path.display().to_string());
+        assert!(saved.saved.contains("a project override of the built-in"));
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("read_only: true"));
+        assert!(!dir.path().join("tools/reshape.yaml").exists());
+
+        let network = tools.draft.lock().unwrap().network.clone();
+        assert!(network.is_edit(), "the item stays open after the save");
+        assert!(!network.has_edits());
+        let reopened = existing(ArtifactKind::Tool, "builtin__reshape", &tools.pipeline).unwrap();
+        assert_eq!(reopened.editing, Some(path));
+        assert!(reopened.yaml.contains("read_only: true"));
+    }
+
+    #[tokio::test]
+    async fn a_pack_tool_opens_from_its_installed_copy_and_saves_back_to_it() {
+        use crate::workbench::artifact::{save_network, ArtifactKind, SaveRequest};
+        let packs = tempfile::tempdir().unwrap();
+        let pack_dir = packs.path().join("demo");
+        std::fs::create_dir_all(pack_dir.join("tools")).unwrap();
+        let installed = pack_dir.join("tools/count.yaml");
+        std::fs::write(
+            &installed,
+            "name: count\ndescription: Counts\nkind: exec\ncommand: wc\n",
+        )
+        .unwrap();
+        let source = graph_core::packs::PackSource {
+            name: "demo".to_string(),
+            tag: Some("v1.0.0".to_string()),
+            layer: graph_config::pack::LayerKind::Project,
+            dir: pack_dir,
+        };
+        let (tools, _rx, dir) = item_tools(vec![source], Vec::new());
+        let name = crate::workbench::artifact::open_existing(
+            &tools.draft,
+            &tools.pipeline,
+            &tools.tx,
+            ArtifactKind::Tool,
+            "demo__tool__count",
+        )
+        .await
+        .unwrap();
+        assert_eq!(name, "count");
+        {
+            let network = &mut tools.draft.lock().unwrap().network;
+            let node = network.node(ArtifactKind::Tool, "count").unwrap();
+            assert_eq!(node.catalog_name(), "demo__tool__count");
+            assert_eq!(node.origin.label(), "pack");
+            network
+                .put_draft(
+                    ArtifactKind::Tool,
+                    "count",
+                    "name: count\ndescription: Counts words\nkind: exec\ncommand: wc\nargs: [-w]\n"
+                        .to_string(),
+                    Vec::new(),
+                )
+                .unwrap();
+        }
+        let saved = save_network(
+            &tools.draft,
+            &tools.pipeline,
+            &tools.tx,
+            SaveRequest::unattended(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(saved.files[0].destination, "pack");
+        assert_eq!(saved.files[0].path, installed.display().to_string());
+        assert!(std::fs::read_to_string(&installed)
+            .unwrap()
+            .contains("Counts words"));
+        assert!(!dir.path().join("tools/count.yaml").exists());
+    }
+
+    #[tokio::test]
+    async fn attaching_another_item_to_an_edit_needs_a_reason_and_the_users_approval() {
+        let plan: PlanDoc = graph_core::pipeline::plan_doc(&report_plan()).unwrap();
+        let (tools, mut rx, dir) = item_tools(Vec::new(), vec![plan]);
+        std::fs::create_dir_all(dir.path().join("tools")).unwrap();
+        std::fs::write(dir.path().join("tools/weather.yaml"), WEATHER_TOOL).unwrap();
+        let opened = tools
+            .invoke(
+                crate::workbench::artifact::LOAD_ARTIFACT,
+                json!({"kind": "tool", "name": "weather"}),
+            )
+            .await
+            .unwrap();
+        assert!(!opened.is_error, "{}", opened.result);
+
+        let unexplained = tools
+            .invoke(
+                crate::workbench::artifact::LOAD_ARTIFACT,
+                json!({"kind": "plan", "name": "report_on_x"}),
+            )
+            .await
+            .unwrap();
+        assert!(unexplained.is_error);
+        assert!(unexplained.result.to_string().contains("reason"));
+
+        let attaching = tools.invoke(
+            crate::workbench::artifact::LOAD_ARTIFACT,
+            json!({"kind": "plan", "name": "report_on_x", "reason": "it calls the weather tool"}),
+        );
+        let (attached, ()) = tokio::join!(
+            attaching,
+            answer_yes(
+                &mut rx,
+                "Attach the plan report_on_x to this edit? it calls the weather tool",
+                "attach"
+            )
+        );
+        let attached = attached.unwrap();
+        assert!(!attached.is_error, "{}", attached.result);
+        let network = tools.draft.lock().unwrap().network.clone();
+        let plan = network
+            .node(
+                crate::workbench::artifact::ArtifactKind::Plan,
+                "report_on_x",
+            )
+            .unwrap();
+        assert_eq!(plan.origin.label(), "builtin");
+        assert!(
+            tools.draft.lock().unwrap().doc.is_none(),
+            "not the plan pane"
         );
     }
 }

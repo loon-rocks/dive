@@ -108,3 +108,10 @@ fn a_newer_agent_format_is_refused_before_the_schema_is_consulted() {
     );
     assert!(!err.contains("unknown field"), "{err}");
 }
+
+#[test]
+fn a_version_3_agent_can_read_the_evidence_of_an_edit_session() {
+    let raw = std::fs::read_to_string(fixture_dir(3).join("item_editor.yaml")).unwrap();
+    let doc = parse_agent_source(&raw).unwrap();
+    assert_eq!(doc.attachments, ["network", "evidence"]);
+}

@@ -1,5 +1,5 @@
 use super::event::WorkbenchEvent;
-use super::network::{self, Network, NetworkView, TestRun};
+use super::network::{self, Network, NetworkView, Origin, TestRun};
 use super::runner::interlocutor_for;
 use super::tools::SharedDraft;
 use graph_core::agent::conversation::{Conversation, HandoffGuard};
@@ -88,7 +88,7 @@ pub type Tester = Arc<OnceLock<Conversation>>;
 
 const TEST_LIMIT: std::time::Duration = std::time::Duration::from_secs(90);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArtifactKind {
     Agent,
@@ -145,17 +145,38 @@ pub async fn check(
     pipeline: &Pipeline,
     network: &Network,
     kind: ArtifactKind,
+    origin: &Origin,
     yaml: &str,
 ) -> Vec<String> {
     let over = network::overlay(pipeline, network);
     match kind {
         ArtifactKind::Tool => over.check_tool_file(yaml),
-        ArtifactKind::Agent => over.check_agent_file(yaml).await.err().unwrap_or_default(),
-        ArtifactKind::Plan => match network::parse_plan(yaml) {
+        ArtifactKind::Agent => match origin {
+            Origin::Pack(source) => {
+                let resolved = parse_agent(yaml).and_then(|mut doc| {
+                    let problems = graph_core::packs::resolve_agent(&mut doc, &source.name);
+                    if problems.is_empty() {
+                        serde_yaml::to_string(&doc).map_err(|e| e.to_string())
+                    } else {
+                        Err(problems.join("; "))
+                    }
+                });
+                match resolved {
+                    Ok(yaml) => over.check_agent_file(&yaml).await.err().unwrap_or_default(),
+                    Err(problem) => vec![problem],
+                }
+            }
+            _ => over.check_agent_file(yaml).await.err().unwrap_or_default(),
+        },
+        ArtifactKind::Plan => match network::resolved_plan(origin, yaml) {
             Ok(doc) => super::tools::plan_problems(&over, &doc),
             Err(problem) => vec![problem],
         },
     }
+}
+
+fn parse_agent(yaml: &str) -> Result<graph_core::agent::doc::AgentDoc, String> {
+    graph_core::agent::doc::parse_agent_source(yaml)
 }
 
 pub async fn put(
@@ -167,7 +188,11 @@ pub async fn put(
     yaml: &str,
 ) -> ToolOutcome {
     let network = draft.lock().unwrap().network.clone();
-    let problems = check(pipeline, &network, kind, yaml).await;
+    let origin = network
+        .node(kind, name)
+        .map(|node| node.origin.clone())
+        .unwrap_or_default();
+    let problems = check(pipeline, &network, kind, &origin, yaml).await;
     let placed =
         draft
             .lock()
@@ -314,57 +339,171 @@ pub struct Existing {
     pub yaml: String,
     pub editing: Option<PathBuf>,
     pub name: String,
+    pub origin: Origin,
 }
 
-pub fn existing(kind: ArtifactKind, name: &str, tool_dirs: &[PathBuf]) -> Result<Existing, String> {
+fn read(path: &Path) -> Result<String, String> {
+    std::fs::read_to_string(path).map_err(|e| format!("can't read {}: {e}", path.display()))
+}
+
+fn pack_bare(pack: &str, kind: graph_core::packs::ItemKind, name: &str) -> String {
+    name.strip_prefix(&graph_core::packs::catalog_name(pack, kind, ""))
+        .unwrap_or(name)
+        .to_string()
+}
+
+pub fn existing(kind: ArtifactKind, name: &str, pipeline: &Pipeline) -> Result<Existing, String> {
     match kind {
-        ArtifactKind::Agent => {
-            let (set, _) = graph_core::agent::doc::AgentSet::load(
-                graph_core::agent::doc::BUILTINS,
-                &graph_core::agent::doc::agent_dirs(),
-            );
-            let doc = set
-                .get(name)
-                .ok_or_else(|| format!("there's no agent named '{name}'"))?;
-            let (yaml, editing) = match &doc.source {
-                graph_core::agent::doc::AgentSource::File(path) => (
-                    std::fs::read_to_string(path)
-                        .map_err(|e| format!("can't read {}: {e}", path.display()))?,
-                    Some(path.clone()),
-                ),
-                graph_core::agent::doc::AgentSource::Builtin
-                | graph_core::agent::doc::AgentSource::Pack { .. } => {
-                    let mut value = serde_yaml::to_value(&doc).map_err(|e| e.to_string())?;
-                    graph_core::format::stamp(graph_core::format::Kind::Agent, &mut value);
-                    (
-                        serde_yaml::to_string(&value).map_err(|e| e.to_string())?,
-                        None,
-                    )
-                }
-            };
+        ArtifactKind::Agent => existing_agent(name, pipeline),
+        ArtifactKind::Tool => existing_tool(name, &pipeline.drafted),
+        ArtifactKind::Plan => existing_plan(name, pipeline),
+    }
+}
+
+fn existing_agent(name: &str, pipeline: &Pipeline) -> Result<Existing, String> {
+    use graph_core::agent::doc::AgentSource;
+    let name = network::bare_name(ArtifactKind::Agent, name);
+    let (set, _) = graph_core::agent::doc::AgentSet::load(
+        graph_core::agent::doc::BUILTINS,
+        &graph_core::agent::doc::agent_dirs(),
+    );
+    let doc = set
+        .get(&name)
+        .or_else(|| {
+            pipeline
+                .agents
+                .iter()
+                .find(|doc| doc.name == name && matches!(doc.source, AgentSource::Pack { .. }))
+        })
+        .ok_or_else(|| format!("there's no agent named '{name}'"))?;
+    match &doc.source {
+        AgentSource::File(path) => Ok(Existing {
+            yaml: read(path)?,
+            editing: Some(path.clone()),
+            name,
+            origin: Origin::File,
+        }),
+        AgentSource::Pack { source, path } => Ok(Existing {
+            yaml: read(path)?,
+            editing: Some(path.clone()),
+            name: pack_bare(&source.name, graph_core::packs::ItemKind::Agent, &name),
+            origin: Origin::Pack(source.clone()),
+        }),
+        AgentSource::Builtin => {
+            let mut value = serde_yaml::to_value(&doc).map_err(|e| e.to_string())?;
+            graph_core::format::stamp(graph_core::format::Kind::Agent, &mut value);
             Ok(Existing {
-                yaml,
-                editing,
-                name: name.to_string(),
+                yaml: serde_yaml::to_string(&value).map_err(|e| e.to_string())?,
+                editing: None,
+                name,
+                origin: Origin::Builtin,
             })
         }
-        ArtifactKind::Tool => {
-            let bare = network::bare_name(kind, name);
-            let docs = graph_core::user_tools::load_user_tools(tool_dirs)?;
-            let doc = docs.into_iter().find(|doc| doc.name == bare).ok_or_else(|| {
-                format!("there's no user tool named '{bare}'; built-in pack tools can't be edited here")
-            })?;
+    }
+}
+
+fn existing_tool(name: &str, drafted: &graph_core::pipeline::Drafted) -> Result<Existing, String> {
+    use graph_core::user_tools::{
+        builtin_override_dirs, builtin_tool_sources, load_user_tools, parse_tool_source,
+        BUILTIN_TOOL_PREFIX,
+    };
+    if let Some((pack, graph_core::packs::ItemKind::Tool, bare)) =
+        graph_core::packs::split_catalog_name(name)
+    {
+        let source = drafted
+            .pack_sources
+            .iter()
+            .find(|source| source.name == pack)
+            .ok_or_else(|| format!("no pack named '{pack}' is installed"))?;
+        let doc = load_user_tools(&[source.dir.join("tools")])?
+            .into_iter()
+            .find(|doc| doc.name == bare)
+            .ok_or_else(|| format!("the {pack} pack has no tool named '{bare}'"))?;
+        let path = doc
+            .path
+            .ok_or_else(|| format!("'{name}' has no file to edit"))?;
+        return Ok(Existing {
+            yaml: read(&path)?,
+            editing: Some(path),
+            name: bare.to_string(),
+            origin: Origin::Pack(source.clone()),
+        });
+    }
+    let builtin = name.strip_prefix(BUILTIN_TOOL_PREFIX);
+    let bare = builtin
+        .map(str::to_string)
+        .unwrap_or_else(|| network::bare_name(ArtifactKind::Tool, name));
+    if builtin.is_none() {
+        let user = load_user_tools(&drafted.tool_dirs)?
+            .into_iter()
+            .find(|doc| doc.name == bare);
+        if let Some(doc) = user {
             let path = doc
                 .path
                 .ok_or_else(|| format!("'{bare}' has no file to edit"))?;
-            Ok(Existing {
-                yaml: std::fs::read_to_string(&path)
-                    .map_err(|e| format!("can't read {}: {e}", path.display()))?,
+            return Ok(Existing {
+                yaml: read(&path)?,
                 editing: Some(path),
                 name: bare,
-            })
+                origin: Origin::File,
+            });
         }
-        ArtifactKind::Plan => Err("plans open in the plan pane".to_string()),
+    }
+    let overridden = load_user_tools(&builtin_override_dirs(&drafted.tool_dirs))?
+        .into_iter()
+        .find(|doc| doc.name == bare);
+    if let Some(path) = overridden.and_then(|doc| doc.path) {
+        return Ok(Existing {
+            yaml: read(&path)?,
+            editing: Some(path),
+            name: bare,
+            origin: Origin::Builtin,
+        });
+    }
+    let source = builtin_tool_sources()
+        .iter()
+        .find(|raw| parse_tool_source(raw).is_ok_and(|doc| doc.name == bare))
+        .ok_or_else(|| {
+            format!("there's no tool named '{name}' (a user__ tool, a builtin__ tool, or a pack's <pack>__tool__<name>)")
+        })?;
+    Ok(Existing {
+        yaml: source.to_string(),
+        editing: None,
+        name: bare,
+        origin: Origin::Builtin,
+    })
+}
+
+fn existing_plan(name: &str, pipeline: &Pipeline) -> Result<Existing, String> {
+    let bare = network::bare_name(ArtifactKind::Plan, name);
+    let doc = pipeline
+        .plans
+        .iter()
+        .find(|doc| doc.identifier == bare || doc.identifier == name)
+        .ok_or_else(|| format!("there's no plan named '{name}'"))?;
+    match (&doc.pack, &doc.path) {
+        (Some(source), Some(path)) => Ok(Existing {
+            yaml: read(path)?,
+            editing: Some(path.clone()),
+            name: pack_bare(
+                &source.name,
+                graph_core::packs::ItemKind::Plan,
+                &doc.identifier,
+            ),
+            origin: Origin::Pack(source.clone()),
+        }),
+        (None, Some(path)) => Ok(Existing {
+            yaml: read(path)?,
+            editing: Some(path.clone()),
+            name: doc.identifier.clone(),
+            origin: Origin::File,
+        }),
+        _ => Ok(Existing {
+            yaml: graph_core::pipeline::authoring::to_yaml(doc).map_err(|e| e.to_string())?,
+            editing: None,
+            name: doc.identifier.clone(),
+            origin: Origin::Builtin,
+        }),
     }
 }
 
@@ -375,7 +514,7 @@ pub async fn open_existing(
     kind: ArtifactKind,
     name: &str,
 ) -> Result<String, String> {
-    let found = existing(kind, name, &pipeline.drafted.tool_dirs)?;
+    let found = existing(kind, name, pipeline)?;
     if draft
         .lock()
         .unwrap()
@@ -390,17 +529,48 @@ pub async fn open_existing(
         ));
     }
     let network = draft.lock().unwrap().network.clone();
-    let problems = check(pipeline, &network, kind, &found.yaml).await;
-    draft.lock().unwrap().network.open(
-        kind,
-        &found.name,
-        found.yaml,
-        found.editing,
-        Some(found.name.clone()),
-        problems,
-    );
+    let problems = check(pipeline, &network, kind, &found.origin, &found.yaml).await;
+    let name = found.name.clone();
+    draft.lock().unwrap().network.open(kind, found, problems);
     publish(draft, tx);
-    Ok(found.name)
+    Ok(name)
+}
+
+pub async fn load_node(
+    draft: &SharedDraft,
+    pipeline: &Pipeline,
+    tx: &UnboundedSender<WorkbenchEvent>,
+    kind: ArtifactKind,
+    input: &Value,
+) -> ToolOutcome {
+    let name = input["name"].as_str().unwrap_or_default();
+    let reason = input["reason"]
+        .as_str()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty());
+    let editing = draft.lock().unwrap().network.is_edit();
+    if editing && reason.is_none() {
+        return error(
+            "this thread is editing items already: pass `reason`, saying why this one belongs in the edit, so the user can approve attaching it",
+        );
+    }
+    if let Some(reason) = reason {
+        if let Err(refusal) = ask_yes(
+            pipeline,
+            tx,
+            "load_artifact",
+            format!("Attach the {} {name} to this edit? {reason}", kind.label()),
+            "attach",
+        )
+        .await
+        {
+            return error(format!("not attached: {refusal}"));
+        }
+    }
+    match open_existing(draft, pipeline, tx, kind, name).await {
+        Ok(name) => outcome(json!({"opened": name, "kind": kind.label()}), false),
+        Err(problem) => error(problem),
+    }
 }
 
 pub fn list_agents(pipeline: &Pipeline) -> ToolOutcome {
@@ -466,7 +636,7 @@ pub fn discard_network(
     let (empty, drafted) = {
         let mut state = draft.lock().unwrap();
         let empty = state.network.is_empty();
-        (empty, state.network.clear())
+        (empty, state.network.discard_all())
     };
     if empty {
         return None;
@@ -609,7 +779,7 @@ pub async fn test_network(
     let Some(node) = network
         .nodes
         .iter()
-        .find(|node| node.name == entry || node.catalog_name() == entry)
+        .find(|node| node.names(&entry))
         .cloned()
     else {
         return error(format!(
@@ -622,7 +792,7 @@ pub async fn test_network(
         _ => json!({}),
     };
     let what = match node.kind {
-        ArtifactKind::Agent => format!("send \"{message}\" to {}", node.name),
+        ArtifactKind::Agent => format!("send \"{message}\" to {}", node.runtime_name()),
         _ => format!("run {} with {plan_input}", node.catalog_name()),
     };
     if node.kind == ArtifactKind::Agent && message.trim().is_empty() {
@@ -704,15 +874,17 @@ pub async fn test_network(
             conversation.handoff_guard = None;
             conversation.prompt_overrides.clear();
             conversation.events = Arc::new(NullSink);
-            let turn =
-                tokio::time::timeout(TEST_LIMIT, conversation.run_turn(&[], &node.name, &message))
-                    .await
-                    .unwrap_or_else(|_| {
-                        Err(graph_core::agent::conversation::ConversationError::Setup {
-                            agent: node.name.clone(),
-                            message: format!("the test ran longer than {}s", TEST_LIMIT.as_secs()),
-                        })
-                    });
+            let turn = tokio::time::timeout(
+                TEST_LIMIT,
+                conversation.run_turn(&[], &node.runtime_name(), &message),
+            )
+            .await
+            .unwrap_or_else(|_| {
+                Err(graph_core::agent::conversation::ConversationError::Setup {
+                    agent: node.name.clone(),
+                    message: format!("the test ran longer than {}s", TEST_LIMIT.as_secs()),
+                })
+            });
             match turn {
                 Ok(turn) => TestRun {
                     entry: node.name.clone(),
@@ -733,7 +905,7 @@ pub async fn test_network(
         _ => {
             let call = match tokio::time::timeout(
                 TEST_LIMIT,
-                over.call_plan(&node.name, plan_input.clone()),
+                over.call_plan(&node.runtime_name(), plan_input.clone()),
             )
             .await
             {
@@ -830,23 +1002,34 @@ fn target(
     if let Some(path) = &node.editing {
         return Ok(path.clone());
     }
+    let file = format!("{}.yaml", node.name);
+    let overrides = node.kind == ArtifactKind::Tool && node.origin == Origin::Builtin;
     if let Some(dir) = scoped {
-        return Ok(dir
-            .join(kind_dir(node.kind))
-            .join(format!("{}.yaml", node.name)));
+        let dir = dir.join(kind_dir(node.kind));
+        return Ok(match overrides {
+            true => dir
+                .join(graph_core::user_tools::BUILTIN_OVERRIDE_DIR)
+                .join(file),
+            false => dir.join(file),
+        });
     }
     match node.kind {
         ArtifactKind::Tool => pipeline
             .drafted
             .tools_dir
             .clone()
-            .map(|dir| dir.join(format!("{}.yaml", node.name)))
+            .map(|dir| match overrides {
+                true => dir
+                    .join(graph_core::user_tools::BUILTIN_OVERRIDE_DIR)
+                    .join(&file),
+                false => dir.join(&file),
+            })
             .ok_or_else(|| "no tools directory is configured ([tools].paths)".to_string()),
         ArtifactKind::Agent => pipeline
             .drafted
             .agents_dir
             .clone()
-            .map(|dir| dir.join(format!("{}.yaml", node.name)))
+            .map(|dir| dir.join(&file))
             .ok_or_else(|| "no agents directory is available".to_string()),
         ArtifactKind::Plan => {
             let doc = network::parse_plan(node.yaml.as_deref().unwrap_or_default())?;
@@ -855,12 +1038,55 @@ fn target(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SavedFile {
+    pub kind: ArtifactKind,
+    pub name: String,
+    pub path: String,
+    pub destination: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Saved {
+    pub saved: String,
+    pub files: Vec<SavedFile>,
+    pub untested: bool,
+}
+
+fn destination_label(destination: &str) -> &'static str {
+    match destination {
+        "override" => " (a project override of the built-in)",
+        "pack" => " (the pack's installed copy; graph pack update replaces it)",
+        _ => "",
+    }
+}
+
+fn write_raw(kind: ArtifactKind, yaml: &str, path: &Path) -> Result<String, String> {
+    let format = match kind {
+        ArtifactKind::Tool => {
+            let doc = graph_core::user_tools::parse_tool_source(yaml)?;
+            graph_core::user_tools::validate_tool(&doc)?;
+            graph_core::format::Kind::Tool
+        }
+        ArtifactKind::Plan => {
+            network::parse_plan(yaml)?;
+            graph_core::format::Kind::Plan
+        }
+        ArtifactKind::Agent => {
+            parse_agent(yaml)?;
+            graph_core::format::Kind::Agent
+        }
+    };
+    graph_core::pipeline::write_file(path, &graph_core::pipeline::stamped(yaml, format), true)
+        .map(|path| path.display().to_string())
+}
+
 pub async fn save_network(
     draft: &SharedDraft,
     pipeline: &Pipeline,
     tx: &UnboundedSender<WorkbenchEvent>,
     request: SaveRequest<'_>,
-) -> Result<String, String> {
+) -> Result<Saved, String> {
     let SaveRequest {
         plans_dir,
         root,
@@ -872,7 +1098,11 @@ pub async fn save_network(
     let scoped = scoped_dir(scope, root);
     let network = draft.lock().unwrap().network.clone();
     if network.in_save_order().is_empty() {
-        return Err("there is nothing drafted to save".to_string());
+        return Err(if network.nodes.iter().any(|node| node.drafted()) {
+            "nothing has changed since the items were opened or last saved".to_string()
+        } else {
+            "there is nothing drafted to save".to_string()
+        });
     }
     let missing = network.missing();
     if !missing.is_empty() {
@@ -909,7 +1139,13 @@ pub async fn save_network(
         let listing: Vec<String> = plan
             .iter()
             .map(|(node, path)| {
-                format!("- {} {} → {}", node.kind.label(), node.name, path.display())
+                format!(
+                    "- {} {} → {}{}",
+                    node.kind.label(),
+                    node.name,
+                    path.display(),
+                    destination_label(node.origin.destination())
+                )
             })
             .collect();
         ask_yes(
@@ -927,7 +1163,7 @@ pub async fn save_network(
         .await?;
     }
     let over = network::overlay(pipeline, &network);
-    let mut saved = Vec::new();
+    let mut saved: Vec<SavedFile> = Vec::new();
     for (node, path) in &plan {
         let yaml = node.yaml.clone().unwrap_or_default();
         let replacing = node.editing.is_some();
@@ -935,8 +1171,11 @@ pub async fn save_network(
             .editing
             .clone()
             .or_else(|| scoped.as_ref().map(|_| path.clone()));
-        let result = match node.kind {
-            ArtifactKind::Tool => {
+        let result = match (node.kind, &node.origin) {
+            (_, Origin::Pack(_)) | (ArtifactKind::Tool, Origin::Builtin) => {
+                write_raw(node.kind, &yaml, path)
+            }
+            (ArtifactKind::Tool, _) => {
                 let saved = pipeline
                     .save_tool_file_at(&yaml, true, replacing, false, at.as_deref())
                     .await;
@@ -945,7 +1184,7 @@ pub async fn save_network(
                     .map(str::to_string)
                     .ok_or_else(|| refusal(&saved))
             }
-            ArtifactKind::Agent => {
+            (ArtifactKind::Agent, _) => {
                 let saved = over
                     .save_agent_file_at(&yaml, replacing, false, at.as_deref())
                     .await;
@@ -954,23 +1193,21 @@ pub async fn save_network(
                     .map(str::to_string)
                     .ok_or_else(|| refusal(&saved))
             }
-            ArtifactKind::Plan => network::parse_plan(&yaml).and_then(|doc| {
+            (ArtifactKind::Plan, _) => network::parse_plan(&yaml).and_then(|doc| {
                 graph_core::pipeline::authoring::write_doc(&doc, path, replacing)
                     .map(|()| path.display().to_string())
                     .map_err(|e| e.to_string())
             }),
         };
         match result {
-            Ok(written) => saved.push((node.kind, node.name.clone(), written)),
+            Ok(written) => saved.push(SavedFile {
+                kind: node.kind,
+                name: node.name.clone(),
+                path: written,
+                destination: node.origin.destination(),
+            }),
             Err(problem) => {
-                {
-                    let mut state = draft.lock().unwrap();
-                    for (kind, name, written) in &saved {
-                        state
-                            .network
-                            .mark_saved(*kind, name, PathBuf::from(written));
-                    }
-                }
+                record_saved(draft, &saved, true);
                 publish(draft, tx);
                 return Err(format!(
                     "saved {} of {}; {} {} was not saved: {problem}",
@@ -982,17 +1219,36 @@ pub async fn save_network(
             }
         }
     }
-    draft.lock().unwrap().network.clear();
+    record_saved(draft, &saved, false);
     publish(draft, tx);
-    Ok(format!(
-        "saved {}{}",
-        saved
-            .iter()
-            .map(|(_, _, path)| path.clone())
-            .collect::<Vec<_>>()
-            .join(", "),
-        if untested { " (untested)" } else { "" }
-    ))
+    Ok(Saved {
+        saved: format!(
+            "saved {}{}",
+            saved
+                .iter()
+                .map(|file| format!("{}{}", file.path, destination_label(file.destination)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            if untested { " (untested)" } else { "" }
+        ),
+        files: saved,
+        untested,
+    })
+}
+
+fn record_saved(draft: &SharedDraft, saved: &[SavedFile], partial: bool) {
+    let written: Vec<(ArtifactKind, String, PathBuf)> = saved
+        .iter()
+        .map(|file| (file.kind, file.name.clone(), PathBuf::from(&file.path)))
+        .collect();
+    let mut state = draft.lock().unwrap();
+    if partial && !state.network.is_edit() {
+        for (kind, name, path) in written {
+            state.network.mark_saved(kind, &name, path);
+        }
+        return;
+    }
+    state.network.saved(&written);
 }
 
 fn refusal(saved: &Value) -> String {
@@ -1118,15 +1374,16 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: SHOW_ARTIFACT.to_string(),
-            description: "Read an existing plan, agent or user tool as YAML without touching \
-                          any draft, to inspect it or use it as a reference."
+            description: "Read an existing plan, agent or tool as YAML without touching any \
+                          draft, to inspect it or use it as a reference. Tools can be user, \
+                          built-in or pack tools."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["kind", "name"],
                 "properties": {
                     "kind": kind_property("What to read"),
-                    "name": {"type": "string", "description": "A plan identifier or plan file path, an agent's name, or a tool's name (with or without user__)"}
+                    "name": {"type": "string", "description": "A plan identifier or plan file path, an agent's name, or a tool's name: user__<name> or a bare name, builtin__<name>, or <pack>__tool__<name>"}
                 }
             }),
             output_schema: None,
@@ -1135,19 +1392,23 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: LOAD_ARTIFACT.to_string(),
-            description: "Open an existing plan, agent or user tool for editing. A plan opens in \
-                          the plan pane (it fails when the plan draft has unsaved changes \
-                          unless overwrite_draft is true); an agent or tool opens as a node of \
-                          the network draft, and saving the network replaces its file (an \
-                          edited built-in agent is saved as a project override)."
+            description: "Open an existing plan, agent or tool for editing as a node of the \
+                          network draft; saving the network writes it back. A built-in is saved \
+                          as a project override, and a pack's item to the pack's installed \
+                          copy. Without a sketch or items being edited, a plan opens in the \
+                          plan pane instead (it fails when the plan draft has unsaved changes unless \
+                          overwrite_draft is true). When the thread is already editing items, \
+                          `reason` is required: the user is asked to approve attaching the item, \
+                          with the reason, before it opens."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["kind", "name"],
                 "properties": {
                     "kind": kind_property("What to open"),
-                    "name": {"type": "string", "description": "A plan identifier or plan file path, an agent's name, or a tool's name (with or without user__)"},
-                    "overwrite_draft": {"type": "boolean", "description": "Plans only: load over a plan draft with unsaved changes, only after the user confirms discarding them"}
+                    "name": {"type": "string", "description": "A plan identifier or plan file path, an agent's name, or a tool's name: user__<name> or a bare name, builtin__<name>, or <pack>__tool__<name>"},
+                    "reason": {"type": "string", "description": "Why this item belongs in the edit, in a sentence the user reads when approving it. Required while the thread is editing items"},
+                    "overwrite_draft": {"type": "boolean", "description": "Plan pane only: load over a plan draft with unsaved changes, only after the user confirms discarding them"}
                 }
             }),
             output_schema: None,
@@ -1276,11 +1537,13 @@ pub fn tool_defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: SAVE_NETWORK.to_string(),
-            description: "Save every drafted node of the network, after the user confirms the \
+            description: "Save every changed node of the network, after the user confirms the \
                           list of files: tools first, then plans, then agents. Every sketched \
                           node has to be drafted without problems, and the network has to have \
                           passed a test since it last changed unless `untested` is true because \
-                          the user said not to test it."
+                          the user said not to test it. An opened item goes back to its own \
+                          file, a built-in to a project override, and a pack's item to the \
+                          pack's installed copy; the result names each file and where it went."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -1367,7 +1630,8 @@ pub fn tool_defs() -> Vec<ToolDef> {
         ToolDef {
             name: DISCARD_NETWORK.to_string(),
             description: "Throw away the whole network draft (sketch and every draft), only when \
-                          the user asks."
+                          the user asks. In an edit without a sketch, the opened items stay and \
+                          go back to their saved files."
                 .to_string(),
             input_schema: json!({"type": "object", "properties": {}}),
             output_schema: None,

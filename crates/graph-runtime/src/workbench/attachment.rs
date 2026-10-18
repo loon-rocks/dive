@@ -1,4 +1,4 @@
-use super::artifact::{self, ArtifactKind, SaveRequest, Scope, Tester};
+use super::artifact::{self, ArtifactKind, SaveRequest, Saved, Scope, Tester};
 use super::event::{GateKind, WorkbenchEvent};
 use super::network::NetworkView;
 use super::runner::{DebugControls, UiDecision};
@@ -24,6 +24,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 pub const SAVE: &str = "save";
 
 pub const DISCARD: &str = "discard";
+
+pub const OPENED: &str = "opened";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -92,6 +94,7 @@ pub struct NetworkAttachment {
     tester: Tester,
     tools: Arc<dyn ToolRegistry>,
     lifecycle: Arc<Mutex<Lifecycle>>,
+    opened: Mutex<Vec<(ArtifactKind, String)>>,
 }
 
 impl NetworkAttachment {
@@ -135,6 +138,7 @@ impl NetworkAttachment {
             tester,
             tools,
             lifecycle: Arc::new(Mutex::new(Lifecycle::default())),
+            opened: Mutex::new(Vec::new()),
         })
     }
 
@@ -154,6 +158,38 @@ impl NetworkAttachment {
         let mut lifecycle = self.lifecycle.lock().unwrap();
         lifecycle.state = NetworkState::parse(recorded.field("state"));
         lifecycle.saved = recorded.field("saved").map(str::to_string);
+        *self.opened.lock().unwrap() = recorded
+            .fields
+            .get(OPENED)
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        Some((
+                            ArtifactKind::parse(item["kind"].as_str()?)?,
+                            item["name"].as_str()?.to_string(),
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    }
+
+    pub fn opened(&self) -> Vec<(ArtifactKind, String)> {
+        self.opened.lock().unwrap().clone()
+    }
+
+    pub async fn open_item(&self, kind: ArtifactKind, name: &str) -> Result<String, String> {
+        let opened = self.open_existing(kind, name).await?;
+        let mut items = self.opened.lock().unwrap();
+        if !items
+            .iter()
+            .any(|(known, known_name)| *known == kind && known_name == name)
+        {
+            items.push((kind, name.to_string()));
+        }
+        Ok(opened)
     }
 
     pub fn attachment_view(&self) -> NetworkAttachmentView {
@@ -164,9 +200,13 @@ impl NetworkAttachment {
         artifact::open_existing(&self.draft, &self.pipeline, &self.tx, kind, name).await
     }
 
-    pub async fn save(&self, scope: Option<&str>, skip: Vec<String>) -> Result<String, String> {
+    pub async fn save(&self, scope: Option<&str>, skip: Vec<String>) -> Result<Saved, String> {
         let saved = if self.network().is_empty() {
-            super::save_draft(&self.draft, self.plans_dir.as_deref())
+            super::save_draft(&self.draft, self.plans_dir.as_deref()).map(|path| Saved {
+                saved: path,
+                files: Vec::new(),
+                untested: true,
+            })
         } else {
             artifact::save_network(
                 &self.draft,
@@ -185,7 +225,7 @@ impl NetworkAttachment {
         }?;
         let mut lifecycle = self.lifecycle.lock().unwrap();
         lifecycle.state = NetworkState::Saved;
-        lifecycle.saved = Some(saved.clone());
+        lifecycle.saved = Some(saved.saved.clone());
         Ok(saved)
     }
 
@@ -221,7 +261,8 @@ fn view_of(draft: &SharedDraft, lifecycle: &Mutex<Lifecycle>) -> NetworkAttachme
         })
     };
     let lifecycle = lifecycle.lock().unwrap().clone();
-    let state = if network.is_empty() {
+    let settled = network.is_empty() || (network.is_edit() && network.unsaved() == 0);
+    let state = if settled {
         lifecycle.state
     } else {
         NetworkState::Open
@@ -323,12 +364,18 @@ impl AttachmentHost for NetworkAttachment {
     }
 
     fn wire(&self, conversation: &mut Conversation) {
-        conversation.handoff_guard = Some(artifact::handoff_guard(self.draft.clone()));
-        conversation.progress_tools = super::tools::progress_tools();
-        conversation.stop_tools = artifact::STOP_TOOLS
-            .iter()
-            .map(|name| name.to_string())
-            .collect();
+        crate::attachment::add_handoff_guard(
+            &mut conversation.handoff_guard,
+            artifact::handoff_guard(self.draft.clone()),
+        );
+        crate::attachment::add_tools(
+            &mut conversation.progress_tools,
+            super::tools::progress_tools(),
+        );
+        crate::attachment::add_tools(
+            &mut conversation.stop_tools,
+            artifact::STOP_TOOLS.iter().map(|name| name.to_string()),
+        );
         let mut base = conversation.clone();
         base.catalog = Arc::new(CompositeRegistry::new(Vec::new()));
         base.context = None;
@@ -348,7 +395,10 @@ impl AttachmentHost for NetworkAttachment {
     }
 
     fn restore(&self, history: &[NewEntry]) {
-        let mut network = super::replay::network(history, &self.pipeline.drafted.tool_dirs);
+        let pipeline = self.pipeline.clone();
+        let items =
+            move |kind: ArtifactKind, name: &str| artifact::existing(kind, name, &pipeline).ok();
+        let mut network = super::replay::network(history, &self.opened(), &items);
         network.secrets = Some(self.pipeline.drafted.secrets.clone());
         self.draft.lock().unwrap().network = network;
     }
@@ -359,11 +409,21 @@ impl AttachmentHost for NetworkAttachment {
 
     fn record(&self) -> Attachment {
         let view = self.attachment_view();
-        let record = Attachment::new(NETWORK_ATTACHMENT).with("state", view.state.label());
-        match view.saved {
-            Some(saved) => record.with("saved", saved),
-            None => record,
+        let mut record = Attachment::new(NETWORK_ATTACHMENT).with("state", view.state.label());
+        if let Some(saved) = view.saved {
+            record = record.with("saved", saved);
         }
+        let opened = self.opened();
+        if !opened.is_empty() {
+            record = record.with(
+                OPENED,
+                opened
+                    .iter()
+                    .map(|(kind, name)| serde_json::json!({"kind": kind.label(), "name": name}))
+                    .collect::<Vec<_>>(),
+            );
+        }
+        record
     }
 
     async fn act(&self, action: &str, input: Value) -> Result<Value, String> {
@@ -381,7 +441,7 @@ impl AttachmentHost for NetworkAttachment {
                     .unwrap_or_default();
                 self.save(input["scope"].as_str(), skip)
                     .await
-                    .map(Value::String)
+                    .map(|saved| serde_json::to_value(saved).unwrap_or_default())
             }
             DISCARD => Ok(self.discard().map(Value::String).unwrap_or(Value::Null)),
             other => Err(format!(
