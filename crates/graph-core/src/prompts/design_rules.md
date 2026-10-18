@@ -9,5 +9,5 @@ Design for efficiency, speed and cost:
 - Agents hand throwaway work to subagents: searching, reading files and fetching pages whose result the agent needs only a few lines of runs in a subagent on a small model, so the lead's conversation, which every turn sends again, keeps only the answers.
 - Independent tool calls go in one response, so they run in parallel in one round.
 - No model at all when a command, an API call or a reshape does the job.
-- A slow or costly step does less before it gets more: a narrower range, only the items, files or fields the decision needs, or a cheap input of its own, rather than a longer timeout, a bigger budget or a faster model.
+- A slow or costly step gets smaller context and cheaper calls together: it reads only the items, files or fields its decision needs, from a cheap input of its own when a shared one is wide; its classifications and choices go to the decision model and the rest to the smallest role that does the job. A longer timeout or a bigger budget only hides the cost.
 - Keep it small: the fewest nodes, and plans of a handful of steps. Call an existing plan only when it does exactly a node's job; never reach for a heavyweight plan (a review, an eval, a whole report) to get one piece of what it computes.
