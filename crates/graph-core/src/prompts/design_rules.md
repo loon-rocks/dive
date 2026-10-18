@@ -6,8 +6,16 @@ Design for efficiency, speed and cost:
 - Map/reduce over a small model instead of one big context.
 - Concurrency for independent items; prune context to the fields each step reads.
 - Plans before agents: a plan when the steps are known, an agent only when the path depends on the conversation.
-- Agents hand throwaway work to subagents: searching, reading files and fetching pages whose result the agent needs only a few lines of runs in a subagent on a small model, so the lead's conversation, which every turn sends again, keeps only the answers.
-- Independent tool calls go in one response, so they run in parallel in one round.
 - No model at all when a command, an API call or a reshape does the job.
-- A slow or costly step gets smaller context and cheaper calls together: it reads only the items, files or fields its decision needs, from a cheap input of its own when a shared one is wide; its classifications and choices go to the decision model and the rest to the smallest role that does the job. A longer timeout or a bigger budget only hides the cost.
 - Keep it small: the fewest nodes, and plans of a handful of steps. Call an existing plan only when it does exactly a node's job; never reach for a heavyweight plan (a review, an eval, a whole report) to get one piece of what it computes.
+
+Treat context as scarce memory and tokens as clock cycles: every token read costs time and money, every token written costs several times more, and a long-lived context is paid for again on every round. Apply the patterns of a constrained system:
+- Index, then seek: read a table of contents (a file list, hunk headers, per-file match counts, names and one-line descriptions) and fetch only the slices it points to, by line window, path or anchor. Never scan a whole file, diff or page to find one part.
+- Track what changed: record a watermark (a sha, a timestamp, an id) when work is done, and next time process only the delta since it.
+- Cascade: a comparison or a command settles what it can, the decision model takes what's left, and a chat model only the remainder that needs prose.
+- Never copy data through a model: a model returns ids, verdicts and the new text only, and reshapes join them back to the data. A decision model's output is a probability, so it writes nothing.
+- Isolate and pass references: work whose result the caller needs only a few lines of (searching, reading, research) runs in a subagent's own context, on a small model, and returns facts with pointers (path and lines, URL and anchor), not copies. The caller dereferences a pointer only when it needs the exact text.
+- Load lazily: a long-lived agent keeps the index; detail loads where it's used, in a builder's or subagent's short-lived context.
+- Shorten the critical path: fan independent items out with map and concurrency, put independent tool calls in one response, and end early with exit gates. Each serial model round adds its full latency.
+- Fixed before variable: what stays the same across calls (instructions, reference text) goes in the system prompt (a prompt tool's `system`, an agent's system_prompt) and what changes (the item) in the message, so the prompt cache reuses the fixed part.
+- A longer timeout, a bigger byte budget or a lower cap only hides the cost; a faster model alone keeps the same shape.
