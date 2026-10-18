@@ -479,10 +479,10 @@ mod tests {
         };
         let entries = vec![
             NewEntry::new(
-                "item_editor",
+                "network_editor",
                 EntryBody::SubagentRun {
                     agent: "tool_drafter".into(),
-                    caller: "item_editor".into(),
+                    caller: "network_editor".into(),
                     input: json!({"node": "word_count", "notes": "count words, not lines"}),
                     messages: vec![
                         ChatMessage::Assistant {
