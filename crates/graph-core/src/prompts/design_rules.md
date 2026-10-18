@@ -6,5 +6,8 @@ Design for efficiency, speed and cost:
 - Map/reduce over a small model instead of one big context.
 - Concurrency for independent items; prune context to the fields each step reads.
 - Plans before agents: a plan when the steps are known, an agent only when the path depends on the conversation.
+- Agents hand throwaway work to subagents: searching, reading files and fetching pages whose result the agent needs only a few lines of runs in a subagent on a small model, so the lead's conversation, which every turn sends again, keeps only the answers.
+- Independent tool calls go in one response, so they run in parallel in one round.
 - No model at all when a command, an API call or a reshape does the job.
+- A slow or costly step does less before it gets more: a narrower range, only the items, files or fields the decision needs, or a cheap input of its own, rather than a longer timeout, a bigger budget or a faster model.
 - Keep it small: the fewest nodes, and plans of a handful of steps. Call an existing plan only when it does exactly a node's job; never reach for a heavyweight plan (a review, an eval, a whole report) to get one piece of what it computes.
