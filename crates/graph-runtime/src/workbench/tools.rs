@@ -532,7 +532,12 @@ impl WorkbenchTools {
                 };
             }
         }
-        let defs = self.pipeline.planner_tool_defs().await;
+        let mut defs = self.pipeline.planner_tool_defs().await;
+        let natives: Vec<_> = graph_core::pipeline::native_tool_defs()
+            .into_iter()
+            .filter(|native| defs.iter().all(|def| def.name != native.name))
+            .collect();
+        defs.extend(natives);
         let Some(def) = defs.iter().find(|def| def.name == name).cloned() else {
             let servers = self.pipeline.registry.servers().await;
             return error_outcome(&unknown_tool_message(name, &defs, &servers));
@@ -862,8 +867,8 @@ pub fn tool_defs() -> Vec<ToolDef> {
     let mut defs = vec![
         ToolDef {
             name: DESCRIBE_TOOL.to_string(),
-            description: "Describe one tool from the plan catalog without calling it: its \
-                          description, input schema, declared output schema, the output \
+            description: "Describe one tool from the plan catalog, or one of graph's native \
+                          builtin__ tools, without calling it: its description, input schema, declared output schema, the output \
                           shape observed in earlier runs, and whether it's read-only. Use it \
                           to write a step's input and the templates that read its result."
                 .to_string(),
@@ -2150,6 +2155,30 @@ steps:
     }
 
     #[tokio::test]
+    async fn describe_tool_knows_native_tools_and_suggests_them_for_a_near_miss() {
+        let (pipeline, _) = scripted_pipeline(Vec::new());
+        let (tools, _rx) = draft_tools(pipeline);
+        let outcome = tools
+            .describe_tool(&json!({"name": "builtin__score_candidates"}))
+            .await;
+        assert!(!outcome.is_error, "{}", outcome.result);
+        assert_eq!(outcome.result["name"], "builtin__score_candidates");
+        assert!(outcome.result["inputSchema"].is_object());
+        let missed = tools
+            .describe_tool(&json!({"name": "builtin_score_candidates"}))
+            .await;
+        assert!(missed.is_error);
+        assert!(
+            missed
+                .result
+                .to_string()
+                .contains("builtin__score_candidates"),
+            "{}",
+            missed.result
+        );
+    }
+
+    #[tokio::test]
     async fn describe_tool_says_when_a_guessed_server_does_not_exist() {
         let (pipeline, _) = scripted_pipeline(Vec::new());
         let (tools, _rx) = draft_tools(pipeline);
@@ -3102,6 +3131,17 @@ steps:
         let reopened = existing(ArtifactKind::Tool, "builtin__reshape", &tools.pipeline).unwrap();
         assert_eq!(reopened.editing, Some(path));
         assert!(reopened.yaml.contains("read_only: true"));
+    }
+
+    #[tokio::test]
+    async fn a_workbench_agent_opens_for_editing_as_a_built_in() {
+        use crate::workbench::artifact::{existing, ArtifactKind};
+        let (pipeline, _) = scripted_pipeline(Vec::new());
+        let (tools, _rx) = draft_tools(pipeline);
+        let opened = existing(ArtifactKind::Agent, "network_editor", &tools.pipeline).unwrap();
+        assert_eq!(opened.name, "network_editor");
+        assert!(opened.editing.is_none());
+        assert!(opened.yaml.contains("name: network_editor"));
     }
 
     #[tokio::test]
