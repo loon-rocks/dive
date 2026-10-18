@@ -344,7 +344,8 @@ impl Workbench {
                 confirm: false,
             },
         )
-        .await;
+        .await
+        .map(|saved| saved.saved);
         let status = match &saved {
             Ok(message) => message.clone(),
             Err(error) => format!("not saved: {error}"),

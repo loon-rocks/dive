@@ -25,13 +25,14 @@ Every file is plain JSON or JSONL, so `cat` and `jq` can read it. Thread IDs are
 
 ## Thread attachments
 
-`meta.json` lists the things a thread works on under `attachments`, left out when there are none. Each attachment has a `kind`, plus fields of its own. A thread carries one attachment at most for now.
+`meta.json` lists the things a thread works on under `attachments`, left out when there are none. Each attachment has a `kind`, plus fields of its own. A thread carries at most one attachment of each kind.
 
 | Kind | Fields |
 | --- | --- |
-| `network` | The network draft of tools, plans and agents the drafting agents build in the thread. `state` is `open`, `saved` or `discarded`, and `saved`, when present, says what was written where. The draft itself isn't stored: it's rebuilt from the thread's entries when the thread is opened again. |
+| `network` | The network draft of tools, plans and agents the drafting agents build in the thread, or the existing items an edit thread changes. `state` is `open`, `saved` or `discarded`, and `saved`, when present, says what was written where. `opened`, when present, lists the items the thread was opened on, each with its `kind` (`agent`, `plan` or `tool`) and `name`. The draft itself isn't stored: the opened items are read from their files and the edits are rebuilt from the thread's entries when the thread is opened again. |
+| `evidence` | The call an edit thread is about, copied from the thread it came from so it outlives that thread: `thread`, the source thread's id; `call`, the call's id, when there is one; `item`, the agent, plan or tool it concerns, with its `kind` and `name`; `input`; and `output` or `error`. |
 
-A thread gets a `network` attachment when its first message goes to an agent that reads networks (`attachments: [network]` in the [agent file](/agents/reference/agent-file)).
+A thread gets a `network` attachment when its first message goes to an agent that reads networks (`attachments: [network]` in the [agent file](/agents/reference/agent-file)). An edit thread gets a `network` attachment with the items to edit opened, and an `evidence` attachment when the edit started from a call.
 
 ## Thread entries
 

@@ -1,7 +1,7 @@
 ---
 title: "workbench__show_artifact"
 sidebarTitle: "workbench__show_artifact"
-description: "Returns an existing plan, agent or user tool as YAML, without opening it in the pane."
+description: "Returns an existing plan, agent or tool as YAML, without opening it in the pane."
 playground: "none"
 keywords: ["workbench__show_artifact"]
 ---
@@ -19,5 +19,5 @@ keywords: ["workbench__show_artifact"]
 </ParamField>
 
 <ParamField body="name" type="string" required>
-  A plan identifier or plan file path, an agent's name, or a tool's name (with or without user__)
+  A plan identifier or plan file path, an agent's name, or a tool's name: user__&lt;name&gt; or a bare name, builtin__&lt;name&gt;, or &lt;pack&gt;__tool__&lt;name&gt;
 </ParamField>

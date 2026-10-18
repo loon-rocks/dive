@@ -10,6 +10,7 @@ pub const WORKBENCH_AGENTS: &[&str] = &[
     include_str!("plan_editor.yaml"),
     include_str!("tool_drafter.yaml"),
     include_str!("agent_drafter.yaml"),
+    include_str!("item_editor.yaml"),
 ];
 
 pub const FRONT_DESK: &str = "front_desk";
@@ -17,6 +18,8 @@ pub const FRONT_DESK: &str = "front_desk";
 pub const PLAN_DRAFTER: &str = "plan_drafter";
 
 pub const PLAN_EDITOR: &str = "plan_editor";
+
+pub const ITEM_EDITOR: &str = "item_editor";
 
 pub fn workbench_only() -> Vec<graph_core::agent::doc::AgentDoc> {
     let globals: Vec<String> = graph_core::agent::doc::BUILTINS
@@ -49,6 +52,10 @@ pub enum Start {
     Plan(Option<String>),
     Agent(Option<String>),
     Tool(Option<String>),
+    Edit {
+        items: Vec<crate::evidence::Item>,
+        evidence: Option<crate::evidence::Evidence>,
+    },
 }
 
 pub fn starting_agent(start: &Start, doc: Option<&PlanDoc>) -> &'static str {
@@ -58,6 +65,7 @@ pub fn starting_agent(start: &Start, doc: Option<&PlanDoc>) -> &'static str {
         (Start::Plan(_), None) | (Start::Agent(_), _) | (Start::Tool(_), _) => {
             super::artifact::NETWORK_DRAFTER
         }
+        (Start::Edit { .. }, _) => ITEM_EDITOR,
     }
 }
 
@@ -134,6 +142,7 @@ mod tests {
             "plan_editor",
             "tool_drafter",
             "agent_drafter",
+            "item_editor",
         ] {
             assert!(set.get(name).is_some(), "{name}");
         }
@@ -155,6 +164,16 @@ mod tests {
         assert_eq!(
             starting_agent(&Start::Tool(Some("x".into())), None),
             "network_drafter"
+        );
+        assert_eq!(
+            starting_agent(
+                &Start::Edit {
+                    items: Vec::new(),
+                    evidence: None
+                },
+                None
+            ),
+            "item_editor"
         );
     }
 
@@ -209,6 +228,13 @@ steps:
             assert!(sections[0].starts_with("## Model roles"), "{builder}");
             assert!(sections[1].starts_with("## The network draft"), "{builder}");
         }
+        let editor = hook("item_editor");
+        assert_eq!(
+            editor.len(),
+            2,
+            "network sections, and no evidence without an evidence host"
+        );
+        assert!(editor[1].starts_with("## The network draft"));
         assert_eq!(hook("plan_editor").len(), 1);
         assert!(hook("plan_editor")[0].starts_with("## Current draft"));
         assert!(hook("plan_loader").is_empty());

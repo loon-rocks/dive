@@ -20,8 +20,9 @@ pub const SAVE_TOOL_TOOL: &str = "builtin__save_tool";
 
 pub const SAVE_AGENT_TOOL: &str = "builtin__save_agent";
 
-const WORKBENCH_AGENTS: [&str; 5] = [
+const WORKBENCH_AGENTS: [&str; 6] = [
     "front_desk",
+    "item_editor",
     "network_drafter",
     "plan_drafter",
     "plan_loader",
@@ -37,6 +38,7 @@ pub struct Drafted {
     pub tools_dir: Option<PathBuf>,
     pub agents_dir: Option<PathBuf>,
     pub tool_dirs: Vec<PathBuf>,
+    pub pack_sources: Vec<crate::packs::PackSource>,
     pub secrets: Arc<dyn SecretSource>,
 }
 
@@ -50,6 +52,7 @@ impl Default for Drafted {
             tools_dir: None,
             agents_dir: None,
             tool_dirs: Vec::new(),
+            pack_sources: Vec::new(),
             secrets: Arc::new(crate::secrets::system()),
         }
     }
@@ -66,6 +69,11 @@ impl Drafted {
 
     pub fn with_tool_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
         self.tool_dirs = dirs;
+        self
+    }
+
+    pub fn with_pack_sources(mut self, sources: Vec<crate::packs::PackSource>) -> Self {
+        self.pack_sources = sources;
         self
     }
 
@@ -249,7 +257,7 @@ fn run_preview(doc: &UserToolDoc, input: &Value) -> String {
     )
 }
 
-fn write_file(path: &Path, yaml: &str, overwrite: bool) -> Result<PathBuf, String> {
+pub fn write_file(path: &Path, yaml: &str, overwrite: bool) -> Result<PathBuf, String> {
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("can't create {}: {e}", dir.display()))?;
     let path = path.to_path_buf();
@@ -325,7 +333,7 @@ fn redacted(result: Value, secrets: &std::collections::BTreeMap<String, String>)
     }
 }
 
-fn stamped(yaml: &str, kind: crate::format::Kind) -> String {
+pub fn stamped(yaml: &str, kind: crate::format::Kind) -> String {
     match serde_yaml::from_str::<serde_yaml::Value>(yaml) {
         Ok(mut value) if value.get("version").is_none() => {
             crate::format::stamp(kind, &mut value);

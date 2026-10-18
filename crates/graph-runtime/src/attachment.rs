@@ -1,15 +1,17 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use graph_core::agent::conversation::{ContextHook, Conversation};
+use graph_core::agent::conversation::{ContextHook, Conversation, HandoffGuard};
 use graph_core::agent::doc::{AgentDoc, AgentSet};
 use graph_core::{Attachment, EventSink, NewEntry, Store, ToolRegistry};
 use serde_json::Value;
 use std::any::Any;
 use std::sync::Arc;
 
-pub use graph_core::store::{ATTACHMENT_KINDS, NETWORK_ATTACHMENT, PLAN_ATTACHMENT};
+pub use graph_core::store::{
+    ATTACHMENT_KINDS, EVIDENCE_ATTACHMENT, NETWORK_ATTACHMENT, PLAN_ATTACHMENT,
+};
 
-pub const THREAD_KINDS: &[&str] = &[NETWORK_ATTACHMENT];
+pub const THREAD_KINDS: &[&str] = &[NETWORK_ATTACHMENT, EVIDENCE_ATTACHMENT];
 
 #[async_trait]
 pub trait AttachmentHost: Send + Sync {
@@ -48,21 +50,54 @@ pub trait AttachmentHost: Send + Sync {
 
 pub fn agent_sources(kind: &str) -> Vec<&'static str> {
     match kind {
-        NETWORK_ATTACHMENT => crate::workbench::agents::WORKBENCH_AGENTS.to_vec(),
+        NETWORK_ATTACHMENT | EVIDENCE_ATTACHMENT => {
+            crate::workbench::agents::WORKBENCH_AGENTS.to_vec()
+        }
         _ => Vec::new(),
     }
 }
 
+pub fn agent_sources_for(kinds: &[String]) -> Vec<&'static str> {
+    let mut sources: Vec<&'static str> = Vec::new();
+    for source in kinds.iter().flat_map(|kind| agent_sources(kind)) {
+        if !sources.contains(&source) {
+            sources.push(source);
+        }
+    }
+    sources
+}
+
 pub async fn record(store: &dyn Store, thread_id: &str, attachments: &[Attachment]) -> Result<()> {
-    if let [first, second, ..] = attachments {
-        bail!(
-            "a thread carries one attachment for now: it has a {} attachment, so it can't take a {} one",
-            first.kind,
-            second.kind
-        );
+    for (at, attachment) in attachments.iter().enumerate() {
+        if attachments[..at]
+            .iter()
+            .any(|earlier| earlier.kind == attachment.kind)
+        {
+            bail!(
+                "a thread carries one attachment of each kind: it has two {} attachments",
+                attachment.kind
+            );
+        }
     }
     store.set_attachments(thread_id, attachments).await?;
     Ok(())
+}
+
+pub fn add_handoff_guard(slot: &mut Option<HandoffGuard>, guard: HandoffGuard) {
+    *slot = Some(match slot.take() {
+        Some(earlier) => {
+            Arc::new(move |from: &str, to: &str| earlier(from, to).or_else(|| guard(from, to)))
+        }
+        None => guard,
+    });
+}
+
+pub fn add_tools(tools: &mut Vec<String>, added: impl IntoIterator<Item = String>) {
+    for tool in added {
+        if !tools.contains(&tool) {
+            tools.push(tool);
+        }
+    }
 }
 
 pub fn context_hook(agents: Arc<AgentSet>, hosts: Vec<Arc<dyn AttachmentHost>>) -> ContextHook {
@@ -73,12 +108,13 @@ pub fn context_hook(agents: Arc<AgentSet>, hosts: Vec<Arc<dyn AttachmentHost>>) 
 }
 
 pub fn thread_kinds(declared: &[String]) -> Vec<String> {
-    declared
-        .iter()
-        .filter(|kind| THREAD_KINDS.contains(&kind.as_str()))
-        .take(1)
-        .cloned()
-        .collect()
+    let mut kinds: Vec<String> = Vec::new();
+    for kind in declared {
+        if THREAD_KINDS.contains(&kind.as_str()) && !kinds.contains(kind) {
+            kinds.push(kind.clone());
+        }
+    }
+    kinds
 }
 
 pub fn records(hosts: &[Arc<dyn AttachmentHost>], recorded: &[Attachment]) -> Vec<Attachment> {
@@ -163,32 +199,71 @@ mod tests {
     }
 
     #[test]
-    fn a_thread_takes_one_attachment_of_a_kind_it_can_host() {
+    fn a_thread_takes_every_kind_it_can_host_once() {
         let declared = |kinds: &[&str]| kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>();
         assert_eq!(thread_kinds(&declared(&["network"])), ["network"]);
         assert!(thread_kinds(&declared(&["plan"])).is_empty());
         assert_eq!(thread_kinds(&declared(&["plan", "network"])), ["network"]);
+        assert_eq!(
+            thread_kinds(&declared(&["network", "evidence", "network"])),
+            ["network", "evidence"]
+        );
         assert!(thread_kinds(&[]).is_empty());
     }
 
+    #[test]
+    fn the_agents_of_several_kinds_load_once() {
+        let kinds = vec![
+            NETWORK_ATTACHMENT.to_string(),
+            EVIDENCE_ATTACHMENT.to_string(),
+        ];
+        assert_eq!(
+            agent_sources_for(&kinds).len(),
+            crate::workbench::agents::WORKBENCH_AGENTS.len()
+        );
+    }
+
     #[tokio::test]
-    async fn a_thread_refuses_a_second_attachment() {
+    async fn a_thread_takes_several_attachments_but_one_of_each_kind() {
         let store = graph_store::MemoryStore::new();
         let meta = store.create_thread("t", "chat", None).await.unwrap();
-        record(&store, &meta.id, &[Attachment::new(NETWORK_ATTACHMENT)])
-            .await
-            .unwrap();
+        let both = [
+            Attachment::new(NETWORK_ATTACHMENT),
+            Attachment::new(EVIDENCE_ATTACHMENT).with("thread", "a1"),
+        ];
+        record(&store, &meta.id, &both).await.unwrap();
         let error = record(
             &store,
             &meta.id,
-            &[Attachment::new(NETWORK_ATTACHMENT), Attachment::new("plan")],
+            &[
+                Attachment::new(NETWORK_ATTACHMENT),
+                Attachment::new(NETWORK_ATTACHMENT),
+            ],
         )
         .await
         .unwrap_err()
         .to_string();
-        assert!(error.contains("one attachment"), "{error}");
+        assert!(error.contains("one attachment of each kind"), "{error}");
         let kept = store.get_thread(&meta.id).await.unwrap().unwrap();
-        assert_eq!(kept.attachments, [Attachment::new(NETWORK_ATTACHMENT)]);
+        assert_eq!(kept.attachments, both);
+    }
+
+    #[test]
+    fn a_second_host_adds_its_guard_and_tools_to_the_first_ones() {
+        let mut tools = vec!["a".to_string()];
+        add_tools(&mut tools, ["a".to_string(), "b".to_string()]);
+        assert_eq!(tools, ["a", "b"]);
+        let mut guarded: Option<HandoffGuard> = Some(Arc::new(|from: &str, _: &str| {
+            (from == "x").then(|| "first".to_string())
+        }));
+        add_handoff_guard(
+            &mut guarded,
+            Arc::new(|from: &str, _: &str| (from == "y").then(|| "second".to_string())),
+        );
+        let guard = guarded.unwrap();
+        assert_eq!(guard("x", "z").as_deref(), Some("first"));
+        assert_eq!(guard("y", "z").as_deref(), Some("second"));
+        assert_eq!(guard("z", "x"), None);
     }
 
     #[test]
