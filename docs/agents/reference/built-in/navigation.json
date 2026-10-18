@@ -17,6 +17,7 @@
         "agents/reference/built-in/workbench/plan_drafter",
         "agents/reference/built-in/workbench/plan_loader",
         "agents/reference/built-in/workbench/plan_editor",
+        "agents/reference/built-in/workbench/item_editor",
         "agents/reference/built-in/workbench/agent_drafter",
         "agents/reference/built-in/workbench/tool_drafter"
       ]

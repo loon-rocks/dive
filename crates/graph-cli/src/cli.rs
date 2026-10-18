@@ -157,7 +157,9 @@ pub enum WorkbenchCommand {
         after_long_help = "Examples:\n  graph wb tool\n  graph wb tool summarize"
     )]
     Tool {
-        /// A user tool name to open for editing; omit to draft a new one
+        #[arg(
+            help = "A tool to open for editing: a user tool, builtin__<name>, or <pack>__tool__<name>; omit to draft a new one"
+        )]
         name: Option<String>,
     },
 }

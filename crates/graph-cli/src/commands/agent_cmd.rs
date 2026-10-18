@@ -108,6 +108,7 @@ mod tests {
                 "agent_drafter",
                 "chat",
                 "front_desk",
+                "item_editor",
                 "network_drafter",
                 "plan_drafter",
                 "plan_editor",

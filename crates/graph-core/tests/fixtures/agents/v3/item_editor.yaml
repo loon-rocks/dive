@@ -1,0 +1,12 @@
+version: 3
+name: item_editor
+description: Proposes and makes fixes to the items an edit session opened, from the call that went wrong.
+model: chat
+tools:
+  - workbench__load_artifact
+  - workbench__test_network
+subagents: [tool_drafter]
+attachments: [network, evidence]
+system_prompt: |
+  Read the items and the evidence, say what went wrong, and propose a change.
+  Current date and time: {{session.date}}
