@@ -364,7 +364,7 @@ fn existing_agent(name: &str, pipeline: &Pipeline) -> Result<Existing, String> {
     use graph_core::agent::doc::AgentSource;
     let name = network::bare_name(ArtifactKind::Agent, name);
     let (set, _) = graph_core::agent::doc::AgentSet::load(
-        graph_core::agent::doc::BUILTINS,
+        &crate::workbench::agents::builtin_sources(),
         &graph_core::agent::doc::agent_dirs(),
     );
     let doc = set
