@@ -10,7 +10,7 @@ pub const WORKBENCH_AGENTS: &[&str] = &[
     include_str!("plan_editor.yaml"),
     include_str!("tool_drafter.yaml"),
     include_str!("agent_drafter.yaml"),
-    include_str!("item_editor.yaml"),
+    include_str!("network_editor.yaml"),
 ];
 
 pub const FRONT_DESK: &str = "front_desk";
@@ -19,7 +19,7 @@ pub const PLAN_DRAFTER: &str = "plan_drafter";
 
 pub const PLAN_EDITOR: &str = "plan_editor";
 
-pub const ITEM_EDITOR: &str = "item_editor";
+pub const NETWORK_EDITOR: &str = "network_editor";
 
 pub fn workbench_only() -> Vec<graph_core::agent::doc::AgentDoc> {
     let globals: Vec<String> = graph_core::agent::doc::BUILTINS
@@ -65,7 +65,7 @@ pub fn starting_agent(start: &Start, doc: Option<&PlanDoc>) -> &'static str {
         (Start::Plan(_), None) | (Start::Agent(_), _) | (Start::Tool(_), _) => {
             super::artifact::NETWORK_DRAFTER
         }
-        (Start::Edit { .. }, _) => ITEM_EDITOR,
+        (Start::Edit { .. }, _) => NETWORK_EDITOR,
     }
 }
 
@@ -142,7 +142,7 @@ mod tests {
             "plan_editor",
             "tool_drafter",
             "agent_drafter",
-            "item_editor",
+            "network_editor",
         ] {
             assert!(set.get(name).is_some(), "{name}");
         }
@@ -173,7 +173,7 @@ mod tests {
                 },
                 None
             ),
-            "item_editor"
+            "network_editor"
         );
     }
 
@@ -228,7 +228,7 @@ steps:
             assert!(sections[0].starts_with("## Model roles"), "{builder}");
             assert!(sections[1].starts_with("## The network draft"), "{builder}");
         }
-        let editor = hook("item_editor");
+        let editor = hook("network_editor");
         assert_eq!(
             editor.len(),
             2,

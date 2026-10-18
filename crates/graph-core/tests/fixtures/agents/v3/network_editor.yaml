@@ -1,5 +1,5 @@
 version: 3
-name: item_editor
+name: network_editor
 description: Proposes and makes fixes to the items an edit session opened, from the call that went wrong.
 model: chat
 tools:

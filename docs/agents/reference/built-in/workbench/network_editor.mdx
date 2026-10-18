@@ -1,9 +1,9 @@
 ---
-title: "item_editor (workbench)"
-sidebarTitle: "item_editor"
+title: "network_editor (workbench)"
+sidebarTitle: "network_editor"
 description: "Edits existing agents, plans and tools in a chat thread. Proposes a fix from the call that went wrong, has the builders make it when you say go, and tests it against that call."
 playground: "none"
-keywords: ["item_editor", "agent"]
+keywords: ["network_editor", "agent"]
 ---
 
 - Starts an edit session, a chat thread opened on the items to edit and, when the edit comes from a run, the call that went wrong as its evidence. It replies first, without waiting for a message, with what went wrong and the change it proposes.
@@ -72,7 +72,7 @@ Current date and time: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show item_editor > .graph/agents/item_editor.yaml
+graph agent show network_editor > .graph/agents/network_editor.yaml
 ```
 
 </RequestExample>

@@ -1,5 +1,5 @@
 version: 3
-name: item_editor
+name: network_editor
 description: Edits existing agents, plans and tools. Reads the items an edit session opened and the call that went wrong, proposes a fix, has the builders make it once you say go, and tests it against that call.
 model: chat
 tools:
