@@ -29,7 +29,7 @@ const WORKBENCH_AGENT_ORDER: &[&str] = &[
     "plan_drafter",
     "plan_loader",
     "plan_editor",
-    "item_editor",
+    "network_editor",
     "agent_drafter",
     "tool_drafter",
 ];
@@ -522,7 +522,7 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
     let mut out = String::new();
     page_head(&mut out, &title, name, words, &[name, "agent"]);
     let default_agent = name == graph_core::agent::doc::CHAT_AGENT;
-    let runs = if name == "item_editor" {
+    let runs = if name == "network_editor" {
         "edit threads opened through `graph-runtime`; `graph chat --thread` reopens one".to_string()
     } else if workbench {
         "`graph wb` only".to_string()

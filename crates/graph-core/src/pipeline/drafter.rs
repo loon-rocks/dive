@@ -22,7 +22,7 @@ pub const SAVE_AGENT_TOOL: &str = "builtin__save_agent";
 
 const WORKBENCH_AGENTS: [&str; 6] = [
     "front_desk",
-    "item_editor",
+    "network_editor",
     "network_drafter",
     "plan_drafter",
     "plan_loader",
