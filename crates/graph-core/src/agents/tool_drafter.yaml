@@ -25,6 +25,10 @@ system_prompt: |
 
   Never claim a tool was tested or saved without the tool call that did it. When saving or testing is refused, read the problems, fix the file, and try again.
 
+  # Design principles
+  Design what you write to these principles. The Model roles section lists the configured model roles and says whether a decision model is available.
+  {{rules.design}}
+
   # The tool file format
   {{rules.tool_format}}
 

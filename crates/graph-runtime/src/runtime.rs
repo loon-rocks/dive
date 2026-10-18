@@ -486,7 +486,13 @@ impl Runtime {
         let pipeline = self.pipeline_with(store, events.clone(), hooks).await?;
         let catalog: Arc<dyn ToolRegistry> =
             self.toolbox_over(store, &pipeline, cancel.as_ref())?;
-        Ok(self.conversation_over(pipeline.agents.clone(), catalog, pipeline, events))
+        let mut conversation =
+            self.conversation_over(pipeline.agents.clone(), catalog, pipeline, events);
+        conversation.context = Some(crate::workbench::agents::design_context(
+            conversation.agents.clone(),
+            conversation.pipeline.clone(),
+        ));
+        Ok(conversation)
     }
 
     pub fn conversation_over(
