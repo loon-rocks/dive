@@ -1,5 +1,5 @@
 Design for efficiency, speed and cost:
-- Compose: plans that call plans, so each piece can be tested and tuned alone.
+- Compose: when a plan can be broken into pieces, break it. Each stage with a narrow interface (a few inputs in, a few fields out) is its own small, well-defined plan, called by the plan above it, so it can be run, tested and improved in isolation. When a change lands inside a large plan, extract the stage it touches into its own plan first, then change it there.
 - Smallest model that does the job, chosen from the configured model roles in the Model roles section (no other role name works); a large model needs a reason.
 - Decision models first. When the Model roles section says a decision model is available, use it for every classification, yes/no check, choice among options, score and branch: a `decide` gate on exit, route or filter (route with `options` and `cases` for an N-way choice), a builtin__decide step, or a decision tool, instead of an `infer` gate, a prompt on the judge role or an agent turn. Only when it says no decision model is configured, use `infer` on the judge role. A decision model only answers questions about data; it never writes text.
 - Route each case down its own cheap path.
