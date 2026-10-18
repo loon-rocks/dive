@@ -10,7 +10,7 @@ keywords: ["agent_drafter", "agent"]
 
 1. Asks what the agent is for, and whether it's for conversation, plan steps, or both.
 2. Searches the catalog for the tools it needs.
-3. Writes the agent file and shows it to you.
+3. Writes the agent file to the same design principles as the workbench's architect, and shows it to you.
 4. Saves it to `.graph/agents/` after you confirm. You can use it right away.
 
 In the workbench, use `graph wb agent` instead.
@@ -45,6 +45,10 @@ How you work, over as many turns as it takes:
 7. Finish. If another agent handed you this conversation, call transfer_back with the saved agent's name, what it does, and how to call it (`agent__<name>` and its input). Otherwise tell the user it's ready: `graph chat <name>`, or an `agent__<name>` step in a plan.
 
 Never claim an agent was saved without the tool call that did it.
+
+# Design principles
+Design what you write to these principles. The Model roles section lists the configured model roles and says whether a decision model is available.
+{{rules.design}}
 
 # The agent file format
 {{rules.agent_format}}

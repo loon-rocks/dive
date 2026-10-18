@@ -1417,6 +1417,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_editor_can_offer_a_rework_beside_the_patch() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("tools")).unwrap();
+        std::fs::write(dir.path().join("tools/word_count.yaml"), WORD_COUNT).unwrap();
+        let reply = "It counts lines because the tool shells out. Patch the flag, or rework it as a reshape?";
+        let runtime = edit_runtime(
+            dir.path(),
+            vec![call(
+                "workbench__propose_designs",
+                json!({
+                    "reply": reply,
+                    "yours": {"title": "Patch the flag", "nodes": [{"kind": "tool", "name": "word_count"}], "lines": ["-l becomes -w", "0 model calls"]},
+                    "suggested": {"title": "Rework the tool", "nodes": [{"kind": "tool", "name": "word_count"}], "lines": ["exec wc -w over stdin", "0 model calls"], "principles": ["No model at all"]}
+                }),
+            )],
+        );
+        let mut chat = open(
+            &runtime,
+            dir.path(),
+            ThreadOpen {
+                draft: Some(Start::Edit {
+                    items: Vec::new(),
+                    evidence: Some(word_count_evidence()),
+                }),
+                ..Default::default()
+            },
+        )
+        .await;
+        let report = chat.begin().await.unwrap();
+        assert_eq!(report.turn.text, reply);
+        assert_eq!(chat.active(), "network_editor");
+        let network = chat.network().unwrap().network();
+        let designs = network.designs.clone().expect("both designs in the pane");
+        assert_eq!(designs.yours.title, "Patch the flag");
+        assert_eq!(designs.suggested.title, "Rework the tool");
+        assert_eq!(network.nodes.len(), 1);
+        assert!(network.is_edit());
+        assert!(!network.nodes[0].changed);
+    }
+
+    #[tokio::test]
     async fn an_edit_without_an_item_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let runtime = edit_runtime(dir.path(), Vec::new());

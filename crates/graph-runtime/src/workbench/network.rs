@@ -469,6 +469,7 @@ impl Network {
     }
 
     pub fn builder_started(&mut self, node: &str, builder: &str) {
+        self.designs = None;
         if let Some(found) = self.nodes.iter_mut().find(|found| found.name == node) {
             found.status = NodeStatus::Drafting;
             found.builder = Some(builder.to_string());
@@ -1564,6 +1565,20 @@ mod tests {
                 .status,
             NodeStatus::Proposed
         );
+    }
+
+    #[test]
+    fn a_builder_starting_settles_the_design_question() {
+        let mut network = Network::default();
+        network
+            .propose_designs(&json!({
+                "yours": {"title": "Patch", "nodes": [], "lines": []},
+                "suggested": {"title": "Rework", "nodes": [], "lines": []}
+            }))
+            .unwrap();
+        assert!(network.designs.is_some());
+        network.builder_started("word_count", "tool_drafter");
+        assert!(network.designs.is_none());
     }
 
     #[test]

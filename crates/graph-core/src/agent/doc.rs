@@ -235,6 +235,7 @@ pub fn global_fragments() -> BTreeMap<&'static str, &'static str> {
         ("templating", crate::pipeline::TEMPLATING_RULES),
         ("tool_format", crate::prompts::TOOL_FORMAT),
         ("agent_format", crate::prompts::AGENT_FORMAT),
+        ("design", crate::prompts::DESIGN_RULES),
     ])
 }
 
@@ -806,6 +807,37 @@ mod tests {
         assert_eq!(
             render_system_prompt(&a, &fragments, &session).unwrap(),
             "use {{E0}} on today"
+        );
+    }
+
+    #[test]
+    fn a_user_agent_can_include_the_design_principles() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("designer.yaml"),
+            minimal("designer", "").replace(
+                "system_prompt: p",
+                "system_prompt: \"Design well.\\n{{rules.design}}\"",
+            ),
+        )
+        .unwrap();
+        let loaded = load_agent_dir(dir.path());
+        assert!(loaded.errors.is_empty(), "{:?}", loaded.errors);
+        let set = AgentSet::layered(vec![], vec![loaded.docs]);
+        let fragments = global_fragments();
+        let names: Vec<&str> = fragments.keys().copied().collect();
+        assert!(
+            set.validate(&names).is_empty(),
+            "{:?}",
+            set.validate(&names)
+        );
+        let session = BTreeMap::from([("date", "today".to_string()), ("user", String::new())]);
+        let rendered =
+            render_system_prompt(&set.get("designer").unwrap(), &fragments, &session).unwrap();
+        assert!(rendered.starts_with("Design well.\n"), "{rendered}");
+        assert!(
+            rendered.contains(crate::prompts::DESIGN_RULES),
+            "{rendered}"
         );
     }
 
