@@ -1355,7 +1355,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(chat.active(), "item_editor");
+        assert_eq!(chat.active(), "network_editor");
         let kinds: Vec<&str> = chat.attachments().iter().map(|host| host.kind()).collect();
         assert_eq!(kinds, ["network", "evidence"]);
         let node = chat.network().unwrap().network().nodes[0].clone();
@@ -1374,10 +1374,10 @@ mod tests {
             .find_map(|entry| match &entry.body {
                 graph_core::store::EntryBody::Message {
                     message: graph_llm::types::ChatMessage::User { content },
-                } if entry.author == "context:item_editor" => Some(content.clone()),
+                } if entry.author == "context:network_editor" => Some(content.clone()),
                 _ => None,
             })
-            .expect("item_editor's context note");
+            .expect("network_editor's context note");
         assert!(note.contains("## The network draft"), "{note}");
         assert!(note.contains("### tool word_count draft"), "{note}");
         assert!(note.contains("## The evidence"), "{note}");
@@ -1403,7 +1403,7 @@ mod tests {
             },
         )
         .await;
-        assert_eq!(reopened.active(), "item_editor");
+        assert_eq!(reopened.active(), "network_editor");
         let nodes = reopened.network().unwrap().network().nodes;
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].name, "word_count");
