@@ -1,5 +1,6 @@
 use super::artifact::{self, ArtifactKind};
 use super::network::{Network, TestRun};
+use graph_core::agent::conversation::starts_run;
 use graph_core::store::EntryBody;
 use graph_core::NewEntry;
 use graph_llm::types::{ChatMessage, ToolCall};
@@ -23,9 +24,10 @@ fn collect(messages: &[ChatMessage], results: &mut Results) {
 }
 
 #[derive(Default)]
-struct Replay {
+struct Replay<'a> {
     network: Network,
     composed: Option<Value>,
+    runs: Vec<(&'a NewEntry, bool)>,
 }
 
 fn yaml_name(yaml: &str) -> Option<String> {
@@ -49,17 +51,52 @@ fn strings(value: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-impl Replay {
+impl<'a> Replay<'a> {
     fn messages(&mut self, messages: &[ChatMessage], results: &Results, tool_dirs: &[PathBuf]) {
         for message in messages {
             let ChatMessage::Assistant { tool_calls, .. } = message else {
                 continue;
             };
             for call in tool_calls {
+                if let Some(run) = self.started(call) {
+                    self.run(run, results, tool_dirs);
+                    continue;
+                }
                 if let Some((result, false)) = results.get(call.id.as_str()) {
                     self.call(call, result, tool_dirs);
                 }
             }
+        }
+    }
+
+    fn started(&mut self, call: &ToolCall) -> Option<&'a NewEntry> {
+        let (run, done) = self.runs.iter_mut().find(|(run, done)| {
+            !*done
+                && matches!(&run.body, EntryBody::SubagentRun { agent, input, .. } if starts_run(call, agent, input))
+        })?;
+        *done = true;
+        Some(*run)
+    }
+
+    fn run(&mut self, entry: &'a NewEntry, results: &Results, tool_dirs: &[PathBuf]) {
+        let EntryBody::SubagentRun {
+            agent,
+            input,
+            messages,
+            output,
+            final_,
+            ..
+        } = &entry.body
+        else {
+            return;
+        };
+        let node = input["node"].as_str().map(str::to_string);
+        if let Some(node) = &node {
+            self.network.builder_started(node, agent);
+        }
+        self.messages(messages, results, tool_dirs);
+        if let Some(node) = &node {
+            self.network.builder_finished(node, agent, output, !final_);
         }
     }
 
@@ -189,29 +226,27 @@ pub fn network(entries: &[NewEntry], tool_dirs: &[PathBuf]) -> Network {
             EntryBody::Handoff { .. } => {}
         }
     }
-    let mut replay = Replay::default();
+    let mut replay = Replay {
+        runs: entries
+            .iter()
+            .filter(|entry| matches!(entry.body, EntryBody::SubagentRun { .. }))
+            .map(|entry| (entry, false))
+            .collect(),
+        ..Replay::default()
+    };
     for entry in entries {
         match &entry.body {
             EntryBody::Message { message } => {
                 replay.messages(std::slice::from_ref(message), &results, tool_dirs);
             }
-            EntryBody::SubagentRun {
-                agent,
-                input,
-                messages,
-                output,
-                final_,
-                ..
-            } => {
-                let node = input["node"].as_str().map(str::to_string);
-                if let Some(node) = &node {
-                    replay.network.builder_started(node, agent);
-                }
-                replay.messages(messages, &results, tool_dirs);
-                if let Some(node) = &node {
-                    replay
-                        .network
-                        .builder_finished(node, agent, output, !final_);
+            EntryBody::SubagentRun { .. } => {
+                let pending = replay
+                    .runs
+                    .iter_mut()
+                    .find(|(run, done)| !*done && std::ptr::eq(*run, entry));
+                if let Some((_, done)) = pending {
+                    *done = true;
+                    replay.run(entry, &results, tool_dirs);
                 }
             }
             EntryBody::Handoff { .. } => {}
@@ -330,6 +365,61 @@ mod tests {
             last_reply(&entries[..2]).as_deref(),
             Some("Question: words?")
         );
+    }
+
+    #[test]
+    fn subagent_runs_written_after_the_turn_replay_at_the_call_that_started_them() {
+        let sketch = json!({
+            "restate": {"outcome": "Words counted", "success": "A number", "constraint": "No model", "out_of_scope": []},
+            "nodes": [{"name": "word_count", "kind": "tool", "job": "Counts words"}]
+        });
+        let tool = "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\n";
+        let input = json!({"node": "word_count", "notes": "count them"});
+        let entries = vec![
+            call("1", artifact::SET_SKETCH, sketch),
+            result("1", json!({"nodes": 1})),
+            call("2", "agent__tool_drafter", input.clone()),
+            result("2", json!({"name": "word_count", "status": "drafted"})),
+            call(
+                "4",
+                artifact::TEST_NETWORK,
+                json!({"entry": "word_count", "input": {"text": "a b"}}),
+            ),
+            result(
+                "4",
+                json!({"passed": true, "ran": ["user__word_count"], "answer": "2"}),
+            ),
+            NewEntry::new(
+                "network_drafter",
+                EntryBody::SubagentRun {
+                    agent: "tool_drafter".into(),
+                    caller: "network_drafter".into(),
+                    input,
+                    messages: vec![
+                        ChatMessage::Assistant {
+                            content: None,
+                            tool_calls: vec![ToolCall {
+                                id: "3".into(),
+                                name: artifact::SET_ARTIFACT.into(),
+                                arguments: json!({"kind": "tool", "yaml": tool}),
+                            }],
+                            thinking: Vec::new(),
+                        },
+                        ChatMessage::ToolResult {
+                            tool_call_id: "3".into(),
+                            content: json!({"name": "word_count", "kind": "tool", "problems": []}),
+                            is_error: false,
+                        },
+                    ],
+                    output: json!({"name": "word_count", "status": "drafted", "summary": "counts"}),
+                    final_: true,
+                },
+            ),
+        ];
+        let network = network(&entries, &[]);
+        let node = network.node(ArtifactKind::Tool, "word_count").unwrap();
+        assert_eq!(node.yaml.as_deref(), Some(tool));
+        assert!(network.tested());
     }
 
     #[test]
