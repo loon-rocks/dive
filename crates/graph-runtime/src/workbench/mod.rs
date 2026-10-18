@@ -42,6 +42,9 @@ impl Workbench {
         root: impl Into<PathBuf>,
         tx: UnboundedSender<WorkbenchEvent>,
     ) -> Result<Self> {
+        if matches!(start, Start::Edit { .. }) {
+            anyhow::bail!("edit sessions open as chat threads (Runtime::open_thread), not in the terminal workbench");
+        }
         let doc = match &start {
             Start::Plan(Some(arg)) => Some(resolve_doc(runtime, arg)?),
             _ => None,
@@ -132,7 +135,6 @@ impl Workbench {
                     .await?
                     .with_context(|| format!("no thread '{id}'"))?;
                 let history = crate::runtime::load_history(store.as_ref(), id).await?;
-                attachment.restore(&history);
                 if let Some(recorded) = meta
                     .attachments
                     .iter()
@@ -140,6 +142,7 @@ impl Workbench {
                 {
                     attachment.recall(recorded);
                 }
+                attachment.restore(&history);
                 (Some(meta), history)
             }
             _ => (None, Vec::new()),

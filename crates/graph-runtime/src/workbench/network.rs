@@ -1,11 +1,14 @@
-use super::artifact::ArtifactKind;
+use super::artifact::{ArtifactKind, Existing};
 use super::secrets::{SecretState, TestSecret};
 use async_trait::async_trait;
 use graph_core::agent::doc::{parse_agent_source, AgentDoc, AgentSet};
+use graph_core::packs::{ItemKind, PackSource};
 use graph_core::pipeline::doc::PlanDoc;
 use graph_core::pipeline::Pipeline;
 use graph_core::secrets::SecretSource;
-use graph_core::user_tools::{UserToolDoc, UserToolRegistry, USER_TOOL_PREFIX};
+use graph_core::user_tools::{
+    UserToolDoc, UserToolRegistry, BUILTIN_TOOL_PREFIX, USER_TOOL_PREFIX,
+};
 use graph_core::{CompositeRegistry, ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -144,6 +147,50 @@ pub struct Designs {
     pub suggested: Design,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Origin {
+    #[default]
+    New,
+    File,
+    Builtin,
+    Pack(PackSource),
+}
+
+impl Origin {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::New => "new",
+            Self::File => "file",
+            Self::Builtin => "builtin",
+            Self::Pack(_) => "pack",
+        }
+    }
+
+    pub fn destination(&self) -> &'static str {
+        match self {
+            Self::New => "new",
+            Self::File => "file",
+            Self::Builtin => "override",
+            Self::Pack(_) => "pack",
+        }
+    }
+
+    pub fn pack(&self) -> Option<&PackSource> {
+        match self {
+            Self::Pack(source) => Some(source),
+            _ => None,
+        }
+    }
+}
+
+fn item_kind(kind: ArtifactKind) -> ItemKind {
+    match kind {
+        ArtifactKind::Tool => ItemKind::Tool,
+        ArtifactKind::Plan => ItemKind::Plan,
+        ArtifactKind::Agent => ItemKind::Agent,
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Node {
     pub name: String,
@@ -162,6 +209,8 @@ pub struct Node {
     pub original: Option<String>,
     pub builder: Option<String>,
     pub note: Option<String>,
+    pub origin: Origin,
+    pub base: Option<String>,
 }
 
 impl Node {
@@ -183,15 +232,38 @@ impl Node {
             original: None,
             builder: None,
             note: None,
+            origin: Origin::New,
+            base: None,
+        }
+    }
+
+    pub fn runtime_name(&self) -> String {
+        match &self.origin {
+            Origin::Pack(source) => {
+                graph_core::packs::catalog_name(&source.name, item_kind(self.kind), &self.name)
+            }
+            _ => self.name.clone(),
         }
     }
 
     pub fn catalog_name(&self) -> String {
-        catalog_name(self.kind, &self.name)
+        match (&self.origin, self.kind) {
+            (Origin::Pack(_), _) => self.runtime_name(),
+            (Origin::Builtin, ArtifactKind::Tool) => format!("{BUILTIN_TOOL_PREFIX}{}", self.name),
+            _ => catalog_name(self.kind, &self.name),
+        }
+    }
+
+    pub fn names(&self, name: &str) -> bool {
+        self.name == name || self.catalog_name() == name || self.runtime_name() == name
     }
 
     pub fn drafted(&self) -> bool {
         self.yaml.is_some()
+    }
+
+    pub fn changed(&self) -> bool {
+        self.yaml.is_some() && self.yaml != self.base
     }
 }
 
@@ -262,6 +334,11 @@ pub struct NodeView {
     pub builder: Option<String>,
     pub note: Option<String>,
     pub secrets: Vec<NodeSecret>,
+    pub origin: &'static str,
+    pub pack: Option<String>,
+    pub path: Option<String>,
+    pub base: Option<String>,
+    pub changed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
@@ -287,7 +364,11 @@ impl NetworkView {
     }
 
     pub fn unsaved(&self) -> usize {
-        self.nodes.iter().filter(|node| node.yaml.is_some()).count()
+        self.nodes.iter().filter(|node| node.changed).count()
+    }
+
+    pub fn is_edit(&self) -> bool {
+        self.restate.is_none() && self.nodes.iter().any(|node| node.base.is_some())
     }
 }
 
@@ -673,29 +754,73 @@ impl Network {
         Ok(())
     }
 
-    pub fn open(
-        &mut self,
-        kind: ArtifactKind,
-        name: &str,
-        yaml: String,
-        editing: Option<PathBuf>,
-        original: Option<String>,
-        problems: Vec<String>,
-    ) {
-        if self.node(kind, name).is_none() {
-            let mut node = Node::sketched(name.to_string(), kind, String::new());
+    pub fn open(&mut self, kind: ArtifactKind, found: Existing, problems: Vec<String>) {
+        let name = found.name.clone();
+        if self.node(kind, &name).is_none() {
+            let mut node = Node::sketched(name.clone(), kind, String::new());
             node.sketched = false;
             self.nodes.push(node);
         }
-        if let Some(node) = self.node_mut(kind, name) {
-            node.yaml = Some(yaml);
+        if let Some(node) = self.node_mut(kind, &name) {
+            node.yaml = Some(found.yaml.clone());
+            node.base = Some(found.yaml);
             node.problems = problems;
             node.last_run = None;
             node.status = NodeStatus::Drafted;
-            node.editing = editing;
-            node.original = original;
+            node.editing = found.editing;
+            node.original = Some(name);
+            node.origin = found.origin;
         }
         self.changed();
+    }
+
+    pub fn is_edit(&self) -> bool {
+        self.restate.is_none() && self.nodes.iter().any(|node| node.base.is_some())
+    }
+
+    pub fn saved(&mut self, written: &[(ArtifactKind, String, PathBuf)]) {
+        if !self.is_edit() {
+            self.clear();
+            return;
+        }
+        for (kind, name, path) in written {
+            if let Some(node) = self.node_mut(*kind, name) {
+                node.base = node.yaml.clone();
+                node.editing = Some(path.clone());
+                if node.origin == Origin::New {
+                    node.origin = Origin::File;
+                }
+                node.status = NodeStatus::Drafted;
+            }
+        }
+        self.tests.clear();
+        self.untest();
+        self.changed();
+    }
+
+    pub fn discard_all(&mut self) -> usize {
+        if !self.is_edit() {
+            return self.clear();
+        }
+        let changed = self.nodes.iter().filter(|node| node.changed()).count();
+        self.nodes.retain(|node| node.base.is_some());
+        for node in &mut self.nodes {
+            node.yaml = node.base.clone();
+            node.problems.clear();
+            node.last_run = None;
+            node.status = NodeStatus::Drafted;
+            node.builder = None;
+            node.note = None;
+        }
+        self.tests.clear();
+        self.testing = None;
+        self.untest();
+        self.changed();
+        changed
+    }
+
+    pub fn has_edits(&self) -> bool {
+        self.nodes.iter().any(Node::changed)
     }
 
     pub fn untest(&mut self) {
@@ -795,6 +920,11 @@ impl Network {
                     builder: node.builder.clone(),
                     note: node.note.clone(),
                     secrets: self.node_secrets(node),
+                    origin: node.origin.label(),
+                    pack: node.origin.pack().map(|source| source.name.clone()),
+                    path: node.editing.as_ref().map(|path| path.display().to_string()),
+                    base: node.base.clone(),
+                    changed: node.changed(),
                 })
                 .collect(),
             edges: self.edges.clone(),
@@ -819,7 +949,7 @@ impl Network {
     pub fn with_problems(&self) -> Vec<String> {
         self.nodes
             .iter()
-            .filter(|node| node.drafted() && !node.problems.is_empty())
+            .filter(|node| node.changed() && !node.problems.is_empty())
             .map(|node| {
                 format!(
                     "{} {}: {}",
@@ -837,7 +967,7 @@ impl Network {
             ArtifactKind::Plan => 1,
             ArtifactKind::Agent => 2,
         };
-        let mut nodes: Vec<&Node> = self.nodes.iter().filter(|node| node.drafted()).collect();
+        let mut nodes: Vec<&Node> = self.nodes.iter().filter(|node| node.changed()).collect();
         nodes.sort_by_key(|node| rank(node.kind));
         nodes
     }
@@ -1043,15 +1173,63 @@ impl ToolRegistry for Stubs {
     }
 }
 
+pub fn resolved_plan(origin: &Origin, yaml: &str) -> Result<PlanDoc, String> {
+    let mut doc = parse_plan(yaml)?;
+    if let Origin::Pack(source) = origin {
+        let problems = graph_core::packs::resolve_plan_steps(&mut doc.steps, &source.name);
+        if !problems.is_empty() {
+            return Err(problems.join("; "));
+        }
+        doc.identifier =
+            graph_core::packs::catalog_name(&source.name, ItemKind::Plan, &doc.identifier);
+        doc.pack = Some(source.clone());
+    }
+    Ok(doc)
+}
+
+pub fn resolved_agent(origin: &Origin, yaml: &str) -> Result<AgentDoc, String> {
+    let mut doc = parse_agent_source(yaml)?;
+    if let Origin::Pack(source) = origin {
+        let problems = graph_core::packs::resolve_agent(&mut doc, &source.name);
+        if !problems.is_empty() {
+            return Err(problems.join("; "));
+        }
+        doc.name = graph_core::packs::catalog_name(&source.name, ItemKind::Agent, &doc.name);
+        doc.source = graph_core::agent::doc::AgentSource::Pack {
+            source: source.clone(),
+            path: source.dir.join("agents"),
+        };
+    }
+    Ok(doc)
+}
+
+fn node_agent(node: &Node) -> Option<AgentDoc> {
+    node.yaml
+        .as_deref()
+        .and_then(|yaml| resolved_agent(&node.origin, yaml).ok())
+        .or_else(|| agent_stub(node))
+}
+
 pub fn overlay(pipeline: &Pipeline, network: &Network) -> Pipeline {
     let mut tools = Vec::new();
+    let mut builtins = Vec::new();
+    let mut packed: Vec<(PackSource, Vec<UserToolDoc>)> = Vec::new();
     let mut stubs = Vec::new();
     let mut plans: Vec<PlanDoc> = Vec::new();
     let mut agents: Vec<AgentDoc> = Vec::new();
     for node in &network.nodes {
         match node.kind {
             ArtifactKind::Tool => match node.yaml.as_deref().and_then(parse_tool) {
-                Some(doc) => tools.push(doc),
+                Some(doc) => match &node.origin {
+                    Origin::Builtin => builtins.push(doc),
+                    Origin::Pack(source) => {
+                        match packed.iter_mut().find(|(known, _)| known == source) {
+                            Some((_, docs)) => docs.push(doc),
+                            None => packed.push((source.clone(), vec![doc])),
+                        }
+                    }
+                    Origin::New | Origin::File => tools.push(doc),
+                },
                 None => stubs.push(ToolDef {
                     name: node.catalog_name(),
                     description: node.job.clone(),
@@ -1065,19 +1243,14 @@ pub fn overlay(pipeline: &Pipeline, network: &Network) -> Pipeline {
                 if let Some(doc) = node
                     .yaml
                     .as_deref()
-                    .and_then(|yaml| parse_plan(yaml).ok())
+                    .and_then(|yaml| resolved_plan(&node.origin, yaml).ok())
                     .or_else(|| plan_stub(node))
                 {
                     plans.push(doc);
                 }
             }
             ArtifactKind::Agent => {
-                if let Some(doc) = node
-                    .yaml
-                    .as_deref()
-                    .and_then(|yaml| parse_agent_source(yaml).ok())
-                    .or_else(|| agent_stub(node))
-                {
+                if let Some(doc) = node_agent(node) {
                     agents.push(doc);
                 }
             }
@@ -1088,6 +1261,19 @@ pub fn overlay(pipeline: &Pipeline, network: &Network) -> Pipeline {
     if !tools.is_empty() {
         layers.push(Arc::new(
             UserToolRegistry::new(tools.clone(), pipeline.router.clone())
+                .with_secrets(pipeline.drafted.secrets.clone()),
+        ));
+    }
+    if !builtins.is_empty() {
+        layers.push(Arc::new(
+            UserToolRegistry::builtins(builtins, pipeline.router.clone())
+                .with_secrets(pipeline.drafted.secrets.clone()),
+        ));
+    }
+    for (source, docs) in packed {
+        layers.push(Arc::new(
+            UserToolRegistry::pack(&source.name, docs, pipeline.router.clone())
+                .with_pack_dir(&source.dir)
                 .with_secrets(pipeline.drafted.secrets.clone()),
         ));
     }
@@ -1136,12 +1322,7 @@ pub fn network_agents(network: &Network) -> Vec<AgentDoc> {
         .nodes
         .iter()
         .filter(|node| node.kind == ArtifactKind::Agent)
-        .filter_map(|node| {
-            node.yaml
-                .as_deref()
-                .and_then(|yaml| parse_agent_source(yaml).ok())
-                .or_else(|| agent_stub(node))
-        })
+        .filter_map(node_agent)
         .collect()
 }
 

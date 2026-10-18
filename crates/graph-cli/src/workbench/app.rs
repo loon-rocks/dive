@@ -1881,6 +1881,11 @@ steps:
                     builder: None,
                     note: None,
                     secrets: Vec::new(),
+                    origin: "new",
+                    pack: None,
+                    path: None,
+                    base: None,
+                    changed: true,
                 }],
                 ..NetworkView::default()
             })),

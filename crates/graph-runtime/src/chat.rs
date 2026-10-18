@@ -1,5 +1,6 @@
-use crate::attachment::{AttachmentHost, NETWORK_ATTACHMENT};
+use crate::attachment::{AttachmentHost, EVIDENCE_ATTACHMENT, NETWORK_ATTACHMENT};
 use crate::cancel::CancelHandle;
+use crate::evidence::{Evidence, EvidenceAttachment, Item};
 use crate::runtime::{
     load_history, persist_turn, resolve_thread, starting_agent, title_from, PipelineHooks, Runtime,
 };
@@ -50,7 +51,8 @@ impl Runtime {
 #[derive(Default)]
 struct Seed {
     doc: Option<PlanDoc>,
-    opening: Option<(ArtifactKind, String)>,
+    opening: Vec<(ArtifactKind, String)>,
+    evidence: Option<Evidence>,
 }
 
 pub struct ChatStart {
@@ -59,10 +61,11 @@ pub struct ChatStart {
     fresh_thread: bool,
     owner: String,
     active: String,
-    attachment: Option<String>,
+    attachments: Vec<String>,
     seed: Seed,
     root: Option<PathBuf>,
     project: Option<String>,
+    title: Option<String>,
 }
 
 impl ChatStart {
@@ -73,19 +76,19 @@ impl ChatStart {
         thread: Option<Option<String>>,
     ) -> Result<Self> {
         let thread = resolve_thread(store.as_ref(), thread).await?;
-        let attachment = match &thread {
+        let attachments = match &thread {
             Some(meta) if !meta.attachments.is_empty() => {
                 let kinds: Vec<String> = meta
                     .attachments
                     .iter()
                     .map(|recorded| recorded.kind.clone())
                     .collect();
-                crate::attachment::thread_kinds(&kinds).into_iter().next()
+                crate::attachment::thread_kinds(&kinds)
             }
             Some(meta) => declared(runtime, &meta.owner),
             None => declared(runtime, agent.unwrap_or(graph_core::agent::doc::CHAT_AGENT)),
         };
-        let agents = runtime.agent_set_for(attachment.as_deref());
+        let agents = runtime.agent_set_for_kinds(&attachments);
         let active = starting_agent(thread.as_ref(), agent, &|name| agents.get(name).is_some())?;
         let owner = thread
             .as_ref()
@@ -97,19 +100,26 @@ impl ChatStart {
             fresh_thread: false,
             owner,
             active,
-            attachment,
+            attachments,
             seed: Seed::default(),
             root: None,
             project: runtime.project().map(str::to_string),
+            title: None,
         })
     }
 
     pub async fn draft(runtime: &Runtime, store: Arc<dyn Store>, start: Start) -> Result<Self> {
         if let Start::Resume(id) = &start {
             let mut resumed = Self::resolve(runtime, store, None, Some(Some(id.clone()))).await?;
-            if resumed.attachment.is_none() {
-                resumed.attachment = Some(NETWORK_ATTACHMENT.to_string());
-                let agents = runtime.agent_set_for(resumed.attachment.as_deref());
+            if !resumed
+                .attachments
+                .iter()
+                .any(|kind| kind == NETWORK_ATTACHMENT)
+            {
+                resumed
+                    .attachments
+                    .insert(0, NETWORK_ATTACHMENT.to_string());
+                let agents = runtime.agent_set_for_kinds(&resumed.attachments);
                 resumed.active = starting_agent(resumed.thread.as_ref(), None, &|name| {
                     agents.get(name).is_some()
                 })?;
@@ -120,10 +130,26 @@ impl ChatStart {
             Start::Plan(Some(arg)) => Some(crate::workbench::resolve_doc(runtime, arg)?),
             _ => None,
         };
-        let opening = match &start {
-            Start::Agent(Some(name)) => Some((ArtifactKind::Agent, name.clone())),
-            Start::Tool(Some(name)) => Some((ArtifactKind::Tool, name.clone())),
-            _ => None,
+        let mut attachments = vec![NETWORK_ATTACHMENT.to_string()];
+        let mut title = None;
+        let (opening, evidence) = match &start {
+            Start::Agent(Some(name)) => (vec![(ArtifactKind::Agent, name.clone())], None),
+            Start::Tool(Some(name)) => (vec![(ArtifactKind::Tool, name.clone())], None),
+            Start::Edit { items, evidence } => {
+                let items = edited(items, evidence.as_ref())?;
+                if evidence.is_some() {
+                    attachments.push(EVIDENCE_ATTACHMENT.to_string());
+                }
+                title = Some(edit_title(&items, evidence.as_ref()));
+                (
+                    items
+                        .into_iter()
+                        .map(|item| (item.kind, item.name))
+                        .collect(),
+                    evidence.clone(),
+                )
+            }
+            _ => (Vec::new(), None),
         };
         let active = crate::workbench::agents::starting_agent(&start, doc.as_ref()).to_string();
         Ok(Self {
@@ -132,10 +158,15 @@ impl ChatStart {
             fresh_thread: false,
             owner: active.clone(),
             active,
-            attachment: Some(NETWORK_ATTACHMENT.to_string()),
-            seed: Seed { doc, opening },
+            attachments,
+            seed: Seed {
+                doc,
+                opening,
+                evidence,
+            },
             root: None,
             project: runtime.project().map(str::to_string),
+            title,
         })
     }
 
@@ -152,8 +183,8 @@ impl ChatStart {
         &self.active
     }
 
-    pub fn attachment(&self) -> Option<&str> {
-        self.attachment.as_deref()
+    pub fn attachments(&self) -> &[String] {
+        &self.attachments
     }
 
     pub async fn create_thread(&mut self, first_message: &str) -> Result<&ThreadMeta> {
@@ -178,7 +209,7 @@ impl ChatStart {
     ) -> Result<ChatSession> {
         runtime.usage.attach_events(events.clone());
         let cancel = hooks.cancel.get_or_insert_with(CancelHandle::new).clone();
-        let Some(kind) = self.attachment.clone() else {
+        if self.attachments.is_empty() {
             let conversation = runtime
                 .conversation(&self.store, events.clone(), hooks)
                 .await?;
@@ -191,40 +222,64 @@ impl ChatStart {
                     Some(cancel),
                 )
                 .await;
-        };
+        }
+        let kinds = self.attachments.clone();
         let pipeline = runtime
             .pipeline_with(&self.store, events.clone(), hooks)
             .await?;
         let toolbox = runtime.toolbox_over(&self.store, &pipeline, Some(&cancel))?;
-        let root = match self.root.take() {
-            Some(root) => root,
-            None => std::env::current_dir().context("failed to read the current directory")?,
-        };
         let seed = std::mem::take(&mut self.seed);
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let network = Arc::new(NetworkAttachment::new(NetworkSetup {
-            pipeline: pipeline.clone(),
-            tx,
-            plans_dir: runtime.plans_dir(),
-            root,
-            doc: seed.doc,
-        })?);
-        network.forward(rx, events.clone());
-        let host: Arc<dyn AttachmentHost> = network.clone();
+        let recorded: Vec<Attachment> = self
+            .thread
+            .as_ref()
+            .map(|meta| meta.attachments.clone())
+            .unwrap_or_default();
+        let mut hosts: Vec<Arc<dyn AttachmentHost>> = Vec::new();
+        let mut network = None;
+        if kinds.iter().any(|kind| kind == NETWORK_ATTACHMENT) {
+            let root = match self.root.take() {
+                Some(root) => root,
+                None => std::env::current_dir().context("failed to read the current directory")?,
+            };
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            let host = Arc::new(NetworkAttachment::new(NetworkSetup {
+                pipeline: pipeline.clone(),
+                tx,
+                plans_dir: runtime.plans_dir(),
+                root,
+                doc: seed.doc,
+            })?);
+            host.forward(rx, events.clone());
+            hosts.push(host.clone());
+            network = Some(host);
+        }
+        let evidence = seed.evidence.or_else(|| {
+            recorded
+                .iter()
+                .find(|recorded| recorded.kind == EVIDENCE_ATTACHMENT)
+                .and_then(Evidence::recall)
+        });
+        if let Some(evidence) =
+            evidence.filter(|_| kinds.iter().any(|kind| kind == EVIDENCE_ATTACHMENT))
+        {
+            hosts.push(Arc::new(EvidenceAttachment::new(evidence)));
+        }
         let mut sinks = vec![events.clone()];
-        sinks.extend(host.observer());
-        let agents = Arc::new(runtime.agent_set_for(Some(&kind)));
-        let mut conversation = runtime.conversation_over(
-            agents,
-            host.tools(toolbox),
-            pipeline,
-            Arc::new(TeeSink::new(sinks)),
+        sinks.extend(hosts.iter().filter_map(|host| host.observer()));
+        let agents = Arc::new(runtime.agent_set_for_kinds(&kinds));
+        let catalog = hosts.iter().fold(
+            toolbox as Arc<dyn graph_core::ToolRegistry>,
+            |catalog, host| host.tools(catalog),
         );
+        let mut conversation =
+            runtime.conversation_over(agents, catalog, pipeline, Arc::new(TeeSink::new(sinks)));
         conversation.context = Some(crate::attachment::context_hook(
             conversation.agents.clone(),
-            vec![host.clone()],
+            hosts.clone(),
         ));
-        host.wire(&mut conversation);
+        for host in &hosts {
+            host.wire(&mut conversation);
+        }
         let mut session = self
             .over(
                 conversation,
@@ -234,21 +289,27 @@ impl ChatStart {
                 Some(cancel),
             )
             .await?;
-        host.restore(&session.history);
-        if let Some(recorded) = session
-            .recorded
-            .iter()
-            .find(|recorded| recorded.kind == host.kind())
-        {
-            network.recall(recorded);
+        if let Some(network) = &network {
+            if let Some(recorded) = session
+                .recorded
+                .iter()
+                .find(|recorded| recorded.kind == NETWORK_ATTACHMENT)
+            {
+                network.recall(recorded);
+            }
         }
-        if let Some((kind, name)) = seed.opening {
-            network
-                .open_existing(kind, &name)
-                .await
-                .map_err(anyhow::Error::msg)?;
+        for host in &hosts {
+            host.restore(&session.history);
         }
-        session.attachments.push(host);
+        if let Some(network) = &network {
+            for (kind, name) in seed.opening {
+                network
+                    .open_item(kind, &name)
+                    .await
+                    .map_err(anyhow::Error::msg)?;
+            }
+        }
+        session.attachments = hosts;
         Ok(session)
     }
 
@@ -285,19 +346,50 @@ impl ChatStart {
             attachments: Vec::new(),
             recorded,
             project: self.project,
+            title: self.title,
         })
     }
 }
 
-fn declared(runtime: &Runtime, agent: &str) -> Option<String> {
-    let doc = runtime.agent_set().get(agent).or_else(|| {
-        crate::attachment::THREAD_KINDS
-            .iter()
-            .find_map(|kind| runtime.agent_set_for(Some(kind)).get(agent))
-    })?;
+fn edited(items: &[Item], evidence: Option<&Evidence>) -> Result<Vec<Item>> {
+    let mut edited: Vec<Item> = Vec::new();
+    for item in items.iter().chain(evidence.map(|evidence| &evidence.item)) {
+        if !edited.contains(item) {
+            edited.push(item.clone());
+        }
+    }
+    if edited.is_empty() {
+        anyhow::bail!("an edit session needs an item to edit: name one in items or evidence");
+    }
+    Ok(edited)
+}
+
+fn edit_title(items: &[Item], evidence: Option<&Evidence>) -> String {
+    let verb = match evidence {
+        Some(evidence) if evidence.error.is_some() => "Fix",
+        Some(_) => "Improve",
+        None => "Edit",
+    };
+    let named: Vec<String> = items
+        .iter()
+        .map(|item| format!("{} {}", item.kind.label(), item.name))
+        .collect();
+    format!("{verb} {}", named.join(", "))
+}
+
+fn declared(runtime: &Runtime, agent: &str) -> Vec<String> {
+    let thread_kinds: Vec<String> = crate::attachment::THREAD_KINDS
+        .iter()
+        .map(|kind| kind.to_string())
+        .collect();
+    let Some(doc) = runtime
+        .agent_set()
+        .get(agent)
+        .or_else(|| runtime.agent_set_for_kinds(&thread_kinds).get(agent))
+    else {
+        return Vec::new();
+    };
     crate::attachment::thread_kinds(&doc.attachments)
-        .into_iter()
-        .next()
 }
 
 pub struct ChatSession {
@@ -315,6 +407,7 @@ pub struct ChatSession {
     attachments: Vec<Arc<dyn AttachmentHost>>,
     recorded: Vec<Attachment>,
     project: Option<String>,
+    title: Option<String>,
 }
 
 pub struct TurnReport {
@@ -402,11 +495,23 @@ impl ChatSession {
     }
 
     pub async fn send(&mut self, message: &str) -> Result<TurnReport> {
+        self.turn(Some(message)).await
+    }
+
+    pub async fn begin(&mut self) -> Result<TurnReport> {
+        self.turn(None).await
+    }
+
+    async fn turn(&mut self, message: Option<&str>) -> Result<TurnReport> {
         let mut thread_error = None;
         if self.thread.is_none() {
+            let title = message
+                .map(str::to_string)
+                .or_else(|| self.title.clone())
+                .unwrap_or_else(|| self.active.clone());
             match create_thread(
                 self.store.as_ref(),
-                message,
+                &title,
                 &self.owner,
                 &self.active,
                 self.project.as_deref(),
@@ -430,12 +535,12 @@ impl ChatSession {
             self.events.run_started(&RunStart {
                 name: name.clone(),
                 session_id: self.thread.as_ref().map(|meta| meta.id.clone()),
-                input: Some(serde_json::Value::String(message.to_string())),
+                input: message.map(|message| serde_json::Value::String(message.to_string())),
             });
         }
         let turn = self
             .conversation
-            .run_turn(&self.history, &self.active, message);
+            .run_turn_from(&self.history, &self.active, message);
         let result: Result<ConversationTurn> = match &self.cancel {
             Some(cancel) => match cancel.run(turn).await {
                 Ok(result) => result.map_err(Into::into),
@@ -1177,5 +1282,153 @@ mod tests {
             .act(NETWORK_ATTACHMENT, "publish", json!({}))
             .await
             .is_err());
+    }
+
+    fn edit_runtime(dir: &std::path::Path, responses: Vec<ChatResponse>) -> Runtime {
+        let mut config = graph_config::Config::default();
+        config.tools.paths = vec![dir.join("tools")];
+        config.plans.paths = Vec::new();
+        config.settings.data_dir = dir.join("data");
+        let provider: Arc<dyn ChatProvider> = Arc::new(Scripted(Mutex::new(responses.into())));
+        let router = ModelRouter::with_providers(
+            HashMap::from([("scripted".to_string(), provider)]),
+            ModelRoles::from([(
+                "default",
+                ModelChoice {
+                    provider: "scripted".to_string(),
+                    model: "scripted".to_string(),
+                    temperature: None,
+                    description: None,
+                    fallbacks: Vec::new(),
+                    context_window: None,
+                },
+            )]),
+        );
+        let options = RuntimeOptions {
+            storage_backend: Some("file".to_string()),
+            capture_content: false,
+        };
+        Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
+    }
+
+    const WORD_COUNT: &str =
+        "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\nargs: [-l]\n";
+
+    fn word_count_evidence() -> Evidence {
+        Evidence {
+            thread: "a1b2c3d4e5f6".to_string(),
+            call: Some("toolu_7".to_string()),
+            item: Item {
+                kind: ArtifactKind::Tool,
+                name: "word_count".to_string(),
+            },
+            input: json!({"text": "one two three"}),
+            output: Some(json!("1")),
+            error: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn an_edit_session_opens_its_items_with_the_evidence_and_proposes_first() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("tools")).unwrap();
+        std::fs::write(dir.path().join("tools/word_count.yaml"), WORD_COUNT).unwrap();
+        let runtime = edit_runtime(
+            dir.path(),
+            vec![text(
+                "It counts lines, not words: `-l` should be `-w`. Go, or tell me what to change?",
+            )],
+        );
+        let mut chat = runtime
+            .open_thread(
+                ThreadOpen {
+                    draft: Some(Start::Edit {
+                        items: Vec::new(),
+                        evidence: Some(word_count_evidence()),
+                    }),
+                    root: Some(dir.path().to_path_buf()),
+                    ..Default::default()
+                },
+                Arc::new(NullSink),
+                PipelineHooks::default(),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(chat.active(), "item_editor");
+        let kinds: Vec<&str> = chat.attachments().iter().map(|host| host.kind()).collect();
+        assert_eq!(kinds, ["network", "evidence"]);
+        let node = chat.network().unwrap().network().nodes[0].clone();
+        assert_eq!((node.name.as_str(), node.origin), ("word_count", "file"));
+        assert!(!node.changed);
+
+        let report = chat.begin().await.unwrap();
+        assert!(report.turn.text.starts_with("It counts lines"));
+        let meta = chat.thread().cloned().unwrap();
+        assert_eq!(meta.title, "Improve tool word_count");
+        let store = runtime.store().unwrap();
+        let history = load_history(store.as_ref(), &meta.id).await.unwrap();
+        assert!(history.iter().all(|entry| entry.author != "user"));
+        let note = history
+            .iter()
+            .find_map(|entry| match &entry.body {
+                graph_core::store::EntryBody::Message {
+                    message: graph_llm::types::ChatMessage::User { content },
+                } if entry.author == "context:item_editor" => Some(content.clone()),
+                _ => None,
+            })
+            .expect("item_editor's context note");
+        assert!(note.contains("## The network draft"), "{note}");
+        assert!(note.contains("### tool word_count draft"), "{note}");
+        assert!(note.contains("## The evidence"), "{note}");
+        assert!(note.contains("one two three"), "{note}");
+
+        let stored = store.get_thread(&meta.id).await.unwrap().unwrap();
+        assert_eq!(
+            stored.attachments,
+            [
+                Attachment::new(NETWORK_ATTACHMENT)
+                    .with("state", "open")
+                    .with("opened", json!([{"kind": "tool", "name": "word_count"}])),
+                word_count_evidence().record(),
+            ]
+        );
+
+        let reopened = open(
+            &runtime,
+            dir.path(),
+            ThreadOpen {
+                thread: Some(meta.id.clone()),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(reopened.active(), "item_editor");
+        let nodes = reopened.network().unwrap().network().nodes;
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].name, "word_count");
+        assert_eq!(nodes[0].base.as_deref(), Some(WORD_COUNT));
+        let evidence = reopened.attachment(EVIDENCE_ATTACHMENT).unwrap().view();
+        assert_eq!(
+            evidence,
+            serde_json::to_value(word_count_evidence()).unwrap()
+        );
+        assert_eq!(reopened.recorded(), stored.attachments.as_slice());
+    }
+
+    #[tokio::test]
+    async fn an_edit_without_an_item_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = edit_runtime(dir.path(), Vec::new());
+        let refused = ChatStart::draft(
+            &runtime,
+            runtime.store().unwrap(),
+            Start::Edit {
+                items: Vec::new(),
+                evidence: None,
+            },
+        )
+        .await;
+        assert!(refused.is_err());
     }
 }

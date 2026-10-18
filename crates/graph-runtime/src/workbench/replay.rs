@@ -1,4 +1,4 @@
-use super::artifact::{self, ArtifactKind};
+use super::artifact::{self, ArtifactKind, Existing};
 use super::network::{Network, TestRun};
 use graph_core::agent::conversation::starts_run;
 use graph_core::store::EntryBody;
@@ -6,9 +6,10 @@ use graph_core::NewEntry;
 use graph_llm::types::{ChatMessage, ToolCall};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 type Results = HashMap<String, (Value, bool)>;
+
+pub type Items<'a> = &'a dyn Fn(ArtifactKind, &str) -> Option<Existing>;
 
 fn collect(messages: &[ChatMessage], results: &mut Results) {
     for message in messages {
@@ -52,18 +53,18 @@ fn strings(value: &Value) -> Vec<String> {
 }
 
 impl<'a> Replay<'a> {
-    fn messages(&mut self, messages: &[ChatMessage], results: &Results, tool_dirs: &[PathBuf]) {
+    fn messages(&mut self, messages: &[ChatMessage], results: &Results, items: Items) {
         for message in messages {
             let ChatMessage::Assistant { tool_calls, .. } = message else {
                 continue;
             };
             for call in tool_calls {
                 if let Some(run) = self.started(call) {
-                    self.run(run, results, tool_dirs);
+                    self.run(run, results, items);
                     continue;
                 }
                 if let Some((result, false)) = results.get(call.id.as_str()) {
-                    self.call(call, result, tool_dirs);
+                    self.call(call, result, items);
                 }
             }
         }
@@ -78,7 +79,7 @@ impl<'a> Replay<'a> {
         Some(*run)
     }
 
-    fn run(&mut self, entry: &'a NewEntry, results: &Results, tool_dirs: &[PathBuf]) {
+    fn run(&mut self, entry: &'a NewEntry, results: &Results, items: Items) {
         let EntryBody::SubagentRun {
             agent,
             input,
@@ -94,13 +95,13 @@ impl<'a> Replay<'a> {
         if let Some(node) = &node {
             self.network.builder_started(node, agent);
         }
-        self.messages(messages, results, tool_dirs);
+        self.messages(messages, results, items);
         if let Some(node) = &node {
             self.network.builder_finished(node, agent, output, !final_);
         }
     }
 
-    fn call(&mut self, call: &ToolCall, result: &Value, tool_dirs: &[PathBuf]) {
+    fn call(&mut self, call: &ToolCall, result: &Value, items: Items) {
         let input = &call.arguments;
         if result.get("error").is_some() {
             return;
@@ -158,18 +159,9 @@ impl<'a> Replay<'a> {
                 _ => {}
             },
             artifact::LOAD_ARTIFACT => {
-                if let (Some(kind @ (ArtifactKind::Agent | ArtifactKind::Tool)), Some(name)) =
-                    (kind, result["opened"].as_str())
-                {
-                    if let Ok(found) = artifact::existing(kind, name, tool_dirs) {
-                        self.network.open(
-                            kind,
-                            &found.name,
-                            found.yaml,
-                            found.editing,
-                            Some(found.name.clone()),
-                            Vec::new(),
-                        );
+                if let (Some(kind), Some(_)) = (kind, result["opened"].as_str()) {
+                    if let Some(found) = items(kind, input["name"].as_str().unwrap_or_default()) {
+                        self.network.open(kind, found, Vec::new());
                     }
                 }
             }
@@ -190,9 +182,27 @@ impl<'a> Replay<'a> {
                     }
                 }
             }
-            artifact::DISCARD_NETWORK | artifact::SAVE_NETWORK => {
-                self.network.clear();
+            artifact::DISCARD_NETWORK => {
+                self.network.discard_all();
             }
+            artifact::SAVE_NETWORK => match result["files"].as_array() {
+                Some(files) => {
+                    let written: Vec<(ArtifactKind, String, std::path::PathBuf)> = files
+                        .iter()
+                        .filter_map(|file| {
+                            Some((
+                                ArtifactKind::parse(file["kind"].as_str()?)?,
+                                file["name"].as_str()?.to_string(),
+                                std::path::PathBuf::from(file["path"].as_str()?),
+                            ))
+                        })
+                        .collect();
+                    self.network.saved(&written);
+                }
+                None => {
+                    self.network.clear();
+                }
+            },
             artifact::TEST_NETWORK => {
                 self.network.waiting_on_secrets = false;
                 self.network.record_test(TestRun {
@@ -217,7 +227,7 @@ impl<'a> Replay<'a> {
     }
 }
 
-pub fn network(entries: &[NewEntry], tool_dirs: &[PathBuf]) -> Network {
+pub fn network(entries: &[NewEntry], opened: &[(ArtifactKind, String)], items: Items) -> Network {
     let mut results = Results::new();
     for entry in entries {
         match &entry.body {
@@ -234,10 +244,15 @@ pub fn network(entries: &[NewEntry], tool_dirs: &[PathBuf]) -> Network {
             .collect(),
         ..Replay::default()
     };
+    for (kind, name) in opened {
+        if let Some(found) = items(*kind, name) {
+            replay.network.open(*kind, found, Vec::new());
+        }
+    }
     for entry in entries {
         match &entry.body {
             EntryBody::Message { message } => {
-                replay.messages(std::slice::from_ref(message), &results, tool_dirs);
+                replay.messages(std::slice::from_ref(message), &results, items);
             }
             EntryBody::SubagentRun { .. } => {
                 let pending = replay
@@ -246,7 +261,7 @@ pub fn network(entries: &[NewEntry], tool_dirs: &[PathBuf]) -> Network {
                     .find(|(run, done)| !*done && std::ptr::eq(*run, entry));
                 if let Some((_, done)) = pending {
                     *done = true;
-                    replay.run(entry, &results, tool_dirs);
+                    replay.run(entry, &results, items);
                 }
             }
             EntryBody::Handoff { .. } => {}
@@ -355,7 +370,7 @@ mod tests {
                 json!({"passed": true, "ran": ["user__word_count"], "answer": "2"}),
             ),
         ];
-        let network = network(&entries, &[]);
+        let network = network(&entries, &[], &|_, _| None);
         assert_eq!(network.interview.as_ref().unwrap().confidence, 60);
         let node = network.node(ArtifactKind::Tool, "word_count").unwrap();
         assert_eq!(node.yaml.as_deref(), Some(tool));
@@ -416,7 +431,7 @@ mod tests {
                 },
             ),
         ];
-        let network = network(&entries, &[]);
+        let network = network(&entries, &[], &|_, _| None);
         let node = network.node(ArtifactKind::Tool, "word_count").unwrap();
         assert_eq!(node.yaml.as_deref(), Some(tool));
         assert!(network.tested());
@@ -434,6 +449,128 @@ mod tests {
             call("2", artifact::SAVE_NETWORK, json!({})),
             result("2", json!({"saved": "saved a"})),
         ];
-        assert!(network(&entries, &[]).is_empty());
+        assert!(network(&entries, &[], &|_, _| None).is_empty());
+    }
+
+    fn opened_file(name: &str, yaml: &str) -> Existing {
+        Existing {
+            yaml: yaml.to_string(),
+            editing: Some(std::path::PathBuf::from(format!("/work/tools/{name}.yaml"))),
+            name: name.to_string(),
+            origin: super::super::network::Origin::File,
+        }
+    }
+
+    #[test]
+    fn items_opened_at_the_start_replay_before_the_edits_made_to_them() {
+        let saved = "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\n";
+        let edited =
+            "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\nargs: [-w]\n";
+        let digest = "identifier: digest\nname: Digest\ndescription: d\nsteps: []\n";
+        let items = |kind: ArtifactKind, name: &str| match (kind, name) {
+            (ArtifactKind::Tool, "word_count") => Some(opened_file("word_count", saved)),
+            (ArtifactKind::Plan, "digest") => Some(Existing {
+                yaml: digest.to_string(),
+                editing: None,
+                name: "digest".to_string(),
+                origin: super::super::network::Origin::Builtin,
+            }),
+            _ => None,
+        };
+        let entries = vec![
+            NewEntry::new(
+                "item_editor",
+                EntryBody::SubagentRun {
+                    agent: "tool_drafter".into(),
+                    caller: "item_editor".into(),
+                    input: json!({"node": "word_count", "notes": "count words, not lines"}),
+                    messages: vec![
+                        ChatMessage::Assistant {
+                            content: None,
+                            tool_calls: vec![ToolCall {
+                                id: "1".into(),
+                                name: artifact::SET_ARTIFACT.into(),
+                                arguments: json!({"kind": "tool", "yaml": edited}),
+                            }],
+                            thinking: Vec::new(),
+                        },
+                        ChatMessage::ToolResult {
+                            tool_call_id: "1".into(),
+                            content: json!({"name": "word_count", "kind": "tool", "problems": []}),
+                            is_error: false,
+                        },
+                    ],
+                    output: json!({"name": "word_count", "status": "drafted", "summary": "counts words"}),
+                    final_: true,
+                },
+            ),
+            call(
+                "2",
+                artifact::LOAD_ARTIFACT,
+                json!({"kind": "plan", "name": "digest", "reason": "it calls word_count"}),
+            ),
+            result("2", json!({"opened": "digest", "kind": "plan"})),
+        ];
+        let opened = [(ArtifactKind::Tool, "word_count".to_string())];
+
+        let network = network(&entries, &opened, &items);
+        let tool = network.node(ArtifactKind::Tool, "word_count").unwrap();
+        assert_eq!(tool.yaml.as_deref(), Some(edited));
+        assert_eq!(tool.base.as_deref(), Some(saved));
+        assert!(tool.changed());
+        assert_eq!(
+            tool.editing.as_deref(),
+            Some(std::path::Path::new("/work/tools/word_count.yaml"))
+        );
+        let plan = network.node(ArtifactKind::Plan, "digest").unwrap();
+        assert!(!plan.changed());
+        assert!(network.is_edit());
+
+        let lost = super::network(&entries, &[], &items);
+        let tool = lost.node(ArtifactKind::Tool, "word_count").unwrap();
+        assert!(
+            tool.base.is_none(),
+            "without the opening the edit has no file to go back to"
+        );
+    }
+
+    #[test]
+    fn a_saved_edit_keeps_its_items_and_a_discarded_one_reverts_them() {
+        let saved = "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\n";
+        let edited =
+            "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\nargs: [-w]\n";
+        let items = |_: ArtifactKind, _: &str| Some(opened_file("word_count", saved));
+        let opened = [(ArtifactKind::Tool, "word_count".to_string())];
+        let edit = |id: &str| {
+            vec![
+                call(
+                    id,
+                    artifact::SET_ARTIFACT,
+                    json!({"kind": "tool", "yaml": edited}),
+                ),
+                result(
+                    id,
+                    json!({"name": "word_count", "kind": "tool", "problems": []}),
+                ),
+            ]
+        };
+        let mut entries = edit("1");
+        entries.push(call("2", artifact::SAVE_NETWORK, json!({"untested": true})));
+        entries.push(result(
+            "2",
+            json!({"saved": "saved /work/tools/word_count.yaml", "untested": true, "files": [{"kind": "tool", "name": "word_count", "path": "/work/tools/word_count.yaml", "destination": "file"}]}),
+        ));
+        let network = network(&entries, &opened, &items);
+        let tool = network.node(ArtifactKind::Tool, "word_count").unwrap();
+        assert_eq!(tool.base.as_deref(), Some(edited));
+        assert!(!network.has_edits());
+
+        let mut entries = edit("1");
+        entries.push(call("2", artifact::DISCARD_NETWORK, json!({})));
+        entries.push(result("2", json!({"discarded": "discarded 1"})));
+        let network = super::network(&entries, &opened, &items);
+        let tool = network.node(ArtifactKind::Tool, "word_count").unwrap();
+        assert_eq!(tool.yaml.as_deref(), Some(saved));
+        assert!(!network.has_edits());
     }
 }

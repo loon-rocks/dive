@@ -114,6 +114,13 @@ impl Runtime {
                     .map(|p| graph_config::expand_tilde(p))
                     .collect(),
             )
+            .with_pack_sources(
+                packs
+                    .tool_docs()
+                    .into_iter()
+                    .map(|(source, _)| source)
+                    .collect(),
+            )
             .with_secrets(Arc::new(graph_core::secrets::in_project(
                 loaded.config.project.id.clone(),
             ))),
@@ -269,12 +276,13 @@ impl Runtime {
     }
 
     pub fn agent_set_for(&self, attachment: Option<&str>) -> graph_core::agent::doc::AgentSet {
+        let kinds: Vec<String> = attachment.map(str::to_string).into_iter().collect();
+        self.agent_set_for_kinds(&kinds)
+    }
+
+    pub fn agent_set_for_kinds(&self, kinds: &[String]) -> graph_core::agent::doc::AgentSet {
         let mut sources = graph_core::agent::doc::BUILTINS.to_vec();
-        sources.extend(
-            attachment
-                .map(crate::attachment::agent_sources)
-                .unwrap_or_default(),
-        );
+        sources.extend(crate::attachment::agent_sources_for(kinds));
         let (set, errors) =
             graph_core::agent::doc::AgentSet::load(&sources, &graph_core::agent::doc::agent_dirs());
         for error in errors {

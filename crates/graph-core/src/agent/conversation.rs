@@ -92,12 +92,26 @@ impl Conversation {
         active: &str,
         user: &str,
     ) -> Result<ConversationTurn, ConversationError> {
-        let mut entries = vec![NewEntry::message(
-            USER_AUTHOR,
-            ChatMessage::User {
-                content: user.to_string(),
-            },
-        )];
+        self.run_turn_from(history, active, Some(user)).await
+    }
+
+    pub async fn run_turn_from(
+        &self,
+        history: &[NewEntry],
+        active: &str,
+        user: Option<&str>,
+    ) -> Result<ConversationTurn, ConversationError> {
+        let mut entries: Vec<NewEntry> = user
+            .map(|user| {
+                NewEntry::message(
+                    USER_AUTHOR,
+                    ChatMessage::User {
+                        content: user.to_string(),
+                    },
+                )
+            })
+            .into_iter()
+            .collect();
         let mut active = active.to_string();
         let mut tool_calls_made = 0;
         let mut tools_used: Vec<String> = Vec::new();
@@ -117,6 +131,12 @@ impl Conversation {
             }
             let agent = self.build_agent(doc, tools.clone())?;
             let mut messages = view(&active, history.iter().chain(entries.iter()));
+            if messages.is_empty() {
+                return Err(ConversationError::Setup {
+                    agent: active.clone(),
+                    message: "there is nothing to start the turn from: no message, no history and no context".to_string(),
+                });
+            }
             let before = messages.len();
             let result = agent.run_turn(&mut messages).await;
             let stamps = result
@@ -1003,6 +1023,28 @@ mod tests {
         );
         let last = turn.entries.last().unwrap().usage.clone().unwrap();
         assert_eq!((last.input_tokens, last.output_tokens), (30, 4));
+    }
+
+    #[tokio::test]
+    async fn a_turn_without_a_message_starts_from_the_agents_context() {
+        let (mut conversation, provider) = conversation(vec![text("Here is what I found.")]);
+        let refused = conversation.run_turn_from(&[], "front", None).await;
+        assert!(
+            matches!(refused, Err(ConversationError::Setup { .. })),
+            "nothing to start from"
+        );
+        conversation.context = Some(Arc::new(|agent: &str| {
+            vec![format!("## Evidence for {agent}")]
+        }));
+        let turn = conversation
+            .run_turn_from(&[], "front", None)
+            .await
+            .unwrap();
+        assert_eq!(turn.text, "Here is what I found.");
+        assert!(turn.entries.iter().all(|entry| entry.author != USER_AUTHOR));
+        assert_eq!(turn.entries[0].author, "context:front");
+        let requests = provider.requests.lock().unwrap();
+        assert_eq!(user_text(&requests[0]), "## Evidence for front");
     }
 
     #[tokio::test]
