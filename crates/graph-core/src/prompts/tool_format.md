@@ -37,7 +37,7 @@ Use it for judgment over text the caller passes in: classify, extract, summarize
 
 `reshape` copies and renames fields of its input with `shape`, a template tree over `{{input.*}}`. It computes nothing.
 
-`decision` asks a decision model typed questions with `state` and `questions`; use it only when the user asks for one.
+`decision` asks a decision model typed questions with `state` and `questions`: a likelihood, a choice among options or a score. When a decision model is available, use it instead of a `prompt` tool to classify, choose or score.
 
 Example:
 

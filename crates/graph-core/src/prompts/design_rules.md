@@ -1,0 +1,20 @@
+Design for efficiency, speed and cost:
+- One job each, composed (the Unix philosophy): a plan does one job, and finishes the way that job calls for: `output` for a small, well-defined result a caller reads, `solver` for synthesized prose, `silent` for a side effect with nothing to return; an agent is an expert in one thing, with only the tools that thing needs; a tool wraps one command or call. Larger, more sophisticated work is a composition of them: plans that call plans, agents that call subagents. When a plan or agent does two jobs, split it, even when that means more nodes, so each piece can be run, tested and improved in isolation. Reuse an existing plan or agent when it does exactly one of the jobs you need; when only one piece of what a plan computes is needed, extract that piece into its own plan and call it from both, rather than calling the whole plan. When a change lands inside a plan or agent that does several jobs, extract the job it touches first, then change it there.
+- Smallest model that does the job, chosen from the configured model roles in the Model roles section (no other role name works); a large model needs a reason.
+- Decision models first. When the Model roles section says a decision model is available, use it for every classification, yes/no check, choice among options, score and branch: a `decide` gate on exit, route or filter (route with `options` and `cases` for an N-way choice), a builtin__decide step, or a decision tool, instead of an `infer` gate, a prompt on the judge role or an agent turn. Only when it says no decision model is configured, use `infer` on the judge role. A decision model only answers questions about data; it never writes text.
+- Route each case down its own cheap path.
+- Map/reduce over a small model instead of one big context.
+- Concurrency for independent items; prune context to the fields each step reads.
+- Plans before agents: a plan when the steps are known, an agent only when the path depends on the conversation.
+- No model at all when a command, an API call or a reshape does the job.
+
+Treat context as scarce memory and tokens as clock cycles: every token read costs time and money, every token written costs several times more, and a long-lived context is paid for again on every round. Apply the patterns of a constrained system:
+- Index, then seek: read a table of contents (a file list, hunk headers, per-file match counts, names and one-line descriptions) and fetch only the slices it points to, by line window, path or anchor. Never scan a whole file, diff or page to find one part.
+- Track what changed: record a watermark (a sha, a timestamp, an id) when work is done, and next time process only the delta since it.
+- Cascade: a comparison or a command settles what it can, the decision model takes what's left, and a chat model only the remainder that needs prose.
+- Never copy data through a model: a model returns ids, verdicts and the new text only, and reshapes join them back to the data. A decision model's output is a probability, so it writes nothing.
+- Isolate and pass references: work whose result the caller needs only a few lines of (searching, reading, research) runs in a subagent's own context, on a small model, and returns facts with pointers (path and lines, URL and anchor), not copies. The caller dereferences a pointer only when it needs the exact text.
+- Load lazily: a long-lived agent keeps the index; detail loads where it's used, in a builder's or subagent's short-lived context.
+- Shorten the critical path: fan independent items out with map and concurrency, put independent tool calls in one response, and end early with exit gates. Each serial model round adds its full latency.
+- Fixed before variable: what stays the same across calls (instructions, reference text) goes in the system prompt (a prompt tool's `system`, an agent's system_prompt) and what changes (the item) in the message, so the prompt cache reuses the fixed part.
+- A longer timeout, a bigger byte budget or a lower cap only hides the cost; a faster model alone keeps the same shape.

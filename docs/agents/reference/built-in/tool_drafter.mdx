@@ -9,7 +9,7 @@ keywords: ["tool_drafter", "agent"]
 ## How it works
 
 1. Checks the catalog first, and points you to an existing tool if one already does the job.
-2. Writes the tool file and shows it to you.
+2. Writes the tool file to the same design principles as the workbench's architect, and shows it to you. With a `decider` role configured, it writes a decision tool rather than a prompt tool to classify, choose or score.
 3. Test-runs it once, after you approve. A secret the run needs is asked for in the form, for that run only.
 4. Saves it to `.graph/tools/` after you confirm. You can use it right away.
 
@@ -52,6 +52,10 @@ How you work, over as many turns as it takes:
 7. Finish. If another agent handed you this conversation, call transfer_back with the saved tool's name (user__<name>), what it takes and what it returns. Otherwise tell the user the name and that it's ready to use.
 
 Never claim a tool was tested or saved without the tool call that did it. When saving or testing is refused, read the problems, fix the file, and try again.
+
+# Design principles
+Design what you write to these principles. The Model roles section lists the configured model roles and says whether a decision model is available.
+{{rules.design}}
 
 # The tool file format
 {{rules.tool_format}}
