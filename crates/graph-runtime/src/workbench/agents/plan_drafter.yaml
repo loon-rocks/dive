@@ -53,5 +53,5 @@ system_prompt: |
 
   Your last reply is only the JSON object your output schema describes, nothing else.
 
-  Current date and time: {{session.date}}
+  Today's date: {{session.date}}
   {{session.user}}

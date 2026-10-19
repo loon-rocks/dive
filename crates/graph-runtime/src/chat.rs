@@ -1285,11 +1285,14 @@ mod tests {
     }
 
     fn edit_runtime(dir: &std::path::Path, responses: Vec<ChatResponse>) -> Runtime {
+        edit_runtime_over(dir, Arc::new(Scripted(Mutex::new(responses.into()))))
+    }
+
+    fn edit_runtime_over(dir: &std::path::Path, provider: Arc<dyn ChatProvider>) -> Runtime {
         let mut config = graph_config::Config::default();
         config.tools.paths = vec![dir.join("tools")];
         config.plans.paths = Vec::new();
         config.settings.data_dir = dir.join("data");
-        let provider: Arc<dyn ChatProvider> = Arc::new(Scripted(Mutex::new(responses.into())));
         let router = ModelRouter::with_providers(
             HashMap::from([("scripted".to_string(), provider)]),
             ModelRoles::from([(
@@ -1455,6 +1458,89 @@ mod tests {
         assert_eq!(network.nodes.len(), 1);
         assert!(network.is_edit());
         assert!(!network.nodes[0].changed);
+    }
+
+    struct Recording {
+        script: Scripted,
+        seen: Mutex<Vec<ChatRequest>>,
+    }
+
+    #[async_trait]
+    impl ChatProvider for Recording {
+        async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, LlmError> {
+            self.seen.lock().unwrap().push(request);
+            self.script.next()
+        }
+
+        async fn chat_stream(&self, request: ChatRequest) -> Result<EventStream, LlmError> {
+            self.seen.lock().unwrap().push(request);
+            let response = self.script.next()?;
+            Ok(futures::stream::iter(vec![Ok(StreamEvent::Completed(response))]).boxed())
+        }
+    }
+
+    fn prefix(request: &ChatRequest) -> (Value, Value, Value) {
+        (
+            json!(request.system),
+            serde_json::to_value(&request.tools).unwrap(),
+            serde_json::to_value(&request.messages).unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn a_reopened_thread_resends_the_previous_turn_s_prompt_unchanged_so_the_cache_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("tools")).unwrap();
+        std::fs::write(dir.path().join("tools/word_count.yaml"), WORD_COUNT).unwrap();
+        let provider = Arc::new(Recording {
+            script: Scripted(Mutex::new(
+                vec![
+                    call("workbench__describe_tool", json!({"name": "word_count"})),
+                    text("It counts lines. Go?"),
+                    text("Done."),
+                ]
+                .into(),
+            )),
+            seen: Mutex::new(Vec::new()),
+        });
+        let runtime = edit_runtime_over(dir.path(), provider.clone());
+        let mut chat = open(
+            &runtime,
+            dir.path(),
+            ThreadOpen {
+                draft: Some(Start::Edit {
+                    items: Vec::new(),
+                    evidence: Some(word_count_evidence()),
+                }),
+                ..Default::default()
+            },
+        )
+        .await;
+        chat.begin().await.unwrap();
+        let thread = chat.thread().unwrap().id.clone();
+        drop(chat);
+
+        let mut reopened = open(
+            &runtime,
+            dir.path(),
+            ThreadOpen {
+                thread: Some(thread),
+                ..Default::default()
+            },
+        )
+        .await;
+        reopened.send("go").await.unwrap();
+
+        let seen = provider.seen.lock().unwrap();
+        assert_eq!(seen.len(), 3);
+        let (system, tools, messages) = prefix(&seen[1]);
+        let (next_system, next_tools, next_messages) = prefix(&seen[2]);
+        assert_eq!(next_system, system);
+        assert_eq!(next_tools, tools);
+        let earlier = messages.as_array().unwrap();
+        let later = next_messages.as_array().unwrap();
+        assert!(later.len() > earlier.len());
+        assert_eq!(&later[..earlier.len()], earlier.as_slice());
     }
 
     #[tokio::test]

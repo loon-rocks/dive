@@ -508,9 +508,7 @@ impl Runtime {
         pipeline: Arc<Pipeline>,
         events: Arc<dyn EventSink>,
     ) -> Conversation {
-        let now = chrono::Local::now()
-            .format("%A, %B %e %Y, %H:%M %Z")
-            .to_string();
+        let now = session_date(chrono::Local::now());
         let mut prompt_overrides = std::collections::BTreeMap::new();
         if let Some(prompt) = deprecated_prompt(
             &agents,
@@ -710,6 +708,13 @@ pub fn starting_agent(
     }
 }
 
+pub(crate) fn session_date<Tz: chrono::TimeZone>(now: chrono::DateTime<Tz>) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    now.format("%A, %B %e %Y").to_string()
+}
+
 fn session_user(user: &graph_config::UserConfig) -> String {
     let mut out = String::new();
     if let Some(name) = &user.name {
@@ -847,6 +852,21 @@ pub struct RuntimeOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_session_date_holds_for_the_whole_day_so_reopened_threads_keep_their_prompt_cache() {
+        use chrono::TimeZone;
+        let morning = chrono::Utc.with_ymd_and_hms(2026, 10, 18, 9, 4, 0).unwrap();
+        let later = chrono::Utc.with_ymd_and_hms(2026, 10, 18, 9, 6, 1).unwrap();
+        let evening = chrono::Utc
+            .with_ymd_and_hms(2026, 10, 18, 23, 59, 59)
+            .unwrap();
+        assert_eq!(session_date(morning), "Sunday, October 18 2026");
+        assert_eq!(session_date(later), session_date(morning));
+        assert_eq!(session_date(evening), session_date(morning));
+        let next_day = chrono::Utc.with_ymd_and_hms(2026, 10, 19, 0, 0, 0).unwrap();
+        assert_ne!(session_date(next_day), session_date(morning));
+    }
 
     #[test]
     fn the_current_workspace_loads_the_same_layers_as_the_cli() {
