@@ -175,6 +175,11 @@ pub async fn run_task_agent(
                 continue;
             }
 
+            if spec.output_schema.is_some() && response.stop_reason == StopReason::MaxTokens {
+                return Err(TaskError::Failed(
+                    graph_llm::LlmError::output_limit(None, &response.usage).to_string(),
+                ));
+            }
             let Some(schema) = &spec.output_schema else {
                 return finish(
                     json!({ "result": text }),
@@ -487,6 +492,76 @@ mod tests {
             panic!("the final notice is the last turn");
         };
         assert_eq!(content, FINAL_ROUND_NOTICE_TEXT);
+    }
+
+    fn truncated(content: Option<&str>, structured: Option<Value>) -> ChatResponse {
+        ChatResponse {
+            structured,
+            stop_reason: StopReason::MaxTokens,
+            usage: Usage {
+                output_tokens: 16000,
+                ..Default::default()
+            },
+            ..response(content, vec![])
+        }
+    }
+
+    fn ranked_schema() -> Value {
+        json!({
+            "type": "object",
+            "properties": {"ranked": {"type": "array"}, "urls": {"type": "array"}},
+            "required": ["ranked", "urls"]
+        })
+    }
+
+    #[tokio::test]
+    async fn truncated_json_text_fails_without_a_repair_call() {
+        let (router, provider) = router(vec![
+            truncated(Some(r#"{"ranked": [{"url": "https://a"#), None),
+            response(Some(r#"{"ranked": [], "urls": []}"#), vec![]),
+        ]);
+        let err = run_task_agent(
+            &spec(None, Some(ranked_schema())),
+            &router,
+            &CallSite::role("chat"),
+            &NullSink,
+            &EchoTools,
+        )
+        .await
+        .unwrap_err();
+        let TaskError::Failed(message) = err else {
+            panic!("expected a failure, got {err:?}");
+        };
+        assert!(
+            message.contains("output limit of 16000 tokens"),
+            "{message}"
+        );
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_truncated_forced_answer_fails_without_a_repair_call() {
+        let (router, provider) = router(vec![
+            truncated(None, Some(json!({"ranked": [{"url": "https://a"}]}))),
+            response(None, vec![]),
+        ]);
+        let err = run_task_agent(
+            &spec(Some(1), Some(ranked_schema())),
+            &router,
+            &CallSite::role("chat"),
+            &NullSink,
+            &EchoTools,
+        )
+        .await
+        .unwrap_err();
+        let TaskError::Failed(message) = err else {
+            panic!("expected a failure, got {err:?}");
+        };
+        assert!(
+            message.contains("output limit of 16000 tokens"),
+            "{message}"
+        );
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
     }
 
     #[test]
