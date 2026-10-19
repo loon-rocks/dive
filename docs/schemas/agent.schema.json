@@ -10,7 +10,7 @@
       "subagents": [
         "chat"
       ],
-      "system_prompt": "You answer questions about what shipped in this repository.\nCurrent date and time: {{session.date}}\n",
+      "system_prompt": "You answer questions about what shipped in this repository.\nToday's date: {{session.date}}\n",
       "tools": [
         "plan__weekly_changes",
         "github__tool__git_log"
@@ -72,7 +72,7 @@
       "type": "array"
     },
     "system_prompt": {
-      "description": "The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else.",
+      "description": "The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else. `{{session.date}}` is today's date with no time of day, so the prompt stays the same all day and a resumed thread keeps its prompt cache.",
       "type": "string"
     },
     "tools": {

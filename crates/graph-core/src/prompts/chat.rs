@@ -18,7 +18,7 @@ pub fn chat_system_prompt(user: &UserConfig, now: &str, base_override: Option<&s
 }
 
 pub fn user_context_section(user: &UserConfig, now: &str) -> String {
-    let mut section = format!("\nCurrent date and time: {now}\n");
+    let mut section = format!("\nToday's date: {now}\n");
     if let Some(name) = &user.name {
         section.push_str(&format!("\nThe user's name is {name}.\n"));
     }
@@ -44,7 +44,7 @@ mod tests {
         let prompt = chat_system_prompt(&user, "NOW", Some("You are a pirate."));
         assert!(prompt.starts_with("You are a pirate.\n"));
         assert!(!prompt.contains("command-line assistant"));
-        assert!(prompt.contains("Current date and time: NOW"));
+        assert!(prompt.contains("Today's date: NOW"));
         assert!(prompt.contains("The user's name is Tyler."));
         assert!(prompt.contains("About the user and their environment:\nCEO"));
     }
@@ -59,7 +59,7 @@ mod tests {
         let section = user_context_section(&user, "NOW");
         assert_eq!(
             section,
-            "\nCurrent date and time: NOW\n\nThe user's name is Tyler.\n\nAbout the user and their environment:\nCEO\n"
+            "\nToday's date: NOW\n\nThe user's name is Tyler.\n\nAbout the user and their environment:\nCEO\n"
         );
         assert!(chat_system_prompt(&user, "NOW", None).ends_with(&section));
     }
@@ -68,6 +68,6 @@ mod tests {
     fn default_base_used_when_no_override() {
         let prompt = chat_system_prompt(&UserConfig::default(), "NOW", None);
         assert!(prompt.starts_with(DEFAULT_CHAT_PROMPT));
-        assert!(prompt.contains("Current date and time: NOW"));
+        assert!(prompt.contains("Today's date: NOW"));
     }
 }

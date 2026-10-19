@@ -27,5 +27,5 @@ system_prompt: |
   {{rules.agent_format}}
 
 
-  Current date and time: {{session.date}}
+  Today's date: {{session.date}}
   {{session.user}}

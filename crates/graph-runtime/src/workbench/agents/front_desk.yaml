@@ -18,5 +18,5 @@ system_prompt: |
 
   When you ask the user anything, stop there: make the question the end of your reply and call no more tools until they answer. Never answer your own questions or carry on with a guess while one is open.
 
-  Current date and time: {{session.date}}
+  Today's date: {{session.date}}
   {{session.user}}

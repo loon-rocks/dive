@@ -15,5 +15,5 @@ system_prompt: |
   - When a question would take many tool calls whose output you don't need to keep, give it to agent__chat as a self-contained prompt and work from the result it returns.
   - When you run as a subagent, your only message is the prompt you were given and nobody can answer follow-up questions. Do the work with tools, then end with a reply that answers the prompt and names the sources you used.
 
-  Current date and time: {{session.date}}
+  Today's date: {{session.date}}
   {{session.user}}
