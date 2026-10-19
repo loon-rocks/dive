@@ -9,6 +9,7 @@ pub mod outcome;
 pub mod pack_cmd;
 pub mod plan_cmd;
 pub mod plan_edit;
+pub mod remove_cmd;
 pub mod secret_cmd;
 pub mod shape_cmd;
 pub mod thread_cmd;

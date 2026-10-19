@@ -35,7 +35,7 @@ Only `prompt` and `decision` tools spend tokens, so moving work into `exec` and 
 
 Mark a tool `read_only` when it has no side effects. `reshape` and `decision` tools are read-only by default.
 
-Tool names must be unique across both directories. To change a built-in tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces graph's version. A pack is a plain copy in `packs/<name>/`, so you change its tools by editing them there; `graph pack list` reports the edits.
+Tool names must be unique across both directories. To change a built-in tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces graph's version. `graph tool rm builtin__<name>` deletes the override and brings graph's version back; `graph tool rm <name>` deletes a user tool. A pack is a plain copy in `packs/<name>/`, so you change its tools by editing them there; `graph pack list` reports the edits.
 
 ## Inspect and run tools
 

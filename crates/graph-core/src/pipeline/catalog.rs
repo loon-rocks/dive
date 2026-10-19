@@ -216,7 +216,7 @@ pub fn resolve_step_tools(plan: &Plan, catalog: &ToolCatalog) -> Vec<String> {
 /// Every `(step id, pattern)` pair from `agent` steps' `tools:` lists,
 /// control-step bodies included. These are tool *references* even though
 /// they live in input data, so they get resolved like any step tool name.
-pub(crate) fn agent_tool_patterns(plan: &Plan) -> Vec<(String, String)> {
+pub fn agent_tool_patterns(plan: &Plan) -> Vec<(String, String)> {
     let mut found = Vec::new();
     let mut collect = |id: String, input: &serde_json::Map<String, serde_json::Value>| {
         let Some(serde_json::Value::Array(items)) = input.get("tools") else {
