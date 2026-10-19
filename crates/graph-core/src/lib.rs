@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod format;
+pub mod list_tools;
 pub mod packs;
 pub mod pipeline;
 pub mod prompts;

@@ -1,0 +1,84 @@
+---
+title: "builtin__rank"
+sidebarTitle: "builtin__rank"
+description: "Ranks a whole list against a question in one decision-model call."
+playground: "none"
+keywords: ["builtin__rank"]
+---
+
+## Behavior
+
+- The items become the options of one `choice` question, `state` is the context they're judged against, and `instructions` is the question.
+- Each option shows the item's `describe` field, or the whole item when `describe` is absent.
+- `items` is the list sorted by probability, highest first, and `ranked` pairs each item with its probability. Both are cut to `top_k`.
+- Options are shown in a shuffled order seeded from the items, since decision models lean toward the first options. The same list ranks the same way on a rerun.
+- `none` adds a "nothing fits" option. Its probability comes back as `none`, and `no_fit` is true when it beats every item.
+- Lists over 254 items are ranked in chunks sent together, and each chunk's best meet in a final choice. Items that don't reach the final choice follow the finalists with a `null` probability.
+- Needs a decision model role, `decider` by default.
+
+## When to use it
+
+- Reranking search results, candidates or options against a question: one call instead of one per item, and no LLM.
+- Keep `state` to what the question needs: the question and its context, not the items.
+- For an absolute yes or no per item rather than an order, use a `filter` step with a `decide` gate.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="describe" type="string">
+  Dot path into each item to show as the option, e.g. `url` or `meta.date`
+</ParamField>
+
+<ParamField body="instructions" type="string" required>
+  The choice question
+</ParamField>
+
+<ParamField body="items" type="any[]" required>
+  The list, usually a template like &#123;&#123;E1.results&#125;&#125;
+</ParamField>
+
+<ParamField body="model" type="string">
+  The decision model role; default decider
+</ParamField>
+
+<ParamField body="none" type="string">
+  Text of a 'nothing fits' option
+</ParamField>
+
+<ParamField body="state" type="any" required>
+  The context the items are judged against, e.g. &#123;"question": "&#123;&#123;input.question&#125;&#125;"&#125;
+</ParamField>
+
+<ParamField body="top_k" type="integer">
+  Keep only the best k
+</ParamField>
+
+## Output
+
+<ResponseField name="items" type="any[]" required>
+</ResponseField>
+
+<ResponseField name="no_fit" type="boolean">
+</ResponseField>
+
+<ResponseField name="none" type="number">
+</ResponseField>
+
+<ResponseField name="ranked" type="object[]" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__rank
+  input:
+    state: "{{input.state}}"
+    items: "{{input.items}}"
+    instructions: "{{input.instructions}}"
+```
+
+</RequestExample>

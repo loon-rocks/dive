@@ -1,15 +1,21 @@
 ---
 title: "Built-in tools"
-description: "Model calls and JSON reshaping that every agent and plan step can use, with no pack to enable."
+description: "Model calls, list processing and JSON reshaping that every agent and plan step can use, with no pack to enable."
 keywords: ["Built-in tools"]
 ---
 
 - Always in the catalog, called as `builtin__<name>`.
-- `infer` and `decide` need a configured model: a chat model for `infer`, a decision model for `decide`. `reshape` makes no model call.
-- To replace one, put a tool file with the same `name` in `<tools dir>/builtin/`, such as `.graph/tools/builtin/reshape.yaml`.
+- `infer` and `decide` need a configured model: a chat model for `infer`, a decision model for `decide`. `rank` needs a decision model too, and is listed only when one is configured.
+- `reshape`, `flatten`, `dedupe`, `sort` and `take` make no model call.
+- To replace `infer`, `decide` or `reshape`, put a tool file with the same `name` in `<tools dir>/builtin/`, such as `.graph/tools/builtin/reshape.yaml`. The list tools can't be replaced.
 
 | Name | Description |
 | --- | --- |
 | [`builtin__infer`](/tools/reference/builtin/infer) | Runs one model call over an instruction and returns text or structured JSON. |
-| [`builtin__decide`](/tools/reference/builtin/decide) | Asks a decision model typed questions about one piece of data. |
+| [`builtin__decide`](/tools/reference/builtin/decide) | Asks a decision model typed questions about one state, in one call. |
 | [`builtin__reshape`](/tools/reference/builtin/reshape) | Builds a value in a new JSON shape from earlier step results. |
+| [`builtin__flatten`](/tools/reference/builtin/flatten) | Flattens a list of lists into one list, with no model call. |
+| [`builtin__dedupe`](/tools/reference/builtin/dedupe) | Removes duplicates from a list, keeping the first of each, with no model call. |
+| [`builtin__sort`](/tools/reference/builtin/sort) | Sorts a list by a field, with no model call. |
+| [`builtin__take`](/tools/reference/builtin/take) | Keeps the first n items of a list, with no model call. |
+| [`builtin__rank`](/tools/reference/builtin/rank) | Ranks a whole list against a question in one decision-model call. |

@@ -1,0 +1,47 @@
+---
+title: "builtin__flatten"
+sidebarTitle: "builtin__flatten"
+description: "Flattens a list of lists into one list, with no model call."
+playground: "none"
+keywords: ["builtin__flatten"]
+---
+
+## Behavior
+
+- `[[a, b], [c]]` becomes `[a, b, c]`.
+- `depth` is how many levels are spliced; the default is 1.
+- Elements that aren't lists are kept as they are.
+
+## When to use it
+
+- After a `map` whose items each return a list, such as one search per query, before deduping, sorting or ranking the results.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="depth" type="integer">
+  Levels to flatten; default 1
+</ParamField>
+
+<ParamField body="items" type="any[]" required>
+  The list, usually a template like &#123;&#123;E1.results&#125;&#125;
+</ParamField>
+
+## Output
+
+<ResponseField name="items" type="any[]" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__flatten
+  input:
+    items: "{{input.items}}"
+```
+
+</RequestExample>
