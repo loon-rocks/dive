@@ -36,7 +36,7 @@ keywords: ["builtin__infer"]
 </ParamField>
 
 <ParamField body="on_mismatch" type="enum<string>">
-  What to do when the output still doesn't match output_schema after the automatic fix-up: "error" (the default) fails the step; "return" hands back the output as it is, for a caller that checks it itself and retries.
+  What to do when the output still doesn't match output_schema after the automatic fix-up: "error" (the default) fails the step; "return" hands back the output as it is, for a caller that checks it itself and retries. Output the model cut off at its output limit is never fixed up or handed back: the step fails with an error naming the limit.
 
   Available options: `error`, `return`
 </ParamField>

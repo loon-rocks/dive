@@ -15,6 +15,8 @@ pub enum LlmError {
     Parse(String),
     #[error("model output did not match the requested schema: {0}")]
     SchemaMismatch(String),
+    #[error("the model hit its output limit{} before finishing the structured result; ask for less output or split the work across steps", limit_phrase(*.limit))]
+    OutputLimit { limit: Option<u64> },
     #[error("provider '{0}' is not configured")]
     UnknownProvider(String),
     /// Configured, but cannot be used as configured — most commonly an
@@ -50,4 +52,17 @@ pub enum LlmError {
         limit: u32,
         estimate: u64,
     },
+}
+
+fn limit_phrase(limit: Option<u64>) -> String {
+    limit.map(|n| format!(" of {n} tokens")).unwrap_or_default()
+}
+
+impl LlmError {
+    pub fn output_limit(requested: Option<u32>, usage: &crate::types::Usage) -> Self {
+        let limit = requested
+            .map(u64::from)
+            .or((usage.output_tokens > 0).then_some(usage.output_tokens));
+        LlmError::OutputLimit { limit }
+    }
 }

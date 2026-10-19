@@ -4,7 +4,7 @@ use crate::decision::{check_context_window, DecisionProvider, DecisionRequest, D
 use crate::failover::{Candidate, DecisionCandidate, FailoverDecider, FailoverProvider};
 use crate::metering::{MeteredDecider, MeteredProvider};
 use crate::providers::{AnthropicProvider, OpenAiCompatProvider, SystemOneProvider};
-use crate::types::{ChatRequest, ChatResponse, EventStream};
+use crate::types::{ChatRequest, ChatResponse, EventStream, StopReason};
 use crate::{ChatProvider, LlmError, UsageMeter};
 use graph_config::{Config, ModelChoice, ModelKind, ProviderKind, Role};
 use std::collections::HashMap;
@@ -408,7 +408,9 @@ impl ModelRouter {
         let (provider, choice) = self.resolve(role)?;
         req.model = choice.model.clone();
         req.temperature = req.temperature.or(choice.temperature);
-        provider.chat(req).await
+        let structured = req.response_schema.is_some();
+        let requested = req.max_tokens;
+        refuse_truncated(structured, requested, provider.chat(req).await?)
     }
 
     pub async fn chat_stream(
@@ -431,8 +433,21 @@ impl ModelRouter {
         let (provider, choice) = self.resolve_named(name)?;
         req.model = choice.model.clone();
         req.temperature = req.temperature.or(choice.temperature);
-        provider.chat(req).await
+        let structured = req.response_schema.is_some();
+        let requested = req.max_tokens;
+        refuse_truncated(structured, requested, provider.chat(req).await?)
     }
+}
+
+pub(crate) fn refuse_truncated(
+    structured: bool,
+    requested: Option<u32>,
+    response: ChatResponse,
+) -> Result<ChatResponse, LlmError> {
+    if structured && response.stop_reason == StopReason::MaxTokens {
+        return Err(LlmError::output_limit(requested, &response.usage));
+    }
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -1085,5 +1100,104 @@ mod tests {
             matches!(&error, LlmError::UnknownModelName { name, .. } if name == "nano"),
             "{error}"
         );
+    }
+
+    struct Truncating {
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    #[async_trait]
+    impl ChatProvider for Truncating {
+        async fn chat(&self, req: ChatRequest) -> Result<ChatResponse, LlmError> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let structured = req.response_schema.is_some().then(|| serde_json::json!({}));
+            Ok(ChatResponse {
+                content: structured.is_none().then(|| "partial".to_string()),
+                tool_calls: Vec::new(),
+                thinking: Vec::new(),
+                structured,
+                stop_reason: StopReason::MaxTokens,
+                usage: Usage {
+                    output_tokens: 16000,
+                    ..Default::default()
+                },
+            })
+        }
+
+        async fn chat_stream(&self, req: ChatRequest) -> Result<EventStream, LlmError> {
+            let response = self.chat(req).await?;
+            Ok(futures::stream::once(async move { Ok(StreamEvent::Completed(response)) }).boxed())
+        }
+    }
+
+    #[derive(serde::Deserialize, schemars::JsonSchema)]
+    #[allow(dead_code)]
+    struct Ranked {
+        #[serde(default)]
+        ranked: Vec<String>,
+    }
+
+    fn truncating_router() -> (ModelRouter, Arc<Truncating>, Arc<Truncating>) {
+        let chat = Arc::new(Truncating {
+            calls: Default::default(),
+        });
+        let fixer = Arc::new(Truncating {
+            calls: Default::default(),
+        });
+        let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
+        providers.insert("chat".into(), chat.clone());
+        providers.insert("fixer".into(), fixer.clone());
+        let roles = graph_config::ModelRoles::from([
+            ("default", choice("chat", "m", vec![])),
+            ("repair", choice("fixer", "m", vec![])),
+        ]);
+        (ModelRouter::with_providers(providers, roles), chat, fixer)
+    }
+
+    #[tokio::test]
+    async fn a_truncated_structured_result_is_an_error_and_never_repaired() {
+        let (router, chat, fixer) = truncating_router();
+        let error = router
+            .get_structured::<Ranked>(Role::Planner, "s", Vec::new(), "ranked")
+            .await
+            .err()
+            .unwrap();
+        assert!(
+            matches!(error, LlmError::OutputLimit { limit: Some(16000) }),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .starts_with("the model hit its output limit of 16000 tokens before finishing the structured result"),
+            "{error}"
+        );
+        assert_eq!(chat.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(fixer.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let request = ChatRequest {
+            max_tokens: Some(4096),
+            response_schema: Some(crate::types::ResponseSchema {
+                name: "x".into(),
+                schema: serde_json::json!({"type": "object"}),
+            }),
+            ..Default::default()
+        };
+        let error = router.chat_named("default", request).await.unwrap_err();
+        assert!(
+            matches!(error, LlmError::OutputLimit { limit: Some(4096) }),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_truncated_text_result_is_returned_as_is() {
+        let (router, _, _) = truncating_router();
+        let response = router
+            .chat(Role::Chat, ChatRequest::default())
+            .await
+            .unwrap();
+        assert_eq!(response.content.as_deref(), Some("partial"));
+        assert_eq!(response.stop_reason, StopReason::MaxTokens);
     }
 }
