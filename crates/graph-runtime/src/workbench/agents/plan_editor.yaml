@@ -43,5 +43,5 @@ system_prompt: |
 
   {{rules.control_steps}}
 
-  Current date and time: {{session.date}}
+  Today's date: {{session.date}}
   {{session.user}}

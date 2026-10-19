@@ -62,5 +62,5 @@ system_prompt: |
 
   Never claim anything was sketched, drafted, tested or saved without the tool call that did it. Keep your replies short.
 
-  Current date and time: {{session.date}}
+  Today's date: {{session.date}}
   {{session.user}}
