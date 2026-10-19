@@ -72,7 +72,7 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | `planner` | Drafting plans |
 | `outliner` | Listing a goal's inputs and steps before the planner drafts. Falls back to `planner` |
 | `solver` | Writing the answer for a plan that finishes with `solver` |
-| `repair` | One retry when a model's structured output doesn't parse |
+| `repair` | One retry when a model's structured output doesn't parse. Output cut off at the model's output limit is never repaired: the call fails with an error naming the limit |
 | `judge` | `infer` conditions on `exit`, `route` and `filter` |
 | `decider` | `decide` conditions and tool search. Needs a decision model |
 

@@ -1,6 +1,6 @@
 //! Typed structured output with a single repair pass.
 
-use crate::roles::ModelRouter;
+use crate::roles::{refuse_truncated, ModelRouter};
 use crate::types::{ChatMessage, ChatRequest, ResponseSchema};
 use crate::LlmError;
 use graph_config::Role;
@@ -91,7 +91,7 @@ impl ModelRouter {
                 ..Default::default()
             })
             .await?;
-        response
+        refuse_truncated(true, None, response)?
             .structured
             .ok_or_else(|| LlmError::SchemaMismatch("model produced no structured output".into()))
     }

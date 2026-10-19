@@ -2017,3 +2017,102 @@ async fn pack_exec_tools_see_their_pack_directory_and_user_tools_do_not() {
     let outcome = user.invoke("user__where", json!({})).await.unwrap();
     assert_eq!(outcome.result, json!({"text": "unset"}));
 }
+
+struct Truncating {
+    calls: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait]
+impl ChatProvider for Truncating {
+    async fn chat(&self, req: ChatRequest) -> Result<ChatResponse, LlmError> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let structured = req
+            .response_schema
+            .is_some()
+            .then(|| json!({"ranked": [{"url": "https://example.com/a"}]}));
+        Ok(ChatResponse {
+            thinking: Vec::new(),
+            content: structured
+                .is_none()
+                .then(|| "a long partial answer".to_string()),
+            tool_calls: vec![],
+            structured,
+            stop_reason: StopReason::MaxTokens,
+            usage: Usage {
+                output_tokens: 16000,
+                ..Default::default()
+            },
+        })
+    }
+    async fn chat_stream(&self, _req: ChatRequest) -> Result<EventStream, LlmError> {
+        unimplemented!()
+    }
+}
+
+fn truncating_router() -> (Arc<ModelRouter>, Arc<Truncating>, Arc<Truncating>) {
+    let chat = Arc::new(Truncating {
+        calls: Default::default(),
+    });
+    let fixer = Arc::new(Truncating {
+        calls: Default::default(),
+    });
+    let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
+    providers.insert("chat".into(), chat.clone());
+    providers.insert("fixer".into(), fixer.clone());
+    let choice = |provider: &str| ModelChoice {
+        provider: provider.into(),
+        model: "m".into(),
+        temperature: None,
+        description: None,
+        fallbacks: Vec::new(),
+        context_window: None,
+    };
+    let router = Arc::new(ModelRouter::with_providers(
+        providers,
+        ModelRoles::from([("default", choice("chat")), ("repair", choice("fixer"))]),
+    ));
+    (router, chat, fixer)
+}
+
+#[tokio::test]
+async fn a_structured_infer_that_hits_max_tokens_fails_without_repair() {
+    let (router, chat, fixer) = truncating_router();
+    let registry = UserToolRegistry::builtins(load_builtin_tools().unwrap(), router);
+    let err = registry
+        .invoke(
+            "builtin__infer",
+            json!({
+                "instruction": "Rank the links",
+                "output_schema": {
+                    "type": "object",
+                    "required": ["ranked", "urls"],
+                    "properties": {
+                        "ranked": {"type": "array"},
+                        "urls": {"type": "array"}
+                    }
+                },
+                "on_mismatch": "return"
+            }),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("output limit of 16000 tokens before finishing the structured result"),
+        "{err}"
+    );
+    assert_eq!(chat.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(fixer.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_plain_text_infer_that_hits_max_tokens_returns_its_text() {
+    let (router, _, fixer) = truncating_router();
+    let registry = UserToolRegistry::builtins(load_builtin_tools().unwrap(), router);
+    let outcome = registry
+        .invoke("builtin__infer", json!({"instruction": "Summarize X"}))
+        .await
+        .unwrap();
+    assert_eq!(outcome.result["text"], "a long partial answer");
+    assert_eq!(fixer.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
