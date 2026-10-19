@@ -1,8 +1,9 @@
 version: 2
 name: decide
 description: >
-  Ask a decision model typed questions about one piece of data, in one fast,
-  cheap call. Each question is answered independently and in parallel. Types:
+  Ask a decision model typed questions about one state, in one fast, cheap
+  call. Each question is answered independently and in parallel against the
+  same state, so ask every question about it in one call. Types:
   likelihood (is this true? returns {type, probability} in 0..1), choice (pick
   one option; returns {type, choice, confidence, probabilities}), and score
   (place it on an ordered scale; returns {type, score, confidence, legend,
@@ -10,7 +11,9 @@ description: >
   maps each question name to its answer, so later steps read {{Ex.<name>.choice}}
   or {{Ex.<name>.probability}}. Use it to classify, score, or check data where a
   calibrated verdict matters more than prose; ask several related questions in
-  one call rather than one call each.
+  one call rather than one call each. A choice holds up to 255 options; to
+  order a whole list by how well each item fits a question, use
+  builtin__rank, which makes the items the options.
 kind: decision
 caller_questions: true
 caller_model: true

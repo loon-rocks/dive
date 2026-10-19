@@ -1,0 +1,85 @@
+---
+title: "Rank and cut lists"
+description: "Flatten, dedupe and rank search results against a question, then keep the best few, with one decision-model call and no LLM."
+keywords: ["rank", "flatten", "dedupe", "sort", "take", "top_k", "list tools"]
+---
+
+`top_sources` searches for several queries, joins the hits into one list, drops repeated URLs, and ranks what's left against the question in one decision-model call.
+
+<RequestExample>
+
+```yaml .graph/plans/top_sources.yaml
+version: 2
+identifier: top_sources
+name: Top sources
+description: The five search results that best answer a question.
+input_schema:
+  type: object
+  required: [question, queries]
+  properties:
+    question: {type: string}
+    queries: {type: array, items: {type: string}}
+steps:
+- id: searches
+  tool_name: map
+  input:
+    over: '{{input.queries}}'
+    concurrency: 4
+    do:
+      tool_name: user__search
+      input:
+        query: '{{item}}'
+- id: hits
+  tool_name: builtin__flatten
+  input:
+    items: '{{searches.results}}'
+- id: unique
+  tool_name: builtin__dedupe
+  input:
+    items: '{{hits.items}}'
+    by: url
+- id: best
+  tool_name: builtin__rank
+  input:
+    state:
+      question: '{{input.question}}'
+    items: '{{unique.items}}'
+    instructions: Which result best answers the question?
+    describe: snippet
+    top_k: 5
+    none: None of these answer the question
+finish:
+  output:
+    sources: '{{best.items}}'
+    no_fit: '{{best.no_fit}}'
+```
+
+</RequestExample>
+
+## Join and dedupe in code
+
+- The `map` returns one list of hits per query, so `{{searches.results}}` is a list of lists.
+- `builtin__flatten` joins them into one list, and `builtin__dedupe` keeps the first hit for each `url`.
+- Neither makes a model call. Sorting by a field the items carry and cutting to the first `n` work the same way, with `builtin__sort` and `builtin__take`.
+
+## Rank against the question in one call
+
+`builtin__rank` asks the decision model one `choice` question:
+
+- The items are the options, each shown by its `snippet`.
+- `state` is what they're judged against, here the question. Keep it to what the question needs.
+- `{{best.items}}` is the five most likely items, best first, and `{{best.ranked}}` carries each one's probability.
+- With `none`, `{{best.no_fit}}` is true when nothing in the list answers the question, so an `exit` gate can stop before the next step.
+
+A choice's probabilities share 1 across its options, so they order the list rather than grade each item. To keep every item that passes an absolute check, use a [`filter`](/plans/guides/filter) with a `decide` gate instead.
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Iterate with map and reduce" icon="repeat" href="/plans/guides/map-and-reduce">
+    Run steps for each item of a list.
+  </Card>
+  <Card title="Select items with filter" icon="filter" href="/plans/guides/filter">
+    Keep only the items that pass a check.
+  </Card>
+</CardGroup>
