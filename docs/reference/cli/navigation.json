@@ -7,6 +7,7 @@
       "reference/cli/plan/list",
       "reference/cli/plan/show",
       "reference/cli/plan/validate",
+      "reference/cli/plan/rm",
       "reference/cli/plan/migrate",
       "reference/cli/plan/run",
       "reference/cli/plan/new",
@@ -33,6 +34,7 @@
       "reference/cli/tool/list",
       "reference/cli/tool/show",
       "reference/cli/tool/test",
+      "reference/cli/tool/rm",
       "reference/cli/tool/migrate"
     ],
     "root": "reference/cli/tool"
@@ -43,6 +45,7 @@
       "reference/cli/agent/list",
       "reference/cli/agent/show",
       "reference/cli/agent/validate",
+      "reference/cli/agent/rm",
       "reference/cli/agent/migrate"
     ],
     "root": "reference/cli/agent"

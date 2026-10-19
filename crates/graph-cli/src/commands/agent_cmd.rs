@@ -10,6 +10,12 @@ pub fn run(command: AgentCommand) -> Result<()> {
     if let AgentCommand::Migrate { path, json } = command {
         return report(migrate(&path)?, json);
     }
+    if let AgentCommand::Rm { name, json } = command {
+        return report(
+            crate::commands::remove_cmd::run(ops::remove::ItemKind::Agent, &name)?,
+            json,
+        );
+    }
     let installed = graph_runtime::runtime::load_packs(&crate::host::load_config()?)?;
     let packs: Vec<AgentDoc> = installed.agents().cloned().collect();
     match command {
@@ -18,7 +24,9 @@ pub fn run(command: AgentCommand) -> Result<()> {
         AgentCommand::Validate { path, json } => {
             report(validate(&dirs, &packs, path.as_deref())?, json)
         }
-        AgentCommand::Migrate { .. } => unreachable!("handled before packs load"),
+        AgentCommand::Migrate { .. } | AgentCommand::Rm { .. } => {
+            unreachable!("handled before packs load")
+        }
     }
 }
 

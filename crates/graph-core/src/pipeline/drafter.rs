@@ -96,6 +96,14 @@ impl Drafted {
         tools.push(doc);
     }
 
+    pub fn forget_tool(&self, name: &str) {
+        self.tools.write().unwrap().retain(|doc| doc.name != name);
+    }
+
+    pub fn forget_agent(&self, name: &str) {
+        self.agents.write().unwrap().retain(|doc| doc.name != name);
+    }
+
     fn add_agent(&self, doc: AgentDoc) {
         let mut agents = self.agents.write().unwrap();
         agents.retain(|existing| existing.name != doc.name);
