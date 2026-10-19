@@ -195,6 +195,16 @@ pub enum PlanCommand {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
+    /// Delete a plan file
+    #[command(
+        after_long_help = "Deletes the file holding the plan, without asking. A plan file that replaces a built-in plan reverts it to the shipped version, and one that shadows a copy in a later plans directory hands over to that copy. Plans and agents that still call it are listed; nothing else is changed. Built-in and pack plans can't be removed one at a time — remove a pack with `graph pack remove`.\n\nExamples:\n  graph plan rm weekly_changes\n  graph plan rm compose_plan --json"
+    )]
+    Rm {
+        #[arg(help = "The plan's identifier")]
+        name: String,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
     /// Rewrite a plan file to the current plan format
     #[command(
         after_long_help = "Rewrites one plan file to the current plan file version. A file already at the current version is left untouched.\n\nExamples:\n  graph plan migrate .graph/plans/weekly_changes.yaml"
@@ -511,6 +521,18 @@ pub enum ToolCommand {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
+    /// Delete a user tool file or a built-in tool's override
+    #[command(
+        after_long_help = "Deletes the tool's file, without asking. `builtin__<name>` deletes the override in a tools directory's `builtin/` folder and brings the shipped tool back. Plans and agents that still call it are listed; nothing else is changed. Pack tools can't be removed one at a time — remove a pack with `graph pack remove`.\n\nExamples:\n  graph tool rm summarize\n  graph tool rm builtin__infer --json"
+    )]
+    Rm {
+        #[arg(
+            help = "The tool's name: user__<name> or a bare name, or builtin__<name> for an override"
+        )]
+        name: String,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
     /// Rewrite a user tool file to the current tool format
     #[command(
         after_long_help = "Rewrites one user tool file to the current tool file version. It takes a path rather than a tool name and doesn't connect to MCP servers.\n\nExamples:\n  graph tool migrate .graph/tools/summarize.yaml"
@@ -550,6 +572,16 @@ pub enum AgentCommand {
     Validate {
         #[arg(help = "One agent file to check against the others; omit to check every agent")]
         path: Option<PathBuf>,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
+    /// Delete an agent file
+    #[command(
+        after_long_help = "Deletes the file defining the agent, without asking. A project agent that shadows a global one hands over to it, and an agent file that replaces a built-in agent reverts it to the shipped version. Plans and agents that still call it, hand off to it or run it as a subagent are listed; nothing else is changed. Pack agents can't be removed one at a time — remove a pack with `graph pack remove`.\n\nExamples:\n  graph agent rm release_notes\n  graph agent rm chat --json"
+    )]
+    Rm {
+        #[arg(help = "The agent's name")]
+        name: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },

@@ -29,6 +29,10 @@ pub async fn run(command: PlanCommand) -> Result<()> {
             render_validation(&outcome.body)
         }
         PlanCommand::Migrate { name_or_path, json } => report(migrate(&name_or_path)?, json),
+        PlanCommand::Rm { name, json } => report(
+            crate::commands::remove_cmd::run(graph_runtime::ops::remove::ItemKind::Plan, &name)?,
+            json,
+        ),
         PlanCommand::Run {
             name,
             input,

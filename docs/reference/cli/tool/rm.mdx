@@ -1,0 +1,43 @@
+---
+title: "graph tool rm"
+sidebarTitle: "rm"
+description: "Delete a user tool file or a built-in tool's override"
+playground: "none"
+keywords: ["graph tool rm"]
+---
+
+Deletes the tool's file, without asking. `builtin__<name>` deletes the override in a tools directory's `builtin/` folder and brings the shipped tool back. Plans and agents that still call it are listed; nothing else is changed. Pack tools can't be removed one at a time — remove a pack with `graph pack remove`.
+
+## Arguments
+
+<ParamField path="NAME" type="string" required>
+  The tool's name: user__&lt;name&gt; or a bare name, or builtin__&lt;name&gt; for an override
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+graph tool rm [OPTIONS] <NAME>
+```
+
+```bash Example 1
+graph tool rm summarize
+```
+
+```bash Example 2
+graph tool rm builtin__infer --json
+```
+
+</RequestExample>
