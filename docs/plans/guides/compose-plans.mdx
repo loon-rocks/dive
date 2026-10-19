@@ -80,8 +80,8 @@ The called plan's steps show indented under its step:
 ```text
 → github__tool__gh_release {}
 ✓ github__tool__gh_release 787.1ms
-→ plan__changes_since {"base":"v0.15.0"}
-  → github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+→ plan__changes_since {"base":"{{release_version}}"}
+  → github__tool__git_log {"base":"{{release_version}}","head":"HEAD"}
   ✓ github__tool__git_log 31.6ms
 ✓ plan__changes_since 32.2ms
 ✎ synthesizing answer…

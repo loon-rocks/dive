@@ -77,13 +77,13 @@ The `review` step's input tells the agent what to do and what to return:
 
 ```bash
 graph plan run risky_changes \
-  --input base=v0.15.0
+  --input base={{release_version}}
 ```
 
 The agent reads every commit's changed files, then the diffs of the ones that look risky:
 
 ```text
-→ github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+→ github__tool__git_log {"base":"{{release_version}}","head":"HEAD"}
 ✓ github__tool__git_log 36.2ms
 → github__tool__git_changed_files {"base":"648d34e…~1","head":"648d34e…","prefix":""}
 → github__tool__git_changed_files {"base":"cd01c05…~1","head":"cd01c05…","prefix":""}

@@ -42,7 +42,7 @@ Tool names must be unique across both directories. To change a built-in tool for
 ```bash
 graph tool list
 graph tool show github__tool__git_log
-graph tool test github__tool__git_log --input base=v0.15.0
+graph tool test github__tool__git_log --input base={{release_version}}
 ```
 
 `graph tool list` lists the catalog, `graph tool show` prints a tool's description, schemas and source, and `graph tool test` calls it and prints the result.

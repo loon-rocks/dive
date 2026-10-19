@@ -77,10 +77,10 @@ graph ask --agent triage \
 ✓ transfer_to_release_notes 31.6µs
 → github__tool__gh_release {}
 ✓ github__tool__gh_release 1.4s
-→ github__tool__git_log {"base":"v0.15.0","head":"HEAD"}
+→ github__tool__git_log {"base":"{{release_version}}","head":"HEAD"}
 → agent__reviewer {"prompt":"Please review the code changes…"}
 ✓ github__tool__git_log 60.6ms
-→ github__tool__git_diff {"base":"v0.15.0","head":"HEAD",…}
+→ github__tool__git_diff {"base":"{{release_version}}","head":"HEAD",…}
 ✓ github__tool__git_diff 104.3ms
 ✓ agent__reviewer 76.6s
 ```

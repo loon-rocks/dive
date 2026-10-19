@@ -19,7 +19,7 @@ llm:
           type: object
           required: [since]
           properties:
-            since: { type: string, description: The tag to start from, such as v0.15.0 }
+            since: { type: string, description: The tag to start from, such as v0.16.0 }
         output_schema:
           type: object
           required: [notes]
