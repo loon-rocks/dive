@@ -27,6 +27,7 @@ These options work with every command.
 | [`graph plan list`](/reference/cli/plan/list) | List available plan documents |
 | [`graph plan show`](/reference/cli/plan/show) | Show a plan document |
 | [`graph plan validate`](/reference/cli/plan/validate) | Validate a plan document by name or file path |
+| [`graph plan rm`](/reference/cli/plan/rm) | Delete a plan file |
 | [`graph plan migrate`](/reference/cli/plan/migrate) | Rewrite a plan file to the current plan format |
 | [`graph plan run`](/reference/cli/plan/run) | Run a plan directly (bypasses the agent loop) |
 | [`graph plan new`](/reference/cli/plan/new) | Scaffold an empty plan file to build up with `set` and `step add` |
@@ -41,10 +42,12 @@ These options work with every command.
 | [`graph tool list`](/reference/cli/tool/list) | List every tool visible to the agent and planner |
 | [`graph tool show`](/reference/cli/tool/show) | Show one tool's description and schemas |
 | [`graph tool test`](/reference/cli/tool/test) | Invoke a tool directly |
+| [`graph tool rm`](/reference/cli/tool/rm) | Delete a user tool file or a built-in tool's override |
 | [`graph tool migrate`](/reference/cli/tool/migrate) | Rewrite a user tool file to the current tool format |
 | [`graph agent list`](/reference/cli/agent/list) | List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents) |
 | [`graph agent show`](/reference/cli/agent/show) | Print an agent's effective definition, the file to copy when customizing it |
 | [`graph agent validate`](/reference/cli/agent/validate) | Validate every agent, or one agent file against the others |
+| [`graph agent rm`](/reference/cli/agent/rm) | Delete an agent file |
 | [`graph agent migrate`](/reference/cli/agent/migrate) | Rewrite an agent file to the current agent format |
 | [`graph thread list`](/reference/cli/thread/list) | List threads |
 | [`graph thread show`](/reference/cli/thread/show) | Show a thread's messages |

@@ -15,6 +15,12 @@ pub async fn run(command: ToolCommand) -> Result<()> {
             json,
         );
     }
+    if let ToolCommand::Rm { name, json } = command {
+        return report(
+            crate::commands::remove_cmd::run(ops::remove::ItemKind::Tool, &name)?,
+            json,
+        );
+    }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
     let toolbox = runtime
@@ -47,7 +53,9 @@ async fn dispatch(
             test(registry, &name, input.as_deref(), &inputs).await?,
             json,
         )),
-        ToolCommand::Migrate { .. } => unreachable!("handled before the runtime starts"),
+        ToolCommand::Migrate { .. } | ToolCommand::Rm { .. } => {
+            unreachable!("handled before the runtime starts")
+        }
     }
 }
 
