@@ -614,7 +614,17 @@ impl Default for ToolPaths {
                 PathBuf::from("./.graph/tools"),
                 PathBuf::from("~/.config/graph/tools"),
             ],
-            always_loaded: vec!["builtin__infer".into(), "builtin__reshape".into()],
+            always_loaded: [
+                "builtin__infer",
+                "builtin__reshape",
+                "builtin__flatten",
+                "builtin__dedupe",
+                "builtin__sort",
+                "builtin__take",
+                "builtin__rank",
+            ]
+            .map(String::from)
+            .to_vec(),
         }
     }
 }

@@ -135,10 +135,18 @@ fn the_version_key_never_reaches_the_typed_config() {
 }
 
 #[test]
-fn infer_and_reshape_are_always_loaded_by_default() {
+fn infer_reshape_and_the_list_tools_are_always_loaded_by_default() {
     assert_eq!(
         graph_config::ToolPaths::default().always_loaded,
-        ["builtin__infer", "builtin__reshape"]
+        [
+            "builtin__infer",
+            "builtin__reshape",
+            "builtin__flatten",
+            "builtin__dedupe",
+            "builtin__sort",
+            "builtin__take",
+            "builtin__rank"
+        ]
     );
 }
 

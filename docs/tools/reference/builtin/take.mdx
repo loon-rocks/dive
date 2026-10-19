@@ -1,0 +1,46 @@
+---
+title: "builtin__take"
+sidebarTitle: "builtin__take"
+description: "Keeps the first n items of a list, with no model call."
+playground: "none"
+keywords: ["builtin__take"]
+---
+
+## Behavior
+
+- Returns the first `n` items; a shorter list is returned whole.
+
+## When to use it
+
+- The top-k cut after [`builtin__sort`](/tools/reference/builtin/sort). [`builtin__rank`](/tools/reference/builtin/rank) cuts its own result with `top_k`.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="items" type="any[]" required>
+  The list, usually a template like &#123;&#123;E1.results&#125;&#125;
+</ParamField>
+
+<ParamField body="n" type="integer" required>
+  How many items to keep
+</ParamField>
+
+## Output
+
+<ResponseField name="items" type="any[]" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__take
+  input:
+    items: "{{input.items}}"
+    n: "{{input.n}}"
+```
+
+</RequestExample>

@@ -171,6 +171,7 @@ impl Runtime {
             Arc::new(
                 UserToolRegistry::new(docs.user, self.router.clone()).with_secrets(self.secrets()),
             ),
+            Arc::new(graph_core::list_tools::ListTools::new(self.router.clone())),
         ];
         for (source, tools) in docs.packs {
             sources.push(Arc::new(
@@ -234,7 +235,8 @@ impl Runtime {
                 })
                 .collect()
         };
-        let builtin_tools = named(graph_core::user_tools::BUILTIN_TOOL_PREFIX, docs.builtins);
+        let mut builtin_tools: std::collections::BTreeSet<String> =
+            named(graph_core::user_tools::BUILTIN_TOOL_PREFIX, docs.builtins);
         let user_tools = named(graph_core::user_tools::USER_TOOL_PREFIX, docs.user);
         for (source, tools) in docs.packs {
             let prefix = graph_core::packs::catalog_name(
@@ -243,6 +245,10 @@ impl Runtime {
                 "",
             );
             named(&prefix, tools);
+        }
+        for def in graph_core::list_tools::list_tool_defs() {
+            input_schemas.insert(def.name.clone(), def.input_schema);
+            builtin_tools.insert(def.name);
         }
         for doc in plan_docs {
             if let Some(schema) = &doc.input_schema {
