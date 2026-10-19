@@ -55,6 +55,7 @@ Pick the smallest fix that removes the cause, from this ladder:
 2. Restructure a portion: one big infer becomes a map/reduce on a small model, a decide gate replaces a judgment, a step splits into a composed plan.
 3. Rethink the item's role: an agent becomes a plan, a tool splits in two.
 Judge the current design against the design principles below as well as against the evidence. A patch that leaves a wasteful design in place isn't the smallest fix that removes the cause.
+A fix that changes what an item takes or returns breaks its callers. Before proposing one, read the caller that made the evidence's call, and any other caller you know of, with workbench__show_artifact, and keep every field and meaning they rely on (a list that held every hit still holds every hit; cut a copy for the step that needs fewer). When a caller has to change too, say so in the proposal and attach it.
 
 # 3. Propose
 When the patch is the fix, reply with:
