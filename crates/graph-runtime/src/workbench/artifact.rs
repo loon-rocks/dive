@@ -115,14 +115,14 @@ impl ArtifactKind {
     }
 }
 
-fn yaml_name(yaml: &str) -> String {
-    serde_yaml::from_str::<serde_yaml::Value>(yaml)
-        .ok()
-        .and_then(|doc| {
-            doc.get("name")
-                .and_then(|name| name.as_str().map(str::to_string))
-        })
-        .unwrap_or_else(|| "unnamed".to_string())
+fn yaml_name(yaml: &str) -> Result<String, String> {
+    let doc = serde_yaml::from_str::<serde_yaml::Value>(yaml)
+        .map_err(|e| format!("the YAML doesn't parse, so nothing was drafted: {e}"))?;
+    doc.get("name")
+        .and_then(serde_yaml::Value::as_str)
+        .filter(|name| !name.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "the file has no top-level `name`, so nothing was drafted".to_string())
 }
 
 pub fn view(draft: &SharedDraft) -> NetworkView {
@@ -222,8 +222,10 @@ pub async fn set_artifact(
     else {
         return error("yaml must be the whole file");
     };
-    let name = yaml_name(yaml);
-    put(draft, pipeline, tx, kind, &name, yaml).await
+    match yaml_name(yaml) {
+        Ok(name) => put(draft, pipeline, tx, kind, &name, yaml).await,
+        Err(refusal) => error(refusal),
+    }
 }
 
 fn pick(
