@@ -181,7 +181,7 @@ properties:
         type: array
         items:
           type: string
-        default: ["builtin__infer", "builtin__reshape"]
+        default: ["builtin__infer", "builtin__reshape", "builtin__flatten", "builtin__dedupe", "builtin__sort", "builtin__take", "builtin__rank"]
         description: Tools always offered to drafters, whatever the search returns.
   packs:
     type: object

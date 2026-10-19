@@ -1,0 +1,47 @@
+---
+title: "builtin__dedupe"
+sidebarTitle: "builtin__dedupe"
+description: "Removes duplicates from a list, keeping the first of each, with no model call."
+playground: "none"
+keywords: ["builtin__dedupe"]
+---
+
+## Behavior
+
+- `by` is the field compared, as a dot path such as `url` or `meta.id`. Without `by`, whole items are compared.
+- The first item of each key is kept, in the original order.
+- Items missing the field are all kept.
+- `removed` is how many items were dropped.
+
+| Available to | Effect |
+| --- | --- |
+| Any agent or plan step | Read-only |
+
+## Input
+
+<ParamField body="by" type="string">
+  Dot path into each item to compare, e.g. `url` or `meta.date`
+</ParamField>
+
+<ParamField body="items" type="any[]" required>
+  The list, usually a template like &#123;&#123;E1.results&#125;&#125;
+</ParamField>
+
+## Output
+
+<ResponseField name="items" type="any[]" required>
+</ResponseField>
+
+<ResponseField name="removed" type="integer" required>
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__dedupe
+  input:
+    items: "{{input.items}}"
+```
+
+</RequestExample>

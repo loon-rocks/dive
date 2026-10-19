@@ -304,6 +304,17 @@ fn builtin_tools() -> Section {
         ));
         pages.push(json!(path));
     }
+    for def in graph_core::list_tools::list_tool_defs() {
+        let name = short_name(&def.name);
+        let path = format!("{BUILTIN_DIR}/{name}");
+        let words = content(&format!("builtin-tools/{name}"), &def.description);
+        files.insert(
+            format!("{path}.mdx"),
+            def_page(&def, &words, "Any agent or plan step", true),
+        );
+        rows.push((path.clone(), def.name.clone(), words.summary.clone()));
+        pages.push(json!(path));
+    }
     let overview = content(
         "sections/builtin-tools",
         "Built-in tools are always loaded, called as `builtin__<name>`.",
