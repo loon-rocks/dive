@@ -16,9 +16,8 @@ input_schema:
     answers: {type: string, description: "The user's answers to questions this builder returned earlier"}
 output_schema:
   type: object
-  required: [name, status, summary]
+  required: [status, summary]
   properties:
-    name: {type: string, description: "The node drafted"}
     status: {type: string, enum: [drafted, question, failed], description: "drafted: the draft is in the pane; question: the sketch leaves something only the user can settle; failed: it can't be built as sketched"}
     summary: {type: string, description: "One or two sentences on what was drafted, or why not"}
     problems: {type: array, items: {type: string}, description: "Problems the draft still has"}

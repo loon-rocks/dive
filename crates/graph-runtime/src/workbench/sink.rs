@@ -207,14 +207,16 @@ pub struct NetworkProgress {
     pub draft: super::tools::SharedDraft,
     pub tx: UnboundedSender<WorkbenchEvent>,
     pub builders: &'static [&'static str],
+    pub runs: std::sync::Mutex<std::collections::HashMap<u64, String>>,
 }
 
 impl EventSink for NetworkProgress {
-    fn subagent_started(&self, _run: u64, agent: &str, _caller: &str, input: &Value) {
+    fn subagent_started(&self, run: u64, agent: &str, _caller: &str, input: &Value) {
         if !self.builders.contains(&agent) {
             return;
         }
         if let Some(node) = input["node"].as_str() {
+            self.runs.lock().unwrap().insert(run, node.to_string());
             self.draft
                 .lock()
                 .unwrap()
@@ -226,7 +228,7 @@ impl EventSink for NetworkProgress {
 
     fn subagent_finished(
         &self,
-        _run: u64,
+        run: u64,
         agent: &str,
         output: &Value,
         is_error: bool,
@@ -235,7 +237,7 @@ impl EventSink for NetworkProgress {
         if !self.builders.contains(&agent) {
             return;
         }
-        let node = output["name"].as_str().map(str::to_string).or_else(|| {
+        let node = self.runs.lock().unwrap().remove(&run).or_else(|| {
             self.draft
                 .lock()
                 .unwrap()
@@ -263,6 +265,7 @@ impl EventSink for NetworkProgress {
 mod tests {
     use super::*;
     use graph_llm::types::Usage;
+    use serde_json::json;
 
     fn report() -> graph_core::usage::UsageReport {
         graph_core::usage::UsageReport {
@@ -326,5 +329,50 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         ChannelSink::plan_run(tx).tool_finished("x", Duration::ZERO, false);
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_builder_finishes_on_the_node_it_was_started_for_whatever_name_it_reports() {
+        use crate::workbench::artifact::ArtifactKind;
+        use crate::workbench::network::NodeStatus;
+        let draft = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::workbench::tools::DraftState::new(None),
+        ));
+        draft
+            .lock()
+            .unwrap()
+            .network
+            .put_draft(
+                ArtifactKind::Tool,
+                "crawl4ai_crawl",
+                "name: crawl4ai_crawl".into(),
+                Vec::new(),
+            )
+            .unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let progress = NetworkProgress {
+            draft: draft.clone(),
+            tx,
+            builders: &["tool_drafter"],
+            runs: Default::default(),
+        };
+        progress.subagent_started(
+            7,
+            "tool_drafter",
+            "network_editor",
+            &json!({"node": "crawl4ai_crawl"}),
+        );
+        progress.subagent_finished(
+            7,
+            "tool_drafter",
+            &json!({"name": "crawl4ai", "status": "drafted", "summary": "sends the token"}),
+            false,
+            Duration::ZERO,
+        );
+        let network = &draft.lock().unwrap().network;
+        let node = network.node(ArtifactKind::Tool, "crawl4ai_crawl").unwrap();
+        assert_eq!(node.status, NodeStatus::Drafted);
+        assert_eq!(node.note.as_deref(), Some("tool_drafter · sends the token"));
+        assert!(network.node(ArtifactKind::Tool, "crawl4ai").is_none());
     }
 }

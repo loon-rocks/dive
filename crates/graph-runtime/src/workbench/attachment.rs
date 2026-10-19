@@ -389,6 +389,7 @@ impl AttachmentHost for NetworkAttachment {
                 draft: self.draft.clone(),
                 tx: self.tx.clone(),
                 builders: &["tool_drafter", "plan_drafter", "agent_drafter"],
+                runs: Default::default(),
             }),
             Arc::new(LifecycleObserver(self.lifecycle.clone())),
         ])))
