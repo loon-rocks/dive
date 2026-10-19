@@ -2352,6 +2352,36 @@ steps:
     }
 
     #[tokio::test]
+    async fn a_tool_file_that_does_not_parse_or_has_no_name_drafts_nothing() {
+        let (tools, _rx, _dir) = drafting_tools();
+        for (yaml, says) in [
+            (
+                "version: 3\nname: weather\ndescription: a: b: c\n",
+                "doesn't parse",
+            ),
+            ("version: 3\ndescription: weather\n", "no top-level `name`"),
+        ] {
+            let set = tools
+                .invoke(
+                    crate::workbench::artifact::SET_ARTIFACT,
+                    json!({"kind": "tool", "yaml": yaml}),
+                )
+                .await
+                .unwrap();
+            assert!(set.is_error, "{}", set.result);
+            assert!(set.result["error"].as_str().unwrap().contains(says));
+        }
+        let listed = tools
+            .invoke(
+                crate::workbench::artifact::LIST_ARTIFACTS,
+                json!({"kind": "tool"}),
+            )
+            .await
+            .unwrap();
+        assert!(!listed.result.to_string().contains("unnamed"));
+    }
+
+    #[tokio::test]
     async fn a_tool_draft_waits_in_the_network_until_the_network_is_saved() {
         let (tools, mut rx, dir) = drafting_tools();
         let set = tools

@@ -263,8 +263,17 @@ impl Node {
     }
 
     pub fn changed(&self) -> bool {
-        self.yaml.is_some() && self.yaml != self.base
+        match (&self.yaml, &self.base) {
+            (None, _) => false,
+            (Some(_), None) => true,
+            (Some(yaml), Some(base)) => yaml != base && !same_document(yaml, base),
+        }
     }
+}
+
+fn same_document(a: &str, b: &str) -> bool {
+    let parse = |text: &str| serde_yaml::from_str::<serde_yaml::Value>(text).ok();
+    matches!((parse(a), parse(b)), (Some(a), Some(b)) if a == b)
 }
 
 pub fn catalog_name(kind: ArtifactKind, name: &str) -> String {
@@ -1493,6 +1502,21 @@ mod tests {
         assert!(section.contains("plan__release_digest"));
         assert!(section.contains("### tool changelog_section draft"));
         assert!(section.contains("- bad"));
+    }
+
+    #[test]
+    fn a_saved_file_with_its_keys_reordered_is_not_a_change() {
+        let mut node = Node::sketched("rank".into(), ArtifactKind::Plan, String::new());
+        node.base =
+            Some("identifier: rank\nsteps:\n- id: a\n  input:\n    by: url\n    items: x\n".into());
+        node.yaml =
+            Some("identifier: rank\nsteps:\n- id: a\n  input:\n    items: x\n    by: url\n".into());
+        assert!(!node.changed());
+        node.yaml =
+            Some("identifier: rank\nsteps:\n- id: a\n  input:\n    items: y\n    by: url\n".into());
+        assert!(node.changed());
+        node.base = None;
+        assert!(node.changed());
     }
 
     #[test]
