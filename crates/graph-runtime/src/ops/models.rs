@@ -76,6 +76,8 @@ pub struct PriceEntry {
     pub cache_read: Option<f64>,
     #[serde(default)]
     pub tiers: Vec<PriceTier>,
+    #[serde(default)]
+    pub source: Option<String>,
     pub origin: Origin,
     pub used_by: Vec<String>,
 }
@@ -376,6 +378,7 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
                 cache_write: price.cache_write,
                 cache_read: price.cache_read,
                 tiers: price.tiers,
+                source: price.source,
                 origin,
                 model,
             }),
@@ -765,6 +768,7 @@ pub fn save_price_in(layers: &Layers, original: Option<&str>, change: &PriceEdit
         if let Some(tiers) = &change.tiers {
             set_tiers(&mut entry, tiers);
         }
+        entry.remove("source");
         pricing.insert(model, Item::Table(entry));
         Ok(())
     })
@@ -914,6 +918,9 @@ fn describe(error: graph_llm::LlmError) -> String {
         other => other.to_string(),
     }
 }
+
+mod catalog;
+pub use catalog::{fill_prices, fill_prices_in, Catalog, PriceFill, CATALOG_SOURCE, CATALOG_URL};
 
 #[cfg(test)]
 mod tests;

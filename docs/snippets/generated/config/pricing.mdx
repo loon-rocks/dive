@@ -18,6 +18,10 @@
   Cache-read tokens.
 </ParamField>
 
+<ParamField body="pricing.<name>.source" type="string">
+  Where the price came from. The desktop app writes `models.dev` when it fills a price from the [models.dev](https://models.dev) catalogue, refreshes only prices marked that way, and drops the mark when you edit one by hand.
+</ParamField>
+
 <ParamField body="pricing.<name>.tiers" type="object[]">
   Higher rates for a call whose prompt is over a token count, as `[[pricing."<model>".tiers]]`. The prompt counts input, cache-write and cache-read tokens. The highest tier the prompt passes prices every token of the call. A tier's missing output rate keeps the base rate; its missing cache rates scale with its input rate.
 </ParamField>

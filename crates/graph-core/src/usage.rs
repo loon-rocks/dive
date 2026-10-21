@@ -392,6 +392,7 @@ mod tests {
             cache_write: None,
             cache_read: None,
             tiers: Vec::new(),
+            source: None,
         }
     }
 

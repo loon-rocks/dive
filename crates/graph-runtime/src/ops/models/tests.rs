@@ -494,3 +494,107 @@ fn price_tiers_are_written_kept_on_edit_and_removed_on_request() {
     save_price_in(&layers, Some("claude-haiku-5-5"), &edit(Some(Vec::new()))).unwrap();
     assert!(!text(&layers).contains("tiers"), "{}", text(&layers));
 }
+
+const CATALOG: &str = r#"{
+  "anthropic": {
+    "id": "anthropic",
+    "models": {
+      "claude-sonnet-5-5": {"cost": {"input": 2, "output": 10, "cache_read": 0.1, "cache_write": 2.5}},
+      "claude-haiku-4-5": {"cost": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write": 1.25}},
+      "claude-haiku-5-5": {"cost": {"input": 0.1, "output": 0.5, "cache_read": 0.01, "cache_write": 0.125,
+        "tiers": [{"input": 0.5, "output": 2.5, "cache_read": 0.05, "cache_write": 0.625, "tier": {"type": "context", "size": 100000}}]}}
+    }
+  },
+  "ollama-cloud": {"api": "https://ollama.example.com/v1", "models": {"llama3": {"cost": {"input": 0, "output": 0}}}}
+}"#;
+
+const WITH_HAIKU: &str = r#"version = 6
+
+[models.fast]
+provider = "anthropic"
+model = "claude-haiku-5-5"
+"#;
+
+fn price_of(layers: &Layers, model: &str) -> PriceEntry {
+    view_layers(layers, &resolver())
+        .pricing
+        .into_iter()
+        .find(|price| price.model == model)
+        .unwrap()
+}
+
+#[test]
+fn filling_prices_adds_catalogue_prices_for_unpriced_models_only() {
+    let (_dir, layers) = layers(GLOBAL, Some(WITH_HAIKU));
+    let catalog = Catalog::parse(CATALOG).unwrap();
+    let current = view_layers(&layers, &resolver());
+    let fill = fill_prices_in(&layers, &current, &catalog, false).unwrap();
+    assert_eq!(fill.added, ["claude-haiku-5-5", "claude-sonnet-5-5"]);
+    assert_eq!(fill.unchanged, ["claude-haiku-4-5"]);
+    assert!(fill.not_found.is_empty(), "{fill:?}");
+
+    let haiku = price_of(&layers, "claude-haiku-5-5");
+    assert_eq!(haiku.source.as_deref(), Some(CATALOG_SOURCE));
+    assert_eq!(haiku.tiers.len(), 1);
+    assert_eq!(haiku.tiers[0].above, 100_000);
+    assert_eq!(haiku.tiers[0].cache_read, Some(0.05));
+    assert_eq!(price_of(&layers, "claude-haiku-4-5").source, None);
+
+    let again =
+        fill_prices_in(&layers, &view_layers(&layers, &resolver()), &catalog, false).unwrap();
+    assert!(again.added.is_empty(), "{again:?}");
+}
+
+#[test]
+fn refreshing_updates_catalogue_prices_and_keeps_hand_edited_ones() {
+    let (_dir, layers) = layers(GLOBAL, Some(WITH_HAIKU));
+    let catalog = Catalog::parse(CATALOG).unwrap();
+    fill_prices_in(&layers, &view_layers(&layers, &resolver()), &catalog, false).unwrap();
+    save_price_in(
+        &layers,
+        Some("claude-haiku-5-5"),
+        &PriceEdit {
+            model: "claude-haiku-5-5".to_string(),
+            input: 0.2,
+            output: 0.5,
+            cache_write: None,
+            cache_read: None,
+            tiers: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(price_of(&layers, "claude-haiku-5-5").source, None);
+
+    let newer = Catalog::parse(&CATALOG.replace(
+        r#""claude-sonnet-5-5": {"cost": {"input": 2,"#,
+        r#""claude-sonnet-5-5": {"cost": {"input": 1.5,"#,
+    ))
+    .unwrap();
+    let fill = fill_prices_in(&layers, &view_layers(&layers, &resolver()), &newer, true).unwrap();
+    assert_eq!(fill.updated, ["claude-sonnet-5-5"]);
+    assert_eq!(fill.kept, ["claude-haiku-4-5", "claude-haiku-5-5"]);
+    assert_eq!(price_of(&layers, "claude-sonnet-5-5").input, 1.5);
+    assert_eq!(price_of(&layers, "claude-haiku-5-5").input, 0.2);
+}
+
+#[test]
+fn compatible_providers_match_the_catalogue_by_host_and_others_stay_unpriced() {
+    let catalog = Catalog::parse(CATALOG).unwrap();
+    assert!(catalog
+        .price(
+            ProviderKind::OpenaiCompat,
+            Some("https://ollama.example.com/v1"),
+            "llama3"
+        )
+        .is_some());
+    assert!(catalog
+        .price(
+            ProviderKind::OpenaiCompat,
+            Some("http://localhost:11434/v1"),
+            "llama3"
+        )
+        .is_none());
+    assert!(catalog
+        .price(ProviderKind::Systemone, None, "jev-1")
+        .is_none());
+}

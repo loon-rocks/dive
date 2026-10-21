@@ -64,6 +64,8 @@ pub struct ModelPrice {
     pub cache_read: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tiers: Vec<PriceTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -741,6 +743,7 @@ mod pricing_tests {
                 cache_write: None,
                 cache_read: None,
             }],
+            source: None,
         }
     }
 
@@ -827,6 +830,7 @@ mod pricing_tests {
                 cache_write: None,
                 cache_read: None,
             }],
+            source: None,
         };
         assert_eq!(rounded(price.cost(&tokens(280_000, 4_000, 0, 0))), 2.98);
     }

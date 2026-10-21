@@ -129,3 +129,5 @@ output = 2.50
 ```
 
 graph prices each call on its own. A prompt's size counts its input, cache-write and cache-read tokens. A call whose prompt has more tokens than a tier's `above` pays that tier's rates for every token, output included. A tier that leaves out a cache rate scales it from the base rate by the same factor as input.
+
+The desktop app fills these entries for you from the [models.dev](https://models.dev) catalogue, tiers included, and marks them `source = "models.dev"`. Its refresh updates only entries with that mark, so a price you edit by hand stays as you set it.
