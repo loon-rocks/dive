@@ -310,6 +310,33 @@ properties:
         cache_read:
           type: number
           description: Cache-read tokens.
+        source:
+          type: string
+          description: Where the price came from. The desktop app writes `models.dev` when it fills a price from the [models.dev](https://models.dev) catalogue, refreshes only prices marked that way, and drops the mark when you edit one by hand.
+        tiers:
+          type: array
+          description: Higher rates for a call whose prompt is over a token count, as `[[pricing."<model>".tiers]]`. The prompt counts input, cache-write and cache-read tokens. The highest tier the prompt passes prices every token of the call. A tier's missing output rate keeps the base rate; its missing cache rates scale with its input rate.
+          items:
+            type: object
+            required: [above]
+            additionalProperties: false
+            properties:
+              above:
+                type: integer
+                minimum: 0
+                description: The tier applies when the prompt has more tokens than this.
+              input:
+                type: number
+                description: Input tokens.
+              output:
+                type: number
+                description: Output tokens.
+              cache_write:
+                type: number
+                description: Cache-write tokens.
+              cache_read:
+                type: number
+                description: Cache-read tokens.
 x-environment:
   - group: Output and logging
     variables:

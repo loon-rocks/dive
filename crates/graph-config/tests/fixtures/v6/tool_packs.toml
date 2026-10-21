@@ -1,0 +1,14 @@
+version = 6
+
+[tools]
+always_loaded = ["builtin__infer"]
+
+[packs.github]
+git = "github.com/tylerdavis/graph-packs"
+path = "github"
+ref = "v1"
+
+[packs.slack]
+git = "github.com/tylerdavis/graph-packs"
+path = "slack"
+ref = "v1"
