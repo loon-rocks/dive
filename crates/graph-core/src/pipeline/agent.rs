@@ -10,6 +10,7 @@
 use super::catalog::glob_matches;
 use super::gate::StepPath;
 use super::{ExecutionEnd, Pipeline, RunState, Step};
+use crate::agent::deferral;
 use crate::agent::task::{run_task_agent, TaskError, TaskSpec, TaskTools};
 use crate::template::{render_str, RenderError, Roots};
 use crate::tools::{ToolDef, ToolRegistry};
@@ -413,15 +414,24 @@ impl Pipeline {
         // and works, because inner calls go through dispatch. Advertising
         // is only half of it — `execute_agent_tools` refuses the name too,
         // since dispatch would happily route it.
-        let tool_specs: Vec<ToolSpec> = tools
+        let mut tools: Vec<crate::tools::ToolDef> = tools
             .into_iter()
             .filter(|t| t.name != PLANNER_TOOL)
-            .map(|t| ToolSpec {
-                name: t.name,
-                description: t.description,
-                input_schema: t.input_schema,
-            })
             .collect();
+        let standing: Vec<String> = self.always_loaded.to_vec();
+        let listed = deferral::lists_search(patterns);
+        let own = deferral::deferrable(&tools, &standing)
+            .into_iter()
+            .cloned()
+            .collect();
+        let mut scoped = self.clone();
+        scoped.search_pool = Some(self.agent_search_pool(own, listed).await);
+        let search = self
+            .callable_plan_defs()
+            .into_iter()
+            .find(|t| t.name == deferral::SEARCH_TOOL);
+        deferral::with_search(&mut tools, &standing, search);
+        let tool_specs: Vec<ToolSpec> = deferral::specs(tools, &standing);
 
         let model_name = spec.model.as_deref().unwrap_or("chat");
 
@@ -441,9 +451,10 @@ impl Pipeline {
             output_schema: Some(spec.output_schema),
         };
         let step_tools = StepTools {
-            pipeline: self,
+            pipeline: &scoped,
             path,
             scope,
+            brief_search: !listed,
         };
         let outcome = run_task_agent(
             &task,
@@ -479,6 +490,7 @@ impl Pipeline {
         path: &StepPath,
         round: u32,
         scope: &Map<String, Value>,
+        brief_search: bool,
     ) -> Result<Vec<ChatMessage>, TaskError> {
         let futures = calls.iter().map(|call| {
             // Nested, not rebuilt from the step id: an agent inside a map
@@ -499,8 +511,13 @@ impl Pipeline {
                         ))),
                     );
                 }
+                let arguments = if call.name == deferral::SEARCH_TOOL {
+                    deferral::search_input(call.arguments.clone(), !brief_search)
+                } else {
+                    call.arguments.clone()
+                };
                 let outcome = self
-                    .dispatch(&call_path, &call.name, call.arguments.clone(), scope)
+                    .dispatch(&call_path, &call.name, arguments, scope)
                     .await;
                 (call, outcome)
             }
@@ -543,13 +560,14 @@ struct StepTools<'a> {
     pipeline: &'a Pipeline,
     path: &'a StepPath,
     scope: &'a Map<String, Value>,
+    brief_search: bool,
 }
 
 #[async_trait]
 impl TaskTools for StepTools<'_> {
     async fn execute(&self, calls: &[ToolCall], round: u32) -> Result<Vec<ChatMessage>, TaskError> {
         self.pipeline
-            .execute_agent_tools(calls, self.path, round, self.scope)
+            .execute_agent_tools(calls, self.path, round, self.scope, self.brief_search)
             .await
     }
 }

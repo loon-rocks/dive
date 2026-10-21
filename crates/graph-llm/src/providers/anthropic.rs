@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
 use serde_json::{json, Map, Value};
+use std::collections::{BTreeMap, BTreeSet};
 
 const API_VERSION: &str = "2023-06-01";
 /// Non-streaming ceiling: larger values risk HTTP timeouts on a single
@@ -67,17 +68,23 @@ impl AnthropicProvider {
     }
 
     fn build_body(&self, req: &ChatRequest, stream: bool) -> Value {
+        let defer = req.tools.iter().any(|t| !t.deferred);
         let mut tools: Vec<Value> = req
             .tools
             .iter()
             .map(|t| {
-                json!({
+                let mut tool = json!({
                     "name": t.name,
                     "description": t.description,
                     "input_schema": t.input_schema,
-                })
+                });
+                if defer && t.deferred {
+                    tool["defer_loading"] = json!(true);
+                }
+                tool
             })
             .collect();
+        let references = references_in(req, defer);
 
         let default_max_tokens = if stream {
             DEFAULT_MAX_TOKENS_STREAMING
@@ -92,7 +99,7 @@ impl AnthropicProvider {
             json!(req.max_tokens.unwrap_or(default_max_tokens)),
         );
 
-        let mut messages = to_anthropic_messages(&req.messages);
+        let mut messages = to_anthropic_messages(&req.messages, &references);
         if caching && (messages.len() > 1 || !req.tools.is_empty()) {
             // Breakpoint two: a rolling marker on the tail of the
             // conversation. On a multi-round loop this is the one that pays —
@@ -397,7 +404,34 @@ impl StreamAssembler {
     }
 }
 
-fn to_anthropic_messages(messages: &[ChatMessage]) -> Vec<Value> {
+fn references_in(req: &ChatRequest, defer: bool) -> BTreeMap<&str, Vec<&str>> {
+    if !defer {
+        return BTreeMap::new();
+    }
+    let deferred: BTreeSet<&str> = req
+        .tools
+        .iter()
+        .filter(|t| t.deferred)
+        .map(|t| t.name.as_str())
+        .collect();
+    req.tool_references
+        .iter()
+        .map(|(id, names)| {
+            let names = names
+                .iter()
+                .map(String::as_str)
+                .filter(|name| deferred.contains(name))
+                .collect::<Vec<_>>();
+            (id.as_str(), names)
+        })
+        .filter(|(_, names)| !names.is_empty())
+        .collect()
+}
+
+fn to_anthropic_messages(
+    messages: &[ChatMessage],
+    references: &BTreeMap<&str, Vec<&str>>,
+) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     for message in messages {
         match message {
@@ -438,10 +472,17 @@ fn to_anthropic_messages(messages: &[ChatMessage]) -> Vec<Value> {
                     Value::String(s) => s.clone(),
                     other => serde_json::to_string(other).unwrap_or_default(),
                 };
+                let content = match references.get(tool_call_id.as_str()) {
+                    Some(names) => json!(names
+                        .iter()
+                        .map(|name| json!({"type": "tool_reference", "tool_name": name}))
+                        .collect::<Vec<_>>()),
+                    None => json!(rendered),
+                };
                 let block = json!({
                     "type": "tool_result",
                     "tool_use_id": tool_call_id,
-                    "content": rendered,
+                    "content": content,
                     "is_error": is_error,
                 });
                 // Consecutive tool results must share one user message.
@@ -759,6 +800,58 @@ mod tests {
         assert_eq!(response.content.as_deref(), Some("done"));
     }
 
+    fn spec(name: &str, deferred: bool) -> ToolSpec {
+        ToolSpec {
+            name: name.into(),
+            description: format!("{name} things"),
+            input_schema: json!({"type": "object"}),
+            deferred,
+        }
+    }
+
+    #[test]
+    fn deferred_tools_load_through_references_on_the_search_result() {
+        let req = ChatRequest {
+            model: "claude-sonnet-5".into(),
+            messages: conversation(),
+            tools: vec![
+                spec("search", false),
+                spec("repo_grep", true),
+                spec("repo_file", true),
+            ],
+            tool_references: BTreeMap::from([(
+                "t1".to_string(),
+                vec!["repo_file".to_string(), "missing".to_string()],
+            )]),
+            ..Default::default()
+        };
+        let body = provider().build_body(&req, false);
+        let tools = body["tools"].as_array().unwrap();
+        assert!(tools[0].get("defer_loading").is_none());
+        assert_eq!(tools[1]["defer_loading"], true);
+        assert_eq!(tools[2]["defer_loading"], true);
+        let result = &body["messages"][2]["content"][0];
+        assert_eq!(result["type"], "tool_result");
+        assert_eq!(
+            result["content"],
+            json!([{"type": "tool_reference", "tool_name": "repo_file"}])
+        );
+    }
+
+    #[test]
+    fn a_request_with_every_tool_deferred_defers_none_and_references_none() {
+        let req = ChatRequest {
+            model: "claude-sonnet-5".into(),
+            messages: conversation(),
+            tools: vec![spec("repo_grep", true)],
+            tool_references: BTreeMap::from([("t1".to_string(), vec!["repo_grep".to_string()])]),
+            ..Default::default()
+        };
+        let body = provider().build_body(&req, false);
+        assert!(body["tools"][0].get("defer_loading").is_none());
+        assert_eq!(body["messages"][2]["content"][0]["content"], "a match");
+    }
+
     #[test]
     fn caching_marks_the_system_prompt_and_the_conversation_tail() {
         let req = ChatRequest {
@@ -815,6 +908,7 @@ mod tests {
                 name: "search".into(),
                 description: "search things".into(),
                 input_schema: json!({"type": "object"}),
+                deferred: false,
             }],
             ..Default::default()
         };
@@ -899,7 +993,7 @@ mod tests {
                 is_error: false,
             },
         ];
-        let rendered = to_anthropic_messages(&messages);
+        let rendered = to_anthropic_messages(&messages, &BTreeMap::new());
         assert_eq!(rendered.len(), 2);
         assert_eq!(rendered[1]["content"].as_array().unwrap().len(), 2);
     }

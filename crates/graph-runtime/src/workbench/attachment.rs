@@ -376,6 +376,10 @@ impl AttachmentHost for NetworkAttachment {
             &mut conversation.stop_tools,
             artifact::STOP_TOOLS.iter().map(|name| name.to_string()),
         );
+        crate::attachment::add_tools(
+            &mut conversation.standing_tools,
+            ["workbench__*".to_string()],
+        );
         let mut base = conversation.clone();
         base.catalog = Arc::new(CompositeRegistry::new(Vec::new()));
         base.context = None;

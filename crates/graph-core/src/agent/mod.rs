@@ -1,6 +1,7 @@
 //! The ReAct agent loop: model ↔ tools until a final text answer.
 
 pub mod conversation;
+pub mod deferral;
 pub mod doc;
 mod events;
 pub mod task;
@@ -34,6 +35,7 @@ pub struct Agent {
     /// — edit, validate, run, repeat — isn't starved mid-repair.
     pub progress_tools: Vec<String>,
     pub stop_tools: Vec<String>,
+    pub standing_tools: Vec<String>,
     pub call_site: crate::usage::CallSite,
 }
 
@@ -180,14 +182,7 @@ impl Agent {
 
     async fn tool_specs(&self) -> Vec<ToolSpec> {
         match self.registry.tools().await {
-            Ok(defs) => defs
-                .into_iter()
-                .map(|def| ToolSpec {
-                    name: def.name,
-                    description: def.description,
-                    input_schema: def.input_schema,
-                })
-                .collect(),
+            Ok(defs) => deferral::specs(defs, &self.standing_tools),
             Err(e) => {
                 tracing::warn!(error = %e, "tool discovery failed; running without tools");
                 Vec::new()
@@ -206,6 +201,7 @@ impl Agent {
             messages: messages.to_vec(),
             tools: tools.to_vec(),
             temperature: self.temperature,
+            tool_references: deferral::references(messages),
             ..Default::default()
         };
         let mut stream = self.provider.chat_stream(request).await?;
@@ -364,6 +360,7 @@ mod tests {
             max_iterations: 3,
             progress_tools,
             stop_tools: Vec::new(),
+            standing_tools: Vec::new(),
             call_site: crate::usage::CallSite::role("chat"),
         };
         (agent, registry)
