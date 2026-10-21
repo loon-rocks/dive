@@ -287,6 +287,7 @@ fn prices_are_written_under_quoted_model_ids() {
             output: 15.0,
             cache_write: None,
             cache_read: Some(0.3),
+            tiers: None,
         },
     )
     .unwrap();
@@ -306,6 +307,7 @@ fn prices_are_written_under_quoted_model_ids() {
             output: 1.0,
             cache_write: None,
             cache_read: None,
+            tiers: None,
         },
     )
     .is_err());
@@ -351,6 +353,7 @@ fn saving_into_an_older_file_keeps_its_version() {
             output: 2.0,
             cache_write: None,
             cache_read: None,
+            tiers: None,
         },
     )
     .unwrap();
@@ -442,4 +445,52 @@ fn keys_expand_from_references_and_defaults() {
         Some("fallback")
     );
     assert_eq!(expand_key(None, &resolver).unwrap(), None);
+}
+
+#[test]
+fn price_tiers_are_written_kept_on_edit_and_removed_on_request() {
+    let (_dir, layers) = layers(GLOBAL, Some(PROJECT));
+    let tier = |above: u64, input: f64| graph_config::PriceTier {
+        above,
+        input: Some(input),
+        output: Some(2.5),
+        cache_write: None,
+        cache_read: None,
+    };
+    let edit = |tiers: Option<Vec<graph_config::PriceTier>>| PriceEdit {
+        model: "claude-haiku-5-5".to_string(),
+        input: 0.1,
+        output: 0.5,
+        cache_write: None,
+        cache_read: Some(0.01),
+        tiers,
+    };
+    save_price_in(&layers, None, &edit(Some(vec![tier(100_000, 0.5)]))).unwrap();
+    let written = text(&layers);
+    assert!(
+        written.contains(
+            "[[pricing.claude-haiku-5-5.tiers]]\nabove = 100000\ninput = 0.5\noutput = 2.5\n"
+        ),
+        "{written}"
+    );
+    let view = view_layers(&layers, &resolver());
+    let price = view
+        .pricing
+        .iter()
+        .find(|price| price.model == "claude-haiku-5-5")
+        .unwrap();
+    assert_eq!(price.tiers, vec![tier(100_000, 0.5)]);
+
+    save_price_in(&layers, Some("claude-haiku-5-5"), &edit(None)).unwrap();
+    assert!(text(&layers).contains(".tiers]]"), "{}", text(&layers));
+
+    assert!(save_price_in(
+        &layers,
+        Some("claude-haiku-5-5"),
+        &edit(Some(vec![tier(100_000, 0.5), tier(100_000, 0.6)])),
+    )
+    .is_err());
+
+    save_price_in(&layers, Some("claude-haiku-5-5"), &edit(Some(Vec::new()))).unwrap();
+    assert!(!text(&layers).contains("tiers"), "{}", text(&layers));
 }

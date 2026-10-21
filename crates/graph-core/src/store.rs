@@ -90,6 +90,17 @@ pub struct EntryUsage {
     pub cache_read_input_tokens: u64,
 }
 
+impl From<&EntryUsage> for graph_config::TokenCounts {
+    fn from(usage: &EntryUsage) -> Self {
+        Self {
+            input: usage.input_tokens,
+            output: usage.output_tokens,
+            cache_write: usage.cache_creation_input_tokens,
+            cache_read: usage.cache_read_input_tokens,
+        }
+    }
+}
+
 impl EntryUsage {
     pub fn new(model: &str, usage: &Usage) -> Self {
         Self {

@@ -184,11 +184,15 @@ impl UsageLedger {
 
         let mut models: Vec<ModelUsage> = by_model
             .into_iter()
-            .map(|((provider, model), (usage, calls))| ModelUsage {
-                cost_usd: self.cost(&model, &usage),
+            .map(|((provider, model), (usage, calls_made))| ModelUsage {
+                cost_usd: self.cost_of(
+                    calls
+                        .iter()
+                        .filter(|c| c.provider == provider && c.model == model),
+                ),
+                calls: calls_made,
                 provider,
                 model,
-                calls,
                 usage,
             })
             .collect();
@@ -210,9 +214,11 @@ impl UsageLedger {
     }
 
     fn cost_of_group(&self, calls: &[CallRecord], group: &str) -> Option<f64> {
+        self.cost_of(calls.iter().filter(|c| c.site.group() == group))
+    }
+
+    fn cost_of<'a>(&self, calls: impl Iterator<Item = &'a CallRecord>) -> Option<f64> {
         let costs: Vec<f64> = calls
-            .iter()
-            .filter(|c| c.site.group() == group)
             .filter_map(|c| self.cost(&c.model, &c.usage))
             .collect();
         (!costs.is_empty()).then(|| costs.iter().sum())
@@ -221,14 +227,7 @@ impl UsageLedger {
     /// Price one model's usage, or `None` when that model has no configured
     /// price. Never guesses — an unpriced model reports tokens only.
     fn cost(&self, model: &str, usage: &Usage) -> Option<f64> {
-        let price = self.prices.get(model)?;
-        let per_million = |tokens: u64, rate: f64| (tokens as f64) * rate / 1_000_000.0;
-        Some(
-            per_million(usage.input_tokens, price.input)
-                + per_million(usage.output_tokens, price.output)
-                + per_million(usage.cache_creation_input_tokens, price.cache_write_rate())
-                + per_million(usage.cache_read_input_tokens, price.cache_read_rate()),
-        )
+        Some(self.prices.get(model)?.cost(&usage.into()))
     }
 }
 
@@ -392,6 +391,7 @@ mod tests {
             output,
             cache_write: None,
             cache_read: None,
+            tiers: Vec::new(),
         }
     }
 
@@ -475,6 +475,25 @@ mod tests {
         // 3 (input) + 15 (output) + 3.75 (write, 1.25x) + 0.30 (read, 0.1x)
         let report = ledger.take();
         assert_eq!(report.cost_usd, Some(22.05));
+    }
+
+    #[tokio::test]
+    async fn each_call_picks_its_own_tier_before_the_rollup_sums() {
+        let mut haiku = price(0.10, 0.50);
+        haiku.tiers.push(graph_config::PriceTier {
+            above: 100_000,
+            input: Some(0.50),
+            output: Some(2.50),
+            cache_write: None,
+            cache_read: None,
+        });
+        let ledger = UsageLedger::new(BTreeMap::from([("haiku".to_string(), haiku)]));
+        ledger.record(call("haiku", tokens(60_000, 1_000)));
+        ledger.record(call("haiku", tokens(60_000, 1_000)));
+        let report = ledger.take();
+        let rounded = |usd: Option<f64>| (usd.unwrap() * 100_000.0).round() / 100_000.0;
+        assert_eq!(rounded(report.by_model[0].cost_usd), 0.013);
+        assert_eq!(rounded(report.cost_usd), 0.013);
     }
 
     #[tokio::test]
