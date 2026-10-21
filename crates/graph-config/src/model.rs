@@ -49,7 +49,7 @@ pub struct Config {
 /// Deliberately not shipped with built-in defaults: published prices change,
 /// and a stale table that quietly reports the wrong dollar figure is worse
 /// than reporting none. An unpriced model still reports its token counts.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ModelPrice {
     /// Uncached input tokens.
@@ -62,9 +62,91 @@ pub struct ModelPrice {
     /// Tokens served from the prompt cache. Defaults to `input` x 0.10.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_read: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tiers: Vec<PriceTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PriceTier {
+    pub above: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TokenCounts {
+    pub input: u64,
+    pub output: u64,
+    pub cache_write: u64,
+    pub cache_read: u64,
+}
+
+impl TokenCounts {
+    pub fn prompt(&self) -> u64 {
+        self.input + self.cache_write + self.cache_read
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rates {
+    pub input: f64,
+    pub output: f64,
+    pub cache_write: f64,
+    pub cache_read: f64,
 }
 
 impl ModelPrice {
+    pub fn tier_for(&self, prompt_tokens: u64) -> Option<&PriceTier> {
+        self.tiers
+            .iter()
+            .filter(|tier| prompt_tokens > tier.above)
+            .max_by_key(|tier| tier.above)
+    }
+
+    pub fn rates_for(&self, prompt_tokens: u64) -> Rates {
+        let base = Rates {
+            input: self.input,
+            output: self.output,
+            cache_write: self.cache_write_rate(),
+            cache_read: self.cache_read_rate(),
+        };
+        let Some(tier) = self.tier_for(prompt_tokens) else {
+            return base;
+        };
+        let input = tier.input.unwrap_or(base.input);
+        let scaled = |rate: f64| {
+            if base.input == 0.0 {
+                rate
+            } else {
+                rate * input / base.input
+            }
+        };
+        Rates {
+            input,
+            output: tier.output.unwrap_or(base.output),
+            cache_write: tier.cache_write.unwrap_or_else(|| scaled(base.cache_write)),
+            cache_read: tier.cache_read.unwrap_or_else(|| scaled(base.cache_read)),
+        }
+    }
+
+    pub fn cost(&self, tokens: &TokenCounts) -> f64 {
+        let rates = self.rates_for(tokens.prompt());
+        let per_million = |count: u64, rate: f64| (count as f64) * rate / 1_000_000.0;
+        per_million(tokens.input, rates.input)
+            + per_million(tokens.output, rates.output)
+            + per_million(tokens.cache_write, rates.cache_write)
+            + per_million(tokens.cache_read, rates.cache_read)
+    }
+
     /// Cache-write rate, falling back to the standard 1.25x premium.
     pub fn cache_write_rate(&self) -> f64 {
         self.cache_write.unwrap_or(self.input * 1.25)
@@ -642,4 +724,114 @@ pub struct UserConfig {
     /// Freeform context injected into the chat and planner prompts.
     pub context: Option<String>,
     pub timezone: Option<String>,
+}
+
+#[cfg(test)]
+mod pricing_tests {
+    use super::*;
+
+    fn haiku() -> ModelPrice {
+        ModelPrice {
+            input: 0.10,
+            output: 0.50,
+            cache_write: None,
+            cache_read: Some(0.01),
+            tiers: vec![PriceTier {
+                above: 100_000,
+                input: Some(0.50),
+                output: Some(2.50),
+                cache_write: None,
+                cache_read: None,
+            }],
+            source: None,
+        }
+    }
+
+    fn rounded(usd: f64) -> f64 {
+        (usd * 1e9).round() / 1e9
+    }
+
+    fn tokens(input: u64, output: u64, cache_write: u64, cache_read: u64) -> TokenCounts {
+        TokenCounts {
+            input,
+            output,
+            cache_write,
+            cache_read,
+        }
+    }
+
+    #[test]
+    fn a_prompt_over_the_threshold_reprices_every_token_kind() {
+        let cost = haiku().cost(&tokens(20_000, 2_000, 0, 85_000));
+        assert_eq!(rounded(cost), 0.01925);
+    }
+
+    #[test]
+    fn a_prompt_at_the_threshold_stays_on_the_base_rates() {
+        let cost = haiku().cost(&tokens(100_000, 0, 0, 0));
+        assert_eq!(rounded(cost), 0.01);
+        let cost = haiku().cost(&tokens(100_001, 0, 0, 0));
+        assert_eq!(rounded(cost), 0.0500005);
+    }
+
+    #[test]
+    fn cache_reads_and_writes_count_toward_the_threshold() {
+        let price = haiku();
+        assert!(price
+            .tier_for(tokens(1_000, 0, 50_000, 50_000).prompt())
+            .is_some());
+        assert!(price
+            .tier_for(tokens(100_000, 50_000, 0, 0).prompt())
+            .is_none());
+    }
+
+    #[test]
+    fn a_tier_without_cache_rates_scales_them_with_input() {
+        let rates = haiku().rates_for(200_000);
+        assert_eq!(rounded(rates.cache_read), 0.05);
+        assert_eq!(rounded(rates.cache_write), 0.625);
+    }
+
+    #[test]
+    fn a_tier_without_an_output_rate_keeps_the_base_output() {
+        let mut price = haiku();
+        price.tiers[0].output = None;
+        assert_eq!(price.rates_for(200_000).output, 0.50);
+    }
+
+    #[test]
+    fn the_highest_tier_the_prompt_passes_wins() {
+        let mut price = haiku();
+        price.tiers.insert(
+            0,
+            PriceTier {
+                above: 500_000,
+                input: Some(1.0),
+                output: None,
+                cache_write: None,
+                cache_read: None,
+            },
+        );
+        assert_eq!(price.rates_for(150_000).input, 0.50);
+        assert_eq!(price.rates_for(600_000).input, 1.0);
+    }
+
+    #[test]
+    fn a_large_openai_prompt_doubles_input_and_lifts_output() {
+        let price = ModelPrice {
+            input: 5.0,
+            output: 30.0,
+            cache_write: None,
+            cache_read: None,
+            tiers: vec![PriceTier {
+                above: 272_000,
+                input: Some(10.0),
+                output: Some(45.0),
+                cache_write: None,
+                cache_read: None,
+            }],
+            source: None,
+        };
+        assert_eq!(rounded(price.cost(&tokens(280_000, 4_000, 0, 0))), 2.98);
+    }
 }

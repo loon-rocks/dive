@@ -250,6 +250,44 @@
           "output": {
             "description": "Output tokens.",
             "type": "number"
+          },
+          "source": {
+            "description": "Where the price came from. The desktop app writes `models.dev` when it fills a price from the [models.dev](https://models.dev) catalogue, refreshes only prices marked that way, and drops the mark when you edit one by hand.",
+            "type": "string"
+          },
+          "tiers": {
+            "description": "Higher rates for a call whose prompt is over a token count, as `[[pricing.\"<model>\".tiers]]`. The prompt counts input, cache-write and cache-read tokens. The highest tier the prompt passes prices every token of the call. A tier's missing output rate keeps the base rate; its missing cache rates scale with its input rate.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "above": {
+                  "description": "The tier applies when the prompt has more tokens than this.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "cache_read": {
+                  "description": "Cache-read tokens.",
+                  "type": "number"
+                },
+                "cache_write": {
+                  "description": "Cache-write tokens.",
+                  "type": "number"
+                },
+                "input": {
+                  "description": "Input tokens.",
+                  "type": "number"
+                },
+                "output": {
+                  "description": "Output tokens.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "above"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           }
         },
         "required": [
