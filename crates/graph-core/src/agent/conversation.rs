@@ -1,3 +1,4 @@
+use super::deferral;
 use super::doc::{global_fragments, input_problems, render_system_prompt, AgentDoc, AgentSet};
 use super::task::{run_task_agent, TaskError, TaskSpec, TaskTools};
 use super::{Agent, AgentError, EventSink};
@@ -44,6 +45,7 @@ pub struct Conversation {
     pub default_max_iterations: u32,
     pub progress_tools: Vec<String>,
     pub stop_tools: Vec<String>,
+    pub standing_tools: Vec<String>,
     pub handoff_guard: Option<HandoffGuard>,
 }
 
@@ -280,6 +282,7 @@ impl Conversation {
                 .into_iter()
                 .chain(self.stop_tools.iter().cloned())
                 .collect(),
+            standing_tools: tools.standing(),
             registry: tools,
             events: self.events.clone(),
             system_prompt: self.system_prompt(doc)?,
@@ -331,17 +334,8 @@ impl Conversation {
             Some(_) => serde_json::to_string_pretty(&input).unwrap_or_default(),
         };
         let tools = ConversationTools::new(self, doc, depth, false);
-        let specs: Vec<ToolSpec> = tools
-            .tools()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|def| ToolSpec {
-                name: def.name,
-                description: def.description,
-                input_schema: def.input_schema,
-            })
-            .collect();
+        let specs: Vec<ToolSpec> =
+            deferral::specs(tools.tools().await.unwrap_or_default(), &tools.standing());
         let spec = TaskSpec {
             model: doc.model.clone(),
             system,
@@ -534,6 +528,7 @@ impl TaskTools for RegistryTools<'_> {
 struct ConversationTools {
     conversation: Conversation,
     base: AllowlistRegistry,
+    lists_search: bool,
     subagents: Vec<ToolDef>,
     handoffs: Vec<String>,
     back_to: Option<String>,
@@ -574,6 +569,7 @@ impl ConversationTools {
         Self {
             conversation: conversation.clone(),
             base: AllowlistRegistry::new(conversation.catalog.clone(), doc.tools.clone()),
+            lists_search: deferral::lists_search(&doc.tools),
             subagents: doc
                 .subagents
                 .iter()
@@ -592,6 +588,45 @@ impl ConversationTools {
             depth,
             runs: Mutex::new(Vec::new()),
             handoff: Mutex::new(None),
+        }
+    }
+
+    fn standing(&self) -> Vec<String> {
+        let mut standing: Vec<String> = self.conversation.pipeline.always_loaded.to_vec();
+        standing.extend(self.conversation.standing_tools.iter().cloned());
+        standing.extend(self.subagents.iter().map(|def| def.name.clone()));
+        standing.extend(self.handoff_tools());
+        standing
+    }
+
+    async fn search_def(&self) -> Option<ToolDef> {
+        self.conversation
+            .catalog
+            .tools()
+            .await
+            .ok()?
+            .into_iter()
+            .find(|def| def.name == deferral::SEARCH_TOOL)
+    }
+
+    async fn search(&self, input: Value) -> ToolOutcome {
+        let defs = self.base.tools().await.unwrap_or_default();
+        let standing = self.standing();
+        let own = deferral::deferrable(&defs, &standing)
+            .into_iter()
+            .cloned()
+            .collect();
+        let mut pipeline = (*self.conversation.pipeline).clone();
+        pipeline.search_pool = Some(pipeline.agent_search_pool(own, self.lists_search).await);
+        let call = pipeline
+            .call_plan(
+                deferral::SEARCH_PLAN,
+                deferral::search_input(input, self.lists_search),
+            )
+            .await;
+        ToolOutcome {
+            result: call.result,
+            is_error: call.is_error,
         }
     }
 
@@ -679,6 +714,12 @@ impl ConversationTools {
 impl ToolRegistry for ConversationTools {
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
         let mut defs = self.base.tools().await?;
+        let standing = self.standing();
+        if !defs.iter().any(|def| def.name == deferral::SEARCH_TOOL)
+            && !deferral::deferrable(&defs, &standing).is_empty()
+        {
+            deferral::with_search(&mut defs, &standing, self.search_def().await);
+        }
         defs.extend(self.subagents.iter().cloned());
         defs.extend(self.handoffs.iter().map(|name| Self::handoff_def(name)));
         if let Some(caller) = &self.back_to {
@@ -730,6 +771,9 @@ impl ToolRegistry for ConversationTools {
                     is_error: false,
                 });
             }
+        }
+        if name == deferral::SEARCH_TOOL {
+            return Ok(self.search(input).await);
         }
         if self.subagents.iter().any(|def| def.name == name) {
             let agent = name.strip_prefix(AGENT_TOOL_PREFIX).unwrap_or(name);
@@ -898,6 +942,7 @@ mod tests {
             agents: agents.clone(),
             agent_depth: 0,
             always_loaded: Default::default(),
+            search_pool: None,
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
@@ -913,9 +958,167 @@ mod tests {
             default_max_iterations: 8,
             progress_tools: Vec::new(),
             stop_tools: Vec::new(),
+            standing_tools: Vec::new(),
             handoff_guard: None,
         };
         (conversation, provider)
+    }
+
+    struct Services;
+
+    #[async_trait]
+    impl ToolRegistry for Services {
+        async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
+            Ok([
+                ("crm__find_contact", "Find a customer contact by name"),
+                (
+                    "billing__list_invoices",
+                    "List the invoices billed to a customer",
+                ),
+                (
+                    "hr__find_person",
+                    "Find a person contact by name in the staff directory",
+                ),
+            ]
+            .into_iter()
+            .map(|(name, description)| ToolDef {
+                name: name.into(),
+                description: description.into(),
+                input_schema: json!({"type": "object"}),
+                output_schema: None,
+                output_example: None,
+                read_only: Some(true),
+            })
+            .collect())
+        }
+        async fn invoke(&self, name: &str, _: Value) -> Result<ToolOutcome, ToolError> {
+            Ok(ToolOutcome {
+                result: json!({"called": name}),
+                is_error: false,
+            })
+        }
+    }
+
+    fn searching(tools: &str, responses: Vec<ChatResponse>) -> (Conversation, Arc<Scripted>) {
+        let (mut conversation, provider) = conversation(responses);
+        let finder = crate::agent::doc::parse_agent_source(&format!(
+            "name: finder\ndescription: finds\nmodel: chat\ntools: {tools}\nsystem_prompt: You find.\n"
+        ))
+        .unwrap();
+        conversation.agents = Arc::new(AgentSet::layered(vec![finder], Vec::new()));
+        let plans: Vec<crate::pipeline::doc::PlanDoc> = crate::pipeline::doc::BUILTIN_PLANS
+            .iter()
+            .map(|raw| crate::pipeline::doc::parse_plan_source(raw, "built-in plan").unwrap())
+            .collect();
+        let mut pipeline = (*conversation.pipeline).clone();
+        pipeline.registry = Arc::new(Services);
+        pipeline.plans = Arc::new(plans.clone());
+        pipeline.agents = conversation.agents.clone();
+        let pipeline = Arc::new(pipeline);
+        conversation.catalog = Arc::new(crate::toolbox::AgentToolbox::new(
+            Arc::new(Services),
+            pipeline.clone(),
+            plans,
+        ));
+        conversation.pipeline = pipeline;
+        (conversation, provider)
+    }
+
+    #[tokio::test]
+    async fn an_agent_defers_its_tools_and_loads_what_a_search_of_its_own_list_finds() {
+        let (conversation, provider) = searching(
+            r#"["crm__*", "billing__*"]"#,
+            vec![
+                call(
+                    "s1",
+                    deferral::SEARCH_TOOL,
+                    json!({"query": "find a customer contact"}),
+                ),
+                call("c1", "crm__find_contact", json!({})),
+                text("found"),
+                text("again"),
+            ],
+        );
+        let turn = conversation
+            .run_turn(&[], "finder", "who is dana")
+            .await
+            .unwrap();
+        assert_eq!(
+            turn.tools_used,
+            [deferral::SEARCH_TOOL, "crm__find_contact"]
+        );
+        let requests = provider.requests.lock().unwrap().clone();
+        let deferred: Vec<(String, bool)> = requests[0]
+            .tools
+            .iter()
+            .map(|spec| (spec.name.clone(), spec.deferred))
+            .collect();
+        assert_eq!(
+            deferred,
+            [
+                ("crm__find_contact".to_string(), true),
+                ("billing__list_invoices".to_string(), true),
+                (deferral::SEARCH_TOOL.to_string(), false),
+            ]
+        );
+        assert!(requests[0].tool_references.is_empty());
+        let loaded = &requests[1].tool_references["s1"];
+        assert!(loaded.contains(&"crm__find_contact".to_string()));
+        assert!(!loaded.contains(&"hr__find_person".to_string()));
+
+        conversation
+            .run_turn(&turn.entries, "finder", "and again")
+            .await
+            .unwrap();
+        let requests = provider.requests.lock().unwrap().clone();
+        assert_eq!(&requests[3].tool_references["s1"], loaded);
+    }
+
+    #[tokio::test]
+    async fn an_agent_listing_search_searches_the_whole_catalog_and_its_own_tools() {
+        let (conversation, provider) = searching(
+            &format!(
+                r#"["{}", "{}"]"#,
+                deferral::SEARCH_TOOL,
+                "builtin__save_tool"
+            ),
+            vec![
+                call(
+                    "s1",
+                    deferral::SEARCH_TOOL,
+                    json!({"query": "find a person by name in the staff directory"}),
+                ),
+                call(
+                    "s2",
+                    deferral::SEARCH_TOOL,
+                    json!({"query": "save a drafted tool"}),
+                ),
+                text("done"),
+            ],
+        );
+        conversation.run_turn(&[], "finder", "go").await.unwrap();
+        let requests = provider.requests.lock().unwrap().clone();
+        assert!(requests[0]
+            .tools
+            .iter()
+            .any(|spec| spec.name == "builtin__save_tool" && spec.deferred));
+        let found = &requests[2].tool_references;
+        assert!(found["s1"].contains(&"hr__find_person".to_string()));
+        assert!(found["s2"].contains(&"builtin__save_tool".to_string()));
+    }
+
+    #[tokio::test]
+    async fn an_agent_whose_tools_are_all_standing_gets_no_search() {
+        let (mut conversation, provider) =
+            searching(r#"["crm__*", "billing__*"]"#, vec![text("hi")]);
+        conversation.standing_tools = vec!["crm__*".to_string(), "billing__*".to_string()];
+        conversation.run_turn(&[], "finder", "hello").await.unwrap();
+        let requests = provider.requests.lock().unwrap().clone();
+        assert!(requests[0].tools.iter().all(|spec| !spec.deferred));
+        assert!(requests[0]
+            .tools
+            .iter()
+            .all(|spec| spec.name != deferral::SEARCH_TOOL));
     }
 
     #[test]

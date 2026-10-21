@@ -428,7 +428,7 @@
             "builtin__take",
             "builtin__rank"
           ],
-          "description": "Tools always offered to drafters, whatever the search returns.",
+          "description": "Tools offered up front, never deferred behind a search. Plan drafting always offers them, and an agent gets the ones its `tools` list matches.",
           "items": {
             "type": "string"
           },

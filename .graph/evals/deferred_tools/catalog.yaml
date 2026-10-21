@@ -1,0 +1,388 @@
+crm:
+  find_contact:
+    description: Look up a customer contact by name or email and return their profile, company and owner.
+    params: {query: Name or email of the contact}
+    returns: {id: c_481, name: Dana Whitfield, email: dana@northwind.io, company: Northwind, owner: Priya}
+  list_deals:
+    description: List open sales deals, optionally for one company, with stage, amount and close date.
+    params: {company: "Company name, or empty for all"}
+    returns: {deals: [{id: d_77, company: Northwind, stage: negotiation, amount: 48000, close: "2026-11-14"}]}
+  update_deal_stage:
+    description: Move a sales deal to a new pipeline stage.
+    params: {deal_id: The deal id, stage: The new stage}
+    returns: {id: d_77, stage: closed_won}
+  log_call:
+    description: Record a phone call with a contact on their CRM timeline.
+    params: {contact_id: The contact id, notes: What was discussed}
+    returns: {logged: true}
+  list_accounts:
+    description: List customer accounts with their tier, region and account manager.
+    params: {region: "Region filter, or empty"}
+    returns: {accounts: [{name: Northwind, tier: enterprise, region: EMEA, manager: Priya}]}
+  merge_contacts:
+    description: Merge two duplicate contact records into one.
+    params: {keep_id: Contact to keep, merge_id: Contact to fold into it}
+    returns: {merged: true}
+  account_health:
+    description: Health score for a customer account from usage, support load and renewal risk.
+    params: {account: Account name}
+    returns: {account: Northwind, score: 62, risk: medium, drivers: [ticket volume up 40%]}
+  create_lead:
+    description: Create a new sales lead from a name, email and source.
+    params: {name: Lead name, email: Lead email, source: Where the lead came from}
+    returns: {id: l_12, status: new}
+  assign_owner:
+    description: Assign a sales owner to an account or deal.
+    params: {record_id: Account or deal id, owner: The new owner}
+    returns: {assigned: true}
+  list_tasks:
+    description: List follow-up tasks due for a sales rep.
+    params: {owner: The rep's name}
+    returns: {tasks: [{id: t_3, title: Send Northwind pricing, due: "2026-10-22"}]}
+billing:
+  list_invoices:
+    description: List invoices for a customer with amount, status (paid, open, overdue) and due date.
+    params: {customer: Customer name}
+    returns: {invoices: [{id: inv_2201, amount: 12000, status: overdue, due: "2026-10-01"}]}
+  get_invoice:
+    description: Get one invoice's line items, taxes and payment history.
+    params: {invoice_id: The invoice id}
+    returns: {id: inv_2201, lines: [{item: Enterprise seats, qty: 40, amount: 12000}], payments: []}
+  issue_refund:
+    description: Refund all or part of a paid invoice to the customer's card.
+    params: {invoice_id: The invoice id, amount: Amount to refund}
+    returns: {refund_id: re_19, status: pending}
+  subscription_status:
+    description: A customer's current subscription plan, seat count, renewal date and billing interval.
+    params: {customer: Customer name}
+    returns: {plan: enterprise, seats: 40, renews: "2027-01-01", interval: annual}
+  change_plan:
+    description: Upgrade or downgrade a customer's subscription plan.
+    params: {customer: Customer name, plan: The new plan}
+    returns: {plan: growth, effective: next_cycle}
+  apply_coupon:
+    description: Apply a discount coupon code to a customer's next invoice.
+    params: {customer: Customer name, code: Coupon code}
+    returns: {applied: true, discount: 15%}
+  revenue_report:
+    description: Monthly recurring revenue, churned revenue and expansion for a month.
+    params: {month: Month as YYYY-MM}
+    returns: {mrr: 412000, churned: 9000, expansion: 21000}
+  payment_methods:
+    description: List the cards and bank accounts on file for a customer.
+    params: {customer: Customer name}
+    returns: {methods: [{type: card, last4: "4242", expires: "2027-03"}]}
+  dunning_status:
+    description: Where a customer is in the failed-payment retry and reminder sequence.
+    params: {customer: Customer name}
+    returns: {stage: second_reminder, next_retry: "2026-10-24"}
+  tax_settings:
+    description: A customer's tax ID, exemption status and billing address.
+    params: {customer: Customer name}
+    returns: {tax_id: GB123456789, exempt: false}
+support:
+  search_tickets:
+    description: Search support tickets by keyword, customer or status.
+    params: {query: "Keywords, customer or status"}
+    returns: {tickets: [{id: T-9012, subject: SSO login loop, status: open, priority: high}]}
+  get_ticket:
+    description: A support ticket's full conversation, assignee and SLA timers.
+    params: {ticket_id: The ticket id}
+    returns: {id: T-9012, assignee: Marco, sla_breach_in: 3h, messages: 6}
+  reply_ticket:
+    description: Post a public reply to the customer on a support ticket.
+    params: {ticket_id: The ticket id, body: Reply text}
+    returns: {posted: true}
+  escalate_ticket:
+    description: Escalate a support ticket to engineering with a severity.
+    params: {ticket_id: The ticket id, severity: sev1 to sev4}
+    returns: {escalated: true, linked_issue: ENG-3301}
+  close_ticket:
+    description: Mark a support ticket solved.
+    params: {ticket_id: The ticket id}
+    returns: {status: solved}
+  csat_scores:
+    description: Customer satisfaction scores for support over a period, by agent.
+    params: {period: e.g. last_30_days}
+    returns: {overall: 4.4, by_agent: [{agent: Marco, score: 4.6}]}
+  macro_list:
+    description: List saved reply macros support agents can apply.
+    params: {query: Keyword}
+    returns: {macros: [{id: m_4, title: Password reset steps}]}
+  queue_load:
+    description: How many tickets are waiting in each support queue and the oldest wait time.
+    params: {queue: "Queue name, or empty for all"}
+    returns: {queues: [{name: tier1, waiting: 37, oldest: 5h}]}
+  add_internal_note:
+    description: Add a private note on a ticket visible only to support staff.
+    params: {ticket_id: The ticket id, note: Note text}
+    returns: {added: true}
+  merge_tickets:
+    description: Merge duplicate tickets from the same customer.
+    params: {keep_id: Ticket to keep, merge_id: Ticket to merge}
+    returns: {merged: true}
+calendar:
+  list_events:
+    description: List calendar events for a person on a date.
+    params: {person: Whose calendar, date: Date as YYYY-MM-DD}
+    returns: {events: [{title: Northwind QBR, start: "10:00", end: "11:00"}]}
+  find_free_slot:
+    description: Find a meeting time when every attendee is free.
+    params: {attendees: Comma-separated names, duration_minutes: Meeting length}
+    returns: {slot: {date: "2026-10-23", start: "14:00"}}
+  create_event:
+    description: Create a calendar event and invite attendees.
+    params: {title: Event title, start: ISO start time, attendees: Comma-separated names}
+    returns: {id: ev_88, created: true}
+  cancel_event:
+    description: Cancel a calendar event and notify attendees.
+    params: {event_id: The event id}
+    returns: {cancelled: true}
+  book_room:
+    description: Book a meeting room for a time slot.
+    params: {room: Room name, start: ISO start time}
+    returns: {booked: true}
+  out_of_office:
+    description: Who is out of office on a date.
+    params: {date: Date as YYYY-MM-DD}
+    returns: {out: [Marco, Lena]}
+  timezone_of:
+    description: A colleague's time zone and current local time.
+    params: {person: Name}
+    returns: {tz: Europe/Berlin, local: "17:42"}
+  reschedule_event:
+    description: Move a calendar event to a new time.
+    params: {event_id: The event id, start: New ISO start time}
+    returns: {moved: true}
+email:
+  search_mail:
+    description: Search the user's mailbox by sender, subject or words.
+    params: {query: Search terms}
+    returns: {messages: [{id: msg_5, from: dana@northwind.io, subject: Renewal questions}]}
+  read_mail:
+    description: Read one email message in full.
+    params: {message_id: The message id}
+    returns: {body: "Can you send the renewal quote by Friday?"}
+  send_mail:
+    description: Send an email.
+    params: {to: Recipient address, subject: Subject line, body: Message body}
+    returns: {sent: true}
+  draft_mail:
+    description: Save an email draft without sending it.
+    params: {to: Recipient address, subject: Subject line, body: Message body}
+    returns: {draft_id: dr_2}
+  list_threads_unread:
+    description: Unread email threads, newest first.
+    params: {limit: How many}
+    returns: {threads: [{subject: Renewal questions, from: Dana Whitfield}]}
+  mail_rules:
+    description: List the mailbox's filtering rules.
+    params: {query: Keyword}
+    returns: {rules: [{name: Invoices to Finance}]}
+docs:
+  search_docs:
+    description: Search the internal wiki for pages matching a query.
+    params: {query: Search terms}
+    returns: {pages: [{id: p_31, title: On-call handbook}]}
+  read_page:
+    description: Read a wiki page's content.
+    params: {page_id: The page id}
+    returns: {title: On-call handbook, body: Page the secondary after 15 minutes.}
+  create_page:
+    description: Create a new wiki page in a space.
+    params: {space: Space name, title: Page title, body: Markdown body}
+    returns: {id: p_90}
+  update_page:
+    description: Replace a wiki page's content.
+    params: {page_id: The page id, body: New markdown body}
+    returns: {updated: true}
+  page_history:
+    description: Edit history of a wiki page with authors and dates.
+    params: {page_id: The page id}
+    returns: {edits: [{author: Lena, date: "2026-09-30"}]}
+  list_spaces:
+    description: List wiki spaces and their owners.
+    params: {query: Keyword}
+    returns: {spaces: [{name: Engineering, owner: Lena}]}
+  stale_pages:
+    description: Wiki pages nobody has edited in a long time.
+    params: {days: Minimum days since last edit}
+    returns: {pages: [{title: Old deploy guide, last_edit: "2024-02-01"}]}
+hr:
+  employee_profile:
+    description: An employee's title, team, manager and start date.
+    params: {name: Employee name}
+    returns: {title: Staff Engineer, team: Platform, manager: Lena, start: "2022-04-11"}
+  org_chart:
+    description: Who reports to a manager, directly and indirectly.
+    params: {manager: Manager name}
+    returns: {reports: [Marco, Ana, Femi]}
+  pto_balance:
+    description: An employee's remaining paid time off.
+    params: {name: Employee name}
+    returns: {days: 11.5}
+  request_pto:
+    description: File a time-off request for dates.
+    params: {name: Employee name, start: Start date, end: End date}
+    returns: {request_id: pto_7, status: pending}
+  open_roles:
+    description: Open job requisitions with team, level and hiring manager.
+    params: {team: "Team, or empty"}
+    returns: {roles: [{title: Senior SRE, team: Platform, manager: Lena}]}
+  candidate_pipeline:
+    description: Candidates in the hiring pipeline for a role and their stage.
+    params: {role: Role title}
+    returns: {candidates: [{name: Kim, stage: onsite}]}
+  headcount_report:
+    description: Headcount by department for a month.
+    params: {month: Month as YYYY-MM}
+    returns: {Engineering: 84, Sales: 41, Support: 22}
+  benefits_summary:
+    description: The benefits plan an employee is enrolled in.
+    params: {name: Employee name}
+    returns: {health: PPO, retirement_match: 4%}
+inventory:
+  stock_level:
+    description: Units on hand and on order for a product SKU per warehouse.
+    params: {sku: Product SKU}
+    returns: {sku: WID-200, on_hand: {reno: 140, leeds: 12}, on_order: 500}
+  reorder:
+    description: Place a purchase order with the supplier for a SKU.
+    params: {sku: Product SKU, quantity: Units to order}
+    returns: {po: PO-551, eta: "2026-11-03"}
+  low_stock:
+    description: SKUs below their reorder point.
+    params: {warehouse: "Warehouse, or empty"}
+    returns: {skus: [{sku: WID-200, warehouse: leeds, on_hand: 12, reorder_point: 50}]}
+  transfer_stock:
+    description: Move units of a SKU between warehouses.
+    params: {sku: Product SKU, from: Source warehouse, to: Destination warehouse, quantity: Units}
+    returns: {transfer: TR-20}
+  supplier_info:
+    description: A supplier's contact, lead time and terms.
+    params: {supplier: Supplier name}
+    returns: {lead_time_days: 14, terms: net30}
+  shipment_status:
+    description: Tracking status of an outbound customer shipment.
+    params: {order_id: The order id}
+    returns: {carrier: DHL, status: in_transit, eta: "2026-10-22"}
+  product_catalog:
+    description: Search products by name with SKU and price.
+    params: {query: Product name}
+    returns: {products: [{sku: WID-200, name: Widget Pro, price: 49}]}
+  returns_queue:
+    description: Customer returns waiting to be inspected.
+    params: {warehouse: "Warehouse, or empty"}
+    returns: {returns: [{rma: RMA-8, sku: WID-200, reason: damaged}]}
+analytics:
+  run_query:
+    description: Run a read-only SQL query against the analytics warehouse.
+    params: {sql: The SQL}
+    returns: {rows: [{signups: 1204}]}
+  dashboard_list:
+    description: List saved analytics dashboards.
+    params: {query: Keyword}
+    returns: {dashboards: [{id: db_3, title: Activation funnel}]}
+  metric_trend:
+    description: Daily values of a product metric over a range, with week-over-week change.
+    params: {metric: Metric name, days: Days back}
+    returns: {metric: weekly_active_users, latest: 18240, wow: "+3.1%"}
+  funnel:
+    description: Conversion rates between the steps of a product funnel.
+    params: {funnel: Funnel name}
+    returns: {steps: [{step: signup, rate: 1.0}, {step: first_plan, rate: 0.41}]}
+  cohort_retention:
+    description: Retention by signup cohort week.
+    params: {weeks: How many cohorts}
+    returns: {cohorts: [{week: "2026-09-01", w4: 0.38}]}
+  event_counts:
+    description: Count of a tracked product event per day.
+    params: {event: Event name, days: Days back}
+    returns: {total: 5530}
+  experiment_results:
+    description: Results of an A/B experiment with lift and significance.
+    params: {experiment: Experiment key}
+    returns: {lift: "+4.2%", p_value: 0.03, winner: variant_b}
+  segment_size:
+    description: How many users match a segment definition.
+    params: {segment: Segment name}
+    returns: {users: 3310}
+deploys:
+  list_deploys:
+    description: Recent production deploys of a service with version, author and time.
+    params: {service: Service name}
+    returns: {deploys: [{version: v412, author: Femi, at: "2026-10-20T09:12Z"}]}
+  rollback:
+    description: Roll a service back to its previous production version.
+    params: {service: Service name}
+    returns: {rolled_back_to: v411}
+  deploy_service:
+    description: Deploy a version of a service to an environment.
+    params: {service: Service name, version: Version, environment: staging or production}
+    returns: {deploy_id: dep_90, status: started}
+  build_status:
+    description: CI build status for a branch.
+    params: {branch: Branch name}
+    returns: {status: failed, failing_job: integration-tests}
+  service_owners:
+    description: The team and on-call rotation that own a service.
+    params: {service: Service name}
+    returns: {team: Payments, rotation: payments-primary}
+  env_config:
+    description: Environment variables configured for a service in an environment.
+    params: {service: Service name, environment: Environment}
+    returns: {vars: [DATABASE_URL, STRIPE_KEY]}
+  canary_status:
+    description: Error rate and latency of the current canary compared to stable.
+    params: {service: Service name}
+    returns: {canary_error_rate: 0.8%, stable_error_rate: 0.2%}
+incidents:
+  open_incidents:
+    description: Currently open incidents with severity, commander and affected services.
+    params: {severity: "Severity filter, or empty"}
+    returns: {incidents: [{id: INC-77, sev: sev2, commander: Ana, services: [checkout]}]}
+  declare_incident:
+    description: Declare a new incident and page the on-call.
+    params: {title: What is broken, severity: sev1 to sev4}
+    returns: {id: INC-78}
+  incident_timeline:
+    description: The timeline of updates on an incident.
+    params: {incident_id: The incident id}
+    returns: {updates: [{at: "09:20", text: Checkout errors spiking}]}
+  who_is_on_call:
+    description: Who is on call now for a rotation.
+    params: {rotation: Rotation name}
+    returns: {primary: Femi, secondary: Ana}
+  postmortem_list:
+    description: Past incident postmortems with their action items.
+    params: {query: Keyword}
+    returns: {postmortems: [{id: PM-12, title: Checkout outage, open_actions: 2}]}
+  resolve_incident:
+    description: Mark an incident resolved with a summary.
+    params: {incident_id: The incident id, summary: Resolution summary}
+    returns: {resolved: true}
+  page_person:
+    description: Page a specific person urgently.
+    params: {person: Who to page, message: Why}
+    returns: {paged: true}
+flags:
+  list_flags:
+    description: Feature flags and whether each is on per environment.
+    params: {query: Keyword}
+    returns: {flags: [{key: new_checkout, production: false, staging: true}]}
+  toggle_flag:
+    description: Turn a feature flag on or off in an environment.
+    params: {key: Flag key, environment: Environment, enabled: "true or false"}
+    returns: {key: new_checkout, enabled: true}
+  flag_rollout:
+    description: Set the percentage of users a feature flag is enabled for.
+    params: {key: Flag key, percent: 0 to 100}
+    returns: {key: new_checkout, percent: 25}
+  flag_history:
+    description: Who changed a feature flag and when.
+    params: {key: Flag key}
+    returns: {changes: [{by: Femi, at: "2026-10-19", to: "staging on"}]}
+  stale_flags:
+    description: Flags fully rolled out or untouched for a long time, candidates for removal.
+    params: {days: Minimum days unchanged}
+    returns: {flags: [old_nav, beta_banner]}

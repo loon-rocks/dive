@@ -175,6 +175,9 @@ const AUTHORING_PLANS: &[&str] = &["search_tools", "compose_plan"];
 
 impl Pipeline {
     pub(super) async fn searchable_tools(&self) -> Vec<ToolDef> {
+        if let Some(pool) = &self.search_pool {
+            return pool.as_ref().clone();
+        }
         let mut tools = self.registry.tools().await.unwrap_or_default();
         tools.extend(self.callable_plan_defs().into_iter().filter(|tool| {
             !AUTHORING_PLANS
@@ -184,6 +187,26 @@ impl Pipeline {
         tools.extend(self.agent_tool_defs());
         self.packs.retain_shown(&self.origin, &mut tools);
         tools
+    }
+
+    pub async fn agent_search_pool(
+        &self,
+        own: Vec<ToolDef>,
+        whole_catalog: bool,
+    ) -> std::sync::Arc<Vec<ToolDef>> {
+        let mut pool = if whole_catalog {
+            let mut unscoped = self.clone();
+            unscoped.search_pool = None;
+            unscoped.searchable_tools().await
+        } else {
+            Vec::new()
+        };
+        for def in own {
+            if !pool.iter().any(|tool| tool.name == def.name) {
+                pool.push(def);
+            }
+        }
+        std::sync::Arc::new(pool)
     }
 
     pub(super) async fn catalog_tools(&self) -> Result<Value, String> {

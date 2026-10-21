@@ -433,6 +433,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         agents: agent_set.clone(),
         agent_depth: 0,
         always_loaded: Default::default(),
+        search_pool: None,
         drafted: Default::default(),
         packs: Arc::new(pack_set),
         origin: Default::default(),
@@ -491,6 +492,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
             .iter()
             .map(|name| name.to_string())
             .collect(),
+        standing_tools: vec!["workbench__*".to_string()],
         handoff_guard: None,
     };
 

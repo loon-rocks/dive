@@ -118,6 +118,7 @@ pub struct Pipeline {
     pub agents: Arc<crate::agent::doc::AgentSet>,
     pub agent_depth: usize,
     pub always_loaded: Arc<Vec<String>>,
+    pub search_pool: Option<Arc<Vec<crate::tools::ToolDef>>>,
     pub drafted: Arc<drafter::Drafted>,
     pub packs: Arc<crate::packs::PackSet>,
     pub origin: crate::packs::Origin,
@@ -534,6 +535,9 @@ impl Pipeline {
     /// call stack.
     fn nested(&self, entering: Option<&str>) -> Pipeline {
         let mut child = self.clone();
+        if entering != Some(crate::agent::deferral::SEARCH_PLAN) {
+            child.search_pool = None;
+        }
         if let Some(identifier) = entering {
             child.call_stack.push(identifier.to_string());
         } else {
