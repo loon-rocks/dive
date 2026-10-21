@@ -147,6 +147,17 @@ impl Usage {
     }
 }
 
+impl From<&Usage> for graph_config::TokenCounts {
+    fn from(usage: &Usage) -> Self {
+        Self {
+            input: usage.input_tokens,
+            output: usage.output_tokens,
+            cache_write: usage.cache_creation_input_tokens,
+            cache_read: usage.cache_read_input_tokens,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatResponse {
     pub content: Option<String>,

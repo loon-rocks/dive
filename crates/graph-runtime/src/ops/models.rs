@@ -3,7 +3,7 @@ use crate::secrets::Secrets;
 use anyhow::{anyhow, bail, Context, Result};
 use graph_config::secrets::{InProject, Origin as SecretOrigin, Resolved, SecretSource};
 use graph_config::{
-    FallbackChoice, ModelChoice, ModelKind, ModelPrice, ProviderConfig, ProviderKind,
+    FallbackChoice, ModelChoice, ModelKind, ModelPrice, PriceTier, ProviderConfig, ProviderKind,
     CONFIG_FORMAT, FORMAT_KEY,
 };
 use serde::{Deserialize, Serialize};
@@ -74,6 +74,10 @@ pub struct PriceEntry {
     pub output: f64,
     pub cache_write: Option<f64>,
     pub cache_read: Option<f64>,
+    #[serde(default)]
+    pub tiers: Vec<PriceTier>,
+    #[serde(default)]
+    pub source: Option<String>,
     pub origin: Origin,
     pub used_by: Vec<String>,
 }
@@ -116,6 +120,8 @@ pub struct PriceEdit {
     pub output: f64,
     pub cache_write: Option<f64>,
     pub cache_read: Option<f64>,
+    #[serde(default)]
+    pub tiers: Option<Vec<PriceTier>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -371,6 +377,8 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
                 output: price.output,
                 cache_write: price.cache_write,
                 cache_read: price.cache_read,
+                tiers: price.tiers,
+                source: price.source,
                 origin,
                 model,
             }),
@@ -747,6 +755,9 @@ pub fn save_price_in(layers: &Layers, original: Option<&str>, change: &PriceEdit
             bail!("the {what} price must be zero or more");
         }
     }
+    if let Some(tiers) = &change.tiers {
+        check_tiers(tiers)?;
+    }
     edit(layers, |doc| {
         let pricing = section(doc, "pricing")?;
         let mut entry = take_entry(pricing, original, model)?;
@@ -754,9 +765,55 @@ pub fn save_price_in(layers: &Layers, original: Option<&str>, change: &PriceEdit
         entry.insert("output", value(change.output));
         set_number(&mut entry, "cache_write", change.cache_write);
         set_number(&mut entry, "cache_read", change.cache_read);
+        if let Some(tiers) = &change.tiers {
+            set_tiers(&mut entry, tiers);
+        }
+        entry.remove("source");
         pricing.insert(model, Item::Table(entry));
         Ok(())
     })
+}
+
+fn check_tiers(tiers: &[PriceTier]) -> Result<()> {
+    for (index, tier) in tiers.iter().enumerate() {
+        if tiers[..index].iter().any(|other| other.above == tier.above) {
+            bail!("two tiers start above {} prompt tokens", tier.above);
+        }
+        for (what, number) in [
+            ("input", tier.input),
+            ("output", tier.output),
+            ("cache write", tier.cache_write),
+            ("cache read", tier.cache_read),
+        ] {
+            if number.is_some_and(|n| !n.is_finite() || n < 0.0) {
+                bail!(
+                    "the {what} price above {} prompt tokens must be zero or more",
+                    tier.above
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn set_tiers(entry: &mut Table, tiers: &[PriceTier]) {
+    if tiers.is_empty() {
+        entry.remove("tiers");
+        return;
+    }
+    let mut sorted = tiers.to_vec();
+    sorted.sort_by_key(|tier| tier.above);
+    let mut array = ArrayOfTables::new();
+    for tier in sorted {
+        let mut table = Table::new();
+        table.insert("above", value(tier.above as i64));
+        set_number(&mut table, "input", tier.input);
+        set_number(&mut table, "output", tier.output);
+        set_number(&mut table, "cache_write", tier.cache_write);
+        set_number(&mut table, "cache_read", tier.cache_read);
+        array.push(table);
+    }
+    entry.insert("tiers", Item::ArrayOfTables(array));
 }
 
 pub fn remove_price(workspace: &Workspace, model: &str) -> Result<()> {
@@ -861,6 +918,9 @@ fn describe(error: graph_llm::LlmError) -> String {
         other => other.to_string(),
     }
 }
+
+mod catalog;
+pub use catalog::{fill_prices, fill_prices_in, Catalog, PriceFill, CATALOG_SOURCE, CATALOG_URL};
 
 #[cfg(test)]
 mod tests;

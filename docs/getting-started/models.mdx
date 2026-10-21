@@ -113,3 +113,21 @@ Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies
 ```
 
 graph ships no prices. Add `[pricing."<model>"]` with input and output prices in US dollars per million tokens, or the line shows tokens only. See [config.toml](/reference/configuration) for every key.
+
+Some models charge more once a prompt passes a size. Claude Haiku 5.5, for example, costs five times as much per token for a prompt over 100,000 tokens. Add a tier for each threshold:
+
+```toml
+[pricing."claude-haiku-5-5"]
+input = 0.10
+output = 0.50
+cache_read = 0.01
+
+[[pricing."claude-haiku-5-5".tiers]]
+above = 100_000
+input = 0.50
+output = 2.50
+```
+
+graph prices each call on its own. A prompt's size counts its input, cache-write and cache-read tokens. A call whose prompt has more tokens than a tier's `above` pays that tier's rates for every token, output included. A tier that leaves out a cache rate scales it from the base rate by the same factor as input.
+
+The desktop app fills these entries for you from the [models.dev](https://models.dev) catalogue, tiers included, and marks them `source = "models.dev"`. Its refresh updates only entries with that mark, so a price you edit by hand stays as you set it.
