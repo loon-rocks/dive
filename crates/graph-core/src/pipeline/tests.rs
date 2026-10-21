@@ -168,6 +168,7 @@ fn pipeline_with_named(
             agents: Arc::new(crate::agent::doc::AgentSet::default()),
             agent_depth: 0,
             always_loaded: Default::default(),
+            search_pool: None,
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
@@ -3233,6 +3234,84 @@ async fn a_plan_step_runs_a_named_agent_as_a_typed_subagent() {
     );
     assert_eq!(user_turns(&requests[0]).len(), 1);
     assert!(user_turns(&requests[0])[0].contains("\"topic\": \"the sprint\""));
+}
+
+fn deferred(request: &ChatRequest) -> Vec<(String, bool)> {
+    request
+        .tools
+        .iter()
+        .filter(|spec| spec.name.starts_with("t__") || spec.name.starts_with("plan__"))
+        .map(|spec| (spec.name.clone(), spec.deferred))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_named_agent_step_defers_its_tools_and_searches_only_its_own_list() {
+    let registry = search_registry(json!({"values": []}));
+    let (mut pipeline, provider) = drafting(
+        vec![
+            tool_use("s1", "plan__search_tools", json!({"query": "test tool"})),
+            text("done"),
+        ],
+        registry,
+    );
+    pipeline.agents = Arc::new(crate::agent::doc::AgentSet::layered(
+        crate::agent::doc::builtin_agents(&[
+            "name: finder\ndescription: Finds\nmodel: planner\ntools: [t__search]\nsystem_prompt: Find.\n",
+        ]),
+        Vec::new(),
+    ));
+    let plan: Plan = serde_json::from_value(json!([
+        {"id": "E0", "toolName": "agent__finder", "input": {"prompt": "go"}},
+    ]))
+    .unwrap();
+    pipeline
+        .run_explicit("q", plan, Finish::Silent, None)
+        .await
+        .unwrap();
+    let requests = provider.requests.lock().unwrap();
+    assert_eq!(
+        deferred(&requests[0]),
+        [
+            ("t__search".to_string(), true),
+            ("plan__search_tools".to_string(), false)
+        ]
+    );
+    assert_eq!(requests[1].tool_references["s1"], ["t__search"]);
+}
+
+#[tokio::test]
+async fn an_agent_step_defers_its_tools_and_loads_them_through_search() {
+    let registry = search_registry(json!({"values": []}));
+    let (pipeline, provider) = drafting(
+        vec![
+            tool_use("s1", "plan__search_tools", json!({"query": "test tool"})),
+            text(r#"{"found": 1}"#),
+        ],
+        registry,
+    );
+    let plan: Plan = serde_json::from_value(json!([agent_step(
+        "E0",
+        json!({
+            "prompt": "find things",
+            "outputSchema": OUT_SCHEMA(),
+            "tools": ["t__search"]
+        })
+    )]))
+    .unwrap();
+    pipeline
+        .run_explicit("q", plan, Finish::Silent, None)
+        .await
+        .unwrap();
+    let requests = provider.requests.lock().unwrap();
+    assert_eq!(
+        deferred(&requests[0]),
+        [
+            ("t__search".to_string(), true),
+            ("plan__search_tools".to_string(), false)
+        ]
+    );
+    assert_eq!(requests[1].tool_references["s1"], ["t__search"]);
 }
 
 #[tokio::test]

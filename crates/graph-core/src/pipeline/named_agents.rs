@@ -3,6 +3,7 @@ use super::catalog::glob_matches;
 use super::gate::StepPath;
 use super::native_tools::{native_tool_defs, tool_error};
 use super::{DispatchError, Pipeline};
+use crate::agent::deferral;
 use crate::agent::doc::{
     global_fragments, input_problems, render_system_prompt, AgentDoc, CHAT_AGENT,
 };
@@ -84,7 +85,8 @@ impl Pipeline {
         let mut child = self.clone();
         child.agent_depth += 1;
         child.origin = crate::packs::Origin::of(doc.source.pack());
-        let tools = child.agent_tools(&doc).await;
+        let (tools, pool) = child.agent_tools(&doc).await;
+        child.search_pool = Some(pool);
         let allowed: BTreeSet<String> = tools.iter().map(|tool| tool.name.clone()).collect();
         let spec = TaskSpec {
             model: doc.model.clone(),
@@ -101,6 +103,7 @@ impl Pipeline {
             path: &agent_path,
             scope: &empty,
             allowed: &allowed,
+            brief_search: !deferral::lists_search(&doc.tools),
         };
         let site = CallSite::role(doc.model.clone())
             .at(path.to_string())
@@ -130,12 +133,16 @@ impl Pipeline {
         }
     }
 
-    async fn agent_tools(&self, doc: &AgentDoc) -> Vec<ToolSpec> {
+    async fn agent_tools(&self, doc: &AgentDoc) -> (Vec<ToolSpec>, std::sync::Arc<Vec<ToolDef>>) {
         let mut candidates = self.registry.tools().await.unwrap_or_default();
         candidates.extend(native_tool_defs());
         candidates.extend(self.callable_plan_defs());
         self.packs.retain_shown(&self.origin, &mut candidates);
-        let mut specs: Vec<ToolSpec> = candidates
+        let search = candidates
+            .iter()
+            .find(|tool| tool.name == deferral::SEARCH_TOOL)
+            .cloned();
+        let mut defs: Vec<ToolDef> = candidates
             .into_iter()
             .filter(|tool| tool.name != PLANNER_TOOL)
             .filter(|tool| {
@@ -143,16 +150,26 @@ impl Pipeline {
                     .iter()
                     .any(|pattern| glob_matches(pattern, &tool.name))
             })
-            .map(to_spec)
             .collect();
-        specs.extend(
-            doc.subagents
-                .iter()
-                .filter_map(|target| self.agents.get(target))
-                .filter(|target| self.packs.shows(&self.origin, &target.name))
-                .map(|target| to_spec(named_agent_tool_def(&target))),
-        );
-        specs
+        let subagents: Vec<ToolDef> = doc
+            .subagents
+            .iter()
+            .filter_map(|target| self.agents.get(target))
+            .filter(|target| self.packs.shows(&self.origin, &target.name))
+            .map(|target| named_agent_tool_def(&target))
+            .collect();
+        let mut standing: Vec<String> = self.always_loaded.to_vec();
+        standing.extend(subagents.iter().map(|def| def.name.clone()));
+        let own = deferral::deferrable(&defs, &standing)
+            .into_iter()
+            .cloned()
+            .collect();
+        let pool = self
+            .agent_search_pool(own, deferral::lists_search(&doc.tools))
+            .await;
+        defs.extend(subagents);
+        deferral::with_search(&mut defs, &standing, search);
+        (deferral::specs(defs, &standing), pool)
     }
 }
 
@@ -174,19 +191,12 @@ impl SubagentRun {
     }
 }
 
-fn to_spec(tool: ToolDef) -> ToolSpec {
-    ToolSpec {
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.input_schema,
-    }
-}
-
 struct AgentTools<'a> {
     pipeline: &'a Pipeline,
     path: &'a StepPath,
     scope: &'a Map<String, Value>,
     allowed: &'a BTreeSet<String>,
+    brief_search: bool,
 }
 
 #[async_trait]
@@ -198,7 +208,7 @@ impl TaskTools for AgentTools<'_> {
             .partition(|call| self.allowed.contains(&call.name));
         let mut results = self
             .pipeline
-            .execute_agent_tools(&offered, self.path, round, self.scope)
+            .execute_agent_tools(&offered, self.path, round, self.scope, self.brief_search)
             .await?;
         results.extend(refused.into_iter().map(|call| ChatMessage::ToolResult {
             tool_call_id: call.id,

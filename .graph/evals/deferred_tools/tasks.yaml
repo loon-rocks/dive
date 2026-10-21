@@ -1,0 +1,154 @@
+- id: overdue_invoices
+  kind: one_tool
+  turns:
+    - message: Which of Northwind's invoices are overdue?
+      expect: [user__billing_list_invoices]
+
+- id: on_call_now
+  kind: one_tool
+  turns:
+    - message: Who is on call for payments-primary right now?
+      expect: [user__incidents_who_is_on_call]
+
+- id: stock_widget
+  kind: one_tool
+  turns:
+    - message: How many WID-200 do we have in each warehouse?
+      expect: [user__inventory_stock_level]
+
+- id: pto_left
+  kind: one_tool
+  turns:
+    - message: How much PTO does Marco have left?
+      expect: [user__hr_pto_balance]
+
+- id: flag_state
+  kind: one_tool
+  turns:
+    - message: Is the new_checkout flag on in production?
+      expect: [user__flags_list_flags]
+
+- id: canary_check
+  kind: one_tool
+  turns:
+    - message: How is the checkout canary doing compared to stable?
+      expect: [user__deploys_canary_status]
+
+- id: experiment_b
+  kind: one_tool
+  turns:
+    - message: Did variant B win the pricing_page_v2 experiment?
+      expect: [user__analytics_experiment_results]
+
+- id: echo_everything
+  kind: one_tool
+  turns:
+    - message: Use the echo tool to echo back the word "pelican".
+      expect: [everything__echo]
+
+- id: incident_and_owner
+  kind: multi_tool
+  turns:
+    - message: What incidents are open right now, and which team owns the affected service?
+      expect: [user__incidents_open_incidents, user__deploys_service_owners]
+
+- id: health_and_tickets
+  kind: multi_tool
+  turns:
+    - message: Northwind's account health dropped. Pull their health score and their open support tickets.
+      expect: [user__crm_account_health, user__support_search_tickets]
+
+- id: renewal_prep
+  kind: multi_tool
+  turns:
+    - message: I have a renewal call with Northwind. What plan are they on, when does it renew, and do they owe us anything?
+      expect: [user__billing_subscription_status, user__billing_list_invoices]
+
+- id: meeting_with_dana
+  kind: multi_tool
+  turns:
+    - message: Find Dana Whitfield's contact details and a 30 minute slot when Priya and I are both free.
+      expect: [user__crm_find_contact, user__calendar_find_free_slot]
+
+- id: low_stock_reorder_info
+  kind: multi_tool
+  turns:
+    - message: Which SKUs are below their reorder point in leeds, and what's the lead time from their supplier Acme?
+      expect: [user__inventory_low_stock, user__inventory_supplier_info]
+
+- id: deploy_then_build
+  kind: multi_tool
+  turns:
+    - message: What was the last checkout deploy, and is CI green on main?
+      expect: [user__deploys_list_deploys, user__deploys_build_status]
+
+- id: tickets_followup
+  kind: follow_up
+  turns:
+    - message: Search support for tickets about SSO.
+      expect: [user__support_search_tickets]
+    - message: Now do the same for tickets about billing errors.
+      expect: [user__support_search_tickets]
+
+- id: invoice_followup
+  kind: follow_up
+  turns:
+    - message: List Northwind's invoices.
+      expect: [user__billing_list_invoices]
+    - message: Show me the line items on the overdue one.
+      expect: [user__billing_get_invoice]
+
+- id: metric_followup
+  kind: follow_up
+  turns:
+    - message: What's the trend for weekly_active_users over the last 14 days?
+      expect: [user__analytics_metric_trend]
+    - message: And for the signups metric?
+      expect: [user__analytics_metric_trend]
+
+- id: wiki_followup
+  kind: follow_up
+  turns:
+    - message: Search the wiki for the on-call handbook.
+      expect: [user__docs_search_docs]
+    - message: Open it and tell me when to page the secondary.
+      expect: [user__docs_read_page]
+
+- id: deals_followup
+  kind: follow_up
+  turns:
+    - message: What deals are open with Northwind?
+      expect: [user__crm_list_deals]
+    - message: Who's their account manager?
+      expect: [user__crm_list_accounts]
+
+- id: capital_of_france
+  kind: no_tool
+  turns:
+    - message: What's the capital of France? Answer from memory.
+      expect: []
+
+- id: write_haiku
+  kind: no_tool
+  turns:
+    - message: Write a haiku about autumn deploys.
+      expect: []
+
+- id: explain_canary
+  kind: no_tool
+  turns:
+    - message: In one paragraph, explain what a canary deploy is in general.
+      expect: []
+
+- id: math
+  kind: no_tool
+  turns:
+    - message: What is 17 times 23?
+      expect: []
+
+- id: no_such_tool
+  kind: no_tool
+  turns:
+    - message: Order me a pizza from Luigi's.
+      expect: []
+      forbid: [user__inventory_reorder, user__billing_change_plan]
