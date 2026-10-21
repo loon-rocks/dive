@@ -476,6 +476,7 @@ impl Runtime {
             agents: Arc::new(self.agent_set()),
             agent_depth: 0,
             always_loaded: Arc::new(self.config.tools.always_loaded.clone()),
+            search_pool: None,
             drafted: self.drafted.clone(),
             packs: Arc::new(self.packs.pack_set()),
             origin: Default::default(),
@@ -536,6 +537,7 @@ impl Runtime {
             default_max_iterations: self.config.settings.max_agent_iterations,
             progress_tools: Vec::new(),
             stop_tools: Vec::new(),
+            standing_tools: Vec::new(),
             handoff_guard: None,
         }
     }

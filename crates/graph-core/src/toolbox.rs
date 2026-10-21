@@ -229,6 +229,7 @@ mod tests {
             agents: Arc::new(crate::agent::doc::AgentSet::default()),
             agent_depth: 0,
             always_loaded: Default::default(),
+            search_pool: None,
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),

@@ -182,6 +182,7 @@ fn pipeline() -> (Pipeline, Arc<Tools>, Arc<Recorder>) {
         )),
         agent_depth: 0,
         always_loaded: Default::default(),
+        search_pool: None,
         drafted: Default::default(),
         packs: Arc::new(packs()),
         origin: Origin::Outside,

@@ -358,6 +358,7 @@ fn pipeline_over(
             agents: Arc::new(AgentSet::default().with_packs(agents)),
             agent_depth: 0,
             always_loaded: Default::default(),
+            search_pool: None,
             drafted: Default::default(),
             packs: Arc::new(set),
             origin: Default::default(),

@@ -119,6 +119,7 @@ pub async fn run_task_agent(
             } else {
                 spec.tools.clone()
             },
+            tool_references: super::deferral::references(&messages),
             response_schema: if final_round || spec.tools.is_empty() {
                 spec.output_schema.clone().map(|schema| ResponseSchema {
                     name: "agent_output".to_string(),
@@ -409,6 +410,7 @@ mod tests {
                 name: "t__echo".to_string(),
                 description: "echo".to_string(),
                 input_schema: json!({"type": "object"}),
+                deferred: false,
             }],
             max_iterations,
             output_schema,

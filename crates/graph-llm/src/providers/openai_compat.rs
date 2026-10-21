@@ -44,10 +44,10 @@ impl OpenAiCompatProvider {
         if let Some(m) = req.max_tokens {
             body.insert("max_tokens".into(), json!(m));
         }
-        if !req.tools.is_empty() {
-            let tools: Vec<Value> = req
-                .tools
-                .iter()
+        let offered = offered_tools(req);
+        if !offered.is_empty() {
+            let tools: Vec<Value> = offered
+                .into_iter()
                 .map(|t| {
                     json!({
                         "type": "function",
@@ -278,6 +278,27 @@ impl StreamAssembler {
     }
 }
 
+fn offered_tools(req: &ChatRequest) -> Vec<&ToolSpec> {
+    let mut offered: Vec<&ToolSpec> = req.tools.iter().filter(|t| !t.deferred).collect();
+    if offered.is_empty() {
+        return req.tools.iter().collect();
+    }
+    for message in &req.messages {
+        let ChatMessage::ToolResult { tool_call_id, .. } = message else {
+            continue;
+        };
+        for name in req.tool_references.get(tool_call_id).into_iter().flatten() {
+            let loaded = req.tools.iter().find(|t| t.deferred && &t.name == name);
+            if let Some(tool) = loaded {
+                if !offered.iter().any(|t| t.name == tool.name) {
+                    offered.push(tool);
+                }
+            }
+        }
+    }
+    offered
+}
+
 fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
     messages
         .iter()
@@ -432,6 +453,59 @@ mod tests {
         assert_eq!(fallback["response_format"]["type"], "json_object");
         let system = fallback["messages"][0]["content"].as_str().unwrap();
         assert!(system.contains("JSON Schema"));
+    }
+
+    fn spec(name: &str, deferred: bool) -> ToolSpec {
+        ToolSpec {
+            name: name.into(),
+            description: format!("{name} things"),
+            input_schema: json!({"type": "object"}),
+            deferred,
+        }
+    }
+
+    #[test]
+    fn deferred_tools_are_offered_once_a_search_result_loads_them() {
+        let provider = OpenAiCompatProvider::new("http://localhost:11434/v1".into(), None);
+        let mut req = ChatRequest {
+            model: "llama3".into(),
+            tools: vec![spec("search", false), spec("a", true), spec("b", true)],
+            ..Default::default()
+        };
+        let names = |body: &Value| -> Vec<String> {
+            body["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| t["function"]["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        assert_eq!(
+            names(&provider.build_body(&req, false, MODE_JSON_SCHEMA)),
+            ["search"]
+        );
+        req.messages = vec![
+            ChatMessage::Assistant {
+                content: None,
+                thinking: Vec::new(),
+                tool_calls: vec![ToolCall {
+                    id: "s1".into(),
+                    name: "search".into(),
+                    arguments: json!({}),
+                }],
+            },
+            ChatMessage::ToolResult {
+                tool_call_id: "s1".into(),
+                content: json!({}),
+                is_error: false,
+            },
+        ];
+        req.tool_references =
+            std::collections::BTreeMap::from([("s1".to_string(), vec!["b".to_string()])]);
+        assert_eq!(
+            names(&provider.build_body(&req, false, MODE_JSON_SCHEMA)),
+            ["search", "b"]
+        );
     }
 
     #[test]

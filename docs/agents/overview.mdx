@@ -70,7 +70,7 @@ finish:
 
 ## Agent files
 
-An agent is a YAML file in `./.graph/agents/` or `~/.config/graph/agents/`. It names a model role, the tools it may call, and its system prompt. It can also list other agents to call as subagents or hand the conversation to. See [Agent file](/agents/reference/agent-file) for every field.
+An agent is a YAML file in `./.graph/agents/` or `~/.config/graph/agents/`. It names a model role, the tools it may call, and its system prompt. The tools are loaded as the agent needs them: it searches its own list and loads what fits, so a long list costs nothing until it's used. It can also list other agents to call as subagents or hand the conversation to. See [Agent file](/agents/reference/agent-file) for every field.
 
 ## Agent networks
 

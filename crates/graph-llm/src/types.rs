@@ -45,6 +45,8 @@ pub struct ToolSpec {
     pub description: String,
     /// JSON Schema for the tool input.
     pub input_schema: Value,
+    #[serde(default)]
+    pub deferred: bool,
 }
 
 /// A tool invocation requested by the model.
@@ -95,6 +97,7 @@ pub struct ChatRequest {
     /// Prompt-caching policy. Honoured by providers with an explicit cache
     /// API (Anthropic); providers that cache automatically ignore it.
     pub cache: CacheHint,
+    pub tool_references: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

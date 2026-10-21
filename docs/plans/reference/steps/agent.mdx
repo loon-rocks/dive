@@ -13,7 +13,7 @@ keywords: ["agent", "control step"]
 
 ## How it works
 
-- `tools` limits what the step can call, by name or glob. Omit it for the whole catalog.
+- `tools` limits what the step can call, by name or glob. Omit it for the whole catalog. The step loads them through a search, like any agent (see [Agent file](/agents/reference/agent-file)).
 - `maxIterations` caps model rounds. The default is 8.
 - `systemPrompt` is added after the built-in prompt.
 - Each round is a model call, and inside `map` it runs once per item.
