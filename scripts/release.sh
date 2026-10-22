@@ -17,7 +17,7 @@ command="${1:?usage: release.sh <patch|minor|major|current|publish|abort>}"
 
 # Everything a prepared release touches. `publish` refuses a tree that is
 # dirty anywhere else, and `abort` restores exactly this set.
-release_files=(Cargo.toml Cargo.lock CHANGELOG.md docs/docs.json docs/changelog.mdx docs/snippets/changelog)
+release_files=(Cargo.toml Cargo.lock CHANGELOG.md docs/docs.json docs/changelog.mdx docs/snippets/changelog .github/workflows/graph-checks.yaml .graph/config.toml)
 
 require_main() {
   local branch
@@ -173,6 +173,11 @@ prepare() {
     grep -q "\"release_version\": \"v$new\"" docs/docs.json || { echo "docs release_version bump failed" >&2; exit 1; }
   fi
 
+  sed -i.bak "s|ghcr.io/tylerdavis/graph:v[0-9][0-9.]*|ghcr.io/tylerdavis/graph:v$new|g" .github/workflows/graph-checks.yaml && rm .github/workflows/graph-checks.yaml.bak
+  pins=$(grep -oE "ghcr.io/tylerdavis/graph:v[0-9][0-9.]*" .github/workflows/graph-checks.yaml | sort -u)
+  [ "$pins" = "ghcr.io/tylerdavis/graph:v$new" ] || { echo "checks image pin bump failed: $pins" >&2; exit 1; }
+  cargo run -q -p graph-cli -- config migrate
+
   git-cliff --tag "v$new" -o CHANGELOG.md
 
   # The changelog is for graph's users. This repo's own dogfooding — the
@@ -212,6 +217,7 @@ v$new is prepared and NOT committed. Review before publishing:
   docs/snippets/changelog/graph/v$new/   the inferred summary (and migration prompt, if any) — edit freely;
                                          a prompt about a bumped file kind belongs in that kind's directory (config/v2/)
   CHANGELOG.md                           the commit rendering — fix a wrong entry by retyping its commit, not here
+  .graph/config.toml                     migrated to the current config version; check any notes migrate printed
   docs/changelog.mdx                     composed from the snippets; if you add, remove, or move a snippet file, re-run
                                          GRAPH_STORAGE=memory graph plan run compose_changelog --input tag=v$new
 
@@ -227,7 +233,7 @@ EOF
 require_prepared() {
   require_main
   local stray
-  stray=$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -vE '^(Cargo\.toml|Cargo\.lock|CHANGELOG\.md|docs/docs\.json|docs/changelog\.mdx|docs/snippets/changelog/)' || true)
+  stray=$(git status --porcelain --untracked-files=all | awk '{print $2}' | grep -vE '^(Cargo\.toml|Cargo\.lock|CHANGELOG\.md|docs/docs\.json|docs/changelog\.mdx|docs/snippets/changelog/|\.github/workflows/graph-checks\.yaml|\.graph/config\.toml$)' || true)
   [ -z "$stray" ] || { echo "working tree has changes outside the prepared release:" >&2; echo "$stray" >&2; exit 1; }
   [ -n "$(git status --porcelain)" ] || { echo "nothing is prepared — run scripts/release.sh <patch|minor|major> first" >&2; exit 1; }
   new=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
@@ -264,7 +270,7 @@ publish() {
 
 abort() {
   require_prepared
-  git checkout -q -- Cargo.toml Cargo.lock CHANGELOG.md docs/docs.json docs/changelog.mdx docs/snippets/changelog
+  git checkout -q -- Cargo.toml Cargo.lock CHANGELOG.md docs/docs.json docs/changelog.mdx docs/snippets/changelog .github/workflows/graph-checks.yaml .graph/config.toml
   git clean -qfd docs/snippets/changelog
   echo "dropped the prepared v$new"
 }
