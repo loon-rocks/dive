@@ -13,7 +13,12 @@ mise run release:publish  # commit, tag, push
 Two steps, with the review in between. **Prepare** bumps the single
 workspace version in `Cargo.toml` and the docs' `release_version` variable
 in `docs/docs.json` (the installation page and download cards
-render from it), regenerates `CHANGELOG.md`, and rebuilds the
+render from it), moves the `ghcr.io/tylerdavis/graph` image pin in
+`.github/workflows/graph-checks.yaml` to the new version and migrates
+`.graph/config.toml` to the current config version (so this repo's checks
+move to the new release in the release commit itself, with no follow-up PR;
+checks run only on PRs, and the image exists minutes after the tag, before
+the next PR needs it), regenerates `CHANGELOG.md`, and rebuilds the
 docs changelog page — graph dogfooding itself: the `changelog_entry` plan
 infers the release's summary (and a migration prompt when consumers must
 act) into `docs/snippets/changelog/graph/<version>/`, and the `compose_changelog`
@@ -180,9 +185,11 @@ the tag is the source of truth, so the changelog reads it from there on
 every regeneration), and passes the delta to `changelog_entry` as its
 `formats` input, which forces `migration_needed` and builds the migration
 prompt around `graph config check` and the `migrate` commands rather than
-inferring from commit subjects. Move any `ghcr.io/tylerdavis/graph:vX.Y.Z`
-pin in `.github/workflows/` in the same PR that stamps this repo's own
-`.graph/` files — an older image refuses a newer file version by name.
+inferring from commit subjects. A bump PR leaves this repo's own
+`.graph/` files at the old version, because its checks still run in the
+previous release's image, which refuses a newer file version by name;
+prepare moves the image pin and migrates `.graph/config.toml` when the
+release ships.
 
 ## Commit convention
 
