@@ -414,10 +414,10 @@ async fn a_probe_without_its_key_says_which_name_is_missing() {
     .await;
     assert!(!probe.ok);
     assert_eq!(probe.error.as_deref(), Some("GRAPH_T_UNSET isn't set"));
-    let systemone = probe_with(
+    let bedrock = probe_with(
         &ProviderEdit {
-            name: "s".to_string(),
-            kind: ProviderKind::Systemone,
+            name: "b".to_string(),
+            kind: ProviderKind::Bedrock,
             api_key: None,
             base_url: None,
             region: None,
@@ -426,7 +426,7 @@ async fn a_probe_without_its_key_says_which_name_is_missing() {
         &resolver(),
     )
     .await;
-    assert!(!systemone.listed);
+    assert!(!bedrock.listed);
 }
 
 #[test]

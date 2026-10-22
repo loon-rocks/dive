@@ -5,13 +5,17 @@ use std::time::Duration;
 
 pub const ANTHROPIC_URL: &str = "https://api.anthropic.com";
 pub const OPENAI_URL: &str = "https://api.openai.com/v1";
+pub const SYSTEMONE_URL: &str = "https://api.typesafe.ai";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const TIMEOUT: Duration = Duration::from_secs(15);
 
 pub fn lists_models(kind: ProviderKind) -> bool {
     matches!(
         kind,
-        ProviderKind::Anthropic | ProviderKind::Openai | ProviderKind::OpenaiCompat
+        ProviderKind::Anthropic
+            | ProviderKind::Openai
+            | ProviderKind::OpenaiCompat
+            | ProviderKind::Systemone
     )
 }
 
@@ -26,21 +30,26 @@ pub fn models_url(kind: ProviderKind, base_url: Option<&str>) -> Option<String> 
         ProviderKind::Anthropic => Some(format!("{}/v1/models?limit=1000", base(ANTHROPIC_URL))),
         ProviderKind::Openai => Some(format!("{}/models", base(OPENAI_URL))),
         ProviderKind::OpenaiCompat => base_url.map(|_| format!("{}/models", base(""))),
-        ProviderKind::Systemone | ProviderKind::Bedrock => None,
+        ProviderKind::Systemone => Some(format!("{}/v1/models", base(SYSTEMONE_URL))),
+        ProviderKind::Bedrock => None,
     }
 }
 
 pub fn model_ids(body: &str) -> Result<Vec<String>, LlmError> {
     let value: Value =
         serde_json::from_str(body).map_err(|error| LlmError::Parse(error.to_string()))?;
-    let Some(items) = value.get("data").and_then(Value::as_array) else {
-        return Err(LlmError::Parse(
-            "the model list has no data array".to_string(),
-        ));
+    let (items, field) = match (value.get("data"), value.get("models")) {
+        (Some(Value::Array(items)), _) => (items, "id"),
+        (_, Some(Value::Array(items))) => (items, "name"),
+        _ => {
+            return Err(LlmError::Parse(
+                "the model list has no data or models array".to_string(),
+            ));
+        }
     };
     Ok(items
         .iter()
-        .filter_map(|item| item.get("id").and_then(Value::as_str))
+        .filter_map(|item| item.get(field).and_then(Value::as_str))
         .map(str::to_string)
         .collect())
 }
@@ -100,7 +109,7 @@ mod tests {
             model_ids(body).unwrap(),
             ["claude-sonnet-5-5", "claude-haiku-4-5"]
         );
-        assert!(model_ids(r#"{"models":[]}"#).is_err());
+        assert!(model_ids(r#"{"items":[]}"#).is_err());
     }
 
     #[test]
@@ -122,7 +131,17 @@ mod tests {
             "http://localhost:11434/v1/models"
         );
         assert_eq!(models_url(ProviderKind::OpenaiCompat, None), None);
-        assert_eq!(models_url(ProviderKind::Systemone, None), None);
-        assert!(!lists_models(ProviderKind::Systemone));
+        assert_eq!(
+            models_url(ProviderKind::Systemone, None).unwrap(),
+            "https://api.typesafe.ai/v1/models"
+        );
+        assert!(lists_models(ProviderKind::Systemone));
+        assert_eq!(models_url(ProviderKind::Bedrock, None), None);
+    }
+
+    #[test]
+    fn systemone_model_lists_come_from_the_models_array() {
+        let body = r#"{"models":[{"name":"jev-latest","description":"General-purpose system one model.","release_date":"2026-09-15"}]}"#;
+        assert_eq!(model_ids(body).unwrap(), ["jev-latest"]);
     }
 }
