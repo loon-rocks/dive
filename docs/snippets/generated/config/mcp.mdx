@@ -34,6 +34,12 @@
   Skip these tools.
 </ParamField>
 
+<ParamField body="mcp.<name>.files" type="enum<string>" default="path">
+  How a file reference (`blob:sha256-…`) in a tool call's arguments reaches the server: `path` as a local file path, `url` as a link the server can fetch, `base64` as the file's contents, `off` as the reference text unchanged.
+
+  Available options: `path`, `url`, `base64`, `off`
+</ParamField>
+
 <ParamField body="mcp.<name>.tool_overrides" type="object">
   Per-tool corrections, as `[mcp.<name>.tool_overrides.<tool>]`.
 </ParamField>

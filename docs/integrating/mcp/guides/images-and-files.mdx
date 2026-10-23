@@ -1,0 +1,76 @@
+---
+title: "Work with images and files"
+description: "Keep the images and audio MCP tools return, and pass them to other tools by reference."
+keywords: ["mcp", "images", "screenshots", "files", "storage.files", "s3", "blob"]
+---
+
+When an MCP tool returns an image or audio, such as a browser screenshot, graph stores the file and gives the agent a short reference to it instead of the bytes. The agent can pass that reference to another tool, and graph hands the tool the file in the form it expects.
+
+<RequestExample>
+
+```toml config.toml
+[mcp.browser]
+command = "npx"
+args = ["-y", "@playwright/mcp"]
+files = "path"
+
+[storage.files]
+backend = "s3"
+endpoint = "https://s3.example.com"
+bucket = "graph-files"
+region = "us-east-1"
+access_key_id = "${GRAPH_S3_KEY_ID}"
+secret_access_key = "${GRAPH_S3_SECRET}"
+```
+
+</RequestExample>
+
+## What a tool's result looks like
+
+graph stores every image and audio item in a tool's result: inline `image` and `audio` content, embedded resources with binary contents, and `resource_link` items whose MIME type is an image or audio, which graph reads from the server. The result lists them under `files`, next to whatever text or structured content the tool returned:
+
+```json
+{
+  "text": "Captured https://example.com",
+  "files": [
+    {
+      "ref": "blob:sha256-5d41402abc4b2a76b9719d911017c592a7c1d1d4b2fb7b1f9d1c1e1e2c1a3f4e.png",
+      "mime": "image/png",
+      "bytes": 48213,
+      "width": 1280,
+      "height": 800
+    }
+  ]
+}
+```
+
+When the tool's result isn't an object, or already has its own `files` key, graph puts it under `result` instead, as `{"result": …, "files": […]}`.
+
+A reference names the file by its SHA-256 hash, so the same image stored twice is kept once. It stays the same wherever the file is kept, and threads and plan results that mention it keep working if you move file storage to another backend and copy the files across.
+
+## Pass a file to another tool
+
+Any argument whose whole value is a reference is replaced before graph calls the tool. A reference inside longer text is left as it is. Each server's `files` setting decides what the tool receives:
+
+| `files` | The tool receives |
+|---|---|
+| `path` (default) | A path to the file on this machine. Files kept in S3 or in memory are copied to a local cache first. |
+| `url` | A link the server can fetch: a presigned link valid for an hour when files are in S3, otherwise a `file://` URL. |
+| `base64` | The file's contents, base64-encoded. |
+| `off` | The reference text unchanged. |
+
+Use `url` for a server running on another machine, which can't read your local paths, and `base64` for a server that only accepts file contents in its arguments. Most local servers take a path.
+
+If graph can't read a referenced file, the tool isn't called and the agent gets an error naming the reference.
+
+## Where files are kept
+
+Without a `[storage.files]` table, files follow `[storage].backend`: under `<data_dir>/blobs` for `file`, and in memory for `memory`, which keeps nothing between runs.
+
+To keep files somewhere else, set `[storage.files].backend`:
+
+- `file` keeps files under `<data_dir>/blobs`.
+- `memory` keeps files only for the length of the run.
+- `s3` keeps files in an S3 bucket, or a bucket on an S3-compatible server such as Garage or MinIO. Set `endpoint` for an S3-compatible server, and `region` to the region it expects. Keys go under `prefix` when you set one, so several stores can share a bucket.
+
+Credentials expand `${NAME}` references like the rest of config.toml, so you can keep them in the OS credential store with `graph secret set GRAPH_S3_SECRET`. When `access_key_id` and `secret_access_key` are omitted, graph reads the standard `AWS_*` environment variables. If a referenced secret isn't set, graph still starts. A tool call that receives a file then fails naming the missing variable, and files a tool returns are left out of its result, with a warning in the log.

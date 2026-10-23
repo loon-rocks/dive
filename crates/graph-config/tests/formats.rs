@@ -177,3 +177,55 @@ fn pack_entries_read_every_field() {
         ["bare", "example", "pinned"]
     );
 }
+
+#[test]
+fn file_storage_and_mcp_file_modes_read_every_field() {
+    let path = fixture_dir(CONFIG_FORMAT).join("files.toml");
+    let loaded = load_from(&[path]).unwrap();
+    let files = loaded.config.storage.files.expect("storage.files");
+    assert_eq!(files.backend, graph_config::FilesBackend::S3);
+    assert_eq!(files.endpoint.as_deref(), Some("https://s3.example.test"));
+    assert_eq!(files.bucket.as_deref(), Some("graph"));
+    assert_eq!(files.region.as_deref(), Some("garage"));
+    assert_eq!(files.prefix.as_deref(), Some("team"));
+    assert_eq!(files.access_key_id.as_deref(), Some("key"));
+    assert_eq!(files.secret_access_key.as_deref(), Some("secret"));
+    assert!(files.missing_env.is_empty());
+    assert_eq!(
+        loaded.config.mcp["browser"].files,
+        graph_config::FilesMode::Url
+    );
+}
+
+#[test]
+fn mcp_servers_pass_file_references_as_paths_unless_told_otherwise() {
+    let path = fixture_dir(CONFIG_FORMAT).join("mcp_description.toml");
+    let loaded = load_from(&[path]).unwrap();
+    assert!(loaded
+        .config
+        .mcp
+        .values()
+        .all(|server| server.files == graph_config::FilesMode::Path));
+    assert!(loaded.config.storage.files.is_none());
+}
+
+#[test]
+fn an_unset_secret_in_file_storage_is_recorded_instead_of_failing_the_load() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(
+        &path,
+        format!(
+            "version = {CONFIG_FORMAT}\n[storage.files]\nbackend = \"s3\"\nbucket = \"b\"\nsecret_access_key = \"${{GRAPH_TEST_NEVER_SET_FILES_SECRET}}\"\n"
+        ),
+    )
+    .unwrap();
+    let loaded = load_from(&[path]).unwrap();
+    let files = loaded.config.storage.files.unwrap();
+    assert_eq!(files.missing_env.len(), 1);
+    assert_eq!(files.missing_env[0].field, "secret_access_key");
+    assert_eq!(
+        files.missing_env[0].var,
+        "GRAPH_TEST_NEVER_SET_FILES_SECRET"
+    );
+}
