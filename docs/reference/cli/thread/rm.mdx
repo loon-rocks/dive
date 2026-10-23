@@ -6,6 +6,8 @@ playground: "none"
 keywords: ["dive thread rm"]
 ---
 
+Also removes the stored files, such as generated images, that no other thread refers to. Files in S3 storage are kept, since other machines may share the bucket.
+
 ## Arguments
 
 <ParamField path="ID" type="string" required>

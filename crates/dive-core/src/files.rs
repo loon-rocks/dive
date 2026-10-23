@@ -149,6 +149,10 @@ pub trait BlobStore: Send + Sync {
     async fn locate(&self, blob: &BlobRef) -> Result<FileLocation, FileError>;
 
     async fn materialize(&self, blob: &BlobRef) -> Result<PathBuf, FileError>;
+
+    fn shared(&self) -> bool {
+        false
+    }
 }
 
 pub fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
@@ -163,6 +167,23 @@ pub fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
         }
         other => serde_json::json!({ "result": other, "files": listed }),
     }
+}
+
+pub fn refs_in_text(text: &str) -> Vec<BlobRef> {
+    let mut found = Vec::new();
+    for (at, _) in text.match_indices(BLOB_PREFIX) {
+        let rest = &text[at..];
+        let end = rest[BLOB_PREFIX.len()..]
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
+            .map_or(rest.len(), |end| end + BLOB_PREFIX.len());
+        let candidate = rest[..end].trim_end_matches('.');
+        if let Some(blob) = BlobRef::parse(candidate) {
+            if !found.contains(&blob) {
+                found.push(blob);
+            }
+        }
+    }
+    found
 }
 
 pub fn refs_in(value: &Value) -> Vec<BlobRef> {
@@ -267,6 +288,8 @@ mod tests {
             "count": 2,
         });
         assert_eq!(refs_in(&input), vec![blob.clone()]);
+        let text = format!("See ![one]({blob}). Also {blob}, and blob:sha256-nothex.png");
+        assert_eq!(refs_in_text(&text), vec![blob.clone()]);
         let replacements = HashMap::from([(blob.clone(), json!("/tmp/a.png"))]);
         assert_eq!(
             substitute_refs(input, &replacements),

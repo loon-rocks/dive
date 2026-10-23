@@ -30,3 +30,7 @@ pub fn runtime() -> Result<Runtime> {
 pub fn open_store(config: &dive_config::Config) -> Result<Arc<dyn dive_core::Store>> {
     runtime::open_store(config, &options())
 }
+
+pub fn open_files(config: &dive_config::Config) -> Result<Arc<dyn dive_core::files::BlobStore>> {
+    runtime::open_files(config, &options())
+}
