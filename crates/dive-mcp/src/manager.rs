@@ -397,7 +397,7 @@ fn describe_server(configured: Option<&str>, reported: Option<&Implementation>) 
 fn client_info() -> ClientInfo {
     ClientInfo::new(
         ClientCapabilities::default(),
-        Implementation::new("graph", env!("CARGO_PKG_VERSION")),
+        Implementation::new("dive", env!("CARGO_PKG_VERSION")),
     )
 }
 

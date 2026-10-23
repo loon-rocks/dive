@@ -121,7 +121,7 @@ impl EventSink for TtySink {
 }
 
 /// Machine-readable event sink: one JSON line per event on stderr.
-/// Selected by `GRAPH_EVENTS=jsonl` — CI logs become parseable traces.
+/// Selected by `DIVE_EVENTS=jsonl` — CI logs become parseable traces.
 pub struct JsonlSink {
     /// Suppress streaming text (final answer printed by the caller).
     quiet_text: bool,
@@ -195,15 +195,15 @@ impl EventSink for JsonlSink {
 /// True when stderr is the machine-parseable event feed.
 ///
 /// Anything that would `eprintln!` prose for a human has to check this
-/// first: under `GRAPH_EVENTS=jsonl` stderr is one JSON object per line, and
+/// first: under `DIVE_EVENTS=jsonl` stderr is one JSON object per line, and
 /// a single bare line breaks every consumer parsing it line by line. The
 /// equivalent information belongs in an event instead.
 pub fn jsonl_events() -> bool {
-    std::env::var("GRAPH_EVENTS").as_deref() == Ok("jsonl")
+    dive_config::legacy::var("DIVE_EVENTS").as_deref() == Some("jsonl")
 }
 
-/// The standard sink choice: JSONL when `GRAPH_EVENTS=jsonl`, else the TTY
-/// sink (including `GRAPH_EVENTS=github`, which only adds failure
+/// The standard sink choice: JSONL when `DIVE_EVENTS=jsonl`, else the TTY
+/// sink (including `DIVE_EVENTS=github`, which only adds failure
 /// annotations — see [`gha_annotations`]). `solver_stdout` only applies to
 /// the TTY sink (plan run).
 pub fn make_sink(
@@ -223,13 +223,13 @@ pub fn make_sink(
 
 /// Surface a failure to the CI system, if an annotation mode is active.
 /// Callers report every failure through this unconditionally; whether and
-/// how it renders is this module's concern. `GRAPH_EVENTS=github` emits a
+/// how it renders is this module's concern. `DIVE_EVENTS=github` emits a
 /// GitHub Actions `::error::` workflow command — those are only parsed from
 /// stdout, the one sanctioned exception to the stdout-is-deliverable
 /// contract, and only ever on failure paths, where a nonzero exit code
 /// already tells automation that stdout is not a clean deliverable.
 pub fn annotate_failure(message: &str) {
-    if std::env::var("GRAPH_EVENTS").as_deref() == Ok("github") {
+    if dive_config::legacy::var("DIVE_EVENTS").as_deref() == Some("github") {
         println!("::error::{}", escape_gha_data(message));
     }
 }

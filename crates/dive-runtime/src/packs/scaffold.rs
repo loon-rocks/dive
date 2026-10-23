@@ -1,4 +1,4 @@
-use dive_core::packs::requirements::GRAPH_VERSION;
+use dive_core::packs::requirements::DIVE_VERSION;
 use std::path::{Path, PathBuf};
 
 pub const FILES: &[(&str, &str)] = &[
@@ -27,8 +27,8 @@ pub const REPO_FILES: &[(&str, &str)] = &[
     (".gitignore", include_str!("scaffold/gitignore")),
 ];
 
-pub fn graph_requirement() -> String {
-    let mut parts = GRAPH_VERSION.split('.');
+pub fn dive_requirement() -> String {
+    let mut parts = DIVE_VERSION.split('.');
     let major = parts.next().unwrap_or("0");
     let minor = parts.next().unwrap_or("0");
     format!(">={major}.{minor}")
@@ -36,8 +36,8 @@ pub fn graph_requirement() -> String {
 
 pub fn render(text: &str, name: &str) -> String {
     text.replace("@NAME@", name)
-        .replace("@GRAPH@", &graph_requirement())
-        .replace("@VERSION@", GRAPH_VERSION)
+        .replace("@DIVE@", &dive_requirement())
+        .replace("@VERSION@", DIVE_VERSION)
 }
 
 fn write_file(target: &Path, text: &str) -> std::io::Result<()> {

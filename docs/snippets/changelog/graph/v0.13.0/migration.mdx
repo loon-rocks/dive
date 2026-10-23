@@ -1,9 +1,9 @@
 ````markdown
-# Migrate graph config, plans, and tools to v0.13.0
+# Migrate dive config, plans, and tools to v0.13.0
 
-You are upgrading the graph files in this repository — `.graph/config.toml`,
-the plans under `.graph/plans/`, the user tools under `.graph/tools/`, and,
-if the user asks, the global library in `~/.config/graph/` — to graph
+You are upgrading the graph files in this repository — `.dive/config.toml`,
+the plans under `.dive/plans/`, the user tools under `.dive/tools/`, and,
+if the user asks, the global library in `~/.config/dive/` — to graph
 v0.13.0. The release is backward compatible for every well-formed file:
 nothing you leave untouched changes meaning. But two things need checking
 before the upgrade is trusted, and one file kind can now be stamped with a
@@ -14,7 +14,7 @@ restructure unrelated steps, tools, or config.
 
 - `graph --version` must report ≥ 0.13.0 wherever these files are read.
 - If plans run in CI from the container image
-  (`ghcr.io/tylerdavis/graph:vX.Y.Z`), the pin must move to ≥ v0.13.0
+  (`ghcr.io/loon-rocks/dive:vX.Y.Z`), the pin must move to ≥ v0.13.0
   **in the same PR** as any file you stamp with a `version` key (Migration 3
   below). A pre-0.13 binary reads the key as an unknown field: it refuses a
   stamped `config.toml` outright and skips a stamped plan from its catalog.
@@ -44,14 +44,14 @@ in memory as they load; the file on disk changes only when you run a
 `migrate` command. New commands:
 
 ```text
-graph version                     # binary version + the version each file kind is written at
-graph config check                # each config file's version and whether the merged config loads
-graph config migrate [--global]   # rewrite config.toml to the current version, comments preserved
-graph plan migrate <name|path>    # rewrite one plan file to the current plan version
-graph tools migrate <path>        # rewrite one user tool file to the current tool version
+dive version                     # binary version + the version each file kind is written at
+dive config check                # each config file's version and whether the merged config loads
+dive config migrate [--global]   # rewrite config.toml to the current version, comments preserved
+dive plan migrate <name|path>    # rewrite one plan file to the current plan version
+dive tools migrate <path>        # rewrite one user tool file to the current tool version
 ```
 
-`graph config check` prints one line per config file:
+`dive config check` prints one line per config file:
 `<path>	version 1	current (unstamped)` for a file with no `version` key,
 `current` once stamped, `migrate` when older than the binary writes, and
 `too new` / `too old` outside the window. Files graph itself writes — the
@@ -84,13 +84,13 @@ The rules describing what each `workbench__*` tool does to the draft are
 now appended after the override and cannot be replaced by it. The override
 is framing and policy only: how the agent should behave in the workbench,
 when it may run or save, whether it reads the project. Previously the
-override was the agent's *only* description of those tools, so `graph config
+override was the agent's *only* description of those tools, so `dive config
 init` wrote the full tool list into it and customizations started from
 that text.
 
 **4. `graph --version` prints two lines** (`graph 0.13.0` then
 `file versions: config 1, plan 1, tool 1, store 1`). `-V` still prints the
-binary version alone; `graph version --json` reports `fileVersions` with
+binary version alone; `dive version --json` reports `fileVersions` with
 `oldest` and `current` per kind.
 
 **5. The data directory gains a `FORMAT` marker** on first open, holding the
@@ -102,12 +102,12 @@ now fail to open until the marker can be written once.
 Run, from the repository root:
 
 ```text
-graph plan list --json | jq '.skipped'
-graph tools list
+dive plan list --json | jq '.skipped'
+dive tools list
 ```
 
 Every entry under `skipped` whose reason contains `unknown field` is a plan
-that loaded before this release and no longer does. If `graph tools list`
+that loaded before this release and no longer does. If `dive tools list`
 fails with `<path>: unknown field(s) ...`, fix that file and run it again —
 one bad tool file hides the rest of the catalog. For each hit, open the
 file and decide which of two cases it is:
@@ -142,18 +142,18 @@ steps:
     reasoning: flaky on Mondays; the tool retries internally
 ```
 
-Do the same sweep over the global library (`~/.config/graph/plans/`,
-`~/.config/graph/tools/`) if the user asks for it. Also grep for step keys
+Do the same sweep over the global library (`~/.config/dive/plans/`,
+`~/.config/dive/tools/`) if the user asks for it. Also grep for step keys
 the catalog cannot report because the plan is hidden by unconfigured
-`requires_servers`: `graph plan validate <name>` opens those from disk.
+`requires_servers`: `dive plan validate <name>` opens those from disk.
 
 ## Migration 2 — REQUIRED where present: trim the workbench prompt override
 
-Grep `.graph/config.toml` and `~/.config/graph/config.toml` for a
+Grep `.dive/config.toml` and `~/.config/dive/config.toml` for a
 `workbench` key under `[prompts]` whose value mentions `workbench__`:
 
 ```text
-grep -n 'workbench__' .graph/config.toml ~/.config/graph/config.toml
+grep -n 'workbench__' .dive/config.toml ~/.config/dive/config.toml
 ```
 
 If the override contains tool descriptions (`workbench__show_plan reads any
@@ -175,7 +175,7 @@ Before:
 [prompts]
 workbench = """
 # Plan workbench
-You are running inside the graph plan workbench. Never run or save without asking.
+You are running inside the dive plan workbench. Never run or save without asking.
 Operate on that draft with the workbench tools:
 - workbench__show_plan: read any catalog plan's YAML without touching the draft...
 - workbench__load_plan: open a DIFFERENT plan the user explicitly names...
@@ -201,11 +201,11 @@ Prerequisites hold everywhere the files are read (in particular, the CI
 image pin).
 
 ```text
-graph config check
-graph config migrate               # ./.graph/config.toml
-graph config migrate --global      # ~/.config/graph/config.toml, if the user asked for the global library
-graph plan migrate <name>          # once per plan file in .graph/plans/
-graph tools migrate <path>         # once per tool file in .graph/tools/
+dive config check
+dive config migrate               # ./.dive/config.toml
+dive config migrate --global      # ~/.config/dive/config.toml, if the user asked for the global library
+dive plan migrate <name>          # once per plan file in .dive/plans/
+dive tools migrate <path>         # once per tool file in .dive/tools/
 ```
 
 What the rewrites do:
@@ -228,19 +228,19 @@ Commit the stamped files together with any image-pin change.
 Grep workflows and scripts for `graph --version`. Anything that expects a
 single line (`graph --version | awk '{print $2}'`, a version-gate in a
 Makefile) should switch to `graph -V` for the bare binary version or
-`graph version --json` for the structured form.
+`dive version --json` for the structured form.
 
 ## Verify
 
-1. `graph version` reports `0.13.0` or newer, and
+1. `dive version` reports `0.13.0` or newer, and
    `file versions: config 1, plan 1, tool 1, store 1`.
-2. `graph config check` exits 0 and shows every config file as `current`
+2. `dive config check` exits 0 and shows every config file as `current`
    (or `current (unstamped)` if you skipped Migration 3).
-3. `graph plan list --json | jq '.skipped'` is empty, or contains only
+3. `dive plan list --json | jq '.skipped'` is empty, or contains only
    plans that were deliberately left broken (say which and why).
-4. `graph plan validate <name>` for every plan you touched — must pass.
-5. `graph tools list` builds the catalog without naming any file.
-6. If the workbench override changed, open `graph wb plan` on a scratch plan
+4. `dive plan validate <name>` for every plan you touched — must pass.
+5. `dive tools list` builds the catalog without naming any file.
+6. If the workbench override changed, open `dive wb plan` on a scratch plan
    and confirm the agent still edits the draft with the `workbench__*` tools.
 7. Report per file: what was found, what changed, and validation status.
    List the files you inspected and deliberately left alone, with the

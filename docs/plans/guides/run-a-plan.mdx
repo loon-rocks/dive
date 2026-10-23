@@ -1,14 +1,14 @@
 ---
 title: "Run a plan"
 description: "Run a plan with input and pipe its output to jq."
-keywords: ["graph plan run", "inputs", "--input", "stdout", "jq"]
+keywords: ["dive plan run", "inputs", "--input", "stdout", "jq"]
 ---
 
 `changes_since` takes a git ref as its `base` input and returns the commits merged since it.
 
 <RequestExample>
 
-```yaml .graph/plans/changes_since.yaml
+```yaml .dive/plans/changes_since.yaml
 version: 2
 identifier: changes_since
 name: Changes since
@@ -40,7 +40,7 @@ finish:
 Run `changes_since` without inputs:
 
 ```bash
-graph plan run changes_since
+dive plan run changes_since
 ```
 
 graph checks the inputs before any step runs. It names what's missing, prints the input schema, and exits with code 3:
@@ -65,7 +65,7 @@ input schema:
 Set `base` with `--input`:
 
 ```bash
-graph plan run changes_since \
+dive plan run changes_since \
   --input base=v0.15.0
 ```
 
@@ -93,7 +93,7 @@ The plan prints its result as JSON on stdout:
 Progress goes to stderr, so stdout carries only the result and pipes cleanly:
 
 ```bash
-graph plan run changes_since \
+dive plan run changes_since \
   --input base=v0.15.0 \
   | jq -r '.commits[] | "\(.short_sha) \(.subject)"'
 ```

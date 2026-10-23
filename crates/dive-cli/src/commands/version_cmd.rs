@@ -84,7 +84,7 @@ pub fn outcome() -> Outcome {
             "oldest": format.oldest,
         }))).collect::<serde_json::Map<String, serde_json::Value>>(),
     });
-    Outcome::raw(format!("graph {VERSION}\n{}\n", formats_line()), body)
+    Outcome::raw(format!("dive {VERSION}\n{}\n", formats_line()), body)
 }
 
 #[cfg(test)]
@@ -106,7 +106,7 @@ mod tests {
     fn the_text_rendering_leads_with_the_binary_version() {
         let text = outcome().raw.unwrap();
         assert!(
-            text.starts_with(&format!("graph {VERSION}\nfile versions: config ")),
+            text.starts_with(&format!("dive {VERSION}\nfile versions: config ")),
             "{text}"
         );
         assert!(LONG_VERSION.starts_with(VERSION));

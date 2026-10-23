@@ -40,7 +40,7 @@ You need the server's launch command or its URL. If it needs a token, put the to
   </Step>
   <Step title="Test the connection">
     ```bash
-    graph mcp test everything
+    dive mcp test everything
     ```
 
     ```text
@@ -54,8 +54,8 @@ You need the server's launch command or its URL. If it needs a token, put the to
 List the server's tools, then call one through graph:
 
 ```bash
-graph mcp tools everything
-graph tool test everything__echo --input message=hello
+dive mcp tools everything
+dive tool test everything__echo --input message=hello
 ```
 
 ```json

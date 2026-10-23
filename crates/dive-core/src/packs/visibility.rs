@@ -165,7 +165,7 @@ mod tests {
             name: "example".to_string(),
             tag: None,
             layer: dive_config::pack::LayerKind::Project,
-            dir: std::path::PathBuf::from(".graph/packs/example"),
+            dir: std::path::PathBuf::from(".dive/packs/example"),
         };
         assert_eq!(Origin::of(Some(&source)), Origin::Pack("example".into()));
         assert_eq!(Origin::of(None), Origin::Outside);

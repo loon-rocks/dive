@@ -1,15 +1,15 @@
 ---
 title: "Talk to an agent"
 description: "Ask an agent one question or hold a conversation with it from the terminal, and pick it up later."
-keywords: ["graph ask", "graph chat", "threads", "conversation"]
+keywords: ["dive ask", "dive chat", "threads", "conversation"]
 ---
 
-`graph ask` runs one turn and exits. `graph chat` keeps the conversation open. Both start with the built-in `chat` agent unless you name another.
+`dive ask` runs one turn and exits. `dive chat` keeps the conversation open. Both start with the built-in `chat` agent unless you name another.
 
 ## Ask one question
 
 ```bash
-graph ask --agent release_notes \
+dive ask --agent release_notes \
   "What shipped since v0.15.0?"
 ```
 
@@ -17,34 +17,34 @@ The answer streams to stdout. Usage and a resume command follow on stderr:
 
 ```text
 3 calls · 12k in / 840 out · $0.04
-resume with `graph chat --thread 0b9c2f6e-…`
+resume with `dive chat --thread 0b9c2f6e-…`
 ```
 
 Piped input is added to the message:
 
 ```bash
-git diff main | graph ask "Review this diff"
+git diff main | dive ask "Review this diff"
 ```
 
 ## Hold a conversation
 
 ```bash
-graph chat release_notes
+dive chat release_notes
 ```
 
 The prompt shows which agent you are talking to. Switch agents mid-conversation with `/agent <name>`, list them with `/agent`, and leave with `/quit`.
 
 ## Pick it up later
 
-Add `--thread` to continue the most recent conversation, or `--thread <id>` for a specific one. On `graph ask`, put it after the message:
+Add `--thread` to continue the most recent conversation, or `--thread <id>` for a specific one. On `dive ask`, put it after the message:
 
 <CodeGroup>
-```bash graph chat
-graph chat --thread
+```bash dive chat
+dive chat --thread
 ```
 
-```bash graph ask
-graph ask "And the release before?" \
+```bash dive ask
+dive ask "And the release before?" \
   --thread
 ```
 </CodeGroup>

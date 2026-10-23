@@ -2,7 +2,7 @@
 //! documents, independent of any surface that drives them.
 //!
 //! Two surfaces consume this module — the plan workbench's `workbench__*`
-//! agent tools and the `graph plan` authoring commands — and they must agree
+//! agent tools and the `dive plan` authoring commands — and they must agree
 //! down to the error strings, because a plan edited by one is opened by the
 //! other.
 //!
@@ -783,7 +783,7 @@ pub fn to_yaml(doc: &PlanDoc) -> Result<String, WriteError> {
 
 /// The document as JSON, in the plan *file*'s shape.
 ///
-/// Shares [`to_yaml`]'s normalization on purpose: `graph plan show --json`
+/// Shares [`to_yaml`]'s normalization on purpose: `dive plan show --json`
 /// describes a file on disk, and a caller that reads the envelope and a human
 /// who opens the file must see one spelling. Key order is serde_json's
 /// (alphabetical), which is what a machine caller addresses by name anyway.
@@ -1307,7 +1307,7 @@ steps:
     fn written_yaml_uses_the_documented_snake_case_spelling() {
         // `Step` serializes camelCase for the planner's schema; the plan file
         // format is snake_case. A file an agent writes must look like one a
-        // human wrote, or `graph plan show` and the docs disagree.
+        // human wrote, or `dive plan show` and the docs disagree.
         let yaml = to_yaml(&linked()).unwrap();
         assert!(yaml.contains("tool_name: t__search"), "{yaml}");
         assert!(!yaml.contains("toolName"), "{yaml}");

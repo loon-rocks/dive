@@ -113,7 +113,7 @@ fn layer_in(kind: LayerKind, dir: PathBuf, config: &str) -> Layer {
 
 fn scratch(config: &str) -> Project {
     let dir = tempfile::tempdir().unwrap();
-    let layer = layer_in(LayerKind::Project, dir.path().join(".graph"), config);
+    let layer = layer_in(LayerKind::Project, dir.path().join(".dive"), config);
     Project { _dir: dir, layer }
 }
 
@@ -319,10 +319,10 @@ fn add_installs_a_configured_entry_that_has_no_copy() {
 #[test]
 fn a_missing_project_directory_points_at_config_init() {
     let dir = tempfile::tempdir().unwrap();
-    let error = project_layer(dir.path().join(".graph"))
+    let error = project_layer(dir.path().join(".dive"))
         .unwrap_err()
         .to_string();
-    assert!(error.contains("graph config init"), "{error}");
+    assert!(error.contains("dive config init"), "{error}");
 }
 
 #[test]
@@ -414,7 +414,7 @@ fn update_moves_within_the_major_and_names_what_it_held_back() {
     );
     assert_eq!(
         result["heldBack"],
-        "v2.0.0 available: graph pack update example --major"
+        "v2.0.0 available: dive pack update example --major"
     );
     let locked = &lock(layer).packs["example"];
     assert_eq!(locked.tag.as_deref(), Some("v1.2.0"));
@@ -604,7 +604,7 @@ fn add_refuses_a_release_needing_a_newer_graph_and_installs_nothing() {
     let refusal = error(&add(layer, &request(&upstream.url, None, None)).unwrap());
     assert!(
         refusal.contains(&format!(
-            "requires.graph: needs graph >=99; this is graph {}",
+            "requires.dive: needs Dive >=99; this is Dive {}",
             env!("CARGO_PKG_VERSION")
         )),
         "{refusal}"
@@ -656,8 +656,8 @@ fn update_refuses_a_release_for_another_os_and_keeps_the_installed_one() {
 
 const MCP_CONFIG: &str = "version = 4\n\n[mcp.everything]\ncommand = \"true\"\n";
 
-const UNMET: &str = r#"binaries = ["graph-pack-no-such-binary"]
-env = ["GRAPH_PACK_TEST_NEVER_SET"]
+const UNMET: &str = r#"binaries = ["dive-pack-no-such-binary"]
+env = ["DIVE_PACK_TEST_NEVER_SET"]
 
 [requires.mcp.everything]
 server = "mcp-servers/everything"
@@ -677,8 +677,8 @@ fn add_reports_missing_binaries_env_and_unconfigured_mcp_servers_with_a_snippet(
     assert_eq!(
         outcome.body["unmet"],
         json!([
-            "requires.binaries: graph-pack-no-such-binary not found on PATH",
-            "requires.env: GRAPH_PACK_TEST_NEVER_SET not set (or empty)",
+            "requires.binaries: dive-pack-no-such-binary not found on PATH",
+            "requires.env: DIVE_PACK_TEST_NEVER_SET not set (or empty)",
             "requires.mcp.linear: no MCP server is configured under [mcp.linear] (url = \"https://mcp.linear.app/mcp\")",
         ])
     );
@@ -689,7 +689,7 @@ fn add_reports_missing_binaries_env_and_unconfigured_mcp_servers_with_a_snippet(
     let note = outcome.body["note"].as_str().unwrap();
     assert!(
         note.contains(
-            "example: unmet requires.binaries: graph-pack-no-such-binary not found on PATH"
+            "example: unmet requires.binaries: dive-pack-no-such-binary not found on PATH"
         ),
         "{note}"
     );
@@ -711,12 +711,12 @@ fn update_reports_what_the_new_release_needs() {
             .unwrap()
             .rejected
     );
-    upstream.release_requiring("binaries = [\"graph-pack-no-such-binary\"]", "v1.2.0");
+    upstream.release_requiring("binaries = [\"dive-pack-no-such-binary\"]", "v1.2.0");
     let outcome = update(layer, &[], false).unwrap();
     assert!(!outcome.rejected, "{}", outcome.body);
     assert_eq!(
         outcome.body["packs"][0]["unmet"],
-        json!(["requires.binaries: graph-pack-no-such-binary not found on PATH"])
+        json!(["requires.binaries: dive-pack-no-such-binary not found on PATH"])
     );
     assert_eq!(lock(layer).packs["example"].tag.as_deref(), Some("v1.2.0"));
 }
@@ -1144,7 +1144,7 @@ async fn a_failing_migration_leaves_the_pack_at_the_last_completed_major() {
     assert_eq!(row["left"], json!(["v3.0.0"]));
     assert!(body.contains("migrate_v3 failed"), "{body}");
     assert!(
-        body.contains("continue with `graph pack update example --major`"),
+        body.contains("continue with `dive pack update example --major`"),
         "{body}"
     );
     assert!(
@@ -1341,7 +1341,7 @@ async fn packs_in_one_repository_each_follow_their_own_tags() {
     assert_eq!(rows[1]["status"], "current");
     assert_eq!(
         rows[1]["heldBack"],
-        "v2.0.0 available: graph pack update b --major"
+        "v2.0.0 available: dive pack update b --major"
     );
 
     repo.describe("a", "one point two");
@@ -1485,7 +1485,7 @@ async fn a_release_tag_that_moved_since_install_is_refused() {
         assert!(staging_left(layer).is_empty());
     };
     let expected = format!(
-        "the tag b/v1.0.0 in {} now points at {moved} but was installed from {installed}; a published release must never move, so graph won't install it; contact the pack's maintainers",
+        "the tag b/v1.0.0 in {} now points at {moved} but was installed from {installed}; a published release must never move, so Dive won't install it; contact the pack's maintainers",
         repo.url
     );
 

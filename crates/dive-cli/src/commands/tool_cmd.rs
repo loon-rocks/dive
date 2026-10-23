@@ -1,4 +1,4 @@
-//! `graph tool` — inspect the tool catalog.
+//! `dive tool` — inspect the tool catalog.
 
 use crate::cli::ToolCommand;
 use crate::commands::outcome::{report, Outcome};

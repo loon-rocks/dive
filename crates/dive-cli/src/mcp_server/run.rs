@@ -129,7 +129,7 @@ pub fn step_rm(args: &Map<String, Value>) -> Result<Outcome> {
 /// the command functions are the only definition of what a plan step may
 /// name — invokable tools plus the control-step vocabulary — and a second
 /// copy here is exactly how the control steps went missing from this
-/// surface while `graph tool list` served them.
+/// surface while `dive tool list` served them.
 pub async fn tools_list() -> Result<Outcome> {
     let runtime = runtime()?;
     let store = runtime.store()?;

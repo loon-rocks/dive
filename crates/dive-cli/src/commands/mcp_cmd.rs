@@ -1,4 +1,4 @@
-//! `graph mcp` — list/tools/test/probe.
+//! `dive mcp` — list/tools/test/probe.
 
 use super::listing::render_tool_listing;
 use crate::cli::McpCommand;

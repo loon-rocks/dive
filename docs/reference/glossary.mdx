@@ -6,7 +6,7 @@ keywords: ["glossary", "terms", "definitions"]
 
 ## Agent
 
-A named model with a system prompt, a [model role](#model-role) and a list of [tools](#tool) it may call, defined in an agent file. Agents run in `graph ask`, `graph chat` and the [workbench](#workbench), and [plans](#plan) call them as `agent__<name>` tools. See [Agents](/agents/overview).
+A named model with a system prompt, a [model role](#model-role) and a list of [tools](#tool) it may call, defined in an agent file. Agents run in `dive ask`, `dive chat` and the [workbench](#workbench), and [plans](#plan) call them as `agent__<name>` tools. See [Agents](/agents/overview).
 
 ## Agent network
 
@@ -58,7 +58,7 @@ One [agent](#agent) passing the conversation to another through a `transfer_to_<
 
 ## Layer
 
-One of the three places graph loads [agents](#agent), [plans](#plan), [tools](#tool) and config from. [Built-ins](#built-in) load first, then your global files in `~/.config/graph/`, then project files in `./.graph/`. A file in a later layer replaces one with the same name in an earlier layer. See [Core concepts](/getting-started/concepts).
+One of the three places graph loads [agents](#agent), [plans](#plan), [tools](#tool) and config from. [Built-ins](#built-in) load first, then your global files in `~/.config/dive/`, then project files in `./.dive/`. A file in a later layer replaces one with the same name in an earlier layer. See [Core concepts](/getting-started/concepts).
 
 ## Model role
 
@@ -66,7 +66,7 @@ A name such as `chat`, `judge` or a role you define, which [agents](#agent), [st
 
 ## Pack
 
-A set of [tools](#tool), [plans](#plan) and [agents](#agent) installed from a git repository with `graph pack add`, such as `github` or `slack`. Each pack is a `[packs.<name>]` entry in config, and its tools are called as `<name>__tool__<tool>`. See [Packs](/packs/overview).
+A set of [tools](#tool), [plans](#plan) and [agents](#agent) installed from a git repository with `dive pack add`, such as `github` or `slack`. Each pack is a `[packs.<name>]` entry in config, and its tools are called as `<name>__tool__<tool>`. See [Packs](/packs/overview).
 
 ## Plan
 
@@ -90,7 +90,7 @@ A `{{...}}` reference in a [step](#step), [tool](#tool) or prompt that splices i
 
 ## Thread
 
-The saved history of a conversation with an [agent](#agent) in `graph ask` or `graph chat`. Continue one with `--thread`. See [Manage threads](/agents/guides/threads).
+The saved history of a conversation with an [agent](#agent) in `dive ask` or `dive chat`. Continue one with `--thread`. See [Manage threads](/agents/guides/threads).
 
 ## Tool
 
@@ -102,4 +102,4 @@ What a [tool](#tool) file runs: `exec` runs a command, `prompt` calls a model, `
 
 ## Workbench
 
-The full-screen terminal app opened by `graph workbench`, where you draft, run and debug [plans](#plan), [agents](#agent) and [tools](#tool). See [Workbench](/getting-started/workbench).
+The full-screen terminal app opened by `dive workbench`, where you draft, run and debug [plans](#plan), [agents](#agent) and [tools](#tool). See [Workbench](/getting-started/workbench).

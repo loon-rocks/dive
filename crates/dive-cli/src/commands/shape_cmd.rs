@@ -1,4 +1,4 @@
-//! `graph shape` — inspect the observed-shape cache. Opens the store
+//! `dive shape` — inspect the observed-shape cache. Opens the store
 //! directly; no providers or MCP servers needed.
 
 use crate::cli::ShapeCommand;

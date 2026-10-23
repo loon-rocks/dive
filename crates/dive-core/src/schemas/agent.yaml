@@ -1,10 +1,10 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 title: Agent file
-description: One named agent, in `./.graph/agents/` or `~/.config/graph/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs.
+description: One named agent, in `./.dive/agents/` or `~/.config/dive/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs.
 x-format: YAML
 x-locations:
-  - "`./.graph/agents/<name>.yaml` (project)"
-  - "`~/.config/graph/agents/<name>.yaml` (global)"
+  - "`./.dive/agents/<name>.yaml` (project)"
+  - "`~/.config/dive/agents/<name>.yaml` (global)"
 type: object
 required: [name, description, model, tools, system_prompt]
 additionalProperties: false

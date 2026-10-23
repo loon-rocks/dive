@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "One named agent, in `./.graph/agents/` or `~/.config/graph/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs.",
+  "description": "One named agent, in `./.dive/agents/` or `~/.config/dive/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs.",
   "examples": [
     {
       "description": "Answers questions about what shipped, from the repo's commit history.",
@@ -98,7 +98,7 @@
   "type": "object",
   "x-format": "YAML",
   "x-locations": [
-    "`./.graph/agents/<name>.yaml` (project)",
-    "`~/.config/graph/agents/<name>.yaml` (global)"
+    "`./.dive/agents/<name>.yaml` (project)",
+    "`~/.config/dive/agents/<name>.yaml` (global)"
   ]
 }

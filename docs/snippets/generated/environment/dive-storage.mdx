@@ -1,0 +1,11 @@
+<ParamField header="DIVE_STORAGE" type="enum<string>" default="file">
+  Where graph keeps threads and the shape cache.
+
+  Overrides [`storage.backend`](/reference/configuration#param-storage-backend) in config.toml.
+
+  | Value | Effect |
+  | --- | --- |
+  | `file` | Under `settings.data_dir`. |
+  | `memory` | In memory only. Nothing is kept between runs. |
+
+</ParamField>

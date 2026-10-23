@@ -103,10 +103,10 @@ fn migration_chains_match_the_current_versions() {
 
 #[test]
 fn the_everything_manifest_reads_every_field() {
-    let manifest = load_manifest(&fixture_dir("pack", 1).join("everything.toml")).unwrap();
+    let manifest = load_manifest(&fixture_dir("pack", PACK_FORMAT).join("everything.toml")).unwrap();
     assert_eq!(manifest.name, "example");
     assert_eq!(manifest.license.as_deref(), Some("MIT"));
-    assert_eq!(manifest.requires.graph.as_deref(), Some(">=0.17"));
+    assert_eq!(manifest.requires.dive.as_deref(), Some(">=0.17"));
     assert_eq!(manifest.requires.os, ["macos", "linux"]);
     assert_eq!(manifest.requires.binaries, ["gh", "jq"]);
     assert_eq!(manifest.requires.env, ["GH_TOKEN"]);
@@ -114,7 +114,7 @@ fn the_everything_manifest_reads_every_field() {
     assert_eq!(linear.server.as_deref(), Some("linear-mcp-server"));
     assert_eq!(linear.version.as_deref(), Some(">=1.0"));
     assert_eq!(linear.url.as_deref(), Some("https://mcp.linear.app/mcp"));
-    let minimal = load_manifest(&fixture_dir("pack", 1).join("minimal.toml")).unwrap();
+    let minimal = load_manifest(&fixture_dir("pack", PACK_FORMAT).join("minimal.toml")).unwrap();
     assert_eq!(minimal.license, None);
     assert!(minimal.requires.mcp.is_empty());
 }
@@ -126,7 +126,7 @@ fn a_newer_version_is_refused_by_name_before_the_schema_is_consulted() {
         PACK_FORMAT + 1
     ));
     assert!(err.starts_with("pack.toml is pack version"), "{err}");
-    assert!(err.contains("Upgrade graph"), "{err}");
+    assert!(err.contains("Upgrade Dive"), "{err}");
     assert!(!err.contains("key_from_the_future"), "{err}");
     let err = lock_error(&format!(
         "version = {}\n[packs.x]\nkey_from_the_future = 1\n",
@@ -179,7 +179,7 @@ fn unknown_manifest_keys_are_refused_at_every_depth_by_name() {
 fn requirements_are_validated_naming_the_field() {
     let base = "version = 1\nname = \"x\"\ndescription = \"d\"\n";
     let err = manifest_error(&format!("{base}[requires]\ngraph = \"at least 0.17\"\n"));
-    assert!(err.contains("requires.graph: 'at least 0.17'"), "{err}");
+    assert!(err.contains("requires.dive: 'at least 0.17'"), "{err}");
     let err = manifest_error(&format!(
         "{base}[requires]\nos = [\"macos\", \"windows\"]\n"
     ));
@@ -280,4 +280,23 @@ fn the_lock_writer_is_sorted_stable_and_round_trips() {
         lock_to_string(&PackLock::default()),
         format!("version = {LOCK_FORMAT}\n")
     );
+}
+
+#[test]
+fn a_version_1_requires_graph_is_read_as_requires_dive() {
+    let manifest =
+        parse_manifest("version = 1\nname = \"x\"\ndescription = \"d\"\n[requires]\ngraph = \">=0.16\"\nos = [\"macos\"]\n")
+            .unwrap();
+    assert_eq!(manifest.version, PACK_FORMAT);
+    assert_eq!(manifest.requires.dive.as_deref(), Some(">=0.16"));
+
+    let err = manifest_error(
+        "version = 1\nname = \"x\"\ndescription = \"d\"\n[requires]\ngraph = \">=0.16\"\ndive = \">=0.17\"\nos = [\"macos\"]\n",
+    );
+    assert!(err.contains("has both graph and dive"), "{err}");
+
+    let err = manifest_error(
+        "version = 2\nname = \"x\"\ndescription = \"d\"\n[requires]\ngraph = \">=0.16\"\nos = [\"macos\"]\n",
+    );
+    assert!(err.contains("unknown field `graph`"), "{err}");
 }

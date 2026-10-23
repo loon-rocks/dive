@@ -1,17 +1,17 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 title: Plan file
-description: One plan, in `./.graph/plans/` or `~/.config/graph/plans/`, run with `graph plan run` and called by agents and other plans as `plan__<identifier>`.
+description: One plan, in `./.dive/plans/` or `~/.config/dive/plans/`, run with `dive plan run` and called by agents and other plans as `plan__<identifier>`.
 x-format: YAML
 x-locations:
-  - "`./.graph/plans/<identifier>.yaml` (project)"
-  - "`~/.config/graph/plans/<identifier>.yaml` (global)"
+  - "`./.dive/plans/<identifier>.yaml` (project)"
+  - "`~/.config/dive/plans/<identifier>.yaml` (global)"
 type: object
 required: [identifier, name, description, steps, finish]
 additionalProperties: false
 properties:
   version:
     type: integer
-    description: The file version the document is written in. Omitted means 1; `graph plan migrate` brings a file to the current version.
+    description: The file version the document is written in. Omitted means 1; `dive plan migrate` brings a file to the current version.
   identifier:
     type: string
     pattern: "^[A-Za-z0-9_-]+$"

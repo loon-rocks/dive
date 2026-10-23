@@ -1,4 +1,4 @@
-//! A hermetic scratch environment for driving the real `graph` binary.
+//! A hermetic scratch environment for driving the real `dive` binary.
 //!
 //! These are characterization tests: they pin the machine-facing contract in
 //! `docs/reference/cli/error-handling.mdx` — which stream carries what, which
@@ -6,11 +6,11 @@
 //! of how commands emit their results are provably behavior-preserving.
 //!
 //! Hermeticity matters more than usual here. Config loads in two layers
-//! (`~/.config/graph/config.toml`, then `./.graph/config.toml`), so a test
+//! (`~/.config/dive/config.toml`, then `./.dive/config.toml`), so a test
 //! that only sets the working directory would still inherit the developer's
 //! real plans, MCP servers, and API keys — and would pass or fail depending
 //! on whose machine it ran on. [`Scratch`] therefore points `HOME` at the
-//! temp dir too, which empties the global layer, and clears every `GRAPH_*`
+//! temp dir too, which empties the global layer, and clears every `DIVE_*`
 //! variable that changes output.
 
 #![allow(dead_code)] // Each test file uses a different subset of the helpers.
@@ -28,7 +28,7 @@ impl Scratch {
         let scratch = Self {
             dir: tempfile::tempdir().expect("create temp dir"),
         };
-        std::fs::create_dir_all(scratch.path().join(".graph/plans")).expect("create .graph/plans");
+        std::fs::create_dir_all(scratch.path().join(".dive/plans")).expect("create .dive/plans");
         scratch.write_config("");
         scratch
     }
@@ -38,14 +38,14 @@ impl Scratch {
     }
 
     pub fn write_config(&self, toml: &str) {
-        std::fs::write(self.path().join(".graph/config.toml"), toml).expect("write config");
+        std::fs::write(self.path().join(".dive/config.toml"), toml).expect("write config");
     }
 
     /// Write a plan into the scratch catalog. Returns its path.
     pub fn write_plan(&self, identifier: &str, yaml: &str) -> PathBuf {
         let path = self
             .path()
-            .join(".graph/plans")
+            .join(".dive/plans")
             .join(format!("{identifier}.yaml"));
         std::fs::write(&path, yaml).expect("write plan");
         path
@@ -60,27 +60,27 @@ impl Scratch {
     }
 
     /// Run `graph <args>` inside the scratch.
-    pub fn graph(&self, args: &[&str]) -> Run {
-        self.graph_env(args, &[])
+    pub fn dive(&self, args: &[&str]) -> Run {
+        self.dive_env(args, &[])
     }
 
     /// Run `graph <args>` with extra environment variables.
-    pub fn graph_env(&self, args: &[&str], env: &[(&str, &str)]) -> Run {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_graph"));
+    pub fn dive_env(&self, args: &[&str], env: &[(&str, &str)]) -> Run {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_dive"));
         command
             .args(args)
             .current_dir(self.path())
             .env("HOME", self.path())
-            .env("GRAPH_STORAGE", "memory")
+            .env("DIVE_STORAGE", "memory")
             // Anything inherited here would change what the assertions see.
-            .env_remove("GRAPH_EVENTS")
-            .env_remove("GRAPH_LOG")
+            .env_remove("DIVE_EVENTS")
+            .env_remove("DIVE_LOG")
             .env_remove("ANTHROPIC_API_KEY")
             .env_remove("OPENAI_API_KEY");
         for (key, value) in env {
             command.env(key, value);
         }
-        let output = command.output().expect("run graph");
+        let output = command.output().expect("run dive");
         Run {
             argv: args.iter().map(|a| a.to_string()).collect(),
             code: output
@@ -93,7 +93,7 @@ impl Scratch {
     }
 }
 
-/// One completed `graph` invocation.
+/// One completed `dive` invocation.
 pub struct Run {
     pub argv: Vec<String>,
     pub code: i32,
@@ -107,7 +107,7 @@ impl Run {
     /// `assertion failed: left == right`.
     fn context(&self) -> String {
         format!(
-            "\n  command: graph {}\n  exit: {}\n  stdout: {:?}\n  stderr: {:?}",
+            "\n  command: dive {}\n  exit: {}\n  stdout: {:?}\n  stderr: {:?}",
             self.argv.join(" "),
             self.code,
             self.stdout,

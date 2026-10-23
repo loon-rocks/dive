@@ -22,15 +22,15 @@ import ConfigPricing from "/snippets/generated/config/pricing.mdx";
 
 | File type | Location |
 | --- | --- |
-| TOML | `~/.config/graph/config.toml` (global)<br />`./.graph/config.toml` (project; its values win) |
+| TOML | `~/.config/dive/config.toml` (global)<br />`./.dive/config.toml` (project; its values win) |
 
 ## Secret references
 
-A string value can include `${NAME}` references, such as `api_key = "${ANTHROPIC_API_KEY}"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, graph reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `graph` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `graph secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `graph secret list`.
+A string value can include `${NAME}` references, such as `api_key = "${ANTHROPIC_API_KEY}"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, graph reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.
 
 A name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.
 
-Where no credential store is available, as in a container or on Linux without a Secret Service daemon, graph reads the environment only. Set `GRAPH_SECRET_STORE` to `none` to skip the store on purpose.
+Where no credential store is available, as in a container or on Linux without a Secret Service daemon, graph reads the environment only. Set `DIVE_SECRET_STORE` to `none` to skip the store on purpose.
 
 ## Fields
 

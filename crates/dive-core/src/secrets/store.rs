@@ -1,7 +1,8 @@
 use super::{store_account, store_resolve_in, Resolved, SecretSource, SecretStore, StoreError};
 
-pub const SERVICE: &str = "graph";
-pub const STORE_ENV: &str = "GRAPH_SECRET_STORE";
+pub const SERVICE: &str = "dive";
+pub const LEGACY_SERVICE: &str = "graph";
+pub const STORE_ENV: &str = "DIVE_SECRET_STORE";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CredentialStore {
@@ -11,7 +12,7 @@ pub struct CredentialStore {
 impl CredentialStore {
     pub fn system() -> Self {
         Self {
-            enabled: !matches!(std::env::var(STORE_ENV).as_deref(), Ok("none")),
+            enabled: !matches!(dive_config::legacy::var(STORE_ENV).as_deref(), Some("none")),
         }
     }
 
@@ -20,9 +21,49 @@ impl CredentialStore {
     }
 
     fn entry(&self, name: &str, project: Option<&str>) -> Result<keyring::Entry, StoreError> {
+        self.entry_in(SERVICE, name, project)
+    }
+
+    fn entry_in(
+        &self,
+        service: &str,
+        name: &str,
+        project: Option<&str>,
+    ) -> Result<keyring::Entry, StoreError> {
         let account = store_account(name, project)?;
         self.status()?;
-        keyring::Entry::new(SERVICE, &account).map_err(describe)
+        keyring::Entry::new(service, &account).map_err(describe)
+    }
+
+    fn password(entry: keyring::Entry) -> Result<Option<String>, StoreError> {
+        match entry.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(describe(error)),
+        }
+    }
+
+    fn delete(entry: keyring::Entry) -> Result<bool, StoreError> {
+        match entry.delete_credential() {
+            Ok(()) => Ok(true),
+            Err(keyring::Error::NoEntry) => Ok(false),
+            Err(error) => Err(describe(error)),
+        }
+    }
+
+    fn accounts_in(service: &str) -> Result<Vec<String>, StoreError> {
+        let spec = std::collections::HashMap::from([("service", service)]);
+        let entries = match keyring_core::Entry::search(&spec) {
+            Ok(entries) => entries,
+            Err(keyring::Error::NoEntry) => return Ok(Vec::new()),
+            Err(error) => return Err(describe(error)),
+        };
+        Ok(entries
+            .iter()
+            .filter_map(|entry| entry.get_specifiers())
+            .filter(|(found, _)| found == service)
+            .map(|(_, account)| account)
+            .collect())
     }
 }
 
@@ -55,11 +96,16 @@ impl SecretStore for CredentialStore {
     }
 
     fn get_in(&self, name: &str, project: Option<&str>) -> Result<Option<String>, StoreError> {
-        match self.entry(name, project)?.get_password() {
-            Ok(value) => Ok(Some(value)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(error) => Err(describe(error)),
+        if let Some(value) = Self::password(self.entry(name, project)?)? {
+            return Ok(Some(value));
         }
+        let legacy = Self::password(self.entry_in(LEGACY_SERVICE, name, project)?)?;
+        if legacy.is_some() {
+            dive_config::legacy::note(format!(
+                "{name} is stored under the credential store service `{LEGACY_SERVICE}`, which is deprecated; run `dive secret set {name}` to store it under `{SERVICE}`"
+            ));
+        }
+        Ok(legacy)
     }
 
     fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError> {
@@ -69,27 +115,15 @@ impl SecretStore for CredentialStore {
     }
 
     fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError> {
-        match self.entry(name, project)?.delete_credential() {
-            Ok(()) => Ok(true),
-            Err(keyring::Error::NoEntry) => Ok(false),
-            Err(error) => Err(describe(error)),
-        }
+        let current = Self::delete(self.entry(name, project)?)?;
+        let legacy = Self::delete(self.entry_in(LEGACY_SERVICE, name, project)?)?;
+        Ok(current || legacy)
     }
 
     fn accounts(&self) -> Result<Vec<String>, StoreError> {
         self.status()?;
-        let spec = std::collections::HashMap::from([("service", SERVICE)]);
-        let entries = match keyring_core::Entry::search(&spec) {
-            Ok(entries) => entries,
-            Err(keyring::Error::NoEntry) => return Ok(Vec::new()),
-            Err(error) => return Err(describe(error)),
-        };
-        let mut accounts: Vec<String> = entries
-            .iter()
-            .filter_map(|entry| entry.get_specifiers())
-            .filter(|(service, _)| service == SERVICE)
-            .map(|(_, account)| account)
-            .collect();
+        let mut accounts = Self::accounts_in(SERVICE)?;
+        accounts.extend(Self::accounts_in(LEGACY_SERVICE)?);
         accounts.sort();
         accounts.dedup();
         Ok(accounts)

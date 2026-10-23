@@ -1,8 +1,8 @@
-version = 1
+version = 2
 name = "@NAME@"
 description = "Say in one sentence what this pack does."
 
 [requires]
-graph = "@GRAPH@"
+dive = "@DIVE@"
 os = ["macos", "linux"]
 binaries = ["sh", "wc", "tr"]

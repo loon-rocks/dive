@@ -15,7 +15,7 @@ fn layer_in(dir: &Path, config: &str) -> Layer {
 
 fn project(config: &str) -> (TempDir, Layer) {
     let dir = tempfile::tempdir().unwrap();
-    let layer = layer_in(&dir.path().join(".graph"), config);
+    let layer = layer_in(&dir.path().join(".dive"), config);
     (dir, layer)
 }
 
@@ -34,11 +34,11 @@ fn the_project_layer_needs_its_directory_and_names_config_init() {
     let error = target(&workspace, &LayerChoice::default())
         .unwrap_err()
         .to_string();
-    assert!(error.contains("graph config init"), "{error}");
-    std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+    assert!(error.contains("dive config init"), "{error}");
+    std::fs::create_dir_all(dir.path().join(".dive")).unwrap();
     let layer = target(&workspace, &LayerChoice::default()).unwrap();
     assert_eq!(layer.kind, LayerKind::Project);
-    assert_eq!(layer.dir, dir.path().join(".graph"));
+    assert_eq!(layer.dir, dir.path().join(".dive"));
     assert_eq!(layer.flag, "");
     assert_eq!(layer.config_paths.len(), 2);
 }
@@ -135,7 +135,7 @@ fn remote_columns_flatten_into_the_row() {
     let mut row = PackRow {
         name: "example".to_string(),
         layer: "project".to_string(),
-        dir: ".graph/packs/example".to_string(),
+        dir: ".dive/packs/example".to_string(),
         git: "github.com/owner/repo".to_string(),
         path: String::new(),
         reference: Some("v1".to_string()),

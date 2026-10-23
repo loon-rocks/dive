@@ -6,7 +6,7 @@
 //! - **Streams.** stdout carries only the deliverable, so every character
 //!   of the prompt goes to stderr. That also means the prompt is invisible
 //!   when stderr is redirected — hence the availability check below.
-//! - **Machine-readable events.** `GRAPH_EVENTS=jsonl` turns stderr into a
+//! - **Machine-readable events.** `DIVE_EVENTS=jsonl` turns stderr into a
 //!   parseable event stream; a hand-typed prompt in the middle of it would
 //!   corrupt the trace. In that mode there is no interlocutor at all, and
 //!   `ask` steps resolve by their declared `whenUnanswered`.
@@ -38,11 +38,11 @@ impl TtyInterlocutor {
     ///
     /// Returning `None` is not a degraded mode — it is the honest input to
     /// each `ask` step's declared `whenUnanswered`, and it is what makes
-    /// the same plan behave predictably under `graph plan run < /dev/null`
+    /// the same plan behave predictably under `dive plan run < /dev/null`
     /// and in CI.
     pub fn detect() -> Option<Self> {
         Self::available(
-            std::env::var("GRAPH_EVENTS").as_deref() == Ok("jsonl"),
+            dive_config::legacy::var("DIVE_EVENTS").as_deref() == Some("jsonl"),
             std::io::IsTerminal::is_terminal(&std::io::stdin()),
             std::io::IsTerminal::is_terminal(&std::io::stderr()),
         )
@@ -414,10 +414,10 @@ mod tests {
     #[test]
     fn a_terminal_is_only_usable_when_both_streams_are_free() {
         assert!(TtyInterlocutor::available(false, true, true));
-        // GRAPH_EVENTS=jsonl owns stderr: prompting on it would corrupt
+        // DIVE_EVENTS=jsonl owns stderr: prompting on it would corrupt
         // the trace, so there is no interlocutor at all.
         assert!(!TtyInterlocutor::available(true, true, true));
-        // Redirected stdin (`graph plan run < /dev/null`, CI) or a
+        // Redirected stdin (`dive plan run < /dev/null`, CI) or a
         // captured stderr means the question could never be seen.
         assert!(!TtyInterlocutor::available(false, false, true));
         assert!(!TtyInterlocutor::available(false, true, false));

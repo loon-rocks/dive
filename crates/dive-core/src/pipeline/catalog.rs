@@ -381,11 +381,11 @@ fn check_tool(
                 check.errors.push(match moved_pack_of(bare) {
                     Some(pack) => format!(
                         "step {step_id}: unknown builtin tool '{tool}' — the {pack} tools \
-                         left graph for the {pack} pack: install it with `graph pack add {pack}` \
+                         left Dive for the {pack} pack: install it with `dive pack add {pack}` \
                          and call {pack}__tool__{bare}"
                     ),
                     None => format!(
-                        "step {step_id}: unknown builtin tool '{tool}' — not one of graph's \
+                        "step {step_id}: unknown builtin tool '{tool}' — not one of Dive's \
                          built-in tools"
                     ),
                 });
@@ -653,7 +653,7 @@ steps:
         let check = resolve_plan_tools(&doc(&bad), &catalog());
         assert_eq!(check.errors.len(), 3, "{:?}", check.errors);
         assert!(check.errors[0].contains("unknown builtin tool 'builtin__nope'"));
-        assert!(check.errors[0].contains("not one of graph's built-in tools"));
+        assert!(check.errors[0].contains("not one of Dive's built-in tools"));
         assert!(check.errors[1].contains("unknown user tool 'user__nope'"));
         assert!(check.errors[2].contains("unknown plan 'nope'"));
     }
@@ -664,7 +664,7 @@ steps:
         let check = resolve_plan_tools(&doc(&moved), &catalog());
         assert_eq!(
             check.errors,
-            ["step E1: unknown builtin tool 'builtin__git_log' — the github tools left graph for the github pack: install it with `graph pack add github` and call github__tool__git_log"]
+            ["step E1: unknown builtin tool 'builtin__git_log' — the github tools left Dive for the github pack: install it with `dive pack add github` and call github__tool__git_log"]
         );
     }
 

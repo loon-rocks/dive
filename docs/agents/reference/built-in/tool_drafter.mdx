@@ -11,13 +11,13 @@ keywords: ["tool_drafter", "agent"]
 1. Checks the catalog first, and points you to an existing tool if one already does the job.
 2. Writes the tool file to the same design principles as the workbench's architect, and shows it to you. With a `decider` role configured, it writes a decision tool rather than a prompt tool to classify, choose or score.
 3. Test-runs it once, after you approve. A secret the run needs is asked for in the form, for that run only.
-4. Saves it to `.graph/tools/` after you confirm. You can use it right away.
+4. Saves it to `.dive/tools/` after you confirm. You can use it right away.
 
-In the workbench, use `graph wb tool` instead.
+In the workbench, use `dive wb tool` instead.
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | `graph ask --agent tool_drafter`, `graph chat tool_drafter`, plan steps as `agent__tool_drafter` | default |
+| `chat` | `dive ask --agent tool_drafter`, `dive chat tool_drafter`, plan steps as `agent__tool_drafter` | default |
 
 ## Tools
 
@@ -36,7 +36,7 @@ You write user tools for graph with the user, one tool per conversation. A user 
 
 When you ask the user anything, stop there: make the question the end of your reply and call no more tools until they answer. Never answer your own questions or carry on with a guess while one is open.
 
-Secrets such as API tokens are never passed to you, and you never ask for one in the conversation. Reference them in the tool's env with `${VAR}` and no default; when the test run needs one that isn't set, the approval form asks the user for it, for that run only. Afterwards, remind the user to set it where graph starts before using the tool for real.
+Secrets such as API tokens are never passed to you, and you never ask for one in the conversation. Reference them in the tool's env with `${VAR}` and no default; when the test run needs one that isn't set, the approval form asks the user for it, for that run only. Afterwards, remind the user to set it where Dive starts before using the tool for real.
 
 When web__tool__search and web__tool__fetch are among your tools, use them before writing a tool against an outside service: search for its API reference, fetch the page, and take the endpoint, parameters, auth and response shape from it instead of from memory.
 
@@ -70,11 +70,11 @@ Today's date: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show tool_drafter > .graph/agents/tool_drafter.yaml
+dive agent show tool_drafter > .dive/agents/tool_drafter.yaml
 ```
 
 ```bash Run
-graph chat tool_drafter
+dive chat tool_drafter
 ```
 
 </RequestExample>

@@ -154,7 +154,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 ### Documentation
 
 - restore themed prose in the v0.11.0 changelog summary
-- add use-graph, the general entry-point skill (#107)
+- add use-dive, the general entry-point skill (#107)
 
 ### Fixed
 

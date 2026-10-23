@@ -18,14 +18,14 @@ Or from the command line:
 <Tabs>
   <Tab title="macOS (arm64)">
     ```bash
-    curl -fsSLO "https://github.com/tylerdavis/graph/releases/download/{{release_version}}/graph-{{release_version}}-macos-arm64.tar.gz"
+    curl -fsSLO "https://github.com/loon-rocks/dive/releases/download/{{release_version}}/graph-{{release_version}}-macos-arm64.tar.gz"
     tar xzf graph-*.tar.gz && install -m 0755 graph ~/.local/bin/
     graph --help
     ```
   </Tab>
   <Tab title="Linux (x86_64)">
     ```bash
-    curl -fsSLO "https://github.com/tylerdavis/graph/releases/download/{{release_version}}/graph-{{release_version}}-linux-x86_64.tar.gz"
+    curl -fsSLO "https://github.com/loon-rocks/dive/releases/download/{{release_version}}/graph-{{release_version}}-linux-x86_64.tar.gz"
     tar xzf graph-*.tar.gz && install -m 0755 graph ~/.local/bin/
     graph --help
     ```
@@ -38,15 +38,15 @@ Or from the command line:
 
 ## Container image
 
-Each release also publishes [ghcr.io/tylerdavis/graph](https://github.com/tylerdavis/graph/pkgs/container/graph) with git, gh, jq and curl installed, ready to use in CI:
+Each release also publishes [ghcr.io/loon-rocks/dive](https://github.com/loon-rocks/dive/pkgs/container/graph) with git, gh, jq and curl installed, ready to use in CI:
 
 ```bash
 docker run --rm \
            -e ANTHROPIC_API_KEY \
-           -e GRAPH_STORAGE=memory \
+           -e DIVE_STORAGE=memory \
            -v "$PWD:/work" \
            -w /work \
-           ghcr.io/tylerdavis/graph:{{release_version}} plan list
+           ghcr.io/loon-rocks/dive:{{release_version}} plan list
 ```
 
 ## Requirements
@@ -58,5 +58,5 @@ docker run --rm \
 
 ## First-run notes
 
-- graph creates its [data directory](/reference/data-directory) at `~/.local/share/graph/` on first use (configurable via `[settings] data_dir`).
-- State is plain files under the data directory, safe under concurrent runs. Use `GRAPH_STORAGE=memory` for ephemeral runs that should leave nothing behind.
+- graph creates its [data directory](/reference/data-directory) at `~/.local/share/dive/` on first use (configurable via `[settings] data_dir`).
+- State is plain files under the data directory, safe under concurrent runs. Use `DIVE_STORAGE=memory` for ephemeral runs that should leave nothing behind.

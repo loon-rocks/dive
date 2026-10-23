@@ -2,7 +2,7 @@
 //!
 //! Two populations, deliberately named apart:
 //!
-//! - **Authoring tools** (`graph_plan_*`, `graph_tools_*`) are static. They
+//! - **Authoring tools** (`dive_plan_*`, `dive_tools_*`) are static. They
 //!   are the plan-authoring CLI, one tool per verb, so an agent can build and
 //!   check a plan without a shell.
 //! - **Execution tools** (`plan_<identifier>`) are generated from the plan
@@ -50,14 +50,14 @@ fn target_property() -> Value {
 pub fn authoring_tools() -> Vec<Tool> {
     vec![
         tool(
-            "graph_plan_list",
+            "dive_plan_list",
             "List the plans available on this machine, plus any plan files that failed to \
              load (`skipped`) and any hidden because they need an MCP server this machine \
              does not configure (`hidden`). Start here to find out what already exists.",
             json!({"type": "object", "properties": {}}),
         ),
         tool(
-            "graph_plan_show",
+            "dive_plan_show",
             "Read one plan's full definition: its steps, input schema, and finish mode. Use \
              this before editing a plan, and to inspect a plan you want to model a new one on.",
             json!({
@@ -67,7 +67,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_validate",
+            "dive_plan_validate",
             "Check a plan against every layer: structure, template references, and whether \
              its tools resolve on this machine. Returns `problems` (fatal, makes `ok` false) \
              separately from `notes` (portable but not runnable here). This is the verdict — \
@@ -79,11 +79,11 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_new",
+            "dive_plan_new",
             "Scaffold an empty plan file. It is deliberately invalid until it has steps, so \
              `ok` is true while `problems` still lists 'plan has no steps' — the two are \
              different questions. Use this when there are no model credentials, or when you \
-             already know every step; otherwise prefer graph_plan_draft.",
+             already know every step; otherwise prefer dive_plan_draft.",
             json!({
                 "type": "object",
                 "required": ["identifier"],
@@ -95,7 +95,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_draft",
+            "dive_plan_draft",
             "Draft a plan from a goal using the planner model, grounded in this machine's \
              real tool catalog. COSTS INFERENCE and takes ~30s. Every step is validated as \
              it is generated, so a returned draft is always statically valid. \
@@ -114,7 +114,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_set",
+            "dive_plan_set",
             "Set one plan-level attribute. Validated atomically: the write is refused, with \
              the problems it would introduce, rather than leaving the plan broken. Changing \
              `identifier` writes a NEW file and reports the leftover as `renamedFrom`.",
@@ -135,7 +135,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_unset",
+            "dive_plan_unset",
             "Clear one optional plan attribute. `name`, `description`, and `identifier` are \
              required and cannot be cleared.",
             json!({
@@ -151,7 +151,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_step_add",
+            "dive_plan_step_add",
             "Add a step to a plan, appended or anchored before/after an existing step id. \
              Validated atomically — a step referencing something that is not `input` or an \
              earlier step is refused.",
@@ -161,7 +161,7 @@ pub fn authoring_tools() -> Vec<Tool> {
                 "properties": {
                     "target": target_property(),
                     "id": {"type": "string", "description": "Step id — how later steps reference it as {{<id>.field}}."},
-                    "tool": {"type": "string", "description": "A tool name from graph_tools_list, or a control step: exit, agent, ask, route, filter, map, reduce."},
+                    "tool": {"type": "string", "description": "A tool name from dive_tools_list, or a control step: exit, agent, ask, route, filter, map, reduce."},
                     "input": {"type": "object", "description": "The step's input object. Leaf strings may be templates over earlier results, e.g. {{E1.field}} or {{input.x}}."},
                     "reasoning": {"type": "string", "description": "Why this step exists, carried into the plan for readers."},
                     "before": {"type": "string", "description": "Insert before this step id instead of appending."},
@@ -170,8 +170,8 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_step_update",
-            "Change one attribute of one step. To rename a step use graph_plan_step_rename, \
+            "dive_plan_step_update",
+            "Change one attribute of one step. To rename a step use dive_plan_step_rename, \
              which also rewrites every downstream reference.",
             json!({
                 "type": "object",
@@ -185,7 +185,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_step_rename",
+            "dive_plan_step_rename",
             "Rename a step, rewriting every downstream {{id.…}} reference to match.",
             json!({
                 "type": "object",
@@ -198,7 +198,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_plan_step_rm",
+            "dive_plan_step_rm",
             "Remove a step. Refused if a later step still references it.",
             json!({
                 "type": "object",
@@ -207,18 +207,18 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_tools_list",
+            "dive_tools_list",
             "List everything a plan step's `tool` field may name on this machine: invokable \
              tools under their namespaced name (`server__tool`, `user__tool`, \
              `builtin__tool`, `plan__id`), plus the bare control steps under the \
              `(control)` source — exit, ask, agent, route, map, reduce. This is the \
              complete vocabulary; nothing else is a legal step tool, and the control steps \
              are documented here rather than anywhere on disk. Schemas are omitted — use \
-             graph_tools_show for one entry.",
+             dive_tools_show for one entry.",
             json!({"type": "object", "properties": {}}),
         ),
         tool(
-            "graph_tools_show",
+            "dive_tools_show",
             "Show one tool's or control step's description and schemas. `inputSchema` is \
              what a plan step's input object must satisfy — call this before writing any \
              step, including `exit`, `ask`, `agent`, `route`, `map`, and `reduce`, whose \
@@ -230,7 +230,7 @@ pub fn authoring_tools() -> Vec<Tool> {
             }),
         ),
         tool(
-            "graph_tools_test",
+            "dive_tools_test",
             "Invoke one tool directly and return what it produced. Use this to learn a \
              tool's real output shape before writing a template path against it, instead of \
              guessing at field names. A tool that reports failure comes back with \
@@ -356,7 +356,7 @@ steps:
                 name: pack.to_string(),
                 tag: None,
                 layer: dive_config::pack::LayerKind::Project,
-                dir: std::path::PathBuf::from(".graph/packs").join(pack),
+                dir: std::path::PathBuf::from(".dive/packs").join(pack),
             }
         });
         doc
@@ -405,14 +405,14 @@ steps:
             served_plan_identifier("plan_sprint_report"),
             Some("sprint_report")
         );
-        assert_eq!(served_plan_identifier("graph_plan_list"), None);
+        assert_eq!(served_plan_identifier("dive_plan_list"), None);
     }
 
     #[test]
     fn authoring_tools_are_namespaced_away_from_plan_tools() {
         // A plan named `tools_list` would otherwise collide with the verb.
         for tool in authoring_tools() {
-            assert!(tool.name.starts_with("graph_"), "{}", tool.name);
+            assert!(tool.name.starts_with("dive_"), "{}", tool.name);
             assert!(
                 tool.input_schema.contains_key("type"),
                 "{} needs an object schema",

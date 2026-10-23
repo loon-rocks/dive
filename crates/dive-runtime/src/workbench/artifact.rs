@@ -1058,7 +1058,7 @@ pub struct Saved {
 fn destination_label(destination: &str) -> &'static str {
     match destination {
         "override" => " (a project override of the built-in)",
-        "pack" => " (the pack's installed copy; graph pack update replaces it)",
+        "pack" => " (the pack's installed copy; dive pack update replaces it)",
         _ => "",
     }
 }
@@ -1551,7 +1551,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "type": "object",
                 "properties": {
                     "untested": {"type": "boolean", "description": "Save without a passing test, only when the user said not to test it"},
-                    "scope": {"type": "string", "enum": ["project", "everywhere"], "description": "This project's .graph, or the global config for every project; omit for the configured directories"},
+                    "scope": {"type": "string", "enum": ["project", "everywhere"], "description": "This project's .dive, or the global config for every project; omit for the configured directories"},
                     "skip": {"type": "array", "items": {"type": "string"}, "description": "Node names the user chose not to save"}
                 }
             }),

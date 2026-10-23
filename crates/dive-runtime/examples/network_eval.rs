@@ -310,7 +310,7 @@ async fn run_goal(root: PathBuf, goal: Goal, max_turns: usize) -> anyhow::Result
 async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let goals_path =
-        arg(&args, "--goals").unwrap_or_else(|| ".graph/evals/network/goals.yaml".into());
+        arg(&args, "--goals").unwrap_or_else(|| ".dive/evals/network/goals.yaml".into());
     let out = arg(&args, "--out").unwrap_or_else(|| "/tmp/network-eval/results.json".into());
     let only = arg(&args, "--only");
     let workers: usize = arg(&args, "--workers")

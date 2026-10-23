@@ -76,7 +76,7 @@ pub enum RemoveError {
     NotFound { kind: ItemKind, name: String },
     #[error("{kind} '{name}' is built in and has no override to delete")]
     BuiltIn { kind: ItemKind, name: String },
-    #[error("{kind} '{name}' belongs to the pack '{pack}' — remove the whole pack with `graph pack remove {pack}`")]
+    #[error("{kind} '{name}' belongs to the pack '{pack}' — remove the whole pack with `dive pack remove {pack}`")]
     Pack {
         kind: ItemKind,
         name: String,

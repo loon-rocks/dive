@@ -1,0 +1,91 @@
+version: 1
+identifier: changelog_entry
+name: changelog_entry
+description: Generates one release's docs-changelog front matter — a user-facing summary plus, only when consumers must act, a self-contained migration prompt — and persists it as docs/snippets/changelog/graph/<version>/. The prose is the only part of a release that is stored; everything mechanical is derived from the tag on demand. Idempotent by design; an existing snippet directory means the entry was generated (and possibly hand-curated), so the plan exits without touching it. Run by scripts/release.sh at release time.
+input_schema:
+  type: object
+  required: [version]
+  properties:
+    version:
+      type: string
+      description: Release tag, e.g. v0.10.0 — must be known to git-cliff, i.e. tagged or about to be cut
+    formats:
+      type: string
+      default: ""
+      description: 'File versions this release bumps, as "config 1→2, plan 2→3" (scripts/release.sh computes it); empty when none changed'
+steps:
+  - id: E0
+    tool_name: user__snippet_status
+    input:
+      dir: 'graph/{{input.version}}'
+    reasoning: Snippets are generated once and then curated by hand — find out whether this release already has one before spending any inference.
+  - id: E1
+    tool_name: exit
+    input:
+      when:
+        value: '{{E0.exists}}'
+        op: eq
+        to: true
+      status: success
+      message: 'docs/snippets/changelog/graph/{{input.version}} already exists — curated snippets are never regenerated'
+      output:
+        version: '{{input.version}}'
+        regenerated: false
+        migration_needed: false
+        written: []
+    reasoning: The never-regenerate guard. Curated snippets are the source of truth; exiting success (not error) keeps release automation flowing.
+  - id: E2
+    tool_name: user__release_subjects
+    input:
+      version: '{{input.version}}'
+    reasoning: The release's grouped commit subjects, read from the tag via git-cliff's structured context — the evidence the inference works from. Deliberately not scraped out of CHANGELOG.md; that file is one rendering of these same facts, not their source.
+  - id: E3
+    tool_name: builtin__infer
+    input:
+      instruction: |-
+        You write the changelog front matter for one release of graph, a Rust CLI that runs plans — validated, reviewable YAML pipelines of tool calls — with an agent loop, a plan workbench TUI, MCP client/server support, and bundled tool packs. The audience is graph's users: plan authors and CI operators, not graph's own developers.
+
+        RELEASE: {{input.version}}
+
+        COMMIT SUBJECTS FOR THIS RELEASE, as the changelog's entries (the Graph entry, then one Config / Plan / Tool / Store entry per file version this release bumps) and grouped within each entry, Breaking first:
+        {{E2.text}}
+
+        FILE-FORMAT VERSIONS THIS RELEASE BUMPS (empty means none): {{input.formats}}
+        A version bump is a hard signal, not something to infer: when this line is non-empty, `migration_needed` MUST be true, and the migration prompt MUST (1) name each bumped file kind and its new version, (2) tell the agent to run `dive config check` and then the matching rewrite command — `dive config migrate` (and `--global`) for config, `dive plan migrate <name>` for every plan file, `dive tool migrate <path>` for every user tool file — verifying with `dive plan validate` afterwards, (3) tell the agent that any CI workflow pinning a `ghcr.io/loon-rocks/dive:vX.Y.Z` image must move the pin to this release in the same PR as the rewritten files, because an older image refuses a newer format by name, and (4) point the agent at this release's changelog entries for the bumped file kinds ("Config v2" and so on, next to the "Graph" entry in CHANGELOG.md), whose Breaking lines name the schema change, and otherwise trust the migrate commands to apply it. Do not invent the key-level changes yourself; the migrate commands carry them.
+
+        FIRST, DISCARD WHAT DOES NOT SHIP. Some subjects describe graph's own dogfooding — the `dive_review_9000` / `dive_review_core` / `dive_review_thread_audit` review plans, their scouts and review threads, the `docs_drift` gate, the `changelog_entry` / `compose_changelog` release plans, and this repo's GitHub workflows. Those live in graph's repository and reach no user through the release; a reader who installs this version gets none of them. Tells: named review/CI plans or their internals (scouts, findings, verification bars, PR threads), release tooling, or workflow/secret plumbing. Treat every such subject as absent — never a theme, never a heading, and never mentioned in passing. A subject describing a crate change that the review plans merely exercise (a new step type, a pipeline behavior, cost tracking) DOES ship — keep it. If discarding leaves nothing user-facing, say so in one sentence with no headings rather than promoting internal work to fill the space.
+
+        Produce:
+
+        1. `summary` — a concise, prose-based overview organized by theme. Structure: h3 headings (###) naming each theme in user-benefit language (what you can now do — e.g. "Run plans from anywhere"), each followed by one or two plain sentences describing the theme. New capabilities always come first; behavior changes a user could trip on come last. Scale with the release: a large release earns three or four themes, a small one earns one, and a patch that needs no themes is just one or two sentences with no headings at all. Do NOT repeat the commit subjects or their technical phrasing — the grouped commit list renders directly below this summary, so the summary's job is what the changes add up to, in plain language, keeping only the jargon a reader needs to act (a flag, a config key). Do not over-communicate: anything the commit list already conveys adds nothing here. No marketing language, no exclamation marks. The summary renders as MDX: wrap every literal code fragment in backticks, and never emit a bare angle bracket or curly brace outside backticks (they parse as JSX and break the page); headings must be ### (h3) — one level above the #### commit-group headings the page renders below the summary.
+
+        2. `migration_needed` — true ONLY when an existing user artifact requires action to stay correct: a breaking change to the CLI surface, config format, plan/tool document formats, or template dialect; a previously-working pattern whose behavior changed; or a new capability that existing plans should adopt because their current shape is latently broken (crashes or produces wrong results on real inputs). A purely additive feature nobody must adopt is false. If a change alters a capability that was itself INTRODUCED in this same release's commit list, there is nothing pre-existing to migrate — false. Be conservative — a false true wastes every reader's attention, and a human reviews your verdict before it publishes.
+
+        3. `migration_prompt` — the empty string when migration_needed is false. Otherwise a complete, self-contained prompt the user pastes into their coding agent (Claude Code, Cursor, etc.) in the repository that carries their plans. The agent cannot access graph's documentation, so the prompt must carry everything: the exact facts of what changed (field, step, and tool names with their shapes), how to FIND affected plans/tools/workflows (concrete grep patterns), the exact before→after rewrite as YAML snippets, edge cases, and how to verify (`dive plan validate`, and a scratch run where feasible). Never invent file names, config keys, or YAML shapes the commit subjects don't evidence — if the subjects alone don't give you enough certainty to write the exact rewrite, set migration_needed false and let the human releaser author the prompt instead of publishing speculation. Instruct only the migrations this release actually requires, and tell the agent to be conservative and report what it changed and what it deliberately left alone.
+      output_schema:
+        type: object
+        required: [summary, migration_needed, migration_prompt]
+        properties:
+          summary:
+            type: string
+            description: Themed MDX-safe summary — '###' h3 headings naming each theme in user-benefit language, each followed by 1-2 plain sentences; a trivial patch is 1-2 sentences with no headings
+          migration_needed:
+            type: boolean
+            description: true only when existing plans/tools/CI require action
+          migration_prompt:
+            type: string
+            description: Self-contained coding-agent prompt; empty string when migration_needed is false
+    reasoning: One structured inference over the release's grouped commit subjects produces the summary, the migration verdict, and (only when warranted) the migration prompt.
+  - id: E4
+    tool_name: user__write_changelog_snippet
+    input:
+      version: '{{input.version}}'
+      summary: '{{E3.summary}}'
+      migration_needed: '{{E3.migration_needed}}'
+      migration_prompt: '{{E3.migration_prompt}}'
+    reasoning: Persist the front matter as the committed snippet the compose_changelog plan reads. From here on the files are curated by hand — review before pushing.
+output:
+  version: '{{input.version}}'
+  regenerated: true
+  migration_needed: '{{E3.migration_needed}}'
+  written: '{{E4.written}}'

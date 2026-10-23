@@ -481,7 +481,7 @@ impl Pipeline {
         };
         if !unset.is_empty() {
             report["needs_env"] = json!(unset);
-            report["note"] = json!("these environment variables have to be set where graph starts before the tool works outside this test; their values were never passed to you");
+            report["note"] = json!("these environment variables have to be set where Dive starts before the tool works outside this test; their values were never passed to you");
         }
         if !outcome.is_error {
             let shape = crate::shapes::infer_schema(&outcome.result);

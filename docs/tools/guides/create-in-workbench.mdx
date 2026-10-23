@@ -8,7 +8,7 @@ keywords: ["tool drafter", "network_drafter", "workbench", "create tool"]
 
 <RequestExample>
 
-```yaml .graph/tools/merged_prs.yaml
+```yaml .dive/tools/merged_prs.yaml
 name: merged_prs
 description: Pull requests merged into this repository since a date, as number, title and merge time.
 kind: exec
@@ -37,7 +37,7 @@ input_schema:
 <Steps>
   <Step title="Open the workbench in tool mode">
     ```bash
-    graph workbench tool
+    dive workbench tool
     ```
   </Step>
   <Step title="Describe the tool">
@@ -77,10 +77,10 @@ input_schema:
         description: "HubSpot private app token with `crm.objects.contacts.read`. Create one under [Settings › Private apps](https://app.hubspot.com/private-apps)."
     ```
 
-    A test never runs while one of these is unset. The architect lists what's missing, with each description, and waits. Store each value with `graph secret set NAME` (add `--project` to keep it to this project), say they're set, and it runs the test again. Say you'd rather skip testing and it offers to save the tool untested.
+    A test never runs while one of these is unset. The architect lists what's missing, with each description, and waits. Store each value with `dive secret set NAME` (add `--project` to keep it to this project), say they're set, and it runs the test again. Say you'd rather skip testing and it offers to save the tool untested.
   </Step>
   <Step title="Save">
-    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes the file to `./.graph/tools/merged_prs.yaml`, and the tool is in your catalog as `user__merged_prs`.
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes the file to `./.dive/tools/merged_prs.yaml`, and the tool is in your catalog as `user__merged_prs`.
   </Step>
 </Steps>
 

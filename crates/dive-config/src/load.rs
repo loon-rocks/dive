@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-/// Where a config layer came from, for `graph config path`.
+/// Where a config layer came from, for `dive config path`.
 #[derive(Debug, Clone)]
 pub struct LoadedConfig {
     pub config: Config,
@@ -18,18 +18,17 @@ pub struct LoadedConfig {
     pub pack_layers: Vec<PackLayer>,
 }
 
-/// `~/.config/graph/config.toml` on every platform — CLI convention rather
+/// `~/.config/dive/config.toml` on every platform — CLI convention rather
 /// than the OS-native config dir (`~/Library/Application Support` on macOS).
 pub fn global_config_path() -> PathBuf {
-    dirs::home_dir()
+    let config = dirs::home_dir()
         .map(|home| home.join(".config"))
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("graph")
-        .join("config.toml")
+        .unwrap_or_else(|| PathBuf::from("~/.config"));
+    crate::legacy::resolve(&config.join("dive")).join("config.toml")
 }
 
 pub fn project_config_path() -> PathBuf {
-    PathBuf::from("./.graph/config.toml")
+    crate::legacy::project_dir(Path::new(".")).join("config.toml")
 }
 
 /// Load and merge the global and project config files.
@@ -42,7 +41,7 @@ pub fn project_config_path() -> PathBuf {
 /// the entry's `missing_env` records the variable, and the error surfaces —
 /// naming the variable — when that provider or server is actually used. This
 /// keeps everything that never touches the entry (plan authoring, listing,
-/// serving) working without the secret, and it is why `graph mcp serve` can
+/// serving) working without the secret, and it is why `dive mcp serve` can
 /// start and *explain* a missing key instead of dying before the handshake.
 /// Anywhere else a missing variable still fails the load loudly — a path or
 /// prompt carrying literal `${VAR}` text would be silently wrong everywhere.
@@ -106,6 +105,7 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
         .try_into()
         .context("config does not match the expected schema")?;
     distribute_missing_env(&mut config, missing)?;
+    settle_legacy_paths(&mut config);
     for layer in &pack_layers {
         config.packs.extend(layer.packs.clone());
     }
@@ -132,6 +132,13 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
         layers,
         pack_layers,
     })
+}
+
+fn settle_legacy_paths(config: &mut Config) {
+    config.settings.data_dir = crate::legacy::resolve(&config.settings.data_dir);
+    for path in config.plans.paths.iter_mut().chain(config.tools.paths.iter_mut()) {
+        *path = crate::legacy::resolve(path);
+    }
 }
 
 fn project_id_of(merged: &toml::Table) -> Result<Option<String>> {
@@ -370,7 +377,7 @@ fn distribute_missing_env(config: &mut Config, missing: Vec<(String, String)>) -
                 var,
             }),
             None => {
-                anyhow::bail!("environment variable {var} referenced in config ({path}) is not set; set it, or store it with `graph secret set {var}`")
+                anyhow::bail!("environment variable {var} referenced in config ({path}) is not set; set it, or store it with `dive secret set {var}`")
             }
         }
     }
@@ -429,16 +436,16 @@ mod tests {
             r#"
             [providers.anthropic]
             type = "anthropic"
-            api_key = "${GRAPH_TEST_STORED_KEY_ONLY}"
+            api_key = "${DIVE_TEST_STORED_KEY_ONLY}"
 
             [mcp.linear]
             url = "https://mcp.linear.app/mcp"
-            headers = { Authorization = "Bearer ${GRAPH_TEST_STORED_TOKEN_ONLY}" }
+            headers = { Authorization = "Bearer ${DIVE_TEST_STORED_TOKEN_ONLY}" }
             "#,
         );
         let stored = Stored(vec![
-            ("GRAPH_TEST_STORED_KEY_ONLY", "sk-from-store"),
-            ("GRAPH_TEST_STORED_TOKEN_ONLY", "lin-from-store"),
+            ("DIVE_TEST_STORED_KEY_ONLY", "sk-from-store"),
+            ("DIVE_TEST_STORED_TOKEN_ONLY", "lin-from-store"),
         ]);
         let loaded = super::load_from(&[path], &stored).unwrap();
         let provider = &loaded.config.providers["anthropic"];
@@ -461,16 +468,16 @@ mod tests {
             r#"
             [providers.openai]
             type = "openai"
-            api_key = "${GRAPH_TEST_IN_NO_SOURCE}"
+            api_key = "${DIVE_TEST_IN_NO_SOURCE}"
             "#,
         );
-        let stored = Stored(vec![("GRAPH_TEST_SOMETHING_ELSE", "x")]);
+        let stored = Stored(vec![("DIVE_TEST_SOMETHING_ELSE", "x")]);
         let loaded = super::load_from(&[path], &stored).unwrap();
         assert_eq!(
             loaded.config.providers["openai"].missing_env,
             vec![crate::model::MissingEnv {
                 field: "api_key".into(),
-                var: "GRAPH_TEST_IN_NO_SOURCE".into(),
+                var: "DIVE_TEST_IN_NO_SOURCE".into(),
             }]
         );
     }
@@ -689,7 +696,7 @@ model = "nano-model"
         assert_eq!(
             loaded.layers[0].notes,
             vec![
-                "dropped models.embedder.dimensions: graph no longer reads it",
+                "dropped models.embedder.dimensions: Dive no longer reads it",
                 "models.embedder is no longer a standard role: it stays as a custom role that nothing consults"
             ]
         );
@@ -799,14 +806,14 @@ fallbacks = [
     #[test]
     fn expands_env_vars_when_set() {
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("GRAPH_TEST_KEY", "sk-123");
+        std::env::set_var("DIVE_TEST_KEY", "sk-123");
         let path = write(
             dir.path(),
             "config.toml",
             r#"
             [providers.anthropic]
             type = "anthropic"
-            api_key = "${GRAPH_TEST_KEY}"
+            api_key = "${DIVE_TEST_KEY}"
             "#,
         );
         let loaded = load_from(std::slice::from_ref(&path)).unwrap();
@@ -819,7 +826,7 @@ fallbacks = [
     #[test]
     fn a_missing_var_in_a_provider_defers_instead_of_failing_the_load() {
         // The whole config must stay loadable: plan authoring, listing, and
-        // `graph mcp serve` all work without the secret. The provider itself
+        // `dive mcp serve` all work without the secret. The provider itself
         // carries the record and errors when a model resolves to it.
         let dir = tempfile::tempdir().unwrap();
         let path = write(
@@ -828,7 +835,7 @@ fallbacks = [
             r#"
             [providers.openai]
             type = "openai"
-            api_key = "${GRAPH_TEST_KEY_DOES_NOT_EXIST}"
+            api_key = "${DIVE_TEST_KEY_DOES_NOT_EXIST}"
             "#,
         );
         let loaded = load_from(&[path]).unwrap();
@@ -837,13 +844,13 @@ fallbacks = [
         // and obviously wrong if it ever leaks past the missing_env check.
         assert_eq!(
             provider.api_key.as_deref(),
-            Some("${GRAPH_TEST_KEY_DOES_NOT_EXIST}")
+            Some("${DIVE_TEST_KEY_DOES_NOT_EXIST}")
         );
         assert_eq!(
             provider.missing_env,
             vec![crate::model::MissingEnv {
                 field: "api_key".into(),
-                var: "GRAPH_TEST_KEY_DOES_NOT_EXIST".into(),
+                var: "DIVE_TEST_KEY_DOES_NOT_EXIST".into(),
             }]
         );
     }
@@ -857,7 +864,7 @@ fallbacks = [
             r#"
             [mcp.linear]
             url = "https://mcp.linear.app/mcp"
-            headers = { Authorization = "Bearer ${GRAPH_TEST_TOKEN_DOES_NOT_EXIST}" }
+            headers = { Authorization = "Bearer ${DIVE_TEST_TOKEN_DOES_NOT_EXIST}" }
             "#,
         );
         let loaded = load_from(&[path]).unwrap();
@@ -866,15 +873,15 @@ fallbacks = [
             server.missing_env,
             vec![crate::model::MissingEnv {
                 field: "headers.Authorization".into(),
-                var: "GRAPH_TEST_TOKEN_DOES_NOT_EXIST".into(),
+                var: "DIVE_TEST_TOKEN_DOES_NOT_EXIST".into(),
             }]
         );
         // The describe helper is what the manager's refusal quotes.
         assert_eq!(
             crate::model::describe_missing_env("mcp.linear", &server.missing_env),
-            "environment variable GRAPH_TEST_TOKEN_DOES_NOT_EXIST \
+            "environment variable DIVE_TEST_TOKEN_DOES_NOT_EXIST \
              (mcp.linear.headers.Authorization) is not set; set it, or store it with \
-             `graph secret set GRAPH_TEST_TOKEN_DOES_NOT_EXIST`"
+             `dive secret set DIVE_TEST_TOKEN_DOES_NOT_EXIST`"
         );
     }
 
@@ -889,13 +896,13 @@ fallbacks = [
             "config.toml",
             r#"
             [settings]
-            data_dir = "${GRAPH_TEST_DIR_DOES_NOT_EXIST}"
+            data_dir = "${DIVE_TEST_DIR_DOES_NOT_EXIST}"
             "#,
         );
         let err = load_from(&[path]).unwrap_err();
         let rendered = format!("{err:#}");
         assert!(
-            rendered.contains("GRAPH_TEST_DIR_DOES_NOT_EXIST")
+            rendered.contains("DIVE_TEST_DIR_DOES_NOT_EXIST")
                 && rendered.contains("settings.data_dir"),
             "{rendered}"
         );
@@ -988,7 +995,7 @@ fallbacks = [
         assert!(empty.endpoint.is_none());
         assert!(empty.signal_url("v1/traces").is_none());
         assert_eq!(empty.protocol, TelemetryProtocol::HttpProtobuf);
-        assert_eq!(empty.service_name(), "graph");
+        assert_eq!(empty.service_name(), "dive");
         assert_eq!(empty.timeout_secs(), 30);
         assert!(empty.capture_content);
         assert!(!empty.logs);
@@ -1002,7 +1009,7 @@ fallbacks = [
             endpoint = "http://localhost:4318/"
             protocol = "http/json"
             timeout_secs = 3
-            service_name = "graph-dev"
+            service_name = "dive-dev"
             capture_content = false
             logs = true
             headers = { "x-langfuse-ingestion-version" = "4" }
@@ -1016,7 +1023,7 @@ fallbacks = [
         );
         assert_eq!(telemetry.protocol, TelemetryProtocol::HttpJson);
         assert_eq!(telemetry.timeout_secs(), 3);
-        assert_eq!(telemetry.service_name(), "graph-dev");
+        assert_eq!(telemetry.service_name(), "dive-dev");
         assert!(!telemetry.capture_content && telemetry.logs);
         assert_eq!(telemetry.headers["x-langfuse-ingestion-version"], "4");
         assert_eq!(telemetry.resource["deployment.environment"], "dev");
@@ -1082,7 +1089,7 @@ fallbacks = [
             r#"
             [telemetry]
             endpoint = "http://localhost:4318"
-            headers = { Authorization = "Basic ${GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST}" }
+            headers = { Authorization = "Basic ${DIVE_TEST_LANGFUSE_DOES_NOT_EXIST}" }
             "#,
         );
         let loaded = load_from(&[path]).unwrap();
@@ -1091,14 +1098,14 @@ fallbacks = [
             telemetry.missing_env,
             vec![crate::model::MissingEnv {
                 field: "headers.Authorization".into(),
-                var: "GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST".into(),
+                var: "DIVE_TEST_LANGFUSE_DOES_NOT_EXIST".into(),
             }]
         );
         assert_eq!(
             crate::model::describe_missing_env("telemetry", &telemetry.missing_env),
-            "environment variable GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST \
+            "environment variable DIVE_TEST_LANGFUSE_DOES_NOT_EXIST \
              (telemetry.headers.Authorization) is not set; set it, or store it with \
-             `graph secret set GRAPH_TEST_LANGFUSE_DOES_NOT_EXIST`"
+             `dive secret set DIVE_TEST_LANGFUSE_DOES_NOT_EXIST`"
         );
     }
 
@@ -1111,7 +1118,7 @@ fallbacks = [
             "config.toml",
             r#"
 [packs.example]
-git = "github.com/acme/graph-pack-example"
+git = "github.com/acme/dive-pack-example"
 ref = "v1"
 include = ["plan__*"]
 
@@ -1124,7 +1131,7 @@ git = "github.com/acme/graph-pack-shared"
             "config.toml",
             r#"
 [packs.example]
-git = "github.com/fork/graph-pack-example"
+git = "github.com/fork/dive-pack-example"
 "#,
         );
         let loaded = load_from(&[global, project]).unwrap();
@@ -1141,7 +1148,7 @@ git = "github.com/fork/graph-pack-example"
             ["example"]
         );
         let example = &loaded.config.packs["example"];
-        assert_eq!(example.git, "github.com/fork/graph-pack-example");
+        assert_eq!(example.git, "github.com/fork/dive-pack-example");
         assert_eq!(example.reference, None);
         assert!(example.include.is_empty());
         assert_eq!(

@@ -1,22 +1,22 @@
 ---
-title: "graph workbench"
-sidebarTitle: "graph workbench"
+title: "dive workbench"
+sidebarTitle: "dive workbench"
 description: "Interactive workbench: a dual-pane TUI for building plans, agents and tools"
 playground: "none"
-keywords: ["graph workbench"]
+keywords: ["dive workbench"]
 ---
 
 Opens the full-screen workbench. With no subcommand it starts at the front desk, which asks what you want to build. Needs an interactive terminal on stdin and stdout.
 
-The workbench logs to `<data_dir>/workbench.log` instead of stderr. Set `[workbench].log_path` or `GRAPH_WORKBENCH_LOG` to change the path.
+The workbench logs to `<data_dir>/workbench.log` instead of stderr. Set `[workbench].log_path` or `DIVE_WORKBENCH_LOG` to change the path.
 
-Alias: `graph wb`.
+Alias: `dive wb`.
 
 ## Available commands
 
-- [`graph workbench plan`](/reference/cli/workbench/plan): Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation
-- [`graph workbench agent`](/reference/cli/workbench/agent): Open the workbench in agent mode: draft a new agent, or edit an existing one
-- [`graph workbench tool`](/reference/cli/workbench/tool): Open the workbench in tool mode: draft a new user tool, or edit an existing one
+- [`dive workbench plan`](/reference/cli/workbench/plan): Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation
+- [`dive workbench agent`](/reference/cli/workbench/agent): Open the workbench in agent mode: draft a new agent, or edit an existing one
+- [`dive workbench tool`](/reference/cli/workbench/tool): Open the workbench in tool mode: draft a new user tool, or edit an existing one
 
 ## Global options
 
@@ -27,11 +27,11 @@ Alias: `graph wb`.
 <RequestExample>
 
 ```bash Usage
-graph workbench [OPTIONS] [COMMAND]
+dive workbench [OPTIONS] [COMMAND]
 ```
 
 ```bash Example
-graph wb
+dive wb
 ```
 
 </RequestExample>

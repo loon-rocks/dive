@@ -155,8 +155,8 @@ fn commit(dir: &Path, message: &str) {
     git(dir, &["commit", "-q", "-m", message]);
 }
 
-fn graph(scratch: &Scratch, args: &[&str]) -> Run {
-    scratch.graph_env(args, &git_env())
+fn dive(scratch: &Scratch, args: &[&str]) -> Run {
+    scratch.dive_env(args, &git_env())
 }
 
 fn problems(run: &Run) -> Vec<String> {
@@ -179,7 +179,7 @@ fn has(problems: &[String], needle: &str) {
 #[test]
 fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() {
     let scratch = Scratch::new();
-    graph(&scratch, &["pack", "new", "demo", "repo"]).code_is(0);
+    dive(&scratch, &["pack", "new", "demo", "repo"]).code_is(0);
     for file in [
         "pack.toml",
         "tools/word_count.yaml",
@@ -198,17 +198,17 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
     assert!(!scratch.exists("repo/demo/.gitignore"));
     let manifest = scratch.read("repo/demo/pack.toml");
     assert!(manifest.contains("name = \"demo\""), "{manifest}");
-    assert!(manifest.contains("graph = \">="), "{manifest}");
+    assert!(manifest.contains("dive = \">="), "{manifest}");
     let workflow = scratch.read("repo/.github/workflows/packs.yaml");
-    assert!(workflow.contains("run: graph pack test\n"), "{workflow}");
+    assert!(workflow.contains("run: dive pack test\n"), "{workflow}");
     assert!(
         workflow.contains(&format!(
-            "ghcr.io/tylerdavis/graph:v{}",
+            "ghcr.io/loon-rocks/dive:v{}",
             env!("CARGO_PKG_VERSION")
         )),
         "{workflow}"
     );
-    assert!(scratch.read("repo/.gitignore").contains(".graph/"));
+    assert!(scratch.read("repo/.gitignore").contains(".dive/"));
     let readme = scratch.read("repo/demo/README.md");
     assert!(readme.contains("--path demo"), "{readme}");
     assert!(readme.contains("patch> demo`"), "{readme}");
@@ -219,11 +219,11 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
         "mine\n",
     )
     .unwrap();
-    graph(&scratch, &["pack", "new", "other", "repo"]).code_is(0);
+    dive(&scratch, &["pack", "new", "other", "repo"]).code_is(0);
     assert!(scratch.exists("repo/other/pack.toml"));
     assert_eq!(scratch.read("repo/.github/workflows/packs.yaml"), "mine\n");
 
-    let run = graph(&scratch, &["pack", "check", "repo", "--json"]);
+    let run = dive(&scratch, &["pack", "check", "repo", "--json"]);
     run.code_is(0);
     let packs = run.json()["packs"].as_array().unwrap().clone();
     let names: Vec<&str> = packs
@@ -231,14 +231,14 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
         .map(|pack| pack["name"].as_str().unwrap())
         .collect();
     assert_eq!(names, ["demo", "other"]);
-    graph(&scratch, &["pack", "test", "repo"]).code_is(0);
+    dive(&scratch, &["pack", "test", "repo"]).code_is(0);
 
     write(
         &scratch.path().join("repo"),
         "other/plans/broken.yaml",
         "version: 2\n",
     );
-    let run = graph(&scratch, &["pack", "test", "repo", "--json"]);
+    let run = dive(&scratch, &["pack", "test", "repo", "--json"]);
     run.code_is(1);
     assert!(
         run.json()["error"]
@@ -251,13 +251,13 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
     has(&problems(&run), "other: ");
     std::fs::remove_file(scratch.path().join("repo/other/plans/broken.yaml")).unwrap();
 
-    graph(&scratch, &["pack", "check", "repo/.github"])
+    dive(&scratch, &["pack", "check", "repo/.github"])
         .code_is(1)
         .stderr_contains("none of its subdirectories has one");
 
-    graph(&scratch, &["pack", "check", "repo/demo"]).code_is(0);
-    graph(&scratch, &["pack", "test", "repo/demo"]).code_is(0);
-    let run = graph(
+    dive(&scratch, &["pack", "check", "repo/demo"]).code_is(0);
+    dive(&scratch, &["pack", "test", "repo/demo"]).code_is(0);
+    let run = dive(
         &scratch,
         &[
             "pack",
@@ -273,10 +273,10 @@ fn a_new_scaffold_passes_check_and_test_and_new_refuses_a_non_empty_directory() 
     let output: Value = serde_json::from_str(&run.stdout).unwrap();
     assert!(output["words"].as_i64().unwrap() > 10, "{output}");
 
-    graph(&scratch, &["pack", "new", "other", "repo"])
+    dive(&scratch, &["pack", "new", "other", "repo"])
         .code_is(1)
         .stderr_contains("is not empty");
-    graph(&scratch, &["pack", "new", "Bad__Name", "fresh"])
+    dive(&scratch, &["pack", "new", "Bad__Name", "fresh"])
         .code_is(1)
         .stderr_contains("pack name");
 }
@@ -288,7 +288,7 @@ fn check_reports_every_problem_class_at_once() {
     write(
         &pack,
         "pack.toml",
-        &format!("{MANIFEST}binaries = [\"graph-pack-no-such-binary\"]\n"),
+        &format!("{MANIFEST}binaries = [\"dive-pack-no-such-binary\"]\n"),
     );
     write(&pack, "tools/echo.yaml", ECHO_TOOL);
     let long = "a".repeat(50);
@@ -331,7 +331,7 @@ fn check_reports_every_problem_class_at_once() {
         &rewrite_tool("file_stats"),
     );
 
-    let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "check", "pack", "--json"]);
     run.code_is(1);
     let found = problems(&run);
     has(
@@ -349,7 +349,7 @@ fn check_reports_every_problem_class_at_once() {
         &found,
         "migration plan 'upgrade' must take exactly the inputs {root, apply}, got {root}",
     );
-    has(&found, "graph-pack-no-such-binary not found on PATH");
+    has(&found, "dive-pack-no-such-binary not found on PATH");
     has(&found, "plans/mismatch.yaml");
     has(
         &found,
@@ -368,10 +368,10 @@ fn check_refuses_unmet_graph_and_os_requirements_instead_of_stopping() {
         "plans/unresolved.yaml",
         &GREET_PLAN.replace("$pack__tool__echo", "$pack__tool__missing"),
     );
-    let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "check", "pack", "--json"]);
     run.code_is(1);
     let found = problems(&run);
-    has(&found, "requires.graph: needs graph >=99");
+    has(&found, "requires.dive: needs Dive >=99");
     has(&found, "unknown tool 'example__tool__missing'");
 }
 
@@ -386,13 +386,13 @@ fn check_requires_the_manifest_to_name_the_systems_the_pack_runs_on() {
 
     for manifest in [bare.clone(), format!("{bare}os = []\n")] {
         write(&pack, "pack.toml", &manifest);
-        let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+        let run = dive(&scratch, &["pack", "check", "pack", "--json"]);
         run.code_is(1);
         assert_eq!(problems(&run), vec![missing.to_string()]);
     }
 
     write(&pack, "pack.toml", &format!("{bare}os = [\"plan9\"]\n"));
-    let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "check", "pack", "--json"]);
     run.code_is(1);
     has(
         &problems(&run),
@@ -400,11 +400,11 @@ fn check_requires_the_manifest_to_name_the_systems_the_pack_runs_on() {
     );
 
     write(&pack, "pack.toml", MANIFEST);
-    graph(&scratch, &["pack", "check", "pack", "--json"]).code_is(0);
-    graph(&scratch, &["pack", "test", "pack"]).code_is(0);
+    dive(&scratch, &["pack", "check", "pack", "--json"]).code_is(0);
+    dive(&scratch, &["pack", "test", "pack"]).code_is(0);
 
     write(&pack, "pack.toml", &bare);
-    graph(&scratch, &["pack", "test", "pack"]).code_is(1);
+    dive(&scratch, &["pack", "test", "pack"]).code_is(1);
 }
 
 #[test]
@@ -425,7 +425,7 @@ fn check_leaves_calls_to_an_unconfigured_required_mcp_server_unchecked_and_check
             .replace("$pack__tool__echo", "everything__echo")
             .replace("name: \"{{input.name}}\"", "message: \"{{input.name}}\""),
     );
-    let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "check", "pack", "--json"]);
     run.code_is(0);
     let notes = run.json()["notes"].to_string();
     assert!(
@@ -435,8 +435,8 @@ fn check_leaves_calls_to_an_unconfigured_required_mcp_server_unchecked_and_check
         "{notes}"
     );
 
-    scratch.write_config("[mcp.everything]\ncommand = \"graph-pack-no-such-server\"\n");
-    let run = graph(&scratch, &["pack", "check", "pack", "--json"]);
+    scratch.write_config("[mcp.everything]\ncommand = \"dive-pack-no-such-server\"\n");
+    let run = dive(&scratch, &["pack", "check", "pack", "--json"]);
     run.code_is(1);
     has(
         &problems(&run),
@@ -466,7 +466,7 @@ fn run_runs_a_private_migration_tool_and_a_migration_plan_under_the_manifest_nam
     write(&root, "plans/report.yaml", SAMPLE_PLAN);
     let root_text = root.display().to_string();
 
-    let run = graph(
+    let run = dive(
         &scratch,
         &[
             "pack",
@@ -486,7 +486,7 @@ fn run_runs_a_private_migration_tool_and_a_migration_plan_under_the_manifest_nam
         .contains("example__tool__file_info"));
 
     write(&root, "plans/report.yaml", SAMPLE_PLAN);
-    let run = graph(
+    let run = dive(
         &scratch,
         &[
             "pack",
@@ -506,7 +506,7 @@ fn run_runs_a_private_migration_tool_and_a_migration_plan_under_the_manifest_nam
         .read("users/plans/report.yaml")
         .contains("example__tool__file_info"));
 
-    graph(&scratch, &["pack", "run", "tool__nope", "--path", "pack"])
+    dive(&scratch, &["pack", "run", "tool__nope", "--path", "pack"])
         .code_is(1)
         .stderr_contains("pack 'example' has no item 'tool__nope'");
 }
@@ -516,7 +516,7 @@ name: bundled
 description: Reads a file shipped in the pack
 kind: exec
 command: sh
-args: ["-c", 'cat "$GRAPH_PACK_DIR/data/answer.json"']
+args: ["-c", 'cat "$DIVE_PACK_DIR/data/answer.json"']
 "#;
 
 #[test]
@@ -527,7 +527,7 @@ fn run_gives_a_pack_exec_tool_its_pack_directory() {
     write(&pack, "tools/bundled.yaml", BUNDLED_TOOL);
     write(&pack, "data/answer.json", r#"{"answer": 42}"#);
 
-    let run = graph(
+    let run = dive(
         &scratch,
         &["pack", "run", "tool__bundled", "--path", "pack", "--json"],
     );
@@ -540,7 +540,7 @@ fn test_runs_each_migration_over_its_samples_and_catches_one_that_leaves_a_v1_na
     let scratch = Scratch::new();
     let good = scratch.path().join("good");
     migrating_pack(&good, "file_stats");
-    let run = graph(&scratch, &["pack", "test", "good", "--json"]);
+    let run = dive(&scratch, &["pack", "test", "good", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["cases"][0]["ran"][0], "migrate_v2");
     assert!(scratch
@@ -549,7 +549,7 @@ fn test_runs_each_migration_over_its_samples_and_catches_one_that_leaves_a_v1_na
 
     let bad = scratch.path().join("bad");
     migrating_pack(&bad, "no_such_tool");
-    let run = graph(&scratch, &["pack", "test", "bad", "--json"]);
+    let run = dive(&scratch, &["pack", "test", "bad", "--json"]);
     run.code_is(1);
     let found = problems(&run);
     has(
@@ -565,7 +565,7 @@ fn test_runs_each_migration_over_its_samples_and_catches_one_that_leaves_a_v1_na
         "tests/migrations/v3/plans/report.yaml",
         SAMPLE_PLAN,
     );
-    let found = problems(&graph(&scratch, &["pack", "test", "orphan", "--json"]));
+    let found = problems(&dive(&scratch, &["pack", "test", "orphan", "--json"]));
     has(
         &found,
         "tests/migrations/v3: there is no plans/migrations/migrate_v3.yaml",
@@ -588,12 +588,12 @@ fn release_gates_the_bump_on_the_interface_and_tags_without_pushing() {
     let pack = released_pack(&scratch);
 
     write(&pack, "notes.txt", "uncommitted");
-    graph(&scratch, &["pack", "release", "major", "pack"])
+    dive(&scratch, &["pack", "release", "major", "pack"])
         .code_is(1)
         .stderr_contains("uncommitted changes");
     std::fs::remove_file(pack.join("notes.txt")).unwrap();
 
-    let run = graph(&scratch, &["pack", "release", "major", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "major", "pack", "--json"]);
     run.code_is(0);
     let body = run.json();
     assert_eq!(body["tag"], "v1.0.0");
@@ -603,11 +603,11 @@ fn release_gates_the_bump_on_the_interface_and_tags_without_pushing() {
 
     std::fs::remove_file(pack.join("plans/greet.yaml")).unwrap();
     commit(&pack, "drop greet");
-    let run = graph(&scratch, &["pack", "release", "minor", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "minor", "pack", "--json"]);
     run.code_is(1);
     has(&problems(&run), "plan__greet removed or renamed (major)");
 
-    graph(&scratch, &["pack", "release", "major", "pack"])
+    dive(&scratch, &["pack", "release", "major", "pack"])
         .code_is(1)
         .stderr_contains("needs plans/migrations/migrate_v2.yaml or a `## v1 to v2` section");
 
@@ -617,16 +617,16 @@ fn release_gates_the_bump_on_the_interface_and_tags_without_pushing() {
         "# Migrating\n\n## v1 to v2\n\n- `plan__greet` is gone.\n",
     );
     commit(&pack, "migrating");
-    let run = graph(&scratch, &["pack", "release", "major", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "major", "pack", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["tag"], "v2.0.0");
 
     write(&pack, "plans/greet.yaml", GREET_PLAN);
     commit(&pack, "greet again");
-    let run = graph(&scratch, &["pack", "release", "patch", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "patch", "pack", "--json"]);
     run.code_is(1);
     has(&problems(&run), "plan__greet added (minor)");
-    let run = graph(&scratch, &["pack", "release", "minor", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "minor", "pack", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["tag"], "v2.1.0");
     assert_eq!(git(&pack, &["cat-file", "-t", "v2.1.0"]), "tag");
@@ -655,12 +655,12 @@ fn release_in_a_packs_repository_works_within_the_packs_own_directory_and_tags()
     git(&repo, &["tag", "b/v2.0.0"]);
     git(&repo, &["tag", "v9.0.0"]);
 
-    graph(&scratch, &["pack", "release", "patch", "repo"])
+    dive(&scratch, &["pack", "release", "patch", "repo"])
         .code_is(1)
         .stderr_contains("has no pack.toml");
 
     write(&repo, "b/notes.txt", "uncommitted");
-    let run = graph(&scratch, &["pack", "release", "patch", "repo/a", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "patch", "repo/a", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["tag"], "a/v1.1.1");
     assert_eq!(run.json()["previous"], "a/v1.1.0");
@@ -673,10 +673,10 @@ fn release_in_a_packs_repository_works_within_the_packs_own_directory_and_tags()
     );
     git(&repo, &["add", "a"]);
     git(&repo, &["commit", "-q", "-m", "hello"]);
-    let run = graph(&scratch, &["pack", "release", "patch", "repo/a", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "patch", "repo/a", "--json"]);
     run.code_is(1);
     has(&problems(&run), "plan__hello added (minor)");
-    let run = graph(&scratch, &["pack", "release", "minor", "repo/a", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "minor", "repo/a", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["tag"], "a/v1.2.0");
     assert_eq!(run.json()["previous"], "a/v1.1.1");
@@ -691,12 +691,12 @@ fn release_in_a_packs_repository_works_within_the_packs_own_directory_and_tags()
     );
 
     write(&repo, "a/notes.txt", "uncommitted");
-    graph(&scratch, &["pack", "release", "patch", "repo/a"])
+    dive(&scratch, &["pack", "release", "patch", "repo/a"])
         .code_is(1)
         .stderr_contains("uncommitted changes");
     std::fs::remove_file(repo.join("a/notes.txt")).unwrap();
 
-    let run = graph(&scratch, &["pack", "release", "major", "repo/b", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "major", "repo/b", "--json"]);
     run.code_is(1);
     assert!(
         run.json()["error"]
@@ -712,10 +712,10 @@ fn release_in_a_packs_repository_works_within_the_packs_own_directory_and_tags()
 fn a_first_minor_or_patch_release_starts_below_one() {
     let scratch = Scratch::new();
     released_pack(&scratch);
-    let run = graph(&scratch, &["pack", "release", "patch", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "patch", "pack", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["tag"], "v0.0.1");
-    let run = graph(&scratch, &["pack", "release", "minor", "pack", "--json"]);
+    let run = dive(&scratch, &["pack", "release", "minor", "pack", "--json"]);
     run.code_is(0);
     assert_eq!(run.json()["tag"], "v0.1.0");
 }

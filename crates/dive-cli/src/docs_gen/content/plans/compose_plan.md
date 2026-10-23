@@ -32,4 +32,4 @@ fields:
 4. Asks you about values it had to guess.
 5. Validates the plan and fixes failing steps, up to three rounds.
 
-`graph plan draft`, the workbench and MCP's `graph_plan_draft` all run this plan.
+`dive plan draft`, the workbench and MCP's `dive_plan_draft` all run this plan.

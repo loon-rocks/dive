@@ -9,7 +9,7 @@ pub const CONFIG_FORMAT_OLDEST: u32 = 1;
 pub const FORMAT_KEY: &str = "version";
 
 pub const FORMATS_DOC: &str =
-    "https://github.com/tylerdavis/graph/blob/main/docs/reference/file-versions.mdx";
+    "https://github.com/loon-rocks/dive/blob/main/docs/reference/file-versions.mdx";
 
 pub type Migration = fn(&mut DocumentMut) -> Result<Vec<String>, String>;
 
@@ -51,7 +51,7 @@ fn named_models_become_roles(doc: &mut DocumentMut) -> Result<Vec<String>, Strin
         };
         if dropped {
             notes.push(format!(
-                "dropped models.{}.dimensions: graph no longer reads it",
+                "dropped models.{}.dimensions: Dive no longer reads it",
                 name.get()
             ));
         }
@@ -99,7 +99,7 @@ fn config_version_4_additions(doc: &mut DocumentMut) -> Result<Vec<String>, Stri
         }
         if !MOVED_PACKS.contains(&name.as_str()) {
             notes.push(format!(
-                "dropped \"{name}\" from [tools].packs: graph never shipped a pack by that name"
+                "dropped \"{name}\" from [tools].packs: Dive never shipped a pack by that name"
             ));
             continue;
         }
@@ -109,7 +109,7 @@ fn config_version_4_additions(doc: &mut DocumentMut) -> Result<Vec<String>, Stri
             .is_some_and(|mcp| mcp.contains_key(&name))
         {
             notes.push(format!(
-                "dropped \"{name}\" from [tools].packs: [mcp.{name}] already owns {name}__ tool names; install the pack under another name with `graph pack add {name} --as <name>`"
+                "dropped \"{name}\" from [tools].packs: [mcp.{name}] already owns {name}__ tool names; install the pack under another name with `dive pack add {name} --as <name>`"
             ));
             continue;
         }
@@ -131,7 +131,7 @@ fn config_version_4_additions(doc: &mut DocumentMut) -> Result<Vec<String>, Stri
         entry.insert("ref", toml_edit::value("v1"));
         packs.insert(&name, Item::Table(entry));
         notes.push(format!(
-            "[tools].packs \"{name}\" became [packs.{name}]: its tools are now {name}__tool__<name> from a pack; install it with `graph pack add {name}`"
+            "[tools].packs \"{name}\" became [packs.{name}]: its tools are now {name}__tool__<name> from a pack; install it with `dive pack add {name}`"
         ));
     }
     Ok(notes)
@@ -172,10 +172,10 @@ fn refuse_tool_packs(doc: &DocumentMut, path: &Path) -> Result<(), String> {
         .unwrap_or_default()
         .iter()
         .filter(|name| MOVED_PACKS.contains(&name.as_str()))
-        .map(|name| format!("`graph pack add {name}`"))
+        .map(|name| format!("`dive pack add {name}`"))
         .collect();
     let install = if commands.is_empty() {
-        "install packs with `graph pack add <name>`".to_string()
+        "install packs with `dive pack add <name>`".to_string()
     } else {
         format!("install with {}", commands.join(" and "))
     };
@@ -299,11 +299,11 @@ pub fn window_problem(
     let version = env!("CARGO_PKG_VERSION");
     Some(if found > max {
         format!(
-            "{what} is {kind} version {found}; graph {version} reads {range}. Upgrade graph, or see {FORMATS_DOC}"
+            "{what} is {kind} version {found}; Dive {version} reads {range}. Upgrade Dive, or see {FORMATS_DOC}"
         )
     } else {
         format!(
-            "{what} is {kind} version {found}; graph {version} reads {range}. Migrate it with a graph release that still reads {kind} version {found}, or see {FORMATS_DOC}"
+            "{what} is {kind} version {found}; Dive {version} reads {range}. Migrate it with a Dive release that still reads {kind} version {found}, or see {FORMATS_DOC}"
         )
     })
 }
@@ -542,7 +542,7 @@ mod tests {
             format!("reads config versions {CONFIG_FORMAT_OLDEST} to {CONFIG_FORMAT}")
         };
         assert!(err.contains(&window), "{err}");
-        assert!(err.contains("Upgrade graph"), "{err}");
+        assert!(err.contains("Upgrade Dive"), "{err}");
         assert!(err.contains(FORMATS_DOC), "{err}");
     }
 
@@ -550,12 +550,12 @@ mod tests {
     fn the_window_message_names_both_directions() {
         assert_eq!(window_problem("plan", &"p.yaml", 3, 2, 4), None);
         let old = window_problem("plan", &"p.yaml", 1, 2, 4).unwrap();
-        assert!(old.starts_with("p.yaml is plan version 1; graph "), "{old}");
+        assert!(old.starts_with("p.yaml is plan version 1; Dive "), "{old}");
         assert!(old.contains("reads plan versions 2 to 4"), "{old}");
         assert!(old.contains("still reads plan version 1"), "{old}");
         let new = window_problem("store", &"/data", 5, 2, 4).unwrap();
         assert!(
-            new.contains("reads store versions 2 to 4. Upgrade graph"),
+            new.contains("reads store versions 2 to 4. Upgrade Dive"),
             "{new}"
         );
         let single = window_problem("tool", &"t.yaml", 2, 1, 1).unwrap();
@@ -600,7 +600,7 @@ output = 2.0
         assert_eq!(
             upgrade.notes,
             vec![
-                "dropped models.embedder.dimensions: graph no longer reads it",
+                "dropped models.embedder.dimensions: Dive no longer reads it",
                 "models.embedder is no longer a standard role: it stays as a custom role that nothing consults"
             ]
         );
@@ -735,7 +735,7 @@ input = 1.0
         assert_eq!(
             upgrade.notes,
             vec![
-                "[tools].packs \"github\" became [packs.github]: its tools are now github__tool__<name> from a pack; install it with `graph pack add github`",
+                "[tools].packs \"github\" became [packs.github]: its tools are now github__tool__<name> from a pack; install it with `dive pack add github`",
                 "dropped \"llm\" from [tools].packs: its tools are always built in",
             ]
         );
@@ -760,7 +760,7 @@ input = 1.0
             upgrade.notes,
             vec![
                 "dropped \"data\" from [tools].packs: its tools are always built in",
-                "dropped \"gitlab\" from [tools].packs: graph never shipped a pack by that name",
+                "dropped \"gitlab\" from [tools].packs: Dive never shipped a pack by that name",
             ]
         );
     }
@@ -775,7 +775,7 @@ input = 1.0
         assert!(doc.get("packs").is_none(), "{doc}");
         assert_eq!(
             upgrade.notes,
-            vec!["dropped \"github\" from [tools].packs: [mcp.github] already owns github__ tool names; install the pack under another name with `graph pack add github --as <name>`"]
+            vec!["dropped \"github\" from [tools].packs: [mcp.github] already owns github__ tool names; install the pack under another name with `dive pack add github --as <name>`"]
         );
     }
 
@@ -787,7 +787,7 @@ input = 1.0
         let err = upgrade(&mut doc, Path::new("/x/config.toml")).unwrap_err();
         assert_eq!(
             err,
-            "/x/config.toml: [tools].packs was replaced by [packs.<name>] entries; remove it, then install with `graph pack add github` and `graph pack add slack`"
+            "/x/config.toml: [tools].packs was replaced by [packs.<name>] entries; remove it, then install with `dive pack add github` and `dive pack add slack`"
         );
     }
 

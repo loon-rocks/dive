@@ -26,7 +26,8 @@ use std::sync::Arc;
 
 pub const USER_TOOL_PREFIX: &str = "user__";
 pub const BUILTIN_TOOL_PREFIX: &str = "builtin__";
-pub const PACK_DIR_ENV: &str = "GRAPH_PACK_DIR";
+pub const PACK_DIR_ENV: &str = "DIVE_PACK_DIR";
+pub const LEGACY_PACK_DIR_ENV: &str = "GRAPH_PACK_DIR";
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 // Note: no deny_unknown_fields — serde can't combine it with #[serde(flatten)].
@@ -804,6 +805,7 @@ impl UserToolRegistry {
         cmd.args(&rendered_args);
         if let Some(dir) = &self.pack_dir {
             cmd.env(PACK_DIR_ENV, dir);
+            cmd.env(LEGACY_PACK_DIR_ENV, dir);
         }
         for (key, entry) in env {
             let expanded =
@@ -1230,7 +1232,7 @@ pub fn expand_env(value: &str, secrets: &dyn SecretSource) -> Result<String, Str
             (None, Some(default)) => default.to_string(),
             (None, None) => {
                 return Err(format!(
-                    "environment variable {var} referenced by tool env is not set; set it, or store it with `graph secret set {var}`"
+                    "environment variable {var} referenced by tool env is not set; set it, or store it with `dive secret set {var}`"
                 ))
             }
         };

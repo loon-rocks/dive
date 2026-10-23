@@ -3639,7 +3639,7 @@ async fn usage_is_attributed_to_the_step_that_spent_it() {
 
 #[tokio::test]
 async fn nested_plan_usage_rolls_up_into_its_caller() {
-    // `graph_review_9000` calls `plan__graph_review_core`; the caller has to
+    // `dive_review_9000` calls `plan__dive_review_core`; the caller has to
     // see the callee's spend or the composed plan reports almost nothing.
     let registry = search_registry(json!({"values": []}));
     let inner = plan_doc_yaml(
@@ -4459,7 +4459,7 @@ fn ask_step(id: &str, input: Value) -> Value {
 async fn an_answer_becomes_the_step_result_and_flows_downstream() {
     let registry = search_registry(json!({}));
     let (pipeline, _) = pipeline(vec![], registry.clone(), 1);
-    let human = ScriptedHuman::answering(json!({"repo": "tylerdavis/graph"}));
+    let human = ScriptedHuman::answering(json!({"repo": "loon-rocks/dive"}));
     let pipeline = pipeline.with_interlocutor(human.clone());
 
     let plan: Plan = serde_json::from_value(json!([
@@ -4474,12 +4474,12 @@ async fn an_answer_becomes_the_step_result_and_flows_downstream() {
         .unwrap();
     assert_eq!(
         outcome.state.results["E0"]["answer"]["repo"],
-        "tylerdavis/graph"
+        "loon-rocks/dive"
     );
     assert_eq!(outcome.state.results["E0"]["answered"], json!(true));
     // The whole point: a human's answer is ordinary step data.
     let calls = registry.invocations.lock().unwrap().clone();
-    assert_eq!(calls[0].1["query"], "tylerdavis/graph");
+    assert_eq!(calls[0].1["query"], "loon-rocks/dive");
 }
 
 #[tokio::test]
@@ -4587,7 +4587,7 @@ async fn with_nobody_to_ask_the_default_declares_what_happens() {
             "prompt": "Which repo?",
             "outputSchema": ASK_SCHEMA(),
             "whenUnanswered": "default",
-            "default": {"repo": "tylerdavis/graph"}
+            "default": {"repo": "loon-rocks/dive"}
         })
     )]))
     .unwrap();
@@ -4599,7 +4599,7 @@ async fn with_nobody_to_ask_the_default_declares_what_happens() {
         .unwrap();
     assert_eq!(
         outcome.state.results["E0"]["answer"]["repo"],
-        "tylerdavis/graph"
+        "loon-rocks/dive"
     );
     assert_eq!(outcome.state.results["E0"]["answered"], json!(false));
     assert_eq!(outcome.state.results["E0"]["reason"], "unavailable");
@@ -6135,9 +6135,9 @@ async fn a_drafted_agent_is_validated_saved_and_callable_right_away() {
 
 #[tokio::test]
 async fn a_secret_for_a_test_run_is_asked_in_the_form_used_once_and_kept_from_the_model() {
-    let tool = "name: whoami\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"token\\\":\\\"%s\\\"}\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${GRAPH_TEST_NEVER_SET_TOKEN}\"\n";
+    let tool = "name: whoami\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"token\\\":\\\"%s\\\"}\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${DIVE_TEST_NEVER_SET_TOKEN}\"\n";
     let (pipeline, _dir, human) = drafting_pipeline(vec![AskOutcome::Answered(
-        json!({"run": true, "GRAPH_TEST_NEVER_SET_TOKEN": "hunter22"}),
+        json!({"run": true, "DIVE_TEST_NEVER_SET_TOKEN": "hunter22"}),
     )]);
     let tried = pipeline
         .call_native("builtin__try_tool", json!({"yaml": tool, "input": {}}))
@@ -6147,21 +6147,21 @@ async fn a_secret_for_a_test_run_is_asked_in_the_form_used_once_and_kept_from_th
     assert!(!tried.result.to_string().contains("hunter22"));
     assert_eq!(
         tried.result["needs_env"],
-        json!(["GRAPH_TEST_NEVER_SET_TOKEN"])
+        json!(["DIVE_TEST_NEVER_SET_TOKEN"])
     );
     let asked = human.asked.lock().unwrap();
     assert!(asked[0].prompt.contains("never passed to the model"));
-    assert!(asked[0].schema["properties"]["GRAPH_TEST_NEVER_SET_TOKEN"].is_object());
+    assert!(asked[0].schema["properties"]["DIVE_TEST_NEVER_SET_TOKEN"].is_object());
 }
 
 #[tokio::test]
 async fn a_try_run_asks_only_for_names_no_source_has_and_hides_stored_values_from_the_model() {
-    let tool = "name: whoami\ndescription: Echoes tokens\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"stored\\\":\\\"%s\\\",\\\"asked\\\":\\\"%s\\\"}\" \"$STORED\" \"$ASKED\"']\nenv:\n  STORED: \"${GRAPH_TEST_STORED_DRAFT_TOKEN}\"\n  ASKED: \"${GRAPH_TEST_NEVER_SET_DRAFT_TOKEN}\"\n";
+    let tool = "name: whoami\ndescription: Echoes tokens\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"stored\\\":\\\"%s\\\",\\\"asked\\\":\\\"%s\\\"}\" \"$STORED\" \"$ASKED\"']\nenv:\n  STORED: \"${DIVE_TEST_STORED_DRAFT_TOKEN}\"\n  ASKED: \"${DIVE_TEST_NEVER_SET_DRAFT_TOKEN}\"\n";
     let (mut pipeline, _dir, human) = drafting_pipeline(vec![AskOutcome::Answered(
-        json!({"run": true, "GRAPH_TEST_NEVER_SET_DRAFT_TOKEN": "oneoff99"}),
+        json!({"run": true, "DIVE_TEST_NEVER_SET_DRAFT_TOKEN": "oneoff99"}),
     )]);
     let store = crate::secrets::MemorySecrets::store()
-        .with("GRAPH_TEST_STORED_DRAFT_TOKEN", "stored-hunter22");
+        .with("DIVE_TEST_STORED_DRAFT_TOKEN", "stored-hunter22");
     pipeline.drafted = Arc::new(super::Drafted::new(None, None).with_secrets(Arc::new(
         crate::secrets::ChainedSource::new(vec![
             Arc::new(crate::secrets::EnvSource),
@@ -6178,19 +6178,19 @@ async fn a_try_run_asks_only_for_names_no_source_has_and_hides_stored_values_fro
     assert!(!shown.contains("stored-hunter22") && !shown.contains("oneoff99"));
     assert_eq!(
         tried.result["needs_env"],
-        json!(["GRAPH_TEST_NEVER_SET_DRAFT_TOKEN"])
+        json!(["DIVE_TEST_NEVER_SET_DRAFT_TOKEN"])
     );
     let asked = human.asked.lock().unwrap();
     let properties = &asked[0].schema["properties"];
-    assert!(properties["GRAPH_TEST_NEVER_SET_DRAFT_TOKEN"].is_object());
-    assert!(properties.get("GRAPH_TEST_STORED_DRAFT_TOKEN").is_none());
+    assert!(properties["DIVE_TEST_NEVER_SET_DRAFT_TOKEN"].is_object());
+    assert!(properties.get("DIVE_TEST_STORED_DRAFT_TOKEN").is_none());
 }
 
 #[tokio::test]
 async fn short_secrets_and_secrets_with_escaped_characters_are_redacted_too() {
-    let tool = "name: echo\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"%s\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${GRAPH_TEST_NEVER_SET_SHORT}\"\n";
+    let tool = "name: echo\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"%s\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${DIVE_TEST_NEVER_SET_SHORT}\"\n";
     let (pipeline, _dir, _) = drafting_pipeline(vec![AskOutcome::Answered(
-        json!({"run": true, "GRAPH_TEST_NEVER_SET_SHORT": "a\"\\b"}),
+        json!({"run": true, "DIVE_TEST_NEVER_SET_SHORT": "a\"\\b"}),
     )]);
     let tried = pipeline
         .call_native("builtin__try_tool", json!({"yaml": tool, "input": {}}))

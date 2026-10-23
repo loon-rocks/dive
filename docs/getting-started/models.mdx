@@ -8,7 +8,7 @@ graph never names a model in an agent, plan or tool. They name a role, such as `
 
 <RequestExample>
 
-```toml .graph/config.toml
+```toml .dive/config.toml
 version = 4
 
 [providers.anthropic]
@@ -59,7 +59,7 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | `openai_compat` | Any OpenAI-compatible endpoint, such as Ollama, vLLM or a gateway, at `base_url` |
 | `systemone` | A [decision model](#decision-models) |
 
-`api_key = "${ANTHROPIC_API_KEY}"` reads the key from the environment or, when it isn't set there, from the OS credential store, so the file is safe to commit. `graph secret set ANTHROPIC_API_KEY` stores the key there; see [Secret references](/reference/configuration#secret-references).
+`api_key = "${ANTHROPIC_API_KEY}"` reads the key from the environment or, when it isn't set there, from the OS credential store, so the file is safe to commit. `dive secret set ANTHROPIC_API_KEY` stores the key there; see [Secret references](/reference/configuration#secret-references).
 
 ## Roles
 
@@ -92,7 +92,7 @@ A `description` on a role is what the plan drafter reads when it picks a model f
 
 A decision model answers a question about a piece of data with a probability instead of text, faster and cheaper than a chat model. Connect one with a `systemone` provider, which defaults to TypeSafe's API, and map it to `decider`:
 
-```toml .graph/config.toml
+```toml .dive/config.toml
 [providers.typesafe]
 type = "systemone"
 api_key = "${TYPESAFE_API_KEY}"
@@ -106,7 +106,7 @@ Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies
 
 ## What a run cost
 
-`graph ask`, `graph chat` and `graph plan run` print a usage line on stderr after each run:
+`dive ask`, `dive chat` and `dive plan run` print a usage line on stderr after each run:
 
 ```text
 1 call · 53k in / 10 out · $0.20

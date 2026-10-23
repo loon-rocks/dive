@@ -1,5 +1,5 @@
 name: tool-drafting
-title: graph workbench — drafting a tool
+title: dive workbench — drafting a tool
 grid: { cols: 120, rows: 36 }
 
 agent: network_drafter

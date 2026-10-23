@@ -1,4 +1,4 @@
-//! End-to-end tests for `graph mcp serve`, spoken over real stdio JSON-RPC.
+//! End-to-end tests for `dive mcp serve`, spoken over real stdio JSON-RPC.
 //!
 //! These drive the shipped binary the way an MCP client does, because the
 //! things most likely to break are exactly the things a unit test cannot see:
@@ -44,19 +44,19 @@ impl Session {
     }
 
     fn spawn(scratch: &Scratch, args: &[&str]) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_graph"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_dive"))
             .args(args)
             .current_dir(scratch.path())
             .env("HOME", scratch.path())
-            .env("GRAPH_STORAGE", "memory")
-            .env_remove("GRAPH_EVENTS")
-            .env_remove("GRAPH_LOG")
+            .env("DIVE_STORAGE", "memory")
+            .env_remove("DIVE_EVENTS")
+            .env_remove("DIVE_LOG")
             .env_remove("ANTHROPIC_API_KEY")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("spawn graph mcp serve");
+            .expect("spawn dive mcp serve");
         let stdin = child.stdin.take().expect("stdin");
         let stdout = BufReader::new(child.stdout.take().expect("stdout"));
         let mut session = Self {
@@ -71,7 +71,7 @@ impl Session {
             json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
-                "clientInfo": {"name": "graph-tests", "version": "1"}
+                "clientInfo": {"name": "dive-tests", "version": "1"}
             }),
         );
         session.notify("notifications/initialized", json!({}));
@@ -185,11 +185,11 @@ fn the_server_advertises_tools_and_a_plan_becomes_one() {
     let names = session.tool_names();
     // The authoring half...
     for expected in [
-        "graph_plan_list",
-        "graph_plan_validate",
-        "graph_plan_step_add",
-        "graph_tools_list",
-        "graph_tools_test",
+        "dive_plan_list",
+        "dive_plan_validate",
+        "dive_plan_step_add",
+        "dive_tools_list",
+        "dive_tools_test",
     ] {
         assert!(
             names.contains(&expected.to_string()),
@@ -285,11 +285,11 @@ fn a_rejected_edit_keeps_its_problem_list() {
     let mut session = Session::open(&scratch);
 
     session.call(
-        "graph_plan_new",
+        "dive_plan_new",
         json!({"identifier": "demo", "description": "d"}),
     );
     let (body, is_error) = session.call_parts(
-        "graph_plan_step_add",
+        "dive_plan_step_add",
         json!({
             "target": "demo", "id": "E1", "tool": "builtin__reshape",
             "input": {"shape": {"a": "{{E9.x}}"}}
@@ -312,29 +312,29 @@ fn an_agent_can_author_a_plan_and_then_call_it_in_the_same_session() {
     // The whole thesis: build a capability, then use it, without a shell and
     // without restarting the server.
     session.call(
-        "graph_plan_new",
+        "dive_plan_new",
         json!({"identifier": "made", "description": "Echo a word."}),
     );
     session.call(
-        "graph_plan_step_add",
+        "dive_plan_step_add",
         json!({
             "target": "made", "id": "E1", "tool": "builtin__reshape",
             "input": {"shape": {"said": "{{input.word}}"}}
         }),
     );
     session.call(
-        "graph_plan_set",
+        "dive_plan_set",
         json!({
             "target": "made", "attribute": "input_schema",
             "value": {"type": "object", "required": ["word"], "properties": {"word": {"type": "string"}}}
         }),
     );
     session.call(
-        "graph_plan_set",
+        "dive_plan_set",
         json!({"target": "made", "attribute": "output", "value": {"said": "{{E1.said}}"}}),
     );
 
-    let (verdict, _) = session.call_parts("graph_plan_validate", json!({"target": "made"}));
+    let (verdict, _) = session.call_parts("dive_plan_validate", json!({"target": "made"}));
     assert_eq!(verdict["ok"], json!(true), "{verdict}");
 
     // It is now in the catalog, without a restart...
@@ -360,16 +360,16 @@ fn json_arguments_reach_the_authoring_layer_unstringified() {
     let mut session = Session::open(&scratch);
 
     session.call(
-        "graph_plan_new",
+        "dive_plan_new",
         json!({"identifier": "shapes", "description": "d"}),
     );
     // `exemplars` is a list on the CLI and must be a real array here; an
     // agent should never have to serialize JSON into a string to pass it.
     session.call(
-        "graph_plan_set",
+        "dive_plan_set",
         json!({"target": "shapes", "attribute": "exemplars", "value": ["one", "two"]}),
     );
-    let (body, _) = session.call_parts("graph_plan_show", json!({"target": "shapes"}));
+    let (body, _) = session.call_parts("dive_plan_show", json!({"target": "shapes"}));
     assert_eq!(body["exemplars"], json!(["one", "two"]), "{body}");
 }
 
@@ -379,7 +379,7 @@ fn tools_test_reports_a_tool_result_without_failing_the_call() {
     let mut session = Session::open(&scratch);
 
     let (body, is_error) = session.call_parts(
-        "graph_tools_test",
+        "dive_tools_test",
         json!({"name": "builtin__reshape", "input": {"shape": {"a": "1"}}}),
     );
     assert!(!is_error);
@@ -454,7 +454,7 @@ fn the_server_advertises_the_capabilities_it_actually_implements() {
         json!(true),
         "{reply}"
     );
-    assert_eq!(reply["result"]["serverInfo"]["name"], json!("graph"));
+    assert_eq!(reply["result"]["serverInfo"]["name"], json!("dive"));
     // Instructions are the server's chance to teach the calling agent the
     // draft-once-then-edit loop before it guesses at it.
     let instructions = reply["result"]["instructions"]
@@ -473,7 +473,7 @@ fn without_dir_the_working_directorys_project_is_not_loaded() {
 
     // The scratch IS a graph project, and the server is started inside it.
     // It must still be ignored: an MCP client picks the working directory,
-    // so a `.graph/` found there carries no user intent — and it can name
+    // so a `.dive/` found there carries no user intent — and it can name
     // `[mcp.*]` child processes and exec tools.
     let mut session = Session::open_unpinned(&scratch);
     assert!(
@@ -496,7 +496,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
     let mut session = Session::open_unpinned(&scratch);
 
     let (body, is_error) = session.call_parts(
-        "graph_plan_new",
+        "dive_plan_new",
         json!({"identifier": "written_where", "name": "W", "description": "d"}),
     );
     assert!(!is_error, "{body}");
@@ -504,7 +504,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
     let saved = body["savedTo"].as_str().expect("savedTo");
     let global = scratch
         .path()
-        .join(".config/graph/plans/written_where.yaml");
+        .join(".config/dive/plans/written_where.yaml");
     assert_eq!(
         std::path::Path::new(saved),
         global,
@@ -514,7 +514,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
     assert!(
         !scratch
             .path()
-            .join(".graph/plans/written_where.yaml")
+            .join(".dive/plans/written_where.yaml")
             .exists(),
         "nothing may be written into the client's working directory"
     );
@@ -522,7 +522,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
     // Every mutating command shares the resolution, so a follow-up edit
     // must land on the same file rather than forking a copy into the cwd.
     let (body, is_error) = session.call_parts(
-        "graph_plan_step_add",
+        "dive_plan_step_add",
         json!({"target": "written_where", "id": "E0", "tool": "github__tool__git_log", "input": {}}),
     );
     assert!(!is_error, "{body}");
@@ -535,7 +535,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
 #[test]
 fn an_unpinned_servers_writes_never_read_the_working_directorys_config() {
     // The sharper edge of the same bug: the authoring commands loaded the
-    // layered config, so a `.graph/config.toml` in the client's cwd could
+    // layered config, so a `.dive/config.toml` in the client's cwd could
     // contribute providers, model routing, `[mcp.*]` child processes, and
     // exec tools. A config that cannot even be expanded proves whether it
     // was read at all. The probe lives in `[settings]` deliberately: a
@@ -543,14 +543,14 @@ fn an_unpinned_servers_writes_never_read_the_working_directorys_config() {
     // now defer — a deferred probe would prove nothing.
     let scratch = Scratch::new();
     std::fs::write(
-        scratch.path().join(".graph/config.toml"),
+        scratch.path().join(".dive/config.toml"),
         "[settings]\ndata_dir = \"${MUST_NOT_BE_READ_BY_GRAPH}\"\n",
     )
     .expect("write a hostile project config");
 
     let mut session = Session::open_unpinned(&scratch);
     let (body, is_error) = session.call_parts(
-        "graph_plan_new",
+        "dive_plan_new",
         json!({"identifier": "unpoisoned", "name": "U", "description": "d"}),
     );
     assert!(
@@ -571,13 +571,13 @@ fn a_pinned_server_still_writes_into_the_project_it_was_given() {
     let mut session = Session::open(&scratch);
 
     let (body, is_error) = session.call_parts(
-        "graph_plan_new",
+        "dive_plan_new",
         json!({"identifier": "in_project", "name": "P", "description": "d"}),
     );
     assert!(!is_error, "{body}");
     let saved = body["savedTo"].as_str().expect("savedTo");
     assert!(
-        std::path::Path::new(saved).ends_with(".graph/plans/in_project.yaml"),
+        std::path::Path::new(saved).ends_with(".dive/plans/in_project.yaml"),
         "a pinned server writes into its project: {saved}"
     );
 }
@@ -631,7 +631,7 @@ fn a_missing_provider_key_still_serves_and_the_error_names_the_variable() {
     // the context the agent never had when the process just died.
     let reply = session.request(
         "tools/call",
-        json!({"name": "graph_plan_draft", "arguments": {"goal": "echo a word"}}),
+        json!({"name": "dive_plan_draft", "arguments": {"goal": "echo a word"}}),
     );
     let message = reply["error"]["message"].as_str().unwrap_or_default();
     assert!(
@@ -647,7 +647,7 @@ fn a_config_that_cannot_load_still_serves_and_explains_itself() {
     // must come up anyway: the instructions carry the error at initialize,
     // and every call returns it — context instead of a dead connection.
     let scratch = Scratch::new();
-    scratch.write_config("[settings]\ndata_dir = \"${GRAPH_TEST_UNSET_DIR}\"\n");
+    scratch.write_config("[settings]\ndata_dir = \"${DIVE_TEST_UNSET_DIR}\"\n");
     let mut session = Session::open(&scratch);
 
     let reply = session.request(
@@ -661,7 +661,7 @@ fn a_config_that_cannot_load_still_serves_and_explains_itself() {
     let instructions = reply["result"]["instructions"].as_str().unwrap_or_default();
     assert!(
         instructions.contains("configuration failed to load")
-            && instructions.contains("GRAPH_TEST_UNSET_DIR"),
+            && instructions.contains("DIVE_TEST_UNSET_DIR"),
         "{instructions}"
     );
 
@@ -669,16 +669,16 @@ fn a_config_that_cannot_load_still_serves_and_explains_itself() {
     // load error rather than hanging or dying.
     assert!(session
         .tool_names()
-        .contains(&"graph_plan_list".to_string()));
+        .contains(&"dive_plan_list".to_string()));
     let reply = session.request(
         "tools/call",
-        json!({"name": "graph_plan_list", "arguments": {}}),
+        json!({"name": "dive_plan_list", "arguments": {}}),
     );
     assert!(
         reply["error"]["message"]
             .as_str()
             .unwrap_or_default()
-            .contains("GRAPH_TEST_UNSET_DIR"),
+            .contains("DIVE_TEST_UNSET_DIR"),
         "{reply}"
     );
 }

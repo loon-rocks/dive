@@ -231,8 +231,8 @@
       "properties": {
         "paths": {
           "default": [
-            "./.graph/plans",
-            "~/.config/graph/plans"
+            "./.dive/plans",
+            "~/.config/dive/plans"
           ],
           "description": "Plan directories, searched in order.",
           "items": {
@@ -314,7 +314,7 @@
       "description": "This project's identity. Belongs in the project config.",
       "properties": {
         "id": {
-          "description": "An id graph generates the first time you store a project secret with `graph secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.",
+          "description": "An id graph generates the first time you store a project secret with `dive secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.",
           "type": "string"
         }
       },
@@ -376,7 +376,7 @@
       "description": "Runtime settings.",
       "properties": {
         "data_dir": {
-          "default": "~/.local/share/graph",
+          "default": "~/.local/share/dive",
           "description": "Where threads and the shape cache are stored.",
           "type": "string"
         },
@@ -403,7 +403,7 @@
       "properties": {
         "backend": {
           "default": "file",
-          "description": "`memory` keeps nothing between runs. `GRAPH_STORAGE` overrides it.",
+          "description": "`memory` keeps nothing between runs. `DIVE_STORAGE` overrides it.",
           "enum": [
             "file",
             "memory"
@@ -527,8 +527,8 @@
         },
         "paths": {
           "default": [
-            "./.graph/tools",
-            "~/.config/graph/tools"
+            "./.dive/tools",
+            "~/.config/dive/tools"
           ],
           "description": "Tool directories, searched in order.",
           "items": {
@@ -558,14 +558,14 @@
       "type": "object"
     },
     "version": {
-      "description": "The file version the config is written in. Omitted means 1; `graph config migrate` brings a file to the current version.",
+      "description": "The file version the config is written in. Omitted means 1; `dive config migrate` brings a file to the current version.",
       "type": "integer"
     },
     "workbench": {
       "description": "Workbench settings.",
       "properties": {
         "log_path": {
-          "description": "Where the workbench writes its log. Defaults to `<data_dir>/workbench.log`; `GRAPH_WORKBENCH_LOG` overrides it.",
+          "description": "Where the workbench writes its log. Defaults to `<data_dir>/workbench.log`; `DIVE_WORKBENCH_LOG` overrides it.",
           "type": "string"
         }
       },
@@ -580,15 +580,15 @@
       "variables": [
         {
           "description": "How graph reports progress and failures on stderr. Unset, stderr is for people.",
-          "name": "GRAPH_EVENTS",
+          "name": "DIVE_EVENTS",
           "values": {
-            "github": "A failing `graph plan run` also prints a `::error::` annotation to stdout, which GitHub Actions shows on the run.",
+            "github": "A failing `dive plan run` also prints a `::error::` annotation to stdout, which GitHub Actions shows on the run.",
             "jsonl": "stderr becomes a stream of JSON events, one per line. `ask` steps can't prompt anyone, so they use their `whenUnanswered` setting."
           }
         },
         {
           "description": "A log filter for stderr, such as `info` or `graph=debug`. `-v`, `-vv` and `-vvv` set `info`, `debug` and `trace`.",
-          "name": "GRAPH_LOG",
+          "name": "DIVE_LOG",
           "type": "string"
         }
       ]
@@ -600,10 +600,10 @@
         {
           "default": "os",
           "description": "Whether `${NAME}` references read the OS credential store when the environment doesn't set `NAME`.",
-          "name": "GRAPH_SECRET_STORE",
+          "name": "DIVE_SECRET_STORE",
           "values": {
             "none": "Read the environment only.",
-            "os": "Read the macOS Keychain, or the Secret Service on Linux, under service `graph`. Where neither is available, graph reads the environment only."
+            "os": "Read the macOS Keychain, or the Secret Service on Linux, under service `dive`. Where neither is available, graph reads the environment only."
           }
         }
       ]
@@ -614,7 +614,7 @@
         {
           "default": "file",
           "description": "Where graph keeps threads and the shape cache.",
-          "name": "GRAPH_STORAGE",
+          "name": "DIVE_STORAGE",
           "overrides": "storage.backend",
           "values": {
             "file": "Under `settings.data_dir`.",
@@ -629,7 +629,7 @@
         {
           "default": "<data_dir>/workbench.log",
           "description": "Where the workbench writes its log.",
-          "name": "GRAPH_WORKBENCH_LOG",
+          "name": "DIVE_WORKBENCH_LOG",
           "overrides": "workbench.log_path",
           "type": "string"
         }
@@ -677,12 +677,12 @@
   ],
   "x-format": "TOML",
   "x-locations": [
-    "`~/.config/graph/config.toml` (global)",
-    "`./.graph/config.toml` (project; its values win)"
+    "`~/.config/dive/config.toml` (global)",
+    "`./.dive/config.toml` (project; its values win)"
   ],
   "x-sections": [
     {
-      "body": "A string value can include `${NAME}` references, such as `api_key = \"${ANTHROPIC_API_KEY}\"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, graph reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `graph` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `graph secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `graph secret list`.\n\nA name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.\n\nWhere no credential store is available, as in a container or on Linux without a Secret Service daemon, graph reads the environment only. Set `GRAPH_SECRET_STORE` to `none` to skip the store on purpose.",
+      "body": "A string value can include `${NAME}` references, such as `api_key = \"${ANTHROPIC_API_KEY}\"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, graph reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.\n\nA name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.\n\nWhere no credential store is available, as in a container or on Linux without a Secret Service daemon, graph reads the environment only. Set `DIVE_SECRET_STORE` to `none` to skip the store on purpose.",
       "heading": "Secret references"
     }
   ]

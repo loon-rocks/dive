@@ -104,7 +104,7 @@ pub fn target(workspace: &Workspace, choice: &LayerChoice) -> Result<Layer> {
         let dir = global_dir();
         if !dir.is_dir() {
             bail!(
-                "{} does not exist; create it with `graph config init --global`",
+                "{} does not exist; create it with `dive config init --global`",
                 dir.display()
             );
         }
@@ -131,7 +131,7 @@ pub fn target(workspace: &Workspace, choice: &LayerChoice) -> Result<Layer> {
 pub fn project_layer(dir: PathBuf) -> Result<Layer> {
     if !dir.is_dir() {
         bail!(
-            "{} does not exist; run `graph config init` to create the project's graph directory, or pass --global or --dir",
+            "{} does not exist; run `dive config init` to create the project's Dive directory, or pass --global or --dir",
             dir.display()
         );
     }
@@ -322,7 +322,7 @@ impl PackRow {
             flags.push(format!("shadowed by the {by} layer"));
         }
         if tag_moved {
-            flags.push("release tag moved since install; graph won't install it".to_string());
+            flags.push("release tag moved since install; Dive won't install it".to_string());
         }
         if !flags.is_empty() {
             columns.push(flags.join(", "));
@@ -590,7 +590,7 @@ fn name_available(layer: &Layer, state: &LayerState, name: &str) -> Result<(), P
 }
 
 fn branch_warning(branch: &str) -> String {
-    format!("tracking branch '{branch}' rather than a release; `graph pack update` moves it to the branch head")
+    format!("tracking branch '{branch}' rather than a release; `dive pack update` moves it to the branch head")
 }
 
 fn short(sha: &str) -> String {

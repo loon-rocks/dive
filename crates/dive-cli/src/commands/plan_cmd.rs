@@ -1,4 +1,4 @@
-//! `graph plan` — list/show/validate/run plan documents.
+//! `dive plan` — list/show/validate/run plan documents.
 
 use crate::cli::PlanCommand;
 use crate::commands::input::resolve_input;
@@ -199,7 +199,7 @@ fn render_validation(body: &serde_json::Value) -> Result<()> {
 async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: bool) -> Result<()> {
     // `--json` promises machine-parseable stdout, so it suppresses CI
     // annotations (which are stdout workflow commands) even when a mode
-    // like GRAPH_EVENTS=github is active.
+    // like DIVE_EVENTS=github is active.
     let annotate = |message: &str| {
         if !json {
             crate::output::annotate_failure(message);
@@ -266,7 +266,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
         interlocutor: crate::interlocutor::tty(),
         ..Default::default()
     };
-    // Stream each model call to the sink as it lands, so `GRAPH_EVENTS=jsonl`
+    // Stream each model call to the sink as it lands, so `DIVE_EVENTS=jsonl`
     // carries per-call detail and not just the end-of-run totals.
     runtime.usage.attach_events(events.clone());
     let pipeline = runtime.pipeline_with(&store, events.clone(), hooks).await?;
@@ -284,7 +284,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);
 
-    // Under GRAPH_EVENTS=jsonl the `usage_summary` event carries the report
+    // Under DIVE_EVENTS=jsonl the `usage_summary` event carries the report
     // and stderr is one JSON object per line, so a prose summary there would
     // corrupt the feed.
     let jsonl = crate::output::jsonl_events();

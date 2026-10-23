@@ -565,7 +565,7 @@ mod tests {
         let ledger = priced_ledger();
         CallSite::role("chat")
             .at("E0")
-            .in_plans(&["graph_review_9000".to_string()])
+            .in_plans(&["dive_review_9000".to_string()])
             .scope(async { ledger.record(call("sonnet", tokens(10, 1))) })
             .await;
         CallSite::role("chat")
@@ -576,7 +576,7 @@ mod tests {
         let report = ledger.take();
         let paths: Vec<&str> = report.by_step.iter().map(|s| s.path.as_str()).collect();
         // An inner plan's E0 must not merge with the outer plan's.
-        assert!(paths.contains(&"graph_review_9000/E0"));
+        assert!(paths.contains(&"dive_review_9000/E0"));
         assert!(paths.contains(&"E0"));
     }
 

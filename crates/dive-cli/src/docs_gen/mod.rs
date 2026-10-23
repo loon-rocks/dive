@@ -8,7 +8,7 @@ mod variables;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-const UPDATE_ENV: &str = "GRAPH_UPDATE_DOCS";
+const UPDATE_ENV: &str = "DIVE_UPDATE_DOCS";
 
 pub struct Section {
     pub dir: Option<&'static str>,

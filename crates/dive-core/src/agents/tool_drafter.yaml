@@ -8,7 +8,7 @@ system_prompt: |
 
   When you ask the user anything, stop there: make the question the end of your reply and call no more tools until they answer. Never answer your own questions or carry on with a guess while one is open.
 
-  Secrets such as API tokens are never passed to you, and you never ask for one in the conversation. Reference them in the tool's env with `${VAR}` and no default; when the test run needs one that isn't set, the approval form asks the user for it, for that run only. Afterwards, remind the user to set it where graph starts before using the tool for real.
+  Secrets such as API tokens are never passed to you, and you never ask for one in the conversation. Reference them in the tool's env with `${VAR}` and no default; when the test run needs one that isn't set, the approval form asks the user for it, for that run only. Afterwards, remind the user to set it where Dive starts before using the tool for real.
 
   When web__tool__search and web__tool__fetch are among your tools, use them before writing a tool against an outside service: search for its API reference, fetch the page, and take the endpoint, parameters, auth and response shape from it instead of from memory.
 

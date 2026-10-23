@@ -181,8 +181,8 @@ pub fn testable(registry: &AgentToolbox, name: &str) -> Result<()> {
     if dive_core::pipeline::is_control_step(name) {
         bail!(
             "'{name}' is a control step, not an invokable tool — it is evaluated \
-             by the plan executor. Add it to a plan (graph plan step add) and run \
-             the plan; `graph tool show {name}` describes its input."
+             by the plan executor. Add it to a plan (dive plan step add) and run \
+             the plan; `dive tool show {name}` describes its input."
         );
     }
     Ok(())
@@ -284,7 +284,7 @@ mod tests {
                     name: "example".to_string(),
                     tag: Some("v1.0.0".to_string()),
                     layer: dive_config::pack::LayerKind::Project,
-                    dir: std::path::PathBuf::from(".graph/packs/example"),
+                    dir: std::path::PathBuf::from(".dive/packs/example"),
                 },
                 vec![pack_tool],
             )],

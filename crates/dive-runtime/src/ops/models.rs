@@ -148,7 +148,7 @@ impl Layers {
         let file = if global_workspace {
             global.clone()
         } else {
-            workspace.root().join(".graph").join("config.toml")
+            dive_config::legacy::project_dir(workspace.root()).join("config.toml")
         };
         let load_paths = if global_workspace {
             vec![global.clone()]

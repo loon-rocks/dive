@@ -2,7 +2,7 @@
 # Migrate graph plans to v0.10.0
 
 You are upgrading the graph plans in this repository — and, if the user asks,
-their global library in `~/.config/graph/plans/` — to graph v0.10.0. The
+their global library in `~/.config/dive/plans/` — to graph v0.10.0. The
 release is fully backward compatible: any plan you leave untouched keeps
 working. But one common composition is *latently broken* and must be
 migrated wherever it appears, and two workaround patterns can now be
@@ -13,7 +13,7 @@ restructure unrelated steps.
 
 - `graph --version` must be ≥ 0.10.0 wherever these plans run.
 - If plans run in CI from the container image
-  (`ghcr.io/tylerdavis/graph:vX.Y.Z`), the image pin must move to ≥ v0.10.0
+  (`ghcr.io/loon-rocks/dive:vX.Y.Z`), the image pin must move to ≥ v0.10.0
   **in the same PR** as any plan change that uses the new features — plans
   load from the repo checkout, but the engine comes from the pinned image,
   so they must move atomically. Check `.github/workflows/` for pins.
@@ -129,10 +129,10 @@ entry carries the origin.
 
 ## Verify
 
-1. `graph plan validate <name>` for every plan you touched — must pass.
+1. `dive plan validate <name>` for every plan you touched — must pass.
 2. Where feasible, run the plan against a scratch input in a repo that
-   contains a deletion and a rename (use `GRAPH_STORAGE=memory` and a
-   temp `.graph/config.toml` to keep real state out of the run).
+   contains a deletion and a rename (use `DIVE_STORAGE=memory` and a
+   temp `.dive/config.toml` to keep real state out of the run).
 3. Report per plan: what pattern was found, what changed, and validation
    status. List plans you inspected and deliberately left alone, with the
    reason.

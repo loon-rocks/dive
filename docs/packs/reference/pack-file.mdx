@@ -32,15 +32,15 @@ keywords: ["pack.toml", "schema", "TOML"]
 </ParamField>
 
 <ParamField body="requires" type="object" required>
-  What the pack needs to run. `graph` and `os` are checked when the pack is installed or loaded, and a mismatch refuses it. `binaries`, `env` and `mcp` are reported by `graph config check`, and a plan run that reaches the pack fails before its first step when one is missing.
+  What the pack needs to run. `dive` and `os` are checked when the pack is installed or loaded, and a mismatch refuses it. `binaries`, `env` and `mcp` are reported by `dive config check`, and a plan run that reaches the pack fails before its first step when one is missing.
 </ParamField>
 
-<ParamField body="requires.graph" type="string">
-  The graph versions the pack works with, as a semver requirement such as `">=0.15"`.
+<ParamField body="requires.dive" type="string">
+  The Dive versions the pack works with, as a semver requirement such as `">=0.15"`.
 </ParamField>
 
 <ParamField body="requires.os" type="enum<string>[]" required>
-  The systems the pack runs on, `macos`, `linux` or both. `graph pack check` refuses a pack that leaves it empty.
+  The systems the pack runs on, `macos`, `linux` or both. `dive pack check` refuses a pack that leaves it empty.
 </ParamField>
 
 <ParamField body="requires.binaries" type="string[]">
@@ -52,7 +52,7 @@ keywords: ["pack.toml", "schema", "TOML"]
 </ParamField>
 
 <ParamField body="requires.mcp" type="object">
-  MCP servers the pack's plans and agents call, as `[requires.mcp.<name>]`, where `<name>` is the `[mcp.<name>]` server their calls use, as in `<name>__<tool>`. `graph pack check` checks each call against the server when one is configured under that name.
+  MCP servers the pack's plans and agents call, as `[requires.mcp.<name>]`, where `<name>` is the `[mcp.<name>]` server their calls use, as in `<name>__<tool>`. `dive pack check` checks each call against the server when one is configured under that name.
 </ParamField>
 
 <ParamField body="requires.mcp.<name>.server" type="string">
@@ -74,11 +74,11 @@ description = "Read and comment on pull requests, releases and git history."
 homepage = "https://github.com/tylerdavis/graph-packs/tree/main/github"
 license = "MIT"
 name = "github"
-version = 1
+version = 2
 
 [requires]
 binaries = ["bash", "git", "gh", "jq"]
-graph = ">=0.15"
+dive = ">=0.15"
 os = ["macos", "linux"]
 ```
 

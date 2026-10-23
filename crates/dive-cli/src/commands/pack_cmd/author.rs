@@ -74,7 +74,7 @@ pub fn new_pack(name: &str, root: &Path) -> Result<Outcome> {
             .collect::<Vec<_>>(),
     }))
     .with_note(format!(
-        "scaffolded pack '{name}'; run `graph pack check {name}` and `graph pack test {name}` in {}, and release it with `graph pack release <bump> {name}` as {name}/vX.Y.Z tags",
+        "scaffolded pack '{name}'; run `dive pack check {name}` and `dive pack test {name}` in {}, and release it with `dive pack release <bump> {name}` as {name}/vX.Y.Z tags",
         root.display()
     )))
 }
@@ -230,7 +230,7 @@ fn loaded_for_run(path: &Path) -> Result<LoadedPack, Outcome> {
     author::load_with_migrations(author::source_at(path)).map_err(|problems| {
         refused(
             format!(
-                "the pack at {} does not load; `graph pack check` lists every problem",
+                "the pack at {} does not load; `dive pack check` lists every problem",
                 path.display()
             ),
             problems,
@@ -429,7 +429,7 @@ pub async fn release(path: &Path, bump: Bump, json: bool) -> Result<Outcome> {
     };
     if !path.join(MANIFEST_FILE).is_file() {
         return Ok(refusal(format!(
-            "{} has no {MANIFEST_FILE}; release runs on one pack, so name its directory, as in `graph pack release <bump> <dir>`",
+            "{} has no {MANIFEST_FILE}; release runs on one pack, so name its directory, as in `dive pack release <bump> <dir>`",
             path.display()
         )));
     }
@@ -499,7 +499,7 @@ pub async fn release(path: &Path, bump: Bump, json: bool) -> Result<Outcome> {
     if !problems.is_empty() {
         return Ok(refused(
             format!(
-                "`graph pack test` fails with {}; nothing was tagged",
+                "`dive pack test` fails with {}; nothing was tagged",
                 problem_count(problems.len())
             ),
             problems,

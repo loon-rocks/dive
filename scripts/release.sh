@@ -32,7 +32,7 @@ require_main() {
 # anything is mutated.
 require_graph() {
   command -v graph >/dev/null || { echo "graph not found on PATH — the changelog plans need it (mise run install)" >&2; exit 1; }
-  GRAPH_STORAGE=memory graph plan validate compose_changelog >/dev/null \
+  DIVE_STORAGE=memory dive plan validate compose_changelog >/dev/null \
     || { echo "compose_changelog does not validate — graph on PATH too old? (needs >= v0.10.0 for filter steps)" >&2; exit 1; }
 }
 
@@ -182,7 +182,7 @@ prepare() {
   # for: v0.12.0 shipped with five internal scout commits as its headline
   # "Added" entries. Retype the offending commit (or, if it is already
   # pushed, add it to the historical skip list in cliff.toml) and re-run.
-  if leaked=$(grep -nE 'graph_review_(9000|core|thread_audit)|docs_drift|changelog_entry|compose_changelog|\bscouts?\b' CHANGELOG.md); then
+  if leaked=$(grep -nE 'dive_review_(9000|core|thread_audit)|docs_drift|changelog_entry|compose_changelog|\bscouts?\b' CHANGELOG.md); then
     echo "CHANGELOG.md names graph's own dogfooding — those commits should be ci:" >&2
     echo "$leaked" >&2
     exit 1
@@ -202,8 +202,8 @@ prepare() {
   # reviewer re-runs compose_changelog before publishing.
   #
   # Both plans read the tags through git-cliff, never this CHANGELOG.md.
-  GRAPH_STORAGE=memory graph plan run changelog_entry --input version="v$new" --input formats="$format_delta"
-  GRAPH_STORAGE=memory graph plan run compose_changelog --input tag="v$new"
+  DIVE_STORAGE=memory dive plan run changelog_entry --input version="v$new" --input formats="$format_delta"
+  DIVE_STORAGE=memory dive plan run compose_changelog --input tag="v$new"
 
   cat <<EOF
 
@@ -213,7 +213,7 @@ v$new is prepared and NOT committed. Review before publishing:
                                          a prompt about a bumped file kind belongs in that kind's directory (config/v2/)
   CHANGELOG.md                           the commit rendering — fix a wrong entry by retyping its commit, not here
   docs/changelog.mdx                     composed from the snippets; if you add, remove, or move a snippet file, re-run
-                                         GRAPH_STORAGE=memory graph plan run compose_changelog --input tag=v$new
+                                         DIVE_STORAGE=memory dive plan run compose_changelog --input tag=v$new
 
   git diff --stat
 
@@ -259,7 +259,7 @@ publish() {
   git tag -a "v$new" -m "$tag_message"
   git push -q origin main "v$new"
 
-  echo "v$new pushed — binaries build at: https://github.com/tylerdavis/graph/actions"
+  echo "v$new pushed — binaries build at: https://github.com/loon-rocks/dive/actions"
 }
 
 abort() {

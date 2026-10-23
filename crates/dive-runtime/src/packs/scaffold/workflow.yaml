@@ -7,7 +7,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    container: ghcr.io/tylerdavis/graph:v@VERSION@
+    container: ghcr.io/loon-rocks/dive:v@VERSION@
     steps:
       - uses: actions/checkout@v4
-      - run: graph pack test
+      - run: dive pack test

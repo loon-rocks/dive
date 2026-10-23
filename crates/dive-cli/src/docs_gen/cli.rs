@@ -144,7 +144,7 @@ fn overview_page(root: &Command) -> String {
             ("title", "CLI reference".to_string()),
             (
                 "description",
-                "Every graph command, generated from the CLI's own definitions.".to_string(),
+                "Every dive command, generated from the CLI's own definitions.".to_string(),
             ),
         ],
         &["cli", "commands", "flags", "options"],

@@ -1,4 +1,4 @@
-An agent is one YAML file. Once saved, it can be chatted with (`graph chat <name>`) and called from a plan step as `agent__<name>`.
+An agent is one YAML file. Once saved, it can be chatted with (`dive chat <name>`) and called from a plan step as `agent__<name>`.
 
 Keys:
 - `version`: the file version; leave it out and graph stamps the current one.

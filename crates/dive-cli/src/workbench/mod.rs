@@ -1,4 +1,4 @@
-//! `graph workbench` — the interactive plan IDE: a dual-pane TUI with the
+//! `dive workbench` — the interactive plan IDE: a dual-pane TUI with the
 //! chat agent on the left and the plan workspace (structure, context, runs)
 //! on the right. See docs/getting-started/workbench.mdx.
 
@@ -46,7 +46,7 @@ pub async fn run(command: Option<WorkbenchCommand>, verbosity: u8) -> Result<()>
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         bail!(
             "the workbench needs an interactive terminal — \
-             use `graph plan run` or `graph ask` for scripting"
+             use `dive plan run` or `dive ask` for scripting"
         );
     }
     let runtime = crate::host::runtime()?;
@@ -60,11 +60,11 @@ pub async fn run(command: Option<WorkbenchCommand>, verbosity: u8) -> Result<()>
 /// Route tracing to a log file: the TUI owns the terminal, so stderr
 /// output would scribble over it. Always on — the default filter keeps
 /// the workbench's own instrumentation at debug and everything else at
-/// warn; `-v` flags raise it and `GRAPH_LOG` overrides it entirely.
-/// The path resolves `GRAPH_WORKBENCH_LOG` → `[workbench].log_path` →
+/// warn; `-v` flags raise it and `DIVE_LOG` overrides it entirely.
+/// The path resolves `DIVE_WORKBENCH_LOG` → `[workbench].log_path` →
 /// `<data_dir>/workbench.log` (appended across sessions).
 fn init_debug_log(runtime: &Runtime, verbosity: u8) -> Option<std::path::PathBuf> {
-    let path = log_path(&runtime.config, std::env::var_os("GRAPH_WORKBENCH_LOG"));
+    let path = log_path(&runtime.config, dive_config::legacy::var_os("DIVE_WORKBENCH_LOG"));
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -73,8 +73,9 @@ fn init_debug_log(runtime: &Runtime, verbosity: u8) -> Option<std::path::PathBuf
         .append(true)
         .open(&path)
         .ok()?;
-    let filter = tracing_subscriber::EnvFilter::try_from_env("GRAPH_LOG")
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_log_filter(verbosity)));
+    let filter = dive_config::legacy::var("DIVE_LOG")
+        .and_then(|filter| tracing_subscriber::EnvFilter::try_new(filter).ok())
+        .unwrap_or_else(|| tracing_subscriber::EnvFilter::new(default_log_filter(verbosity)));
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     tracing_subscriber::fmt()
@@ -87,7 +88,7 @@ fn init_debug_log(runtime: &Runtime, verbosity: u8) -> Option<std::path::PathBuf
         .ok()?;
     tracing::info!(
         target: "workbench",
-        "── session started (graph {}) ──",
+        "── session started (dive {}) ──",
         env!("CARGO_PKG_VERSION")
     );
     Some(path)

@@ -867,7 +867,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
     let mut defs = vec![
         ToolDef {
             name: DESCRIBE_TOOL.to_string(),
-            description: "Describe one tool from the plan catalog, or one of graph's native \
+            description: "Describe one tool from the plan catalog, or one of Dive's native \
                           builtin__ tools, without calling it: its description, input schema, declared output schema, the output \
                           shape observed in earlier runs, and whether it's read-only. Use it \
                           to write a step's input and the templates that read its result."
@@ -2807,11 +2807,11 @@ steps:
         }
     }
 
-    const CRM_TOOL: &str = "version: 3\nname: crm_lookup\ndescription: Looks up a contact\nkind: exec\ncommand: printf\nargs: ['{\"ok\":true}']\nenv:\n  TOKEN:\n    value: \"${GRAPH_T_CRM}\"\n    description: \"A CRM token from [settings](https://crm.example/settings).\"\n";
+    const CRM_TOOL: &str = "version: 3\nname: crm_lookup\ndescription: Looks up a contact\nkind: exec\ncommand: printf\nargs: ['{\"ok\":true}']\nenv:\n  TOKEN:\n    value: \"${DIVE_T_CRM}\"\n    description: \"A CRM token from [settings](https://crm.example/settings).\"\n";
 
     fn notify_tool(mark: &std::path::Path) -> String {
         format!(
-            "version: 3\nname: notify\ndescription: Notifies\nkind: exec\ncommand: sh\nargs: ['-c', 'touch \"$MARK\"']\noutput: text\nenv:\n  MARK: \"{}\"\n  HOOK:\n    value: \"${{GRAPH_T_NOTIFY}}\"\n    description: \"The webhook URL from [the hooks page](https://hooks.example).\"\n  LEVEL: \"${{GRAPH_T_LEVEL:-info}}\"\n",
+            "version: 3\nname: notify\ndescription: Notifies\nkind: exec\ncommand: sh\nargs: ['-c', 'touch \"$MARK\"']\noutput: text\nenv:\n  MARK: \"{}\"\n  HOOK:\n    value: \"${{DIVE_T_NOTIFY}}\"\n    description: \"The webhook URL from [the hooks page](https://hooks.example).\"\n  LEVEL: \"${{DIVE_T_LEVEL:-info}}\"\n",
             mark.display()
         )
     }
@@ -2889,11 +2889,11 @@ steps:
             missing,
             [
                 (
-                    "GRAPH_T_CRM".to_string(),
+                    "DIVE_T_CRM".to_string(),
                     vec!["user__crm_lookup".to_string()]
                 ),
                 (
-                    "GRAPH_T_NOTIFY".to_string(),
+                    "DIVE_T_NOTIFY".to_string(),
                     vec!["user__notify".to_string()]
                 ),
             ],
@@ -2916,7 +2916,7 @@ steps:
             .find(|node| node.name == "notify")
             .unwrap();
         assert_eq!(notify.secrets.len(), 1);
-        assert_eq!(notify.secrets[0].name, "GRAPH_T_NOTIFY");
+        assert_eq!(notify.secrets[0].name, "DIVE_T_NOTIFY");
         assert!(!notify.secrets[0].set);
         assert!(notify.secrets[0]
             .description
@@ -2971,9 +2971,9 @@ steps:
         use dive_core::secrets::{ChainedSource, InProject, MemorySecrets};
         let resolver = InProject::new(
             ChainedSource::new(vec![
-                Arc::new(MemorySecrets::env().with("GRAPH_T_CRM", "crm-value")),
+                Arc::new(MemorySecrets::env().with("DIVE_T_CRM", "crm-value")),
                 Arc::new(MemorySecrets::store().with_project(
-                    "GRAPH_T_NOTIFY",
+                    "DIVE_T_NOTIFY",
                     "p1",
                     "https://hooks.example/1",
                 )),
@@ -3012,14 +3012,14 @@ steps:
             "{}",
             tried.result
         );
-        assert_eq!(tried.result["missing_secrets"][0]["name"], "GRAPH_T_NOTIFY");
+        assert_eq!(tried.result["missing_secrets"][0]["name"], "DIVE_T_NOTIFY");
         assert!(!dir.path().join("ran").exists());
         assert!(crate::workbench::artifact::view(&tools.draft).waiting_on_secrets);
 
         let global: Arc<dyn dive_core::secrets::SecretSource> = Arc::new(InProject::new(
             ChainedSource::new(vec![
                 Arc::new(MemorySecrets::env()),
-                Arc::new(MemorySecrets::store().with("GRAPH_T_NOTIFY", "https://hooks.example/g")),
+                Arc::new(MemorySecrets::store().with("DIVE_T_NOTIFY", "https://hooks.example/g")),
             ]),
             Some("p1".to_string()),
         ));
@@ -3069,11 +3069,11 @@ steps:
         let own = vec!["user__notify".to_string()];
         assert_eq!(
             names(crate::workbench::secrets::needed(&over, "agent__helper", &own).await),
-            ["GRAPH_T_CRM"]
+            ["DIVE_T_CRM"]
         );
         assert_eq!(
             names(crate::workbench::secrets::needed(&over, "agent__desk", &own).await),
-            ["GRAPH_T_NOTIFY", "GRAPH_T_CRM"],
+            ["DIVE_T_NOTIFY", "DIVE_T_CRM"],
             "a bare * covers the network's own tools, and the subagent's tools count"
         );
     }

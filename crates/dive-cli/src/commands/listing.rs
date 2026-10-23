@@ -1,5 +1,5 @@
-//! Shared renderer for grouped tool listings — `graph tool list` and
-//! `graph mcp tools`.
+//! Shared renderer for grouped tool listings — `dive tool list` and
+//! `dive mcp tools`.
 
 use dive_core::ToolDef;
 use dive_mcp::NAMESPACE_SEPARATOR;

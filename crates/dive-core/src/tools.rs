@@ -1,6 +1,6 @@
 //! The tool abstraction shared by the agent loop and the plan pipeline.
 //!
-//! Implementations: MCP servers (dive-mcp), built-in graph tools
+//! Implementations: MCP servers (dive-mcp), built-in dive tools
 //! (dive-store), user-defined tools, and plan tools.
 
 use async_trait::async_trait;

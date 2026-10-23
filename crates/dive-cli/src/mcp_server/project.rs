@@ -1,19 +1,19 @@
 //! Which project the server is allowed to load.
 //!
 //! On the command line, graph merges a global config layer
-//! (`~/.config/graph/config.toml`) with a project one (`./.graph/config.toml`)
-//! and searches both `./.graph/plans` and `~/.config/graph/plans`. That is
+//! (`~/.config/dive/config.toml`) with a project one (`./.dive/config.toml`)
+//! and searches both `./.dive/plans` and `~/.config/dive/plans`. That is
 //! right for a CLI: the human chose the directory and typed the command, so
 //! the working directory *is* an expression of intent.
 //!
-//! It is wrong for a server. An MCP client launches `graph mcp serve` with a
+//! It is wrong for a server. An MCP client launches `dive mcp serve` with a
 //! working directory of the client's choosing — commonly `/`, sometimes
 //! whatever the user last had open — and the user never said anything about
-//! that directory. Loading its `.graph/` anyway would mean an arbitrary
+//! that directory. Loading its `.dive/` anyway would mean an arbitrary
 //! checkout could contribute:
 //!
 //! - `[mcp.<name>] command = …`, a child process graph spawns;
-//! - `./.graph/tools/*.yaml`, user tools that shell out (`user_tools.rs`
+//! - `./.dive/tools/*.yaml`, user tools that shell out (`user_tools.rs`
 //!   spawns `tokio::process::Command`);
 //! - prompts, providers, and model routing.
 //!
@@ -68,8 +68,8 @@ pub fn config() -> Result<LoadedConfig> {
     Ok(loaded)
 }
 
-/// Absolute *after* `~` expansion — `~/.config/graph/plans` is anchored to
-/// the user's home and is fine; `./.graph/plans` is not.
+/// Absolute *after* `~` expansion — `~/.config/dive/plans` is anchored to
+/// the user's home and is fine; `./.dive/plans` is not.
 fn is_absolute(path: &Path) -> bool {
     dive_config::expand_tilde(path).is_absolute()
 }
@@ -83,9 +83,9 @@ mod tests {
         // The distinction the unpinned filter turns on: a tilde path is
         // anchored to the user, a dot path is anchored to whatever directory
         // the client chose to launch us in.
-        assert!(is_absolute(Path::new("~/.config/graph/plans")));
+        assert!(is_absolute(Path::new("~/.config/dive/plans")));
         assert!(is_absolute(Path::new("/etc/graph/plans")));
-        assert!(!is_absolute(Path::new("./.graph/plans")));
-        assert!(!is_absolute(Path::new(".graph/plans")));
+        assert!(!is_absolute(Path::new("./.dive/plans")));
+        assert!(!is_absolute(Path::new(".dive/plans")));
     }
 }

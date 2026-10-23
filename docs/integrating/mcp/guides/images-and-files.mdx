@@ -17,10 +17,10 @@ files = "path"
 [storage.files]
 backend = "s3"
 endpoint = "https://s3.example.com"
-bucket = "graph-files"
+bucket = "dive-files"
 region = "us-east-1"
-access_key_id = "${GRAPH_S3_KEY_ID}"
-secret_access_key = "${GRAPH_S3_SECRET}"
+access_key_id = "${DIVE_S3_KEY_ID}"
+secret_access_key = "${DIVE_S3_SECRET}"
 ```
 
 </RequestExample>
@@ -73,4 +73,4 @@ To keep files somewhere else, set `[storage.files].backend`:
 - `memory` keeps files only for the length of the run.
 - `s3` keeps files in an S3 bucket, or a bucket on an S3-compatible server such as Garage or MinIO. Set `endpoint` for an S3-compatible server, and `region` to the region it expects. Keys go under `prefix` when you set one, so several stores can share a bucket.
 
-Credentials expand `${NAME}` references like the rest of config.toml, so you can keep them in the OS credential store with `graph secret set GRAPH_S3_SECRET`. When `access_key_id` and `secret_access_key` are omitted, graph reads the standard `AWS_*` environment variables. If a referenced secret isn't set, graph still starts. A tool call that receives a file then fails naming the missing variable, and files a tool returns are left out of its result, with a warning in the log.
+Credentials expand `${NAME}` references like the rest of config.toml, so you can keep them in the OS credential store with `dive secret set DIVE_S3_SECRET`. When `access_key_id` and `secret_access_key` are omitted, graph reads the standard `AWS_*` environment variables. If a referenced secret isn't set, graph still starts. A tool call that receives a file then fails naming the missing variable, and files a tool returns are left out of its result, with a warning in the log.

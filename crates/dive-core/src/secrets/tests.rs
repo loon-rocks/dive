@@ -55,10 +55,10 @@ fn a_disabled_credential_store_is_unavailable_and_resolves_nothing() {
     let store = CredentialStore::disabled();
     assert!(matches!(store.status(), Err(StoreError::Unavailable(_))));
     assert!(matches!(
-        store.get("GRAPH_TEST_NEVER_STORED"),
+        store.get("DIVE_TEST_NEVER_STORED"),
         Err(StoreError::Unavailable(_))
     ));
-    assert_eq!(store.resolve("GRAPH_TEST_NEVER_STORED"), None);
+    assert_eq!(store.resolve("DIVE_TEST_NEVER_STORED"), None);
     assert!(matches!(
         store.set("not a name", "x"),
         Err(StoreError::InvalidName(_))

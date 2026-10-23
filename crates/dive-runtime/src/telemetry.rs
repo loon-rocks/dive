@@ -130,7 +130,7 @@ fn build(config: &TelemetryConfig) -> anyhow::Result<Telemetry> {
         .with_span_processor(span_processor)
         .with_resource(resource.clone())
         .build();
-    let tracer = tracer_provider.tracer("graph");
+    let tracer = tracer_provider.tracer("dive");
 
     let logger_provider = if config.logs {
         let logs_url = config
@@ -460,7 +460,7 @@ impl OtlpSink {
         let mut attributes = self.attrs(state);
         attributes.push(KeyValue::new("langfuse.observation.type", kind));
         attributes.push(KeyValue::new(
-            "graph.run.kind",
+            "dive.run.kind",
             format!("{:?}", self.run.kind).to_lowercase(),
         ));
         if let Some(input) = &input {
@@ -573,9 +573,9 @@ impl EventSink for OtlpSink {
         let mut attributes = self.attrs(&state);
         attributes.extend([
             KeyValue::new("langfuse.observation.type", observation_type(tool)),
-            KeyValue::new("graph.step.path", key.clone()),
-            KeyValue::new("graph.step.tool", tool.to_string()),
-            KeyValue::new("graph.plan.stack", call_stack.join("/")),
+            KeyValue::new("dive.step.path", key.clone()),
+            KeyValue::new("dive.step.tool", tool.to_string()),
+            KeyValue::new("dive.plan.stack", call_stack.join("/")),
         ]);
         attributes.extend(self.json_attribute("langfuse.observation.input", input));
         let span = self.tracer.build_with_context(
@@ -642,7 +642,7 @@ impl EventSink for OtlpSink {
         let mut attributes = self.attrs(&state);
         attributes.extend([
             KeyValue::new("langfuse.observation.type", observation_type(name)),
-            KeyValue::new("graph.tool.name", name.to_string()),
+            KeyValue::new("dive.tool.name", name.to_string()),
         ]);
         attributes.extend(self.json_attribute("langfuse.observation.input", args));
         let span = self.tracer.build_with_context(
@@ -725,11 +725,11 @@ impl EventSink for OtlpSink {
                 "langfuse.observation.usage_details",
                 usage_details.to_string(),
             ),
-            KeyValue::new("graph.site", call.site.clone()),
-            KeyValue::new("graph.role", call.role.clone()),
+            KeyValue::new("dive.site", call.site.clone()),
+            KeyValue::new("dive.role", call.role.clone()),
         ]);
         if let Some(cost) = call.cost_usd {
-            attributes.push(KeyValue::new("graph.cost_usd", cost));
+            attributes.push(KeyValue::new("dive.cost_usd", cost));
             attributes.push(KeyValue::new(
                 "langfuse.observation.cost_details",
                 serde_json::json!({ "total": cost }).to_string(),
@@ -781,18 +781,18 @@ impl EventSink for OtlpSink {
         let root = self.root(&mut state);
         let span = root.span();
         span.set_attributes([
-            KeyValue::new("graph.usage.calls", report.calls as i64),
+            KeyValue::new("dive.usage.calls", report.calls as i64),
             KeyValue::new(
-                "graph.usage.input_tokens",
+                "dive.usage.input_tokens",
                 report.total.total_input_tokens() as i64,
             ),
             KeyValue::new(
-                "graph.usage.output_tokens",
+                "dive.usage.output_tokens",
                 report.total.output_tokens as i64,
             ),
         ]);
         if let Some(cost) = report.cost_usd {
-            span.set_attribute(KeyValue::new("graph.usage.cost_usd", cost));
+            span.set_attribute(KeyValue::new("dive.usage.cost_usd", cost));
         }
         self.end_all(&mut state);
     }
@@ -950,7 +950,7 @@ mod tests {
             .iter()
             .all(|s| s.span_context.trace_id() == root.span_context.trace_id()));
         assert_eq!(
-            attribute(root, "graph.usage.cost_usd"),
+            attribute(root, "dive.usage.cost_usd"),
             Some(&OtelValue::F64(1.0))
         );
 
@@ -972,7 +972,7 @@ mod tests {
         assert_eq!(body.parent_span_id, e1.span_context.span_id());
         let generation = spans
             .iter()
-            .find(|s| attribute(s, "graph.site") == Some(&OtelValue::from("E1/do.0/E5")))
+            .find(|s| attribute(s, "dive.site") == Some(&OtelValue::from("E1/do.0/E5")))
             .unwrap();
         assert_eq!(generation.parent_span_id, body.span_context.span_id());
         assert_eq!(
@@ -993,14 +993,14 @@ mod tests {
         let inner_step = spans
             .iter()
             .filter(|s| s.name == inner_step.name)
-            .find(|s| attribute(s, "graph.plan.stack") == Some(&OtelValue::from("inner")))
+            .find(|s| attribute(s, "dive.plan.stack") == Some(&OtelValue::from("inner")))
             .unwrap();
         assert_eq!(inner_step.parent_span_id, e2.span_context.span_id());
         assert!(matches!(inner_step.status, Status::Error { .. }));
 
         let solver = spans
             .iter()
-            .find(|s| attribute(s, "graph.site") == Some(&OtelValue::from("solver")))
+            .find(|s| attribute(s, "dive.site") == Some(&OtelValue::from("solver")))
             .unwrap();
         assert_eq!(solver.parent_span_id, root.span_context.span_id());
         assert!(spans
@@ -1147,14 +1147,14 @@ mod tests {
             let generations: Vec<&SpanData> = spans
                 .iter()
                 .filter(|span| {
-                    attribute(span, "graph.site") == Some(&OtelValue::from(agent.to_string()))
-                        || attribute(span, "graph.site")
+                    attribute(span, "dive.site") == Some(&OtelValue::from(agent.to_string()))
+                        || attribute(span, "dive.site")
                             == Some(&OtelValue::from(inner.to_string()))
                 })
                 .collect();
             assert_eq!(generations.len(), 2, "{agent}");
             for generation in generations {
-                let site = attribute(generation, "graph.site").unwrap().to_string();
+                let site = attribute(generation, "dive.site").unwrap().to_string();
                 let parent = if site == agent {
                     agent_span
                 } else {
@@ -1398,11 +1398,11 @@ mod tests {
             Some(&OtelValue::from("typesafe"))
         );
         assert_eq!(
-            attribute(generation, "graph.site"),
+            attribute(generation, "dive.site"),
             Some(&OtelValue::from("E5"))
         );
         assert_eq!(
-            attribute(generation, "graph.cost_usd"),
+            attribute(generation, "dive.cost_usd"),
             Some(&OtelValue::F64(0.5))
         );
         let input = attribute(generation, "langfuse.observation.input")

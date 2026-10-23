@@ -1,4 +1,4 @@
-//! `graph mcp serve` — graph as an MCP server over stdio.
+//! `dive mcp serve` — graph as an MCP server over stdio.
 //!
 //! graph is already an MCP *client* (`dive-mcp`). This is the other
 //! direction: it exposes the plan pipeline to somebody else's agent, as two
@@ -80,7 +80,7 @@ pub async fn serve(dir: Option<PathBuf>) -> Result<()> {
                 // The quiet failure this server can have: looks connected,
                 // has nothing to offer, and never says why.
                 (None, 0) => tracing::warn!(
-                    "no plans found. Only the global config (~/.config/graph) is \
+                    "no plans found. Only the global config (~/.config/dive) is \
                      loaded — the directory this server was started in is ignored \
                      unless you pass --dir, because a client chooses that directory, \
                      not you. Re-launch with `--dir <project>` to serve its plans."
@@ -93,13 +93,13 @@ pub async fn serve(dir: Option<PathBuf>) -> Result<()> {
         }
     }
 
-    let service = GraphServer::new().serve(rmcp::transport::stdio()).await?;
+    let service = DiveServer::new().serve(rmcp::transport::stdio()).await?;
     service.waiting().await?;
     Ok(())
 }
 
 #[derive(Clone, Default)]
-pub struct GraphServer {
+pub struct DiveServer {
     /// Serializes plan writes.
     ///
     /// MCP request handling is concurrent, but plan authoring is
@@ -110,7 +110,7 @@ pub struct GraphServer {
     writes: Arc<Mutex<()>>,
 }
 
-impl GraphServer {
+impl DiveServer {
     fn new() -> Self {
         Self {
             writes: Arc::new(Mutex::new(())),
@@ -202,12 +202,12 @@ fn step_attribute(name: &str) -> Result<StepAttribute, McpError> {
     })
 }
 
-impl GraphServer {
+impl DiveServer {
     /// Every tool visible right now: the static authoring verbs, plus one per
     /// plan in the catalog.
     ///
     /// Read fresh on each `tools/list` rather than cached at startup, because
-    /// an agent that just wrote a plan with `graph_plan_new` should see it as
+    /// an agent that just wrote a plan with `dive_plan_new` should see it as
     /// a callable tool without restarting the server.
     fn tools(&self) -> Vec<rmcp::model::Tool> {
         let mut tools = catalog::authoring_tools();
@@ -259,10 +259,10 @@ impl GraphServer {
         }
 
         let outcome = match name.as_str() {
-            "graph_plan_list" => run::plan_list(),
-            "graph_plan_show" => run::plan_show(&required_str(&args, "target")?),
-            "graph_plan_validate" => run::plan_validate(&required_str(&args, "target")?),
-            "graph_plan_new" => {
+            "dive_plan_list" => run::plan_list(),
+            "dive_plan_show" => run::plan_show(&required_str(&args, "target")?),
+            "dive_plan_validate" => run::plan_validate(&required_str(&args, "target")?),
+            "dive_plan_new" => {
                 let identifier = required_str(&args, "identifier")?;
                 let name = optional_str(&args, "name");
                 let description = optional_str(&args, "description");
@@ -278,7 +278,7 @@ impl GraphServer {
                     )
                 })
             }
-            "graph_plan_draft" => {
+            "dive_plan_draft" => {
                 let goal = required_str(&args, "goal")?;
                 let from = optional_str(&args, "from");
                 // `and_then`, as the sibling arms use, cannot hold the
@@ -289,7 +289,7 @@ impl GraphServer {
                     Err(error) => Err(error),
                 }
             }
-            "graph_plan_set" => {
+            "dive_plan_set" => {
                 let value = args
                     .get("value")
                     .ok_or_else(|| invalid("`value` is required"))?;
@@ -298,18 +298,18 @@ impl GraphServer {
                 let values = value_args(value);
                 runtime().and_then(|rt| plan_edit::set(&rt, &target, attribute, &values))
             }
-            "graph_plan_unset" => {
+            "dive_plan_unset" => {
                 let target = required_str(&args, "target")?;
                 let attribute = plan_attribute(&required_str(&args, "attribute")?)?;
                 runtime().and_then(|rt| plan_edit::unset(&rt, &target, attribute))
             }
-            "graph_plan_step_add" => run::step_add(&args),
-            "graph_plan_step_update" => run::step_update(&args),
-            "graph_plan_step_rename" => run::step_rename(&args),
-            "graph_plan_step_rm" => run::step_rm(&args),
-            "graph_tools_list" => run::tools_list().await,
-            "graph_tools_show" => run::tools_show(&required_str(&args, "name")?).await,
-            "graph_tools_test" => {
+            "dive_plan_step_add" => run::step_add(&args),
+            "dive_plan_step_update" => run::step_update(&args),
+            "dive_plan_step_rename" => run::step_rename(&args),
+            "dive_plan_step_rm" => run::step_rm(&args),
+            "dive_tools_list" => run::tools_list().await,
+            "dive_tools_show" => run::tools_show(&required_str(&args, "name")?).await,
+            "dive_tools_test" => {
                 run::tools_test(
                     &required_str(&args, "name")?,
                     args.get("input").cloned().unwrap_or_else(|| json!({})),
@@ -347,17 +347,17 @@ impl GraphServer {
 /// Tools that write a plan file. They take the write lock, and a successful
 /// one triggers a `tools/list_changed`.
 const MUTATING: &[&str] = &[
-    "graph_plan_new",
-    "graph_plan_draft",
-    "graph_plan_set",
-    "graph_plan_unset",
-    "graph_plan_step_add",
-    "graph_plan_step_update",
-    "graph_plan_step_rename",
-    "graph_plan_step_rm",
+    "dive_plan_new",
+    "dive_plan_draft",
+    "dive_plan_set",
+    "dive_plan_unset",
+    "dive_plan_step_add",
+    "dive_plan_step_update",
+    "dive_plan_step_rename",
+    "dive_plan_step_rm",
 ];
 
-impl ServerHandler for GraphServer {
+impl ServerHandler for DiveServer {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
         info.protocol_version = ProtocolVersion::default();
@@ -366,16 +366,16 @@ impl ServerHandler for GraphServer {
             // The plan tools change as plans are authored, in this session.
             .enable_tool_list_changed()
             .build();
-        info.server_info.name = "graph".into();
+        info.server_info.name = "dive".into();
         info.server_info.version = env!("CARGO_PKG_VERSION").into();
         info.instructions = Some(
-            "graph runs plans: validated, reviewable pipelines of tool calls.\n\n\
+            "Dive runs plans: validated, reviewable pipelines of tool calls.\n\n\
                  Each `plan_<name>` tool runs one of this machine's plans; call it the way \
                  you would call any tool, using its own input schema.\n\n\
-                 The `graph_*` tools author plans. The loop that works: \
-                 graph_plan_draft once to get a statically valid plan grounded in the real \
-                 tool catalog, then graph_plan_set and graph_plan_step_* to correct it, then \
-                 graph_plan_validate for the verdict. Never redraft to fix a plan — drafting \
+                 The `dive_*` tools author plans. The loop that works: \
+                 dive_plan_draft once to get a statically valid plan grounded in the real \
+                 tool catalog, then dive_plan_set and dive_plan_step_* to correct it, then \
+                 dive_plan_validate for the verdict. Never redraft to fix a plan — drafting \
                  replaces every step, so it discards whatever was already right."
                 .into(),
         );
@@ -399,9 +399,9 @@ impl ServerHandler for GraphServer {
                 info.instructions = Some(format!(
                     "{instructions}\n\nNOTE: no plans are available. This server was started \
                      without --dir, so only the user's global configuration \
-                     (~/.config/graph) is loaded and no project's plans are \
+                     (~/.config/dive) is loaded and no project's plans are \
                      served. If the user expected plans from a project, tell them \
-                     to relaunch it as `graph mcp serve --dir <project>`."
+                     to relaunch it as `dive mcp serve --dir <project>`."
                 ));
             }
             Ok(_) => {}

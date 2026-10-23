@@ -1,4 +1,4 @@
-//! `graph thread` — list/show/rm. Opens the store directly; no providers
+//! `dive thread` — list/show/rm. Opens the store directly; no providers
 //! or MCP servers needed.
 
 use crate::cli::ThreadCommand;
@@ -35,12 +35,12 @@ async fn list(store: &Arc<dyn Store>, all: bool, project: Option<&str>) -> Resul
     if listed.threads.is_empty() {
         let note = match (all, project) {
             (false, Some(_)) => {
-                "no threads yet in this project — run `graph ask` or `graph chat`, or `graph thread list --all` for every thread"
+                "no threads yet in this project — run `dive ask` or `dive chat`, or `dive thread list --all` for every thread"
             }
             (false, None) => {
-                "no threads yet outside a project — run `graph ask` or `graph chat`, or `graph thread list --all` for every thread"
+                "no threads yet outside a project — run `dive ask` or `dive chat`, or `dive thread list --all` for every thread"
             }
-            (true, _) => "no threads yet — run `graph ask` or `graph chat`",
+            (true, _) => "no threads yet — run `dive ask` or `dive chat`",
         };
         return Ok(Outcome::raw(String::new(), body).with_note(note));
     }

@@ -3,7 +3,7 @@
 # tab with the report in the detail pane. Used at the top of
 # getting-started/introduction.mdx.
 name: hero
-title: graph workbench — weekly_status
+title: dive workbench — weekly_status
 plan: docs/shots/plans/weekly_status.yaml
 grid: { cols: 120, rows: 36 }
 

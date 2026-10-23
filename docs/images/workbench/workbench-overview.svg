@@ -5,7 +5,7 @@
 <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
 <circle cx="42" cy="18" r="6" fill="#febc2e"/>
 <circle cx="62" cy="18" r="6" fill="#28c840"/>
-<text x="522" y="23" fill="#8b90a0" text-anchor="middle">graph workbench — pr_review</text>
+<text x="522" y="23" fill="#8b90a0" text-anchor="middle">dive workbench — pr_review</text>
 <rect x="438.0" y="162.0" width="25.2" height="18" fill="#c6cad3"/>
 <rect x="463.2" y="162.0" width="75.6" height="18" fill="#c6cad3"/>
 <rect x="538.8" y="162.0" width="470.4" height="18" fill="#c6cad3"/>
@@ -193,7 +193,7 @@
 <text x="446.4" y="265.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">○</text>
 <text x="463.2" y="265.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">├──</text>
 <text x="496.8" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" font-weight="600">E3</text>
-<text x="538.8" y="265.5" textLength="176.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">user__review_graph_pr</text>
+<text x="538.8" y="265.5" textLength="168.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">user__review_dive_pr</text>
 <text x="1009.2" y="265.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="283.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="34.8" y="283.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">each</text>
@@ -256,9 +256,9 @@
 <text x="522.0" y="427.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">pull</text>
 <text x="564.0" y="427.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">request</text>
 <text x="631.2" y="427.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">against</text>
-<text x="698.4" y="427.5" textLength="92.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">dive-cli's</text>
-<text x="799.2" y="427.5" textLength="92.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">invariants,</text>
-<text x="900.0" y="427.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">anchors</text>
+<text x="698.4" y="427.5" textLength="84.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">dive-cli's</text>
+<text x="790.8" y="427.5" textLength="92.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">invariants,</text>
+<text x="891.6" y="427.5" textLength="58.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">anchors</text>
 <text x="1009.2" y="427.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">█│</text>
 <text x="18.0" y="445.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="412.8" y="445.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>

@@ -112,10 +112,10 @@ fn a_plan_run_exports_one_trace_with_the_configured_headers() {
 [telemetry]
 endpoint = "{base}"
 protocol = "http/json"
-service_name = "graph-test"
+service_name = "dive-test"
 
 [telemetry.headers]
-Authorization = "Basic ${{GRAPH_TEST_OTLP_AUTH}}"
+Authorization = "Basic ${{DIVE_TEST_OTLP_AUTH}}"
 "x-langfuse-ingestion-version" = "4"
 
 [telemetry.resource]
@@ -124,9 +124,9 @@ Authorization = "Basic ${{GRAPH_TEST_OTLP_AUTH}}"
     ));
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph_env(
+    let run = scratch.dive_env(
         &["plan", "run", "echo_ok", r#"{"word":"hi"}"#],
-        &[("GRAPH_TEST_OTLP_AUTH", "cGs6c2s=")],
+        &[("DIVE_TEST_OTLP_AUTH", "cGs6c2s=")],
     );
     run.code_is(0);
     assert_eq!(run.json(), json!({"said": "hi"}));
@@ -142,7 +142,7 @@ Authorization = "Basic ${{GRAPH_TEST_OTLP_AUTH}}"
     );
     assert_eq!(
         trace.resource_attribute("service.name").as_deref(),
-        Some("graph-test")
+        Some("dive-test")
     );
     assert_eq!(
         trace
@@ -170,13 +170,13 @@ fn the_standard_otel_variables_alone_turn_the_exporter_on() {
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
     scratch
-        .graph_env(
+        .dive_env(
             &["plan", "run", "echo_ok", r#"{"word":"hi"}"#],
             &[
                 ("OTEL_EXPORTER_OTLP_ENDPOINT", base.as_str()),
                 ("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json"),
                 ("OTEL_EXPORTER_OTLP_HEADERS", "x-api-key=abc, x-two=2"),
-                ("OTEL_SERVICE_NAME", "graph-from-env"),
+                ("OTEL_SERVICE_NAME", "dive-from-env"),
             ],
         )
         .code_is(0);
@@ -186,7 +186,7 @@ fn the_standard_otel_variables_alone_turn_the_exporter_on() {
     assert_eq!(trace.header("x-two"), Some("2"));
     assert_eq!(
         trace.resource_attribute("service.name").as_deref(),
-        Some("graph-from-env")
+        Some("dive-from-env")
     );
     assert!(trace.span_names().iter().any(|n| n == "echo_ok"));
 }
@@ -199,15 +199,15 @@ fn an_unset_header_variable_disables_telemetry_and_says_so() {
         r#"
 [telemetry]
 endpoint = "{base}"
-headers = {{ Authorization = "Basic ${{GRAPH_TEST_OTLP_AUTH_DOES_NOT_EXIST}}" }}
+headers = {{ Authorization = "Basic ${{DIVE_TEST_OTLP_AUTH_DOES_NOT_EXIST}}" }}
 "#
     ));
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph(&["plan", "run", "echo_ok", r#"{"word":"hi"}"#]);
+    let run = scratch.dive(&["plan", "run", "echo_ok", r#"{"word":"hi"}"#]);
     run.code_is(0)
         .stderr_contains("telemetry disabled")
-        .stderr_contains("GRAPH_TEST_OTLP_AUTH_DOES_NOT_EXIST")
+        .stderr_contains("DIVE_TEST_OTLP_AUTH_DOES_NOT_EXIST")
         .stderr_contains("telemetry.headers.Authorization");
     assert_eq!(run.json(), json!({"said": "hi"}));
     assert!(

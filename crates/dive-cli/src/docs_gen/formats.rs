@@ -159,7 +159,7 @@ fn file_facts(out: &mut String, format: &Format, schema: &Yaml) {
     if kind == "YAML" {
         let _ = writeln!(
             out,
-            "Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/tylerdavis/graph/main/docs/schemas/{}.schema.json`.\n",
+            "Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/loon-rocks/dive/main/docs/schemas/{}.schema.json`.\n",
             format.slug
         );
     }
@@ -452,7 +452,7 @@ fn environment() -> Section {
             ("title", "Environment variables".to_string()),
             ("playground", "none".to_string()),
         ],
-        &["environment variables", "env", "GRAPH_LOG", "OTEL"],
+        &["environment variables", "env", "DIVE_LOG", "OTEL"],
     );
     let _ = writeln!(page, "{imports}");
     page.push_str(body.trim_end());

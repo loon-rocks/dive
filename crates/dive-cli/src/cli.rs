@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    name = "graph",
+    name = "dive",
     version,
     long_version = crate::commands::version_cmd::LONG_VERSION.as_str(),
     about = "A command-line agent with a plan-based execution engine"
@@ -23,7 +23,7 @@ pub struct Cli {
 pub enum Command {
     /// Ask a one-shot question (runs one agent turn)
     #[command(
-        after_long_help = "Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.\n\nPut `--thread` after the message, since it takes an optional value. On an existing thread, `--agent` must name the thread's owner.\n\nWith `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, agent}` instead of streaming.\n\nExamples:\n  graph ask \"Which issues are blocking the release?\"\n  git diff | graph ask \"Review this diff\"\n  graph ask --agent release_notes \"What shipped this week?\"\n  graph ask \"And the week before?\" --thread"
+        after_long_help = "Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.\n\nPut `--thread` after the message, since it takes an optional value. On an existing thread, `--agent` must name the thread's owner.\n\nWith `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, agent}` instead of streaming.\n\nExamples:\n  dive ask \"Which issues are blocking the release?\"\n  git diff | dive ask \"Review this diff\"\n  dive ask --agent release_notes \"What shipped this week?\"\n  dive ask \"And the week before?\" --thread"
     )]
     Ask {
         /// The message; reads stdin when omitted and piped
@@ -44,7 +44,7 @@ pub enum Command {
     },
     /// Interactive chat (REPL)
     #[command(
-        after_long_help = "Starts a conversation with the default `chat` agent or the named one. A resumed thread continues with its active agent; naming an agent other than the thread's owner is refused.\n\nSlash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another, `/thread` and `/state` print the current thread and its state, and `/quit` exits.\n\nExamples:\n  graph chat\n  graph chat release_notes\n  graph chat --thread"
+        after_long_help = "Starts a conversation with the default `chat` agent or the named one. A resumed thread continues with its active agent; naming an agent other than the thread's owner is refused.\n\nSlash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another, `/thread` and `/state` print the current thread and its state, and `/quit` exits.\n\nExamples:\n  dive chat\n  dive chat release_notes\n  dive chat --thread"
     )]
     Chat {
         /// The agent to talk to; the default `chat` agent when omitted
@@ -81,7 +81,7 @@ pub enum Command {
     #[command(
         about = "Store, inspect and remove secrets in the OS credential store",
         alias = "secrets",
-        after_long_help = "A `${NAME}` reference in config.toml or a tool's `env` reads the environment variable `NAME` first, then the OS credential store: the macOS Keychain, or the Secret Service on Linux, under service `graph` and account `NAME`. These commands manage the stored values. They never print a value in full.\n\nExamples:\n  graph secret set ANTHROPIC_API_KEY\n  graph secret list"
+        after_long_help = "A `${NAME}` reference in config.toml or a tool's `env` reads the environment variable `NAME` first, then the OS credential store: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. These commands manage the stored values. They never print a value in full.\n\nExamples:\n  dive secret set ANTHROPIC_API_KEY\n  dive secret list"
     )]
     Secret {
         #[command(subcommand)]
@@ -114,7 +114,7 @@ pub enum Command {
     /// Interactive workbench: a dual-pane TUI for building plans, agents and tools
     #[command(visible_alias = "wb")]
     #[command(
-        after_long_help = "Opens the full-screen workbench. With no subcommand it starts at the front desk, which asks what you want to build. Needs an interactive terminal on stdin and stdout.\n\nThe workbench logs to `<data_dir>/workbench.log` instead of stderr. Set `[workbench].log_path` or `GRAPH_WORKBENCH_LOG` to change the path.\n\nExamples:\n  graph wb"
+        after_long_help = "Opens the full-screen workbench. With no subcommand it starts at the front desk, which asks what you want to build. Needs an interactive terminal on stdin and stdout.\n\nThe workbench logs to `<data_dir>/workbench.log` instead of stderr. Set `[workbench].log_path` or `DIVE_WORKBENCH_LOG` to change the path.\n\nExamples:\n  dive wb"
     )]
     Workbench {
         #[command(subcommand)]
@@ -122,7 +122,7 @@ pub enum Command {
     },
     /// Print the binary version and the file formats it reads and writes
     #[command(
-        after_long_help = "Prints the binary version and the version each kind of file is written at. `--json` also reports, under `fileVersions`, the oldest version of each the binary still reads. `graph --version` prints the same lines.\n\nExamples:\n  graph version\n  graph version --json"
+        after_long_help = "Prints the binary version and the version each kind of file is written at. `--json` also reports, under `fileVersions`, the oldest version of each the binary still reads. `dive --version` prints the same lines.\n\nExamples:\n  dive version\n  dive version --json"
     )]
     Version {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -136,7 +136,7 @@ pub enum WorkbenchCommand {
     /// one to inspect, edit and run — fully, or gated with per-tool-call confirmation
     #[command(
         alias = "plans",
-        after_long_help = "Examples:\n  graph wb plan\n  graph wb plan weekly_changes"
+        after_long_help = "Examples:\n  dive wb plan\n  dive wb plan weekly_changes"
     )]
     Plan {
         /// A plan identifier or YAML file path to open; omit for a blank draft
@@ -145,7 +145,7 @@ pub enum WorkbenchCommand {
     /// Open the workbench in agent mode: draft a new agent, or edit an existing one
     #[command(
         alias = "agents",
-        after_long_help = "Examples:\n  graph wb agent\n  graph wb agent release_notes"
+        after_long_help = "Examples:\n  dive wb agent\n  dive wb agent release_notes"
     )]
     Agent {
         /// An agent name to open for editing; omit to draft a new one
@@ -154,7 +154,7 @@ pub enum WorkbenchCommand {
     /// Open the workbench in tool mode: draft a new user tool, or edit an existing one
     #[command(
         alias = "tools",
-        after_long_help = "Examples:\n  graph wb tool\n  graph wb tool summarize"
+        after_long_help = "Examples:\n  dive wb tool\n  dive wb tool summarize"
     )]
     Tool {
         #[arg(
@@ -168,7 +168,7 @@ pub enum WorkbenchCommand {
 pub enum PlanCommand {
     /// List available plan documents
     #[command(
-        after_long_help = "Lists the runnable catalog. `--json` also reports plans that failed to load under `skipped`, and plans hidden by unconfigured `requires_servers` under `hidden`.\n\nExamples:\n  graph plan list\n  graph plan list --json"
+        after_long_help = "Lists the runnable catalog. `--json` also reports plans that failed to load under `skipped`, and plans hidden by unconfigured `requires_servers` under `hidden`.\n\nExamples:\n  dive plan list\n  dive plan list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -176,7 +176,7 @@ pub enum PlanCommand {
     },
     /// Show a plan document
     #[command(
-        after_long_help = "Prints the plan's YAML to stdout and its source, `built-in` or the file path, to stderr. A plan file whose identifier matches a built-in plan replaces it. Opens plans that are invalid or hidden by `requires_servers`.\n\nExamples:\n  graph plan show weekly_changes\n  graph plan show .graph/plans/weekly_changes.yaml --json"
+        after_long_help = "Prints the plan's YAML to stdout and its source, `built-in` or the file path, to stderr. A plan file whose identifier matches a built-in plan replaces it. Opens plans that are invalid or hidden by `requires_servers`.\n\nExamples:\n  dive plan show weekly_changes\n  dive plan show .dive/plans/weekly_changes.yaml --json"
     )]
     Show {
         #[arg(help = "The plan's identifier or YAML file path")]
@@ -187,7 +187,7 @@ pub enum PlanCommand {
     },
     /// Validate a plan document by name or file path
     #[command(
-        after_long_help = "Checks structure (templates, references, step ids) and resolves every step's tool against the catalog: packs, user tools, plans, agents, and configured MCP servers. MCP tool names are checked at the server level only.\n\nProblems exit 1; success prints nothing to stdout. A plan whose `requires_servers` names an unconfigured server validates with a note.\n\nExamples:\n  graph plan validate weekly_changes\n  graph plan validate .graph/plans/weekly_changes.yaml"
+        after_long_help = "Checks structure (templates, references, step ids) and resolves every step's tool against the catalog: packs, user tools, plans, agents, and configured MCP servers. MCP tool names are checked at the server level only.\n\nProblems exit 1; success prints nothing to stdout. A plan whose `requires_servers` names an unconfigured server validates with a note.\n\nExamples:\n  dive plan validate weekly_changes\n  dive plan validate .dive/plans/weekly_changes.yaml"
     )]
     Validate {
         #[arg(help = "The plan's identifier or YAML file path")]
@@ -197,7 +197,7 @@ pub enum PlanCommand {
     },
     /// Delete a plan file
     #[command(
-        after_long_help = "Deletes the file holding the plan, without asking. A plan file that replaces a built-in plan reverts it to the shipped version, and one that shadows a copy in a later plans directory hands over to that copy. Plans and agents that still call it are listed; nothing else is changed. Built-in and pack plans can't be removed one at a time — remove a pack with `graph pack remove`.\n\nExamples:\n  graph plan rm weekly_changes\n  graph plan rm compose_plan --json"
+        after_long_help = "Deletes the file holding the plan, without asking. A plan file that replaces a built-in plan reverts it to the shipped version, and one that shadows a copy in a later plans directory hands over to that copy. Plans and agents that still call it are listed; nothing else is changed. Built-in and pack plans can't be removed one at a time — remove a pack with `dive pack remove`.\n\nExamples:\n  dive plan rm weekly_changes\n  dive plan rm compose_plan --json"
     )]
     Rm {
         #[arg(help = "The plan's identifier")]
@@ -207,7 +207,7 @@ pub enum PlanCommand {
     },
     /// Rewrite a plan file to the current plan format
     #[command(
-        after_long_help = "Rewrites one plan file to the current plan file version. A file already at the current version is left untouched.\n\nExamples:\n  graph plan migrate .graph/plans/weekly_changes.yaml"
+        after_long_help = "Rewrites one plan file to the current plan file version. A file already at the current version is left untouched.\n\nExamples:\n  dive plan migrate .dive/plans/weekly_changes.yaml"
     )]
     Migrate {
         #[arg(help = "The plan's identifier or YAML file path")]
@@ -217,10 +217,10 @@ pub enum PlanCommand {
     },
     /// Run a plan directly (bypasses the agent loop)
     #[command(
-        after_long_help = "Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  graph plan run weekly_changes\n  graph plan run weekly_changes '{\"base\":\"v0.15.0\"}'\n  graph plan run weekly_changes @inputs.json --input base=v0.14.0"
+        after_long_help = "Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  dive plan run weekly_changes\n  dive plan run weekly_changes '{\"base\":\"v0.15.0\"}'\n  dive plan run weekly_changes @inputs.json --input base=v0.14.0"
     )]
     Run {
-        #[arg(help = "The plan's identifier, as `graph plan list` prints it")]
+        #[arg(help = "The plan's identifier, as `dive plan list` prints it")]
         name: String,
         /// Inputs as a JSON object: inline (`'{"a":1}'`), `@file.json`, or `-` for stdin
         #[arg(value_name = "JSON|@FILE|-")]
@@ -233,7 +233,7 @@ pub enum PlanCommand {
     },
     /// Scaffold an empty plan file to build up with `set` and `step add`
     #[command(
-        after_long_help = "Writes a plan with no steps, which won't validate until you add one. An edit is refused only when it adds a validation problem, so you can build the plan up one step at a time.\n\nExamples:\n  graph plan new weekly_changes --description \"Summarize what changed in this repo this week\""
+        after_long_help = "Writes a plan with no steps, which won't validate until you add one. An edit is refused only when it adds a validation problem, so you can build the plan up one step at a time.\n\nExamples:\n  dive plan new weekly_changes --description \"Summarize what changed in this repo this week\""
     )]
     New {
         /// Tool-name-safe identifier; also the file name
@@ -252,7 +252,7 @@ pub enum PlanCommand {
     },
     /// Draft a plan from a goal using the planner model (costs inference)
     #[command(
-        after_long_help = "Runs the built-in `compose_plan` plan over your tool catalog: it finds the tools the goal needs, writes the whole plan in one call, and fixes steps that fail validation. When it had to guess a value that decides what the plan returns, it asks you in the terminal first.\n\nProblems it couldn't fix are listed under `problems`. When no tool in the catalog can do part of the goal, nothing is written and the result lists what is `missing`.\n\nDrafting replaces every step. To correct a plan whose steps you want to keep, use `graph plan set` and the `graph plan step` commands.\n\nExamples:\n  graph plan draft \"Summarize the commits merged since the last release\"\n  graph plan draft \"Summarize the commits merged since the last release\" --from weekly_changes\n  graph plan draft \"List open pull requests with failing checks\" --stdout"
+        after_long_help = "Runs the built-in `compose_plan` plan over your tool catalog: it finds the tools the goal needs, writes the whole plan in one call, and fixes steps that fail validation. When it had to guess a value that decides what the plan returns, it asks you in the terminal first.\n\nProblems it couldn't fix are listed under `problems`. When no tool in the catalog can do part of the goal, nothing is written and the result lists what is `missing`.\n\nDrafting replaces every step. To correct a plan whose steps you want to keep, use `dive plan set` and the `dive plan step` commands.\n\nExamples:\n  dive plan draft \"Summarize the commits merged since the last release\"\n  dive plan draft \"Summarize the commits merged since the last release\" --from weekly_changes\n  dive plan draft \"List open pull requests with failing checks\" --stdout"
     )]
     Draft {
         /// What the plan should do, as a self-contained instruction
@@ -273,7 +273,7 @@ pub enum PlanCommand {
     },
     /// Set one plan attribute
     #[command(
-        after_long_help = "Sets one attribute, named as it appears in the plan file. `solver` and `output` are the two finish modes, so setting one clears the other. Changing `identifier` writes a new file and leaves the old one in place.\n\nAn edit is refused if it adds a validation problem, and a refused edit exits 1 and leaves the file untouched. Problems that were already there never block an edit; they are reported as `preExistingProblems`.\n\nEvery edit rewrites the whole file, so YAML comments are dropped and flow mappings become block mappings.\n\nExamples:\n  graph plan set weekly_changes description \"Summarize the commits merged since a ref\"\n  graph plan set weekly_changes exemplars \"What changed this week?\" \"What shipped since v0.15.0?\"\n  graph plan set weekly_changes input_schema @schema.json"
+        after_long_help = "Sets one attribute, named as it appears in the plan file. `solver` and `output` are the two finish modes, so setting one clears the other. Changing `identifier` writes a new file and leaves the old one in place.\n\nAn edit is refused if it adds a validation problem, and a refused edit exits 1 and leaves the file untouched. Problems that were already there never block an edit; they are reported as `preExistingProblems`.\n\nEvery edit rewrites the whole file, so YAML comments are dropped and flow mappings become block mappings.\n\nExamples:\n  dive plan set weekly_changes description \"Summarize the commits merged since a ref\"\n  dive plan set weekly_changes exemplars \"What changed this week?\" \"What shipped since v0.15.0?\"\n  dive plan set weekly_changes input_schema @schema.json"
     )]
     Set {
         #[arg(
@@ -292,7 +292,7 @@ pub enum PlanCommand {
     },
     /// Clear one optional plan attribute
     #[command(
-        after_long_help = "Clears one optional attribute. Clearing both `solver` and `output` leaves a silent plan. `identifier`, `name` and `description` are required and can only be changed with `graph plan set`.\n\nExamples:\n  graph plan unset weekly_changes exemplars"
+        after_long_help = "Clears one optional attribute. Clearing both `solver` and `output` leaves a silent plan. `identifier`, `name` and `description` are required and can only be changed with `dive plan set`.\n\nExamples:\n  dive plan unset weekly_changes exemplars"
     )]
     Unset {
         #[arg(
@@ -312,7 +312,7 @@ pub enum PlanCommand {
     },
 }
 
-/// Plan-level attributes addressable by `graph plan set` / `unset`. Named
+/// Plan-level attributes addressable by `dive plan set` / `unset`. Named
 /// exactly as they appear in the plan YAML, so what an agent reads in a plan
 /// file is what it writes on the command line.
 #[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -345,7 +345,7 @@ impl PlanAttribute {
     }
 }
 
-/// Step attributes addressable by `graph plan step update` / `unset`.
+/// Step attributes addressable by `dive plan step update` / `unset`.
 /// A step's `id` is deliberately absent: renaming rewrites downstream
 /// `{{id.*}}` references, so it gets its own verb (`step rename`) rather
 /// than looking like a plain field write.
@@ -386,7 +386,7 @@ impl StepCommand {
 pub enum StepCommand {
     /// Append a step, or anchor it before/after an existing one
     #[command(
-        after_long_help = "Adds one step and validates the plan. The edit is refused if it adds a validation problem.\n\nExamples:\n  graph plan step add weekly_changes E1 github__tool__git_log '{\"base\":\"{{input.base}}\",\"head\":\"HEAD\"}'\n  graph plan step add weekly_changes G1 exit '{\"when\":{\"value\":\"{{E1.count}}\",\"op\":\"eq\",\"to\":0},\"status\":\"success\",\"message\":\"Nothing shipped\"}' --after E1"
+        after_long_help = "Adds one step and validates the plan. The edit is refused if it adds a validation problem.\n\nExamples:\n  dive plan step add weekly_changes E1 github__tool__git_log '{\"base\":\"{{input.base}}\",\"head\":\"HEAD\"}'\n  dive plan step add weekly_changes G1 exit '{\"when\":{\"value\":\"{{E1.count}}\",\"op\":\"eq\",\"to\":0},\"status\":\"success\",\"message\":\"Nothing shipped\"}' --after E1"
     )]
     Add {
         #[arg(
@@ -416,7 +416,7 @@ pub enum StepCommand {
     },
     /// Set one attribute of a step
     #[command(
-        after_long_help = "Sets one attribute of a step. `tool` takes a tool name or a control step (`exit`, `agent`, `ask`, `route`, `filter`, `map`, `reduce`), `input` takes the step's whole input object, and `reasoning` takes a string.\n\nExamples:\n  graph plan step update weekly_changes E1 reasoning \"Commit subjects are enough for a summary\"\n  graph plan step update weekly_changes E1 input @e1.json"
+        after_long_help = "Sets one attribute of a step. `tool` takes a tool name or a control step (`exit`, `agent`, `ask`, `route`, `filter`, `map`, `reduce`), `input` takes the step's whole input object, and `reasoning` takes a string.\n\nExamples:\n  dive plan step update weekly_changes E1 reasoning \"Commit subjects are enough for a summary\"\n  dive plan step update weekly_changes E1 input @e1.json"
     )]
     Update {
         #[arg(
@@ -436,7 +436,7 @@ pub enum StepCommand {
     },
     /// Rename a step, rewriting every downstream {{id.*}} reference
     #[command(
-        after_long_help = "Renames a step and rewrites every reference to it in later steps, the `output` map and the `solver` templates.\n\nExamples:\n  graph plan step rename weekly_changes E1 commits"
+        after_long_help = "Renames a step and rewrites every reference to it in later steps, the `output` map and the `solver` templates.\n\nExamples:\n  dive plan step rename weekly_changes E1 commits"
     )]
     Rename {
         #[arg(
@@ -453,7 +453,7 @@ pub enum StepCommand {
     },
     /// Clear one optional attribute of a step
     #[command(
-        after_long_help = "Clears one optional attribute of a step. A step's `tool` and `input` are required and can't be cleared.\n\nExamples:\n  graph plan step unset weekly_changes E1 reasoning"
+        after_long_help = "Clears one optional attribute of a step. A step's `tool` and `input` are required and can't be cleared.\n\nExamples:\n  dive plan step unset weekly_changes E1 reasoning"
     )]
     Unset {
         #[arg(
@@ -470,7 +470,7 @@ pub enum StepCommand {
     },
     /// Remove a step
     #[command(
-        after_long_help = "Removes a step. The edit is refused while a later step still references it.\n\nExamples:\n  graph plan step rm weekly_changes E2"
+        after_long_help = "Removes a step. The edit is refused while a later step still references it.\n\nExamples:\n  dive plan step rm weekly_changes E2"
     )]
     Rm {
         #[arg(
@@ -489,7 +489,7 @@ pub enum StepCommand {
 pub enum ToolCommand {
     /// List every tool visible to the agent and planner
     #[command(
-        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly` and `hasOutputSchema`.\n\nExamples:\n  graph tool list\n  graph tool list --json"
+        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly` and `hasOutputSchema`.\n\nExamples:\n  dive tool list\n  dive tool list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -497,20 +497,20 @@ pub enum ToolCommand {
     },
     /// Show one tool's description and schemas
     #[command(
-        after_long_help = "For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.\n\nExamples:\n  graph tool show github__tool__git_log\n  graph tool show linear__list_issues --json"
+        after_long_help = "For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.\n\nExamples:\n  dive tool show github__tool__git_log\n  dive tool show linear__list_issues --json"
     )]
     Show {
-        #[arg(help = "The tool's namespaced name, as `graph tool list` prints it")]
+        #[arg(help = "The tool's namespaced name, as `dive tool list` prints it")]
         name: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Invoke a tool directly
     #[command(
-        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  graph tool test github__tool__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  graph tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json"
+        after_long_help = "Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.\n\nExamples:\n  dive tool test github__tool__git_log '{\"base\":\"v0.15.0\",\"head\":\"HEAD\"}'\n  dive tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json"
     )]
     Test {
-        #[arg(help = "The tool's namespaced name, as `graph tool list` prints it")]
+        #[arg(help = "The tool's namespaced name, as `dive tool list` prints it")]
         name: String,
         /// Input as a JSON object: inline (`'{"a":1}'`), `@file.json`, or `-` for stdin
         #[arg(value_name = "JSON|@FILE|-")]
@@ -523,7 +523,7 @@ pub enum ToolCommand {
     },
     /// Delete a user tool file or a built-in tool's override
     #[command(
-        after_long_help = "Deletes the tool's file, without asking. `builtin__<name>` deletes the override in a tools directory's `builtin/` folder and brings the shipped tool back. Plans and agents that still call it are listed; nothing else is changed. Pack tools can't be removed one at a time — remove a pack with `graph pack remove`.\n\nExamples:\n  graph tool rm summarize\n  graph tool rm builtin__infer --json"
+        after_long_help = "Deletes the tool's file, without asking. `builtin__<name>` deletes the override in a tools directory's `builtin/` folder and brings the shipped tool back. Plans and agents that still call it are listed; nothing else is changed. Pack tools can't be removed one at a time — remove a pack with `dive pack remove`.\n\nExamples:\n  dive tool rm summarize\n  dive tool rm builtin__infer --json"
     )]
     Rm {
         #[arg(
@@ -535,7 +535,7 @@ pub enum ToolCommand {
     },
     /// Rewrite a user tool file to the current tool format
     #[command(
-        after_long_help = "Rewrites one user tool file to the current tool file version. It takes a path rather than a tool name and doesn't connect to MCP servers.\n\nExamples:\n  graph tool migrate .graph/tools/summarize.yaml"
+        after_long_help = "Rewrites one user tool file to the current tool file version. It takes a path rather than a tool name and doesn't connect to MCP servers.\n\nExamples:\n  dive tool migrate .dive/tools/summarize.yaml"
     )]
     Migrate {
         #[arg(help = "Path to the user tool file")]
@@ -547,9 +547,9 @@ pub enum ToolCommand {
 
 #[derive(Subcommand)]
 pub enum AgentCommand {
-    /// List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents)
+    /// List every agent: built-in, global (~/.config/dive/agents), and project (./.dive/agents)
     #[command(
-        after_long_help = "Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).\n\nExamples:\n  graph agent list\n  graph agent list --json"
+        after_long_help = "Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).\n\nExamples:\n  dive agent list\n  dive agent list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -557,7 +557,7 @@ pub enum AgentCommand {
     },
     /// Print an agent's effective definition, the file to copy when customizing it
     #[command(
-        after_long_help = "Examples:\n  graph agent show chat\n  graph agent show chat > .graph/agents/chat.yaml"
+        after_long_help = "Examples:\n  dive agent show chat\n  dive agent show chat > .dive/agents/chat.yaml"
     )]
     Show {
         #[arg(help = "The agent's name")]
@@ -567,7 +567,7 @@ pub enum AgentCommand {
     },
     /// Validate every agent, or one agent file against the others
     #[command(
-        after_long_help = "Problems exit 1. `--json` lists them under `problems`.\n\nExamples:\n  graph agent validate\n  graph agent validate .graph/agents/release_notes.yaml"
+        after_long_help = "Problems exit 1. `--json` lists them under `problems`.\n\nExamples:\n  dive agent validate\n  dive agent validate .dive/agents/release_notes.yaml"
     )]
     Validate {
         #[arg(help = "One agent file to check against the others; omit to check every agent")]
@@ -577,7 +577,7 @@ pub enum AgentCommand {
     },
     /// Delete an agent file
     #[command(
-        after_long_help = "Deletes the file defining the agent, without asking. A project agent that shadows a global one hands over to it, and an agent file that replaces a built-in agent reverts it to the shipped version. Plans and agents that still call it, hand off to it or run it as a subagent are listed; nothing else is changed. Pack agents can't be removed one at a time — remove a pack with `graph pack remove`.\n\nExamples:\n  graph agent rm release_notes\n  graph agent rm chat --json"
+        after_long_help = "Deletes the file defining the agent, without asking. A project agent that shadows a global one hands over to it, and an agent file that replaces a built-in agent reverts it to the shipped version. Plans and agents that still call it, hand off to it or run it as a subagent are listed; nothing else is changed. Pack agents can't be removed one at a time — remove a pack with `dive pack remove`.\n\nExamples:\n  dive agent rm release_notes\n  dive agent rm chat --json"
     )]
     Rm {
         #[arg(help = "The agent's name")]
@@ -587,7 +587,7 @@ pub enum AgentCommand {
     },
     /// Rewrite an agent file to the current agent format
     #[command(
-        after_long_help = "Rewrites one agent file to the current agent file version.\n\nExamples:\n  graph agent migrate .graph/agents/release_notes.yaml"
+        after_long_help = "Rewrites one agent file to the current agent file version.\n\nExamples:\n  dive agent migrate .dive/agents/release_notes.yaml"
     )]
     Migrate {
         #[arg(help = "Path to the agent file")]
@@ -601,7 +601,7 @@ pub enum AgentCommand {
 pub enum ThreadCommand {
     /// List threads
     #[command(
-        after_long_help = "Lists the threads started in the current directory's project, or the global threads when the directory has no `.graph` folder. `--all` lists every thread.\n\nExamples:\n  graph thread list\n  graph thread list --all"
+        after_long_help = "Lists the threads started in the current directory's project, or the global threads when the directory has no `.dive` folder. `--all` lists every thread.\n\nExamples:\n  dive thread list\n  dive thread list --all"
     )]
     List {
         #[arg(long, help = "List every thread, whatever project it was started in")]
@@ -611,10 +611,10 @@ pub enum ThreadCommand {
     },
     /// Show a thread's messages
     #[command(
-        after_long_help = "Examples:\n  graph thread show 4f1c9a2b7d3e\n  graph thread show 4f1c9a2b7d3e --state --json"
+        after_long_help = "Examples:\n  dive thread show 4f1c9a2b7d3e\n  dive thread show 4f1c9a2b7d3e --state --json"
     )]
     Show {
-        #[arg(help = "The thread id, as `graph thread list` prints it")]
+        #[arg(help = "The thread id, as `dive thread list` prints it")]
         id: String,
         /// Include the full runtime state
         #[arg(long)]
@@ -623,9 +623,9 @@ pub enum ThreadCommand {
         json: bool,
     },
     /// Delete a thread
-    #[command(after_long_help = "Examples:\n  graph thread rm 4f1c9a2b7d3e")]
+    #[command(after_long_help = "Examples:\n  dive thread rm 4f1c9a2b7d3e")]
     Rm {
-        #[arg(help = "The thread id, as `graph thread list` prints it")]
+        #[arg(help = "The thread id, as `dive thread list` prints it")]
         id: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
@@ -636,7 +636,7 @@ pub enum ThreadCommand {
 pub enum SecretCommand {
     #[command(
         about = "Store a secret in the OS credential store",
-        after_long_help = "Reads the value with hidden input when stdin is a terminal, or from stdin when it is piped; one trailing newline is dropped. The value is never accepted as an argument, where it would land in shell history. Storing a name again replaces its value.\n\nWithout --project the value is shared by every project on this machine. With --project it applies only to this project, keyed by the `[project] id` in .graph/config.toml, which is generated on first use. A name resolves from the environment first, then this project's value, then the shared value.\n\nExamples:\n  graph secret set ANTHROPIC_API_KEY\n  graph secret set SLACK_BOT_TOKEN --project\n  printf %s \"$TOKEN\" | graph secret set GITHUB_TOKEN"
+        after_long_help = "Reads the value with hidden input when stdin is a terminal, or from stdin when it is piped; one trailing newline is dropped. The value is never accepted as an argument, where it would land in shell history. Storing a name again replaces its value.\n\nWithout --project the value is shared by every project on this machine. With --project it applies only to this project, keyed by the `[project] id` in .dive/config.toml, which is generated on first use. A name resolves from the environment first, then this project's value, then the shared value.\n\nExamples:\n  dive secret set ANTHROPIC_API_KEY\n  dive secret set SLACK_BOT_TOKEN --project\n  printf %s \"$TOKEN\" | dive secret set GITHUB_TOKEN"
     )]
     Set {
         #[arg(help = "The variable name, as `${NAME}` references it")]
@@ -648,7 +648,7 @@ pub enum SecretCommand {
     },
     #[command(
         about = "Remove a secret from the OS credential store",
-        after_long_help = "Removes the shared value, or this project's value with --project. Removing a name that isn't stored is refused and exits 1.\n\nExamples:\n  graph secret rm GITHUB_TOKEN\n  graph secret rm SLACK_BOT_TOKEN --project"
+        after_long_help = "Removes the shared value, or this project's value with --project. Removing a name that isn't stored is refused and exits 1.\n\nExamples:\n  dive secret rm GITHUB_TOKEN\n  dive secret rm SLACK_BOT_TOKEN --project"
     )]
     Rm {
         #[arg(help = "The variable name, as `${NAME}` references it")]
@@ -660,7 +660,7 @@ pub enum SecretCommand {
     },
     #[command(
         about = "List every variable name the config, tools and packs reference, and where each resolves from",
-        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is the first of `env`, `project` and `shared` that sets it, followed by the sources it shadows, or `missing`. Names stored in the OS credential store for this project or for every project are listed too, even when nothing references them. A name a tool's `env` describes (`{value, description}`) shows its description below it. Values are never printed.\n\nExamples:\n  graph secret list\n  graph secret list --json"
+        after_long_help = "Lists the names referenced by the global and project config.toml, user tools, installed packs' tools, and packs' `requires.env`. Each name's source is the first of `env`, `project` and `shared` that sets it, followed by the sources it shadows, or `missing`. Names stored in the OS credential store for this project or for every project are listed too, even when nothing references them. A name a tool's `env` describes (`{value, description}`) shows its description below it. Values are never printed.\n\nExamples:\n  dive secret list\n  dive secret list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -668,7 +668,7 @@ pub enum SecretCommand {
     },
     #[command(
         about = "Show where one name resolves from and what references it",
-        after_long_help = "Prints the environment, project and shared values in resolution order, marks the one in use, shows the description a tool's `env` gives it, and lists the references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  graph secret show ANTHROPIC_API_KEY"
+        after_long_help = "Prints the environment, project and shared values in resolution order, marks the one in use, shows the description a tool's `env` gives it, and lists the references. Values are masked to their last 4 characters, and to nothing when shorter than 8.\n\nExamples:\n  dive secret show ANTHROPIC_API_KEY"
     )]
     Show {
         #[arg(help = "The variable name, as `${NAME}` references it")]
@@ -681,13 +681,13 @@ pub enum SecretCommand {
 #[derive(Subcommand)]
 pub enum McpCommand {
     /// List configured servers and their status
-    #[command(after_long_help = "Examples:\n  graph mcp list")]
+    #[command(after_long_help = "Examples:\n  dive mcp list")]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// List tools exposed by servers
-    #[command(after_long_help = "Examples:\n  graph mcp tools\n  graph mcp tools linear --json")]
+    #[command(after_long_help = "Examples:\n  dive mcp tools\n  dive mcp tools linear --json")]
     Tools {
         #[arg(help = "Only this server; omit for every configured server")]
         server: Option<String>,
@@ -695,7 +695,7 @@ pub enum McpCommand {
         json: bool,
     },
     /// Connect to a server and verify initialize + tools/list
-    #[command(after_long_help = "Examples:\n  graph mcp test linear")]
+    #[command(after_long_help = "Examples:\n  dive mcp test linear")]
     Test {
         #[arg(help = "The server name, as configured under `[mcp.<name>]`")]
         server: String,
@@ -703,9 +703,9 @@ pub enum McpCommand {
         json: bool,
     },
     /// Serve graph's plans and authoring commands to an agent over MCP (stdio)
-    #[command(after_long_help = "Examples:\n  graph mcp serve --dir ~/code/my-project")]
+    #[command(after_long_help = "Examples:\n  dive mcp serve --dir ~/code/my-project")]
     Serve {
-        /// Project directory to serve from — the one holding `.graph/`.
+        /// Project directory to serve from — the one holding `.dive/`.
         /// MCP clients launch servers with an arbitrary working directory,
         /// so without this the plan catalog resolves against wherever the
         /// client happened to be.
@@ -713,7 +713,7 @@ pub enum McpCommand {
         dir: Option<PathBuf>,
     },
     /// Pre-warm the observed-shape cache by invoking read-only tools
-    #[command(after_long_help = "Examples:\n  graph mcp probe\n  graph mcp probe linear")]
+    #[command(after_long_help = "Examples:\n  dive mcp probe\n  dive mcp probe linear")]
     Probe {
         #[arg(help = "Only this server; omit for every configured server")]
         server: Option<String>,
@@ -725,13 +725,13 @@ pub enum McpCommand {
 #[derive(Subcommand)]
 pub enum ShapeCommand {
     /// List cached tool shapes
-    #[command(after_long_help = "Examples:\n  graph shape list")]
+    #[command(after_long_help = "Examples:\n  dive shape list")]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Show one tool's cached schema and example
-    #[command(after_long_help = "Examples:\n  graph shape show linear__list_issues")]
+    #[command(after_long_help = "Examples:\n  dive shape show linear__list_issues")]
     Show {
         #[arg(help = "The tool's namespaced name")]
         tool: String,
@@ -745,13 +745,13 @@ pub struct LayerArgs {
     #[arg(
         long,
         conflicts_with = "dir",
-        help = "Target the global layer (~/.config/graph/) instead of the project's ./.graph/"
+        help = "Target the global layer (~/.config/dive/) instead of the project's ./.dive/"
     )]
     pub global: bool,
     #[arg(
         long,
         value_name = "PATH",
-        help = "Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)"
+        help = "Target this Dive directory, laid out like .dive/ (config.toml, packs/, packs.lock)"
     )]
     pub dir: Option<PathBuf>,
 }
@@ -759,7 +759,7 @@ pub struct LayerArgs {
 #[derive(Subcommand)]
 pub enum PackCommand {
     #[command(
-        about = "Install a pack from git as a plain copy in the project, global or given graph directory",
+        about = "Install a pack from git as a plain copy in the project, global or given Dive directory",
         after_long_help = "packs.lock records the commit each release tag pointed at when it was installed. A published release must never move: when the repository's copy of a recorded tag now points elsewhere, or a clone checks out a different commit than git ls-remote reported, the install is refused and nothing changes. Branch-tracking packs are exempt."
     )]
     Add {
@@ -846,7 +846,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md",
-        after_long_help = "Writes the files from a scaffold built into graph, so it works offline, into <PATH>/<NAME>/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `graph pack test` over every pack, and a `.gitignore` for `.graph/` when it has none. The scaffold passes `graph pack check` and `graph pack test` as written.\n\nExamples:\n  graph pack new files\n  graph pack new files ../graph-packs"
+        after_long_help = "Writes the files from a scaffold built into Dive, so it works offline, into <PATH>/<NAME>/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `dive pack test` over every pack, and a `.gitignore` for `.dive/` when it has none. The scaffold passes `dive pack check` and `dive pack test` as written.\n\nExamples:\n  dive pack new files\n  dive pack new files ../graph-packs"
     )]
     New {
         #[arg(
@@ -865,7 +865,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements",
-        after_long_help = "Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. pack.toml must list the systems the pack runs on in `requires.os` (`macos`, `linux`). Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.\n\nExamples:\n  graph pack check\n  graph pack check files --json"
+        after_long_help = "Loads the pack under its manifest name and checks every plan and agent against the pack plus Dive's built-ins, including each step's literal input against the called tool's input schema. pack.toml must list the systems the pack runs on in `requires.os` (`macos`, `linux`). Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.\n\nExamples:\n  dive pack check\n  dive pack check files --json"
     )]
     Check {
         #[arg(
@@ -879,7 +879,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Run one of a pack's items, private and migration ones included, under its manifest name",
-        after_long_help = "Runs a tool, plan or agent of the pack at --path, the way the pack's own plans call it, so items outside the public interface and migration items run too. This is the only direct way to run them. The result is printed to stdout as JSON.\n\nExamples:\n  graph pack run tool__word_count --input file=README.md\n  graph pack run plan__migrate_v2 '{\"root\": \".graph\", \"apply\": false}' --path files"
+        after_long_help = "Runs a tool, plan or agent of the pack at --path, the way the pack's own plans call it, so items outside the public interface and migration items run too. This is the only direct way to run them. The result is printed to stdout as JSON.\n\nExamples:\n  dive pack run tool__word_count --input file=README.md\n  dive pack run plan__migrate_v2 '{\"root\": \".dive\", \"apply\": false}' --path files"
     )]
     Run {
         #[arg(
@@ -910,7 +910,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Run check, then every migration over its sample files in tests/migrations/v<N>/ and validate the result",
-        after_long_help = "For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is tested, so a repository's CI is `graph pack test` at its root.\n\nExamples:\n  graph pack test\n  graph pack test files --json"
+        after_long_help = "For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is tested, so a repository's CI is `dive pack test` at its root.\n\nExamples:\n  dive pack test\n  dive pack test files --json"
     )]
     Test {
         #[arg(
@@ -924,7 +924,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Compare the public interface with the previous release tag and create the next annotated tag, without pushing",
-        after_long_help = "A pack's releases are the tags `<DIR>/vX.Y.Z`, where <DIR> is the pack's directory relative to the repository root (plain `vX.Y.Z` for a pack at the root). Refuses uncommitted changes inside the pack's directory, then compares every public item's name, input schema and output schema with the pack's newest release tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `graph pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.\n\nExamples:\n  graph pack release minor files\n  graph pack release major ../graph-packs/files"
+        after_long_help = "A pack's releases are the tags `<DIR>/vX.Y.Z`, where <DIR> is the pack's directory relative to the repository root (plain `vX.Y.Z` for a pack at the root). Refuses uncommitted changes inside the pack's directory, then compares every public item's name, input schema and output schema with the pack's newest release tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `dive pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.\n\nExamples:\n  dive pack release minor files\n  dive pack release major ../graph-packs/files"
     )]
     Release {
         #[arg(value_name = "BUMP", help = "Which part of the version to raise")]
@@ -943,17 +943,17 @@ pub enum PackCommand {
 #[derive(Subcommand)]
 pub enum ConfigCommand {
     /// Print the merged effective configuration
-    #[command(after_long_help = "Examples:\n  graph config show\n  graph config show --json")]
+    #[command(after_long_help = "Examples:\n  dive config show\n  dive config show --json")]
     Show {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Write a starter config file
     #[command(
-        after_long_help = "Writes a commented starter config to `./.graph/config.toml`, or to `~/.config/graph/config.toml` with `--global`. Refuses to overwrite an existing file unless `--force` is set.\n\nExamples:\n  graph config init\n  graph config init --global"
+        after_long_help = "Writes a commented starter config to `./.dive/config.toml`, or to `~/.config/dive/config.toml` with `--global`. Refuses to overwrite an existing file unless `--force` is set.\n\nExamples:\n  dive config init\n  dive config init --global"
     )]
     Init {
-        /// Write to the global location (~/.config/graph/) instead of the project (./.graph/)
+        /// Write to the global location (~/.config/dive/) instead of the project (./.dive/)
         #[arg(long)]
         global: bool,
         /// Overwrite an existing file
@@ -964,14 +964,14 @@ pub enum ConfigCommand {
         path: Option<PathBuf>,
     },
     /// Print the config file locations and which exist
-    #[command(after_long_help = "Examples:\n  graph config path")]
+    #[command(after_long_help = "Examples:\n  dive config path")]
     Path {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
     /// Report each config file's format and whether the merged config loads
     #[command(
-        after_long_help = "Reports each config file's version as `current`, `migrate`, `too new` or `too old`, then loads the merged config and exits 1 with the problems if it doesn't load.\n\nExamples:\n  graph config check"
+        after_long_help = "Reports each config file's version as `current`, `migrate`, `too new` or `too old`, then loads the merged config and exits 1 with the problems if it doesn't load.\n\nExamples:\n  dive config check"
     )]
     Check {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -979,10 +979,10 @@ pub enum ConfigCommand {
     },
     /// Rewrite a config file to the current config format, comments intact
     #[command(
-        after_long_help = "Rewrites the config file to the current config file version, keeping comments and layout. A file already at the current version is left untouched.\n\nExamples:\n  graph config migrate\n  graph config migrate --global"
+        after_long_help = "Rewrites the config file to the current config file version, keeping comments and layout. A file already at the current version is left untouched.\n\nExamples:\n  dive config migrate\n  dive config migrate --global"
     )]
     Migrate {
-        /// Migrate the global file (~/.config/graph/) instead of the project one (./.graph/)
+        /// Migrate the global file (~/.config/dive/) instead of the project one (./.dive/)
         #[arg(long)]
         global: bool,
         #[arg(long, help = "Print a JSON envelope instead of text")]

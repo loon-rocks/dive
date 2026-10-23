@@ -6,11 +6,11 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-pub const GRAPH_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const DIVE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Machine {
-    pub graph: String,
+    pub dive: String,
     pub os: String,
     pub path: Vec<PathBuf>,
     pub env: BTreeMap<String, String>,
@@ -20,7 +20,7 @@ pub struct Machine {
 impl Machine {
     pub fn current() -> Machine {
         Machine {
-            graph: GRAPH_VERSION.to_string(),
+            dive: DIVE_VERSION.to_string(),
             os: std::env::consts::OS.to_string(),
             path: std::env::var_os("PATH")
                 .map(|path| std::env::split_paths(&path).collect())
@@ -83,8 +83,8 @@ pub struct Evaluation {
 
 pub fn evaluate(requires: &PackRequires, machine: &Machine) -> Evaluation {
     let mut evaluation = Evaluation::default();
-    if let Some(wanted) = &requires.graph {
-        if let Some(problem) = graph_problem(wanted, &machine.graph) {
+    if let Some(wanted) = &requires.dive {
+        if let Some(problem) = dive_problem(wanted, &machine.dive) {
             evaluation.refused.push(problem);
         }
     }
@@ -127,9 +127,9 @@ fn meets(wanted: &str, version: &str) -> bool {
     Version::parse(version).is_ok_and(|version| requirement.matches(&version))
 }
 
-fn graph_problem(wanted: &str, running: &str) -> Option<String> {
+fn dive_problem(wanted: &str, running: &str) -> Option<String> {
     (!meets(wanted, running))
-        .then(|| format!("requires.graph: needs graph {wanted}; this is graph {running}"))
+        .then(|| format!("requires.dive: needs Dive {wanted}; this is Dive {running}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

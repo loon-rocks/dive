@@ -94,8 +94,8 @@ pub struct InstalledPacks {
 
 fn add_command(name: &str, layer: LayerKind) -> String {
     match layer {
-        LayerKind::Global => format!("graph pack add {name} --global"),
-        LayerKind::Project => format!("graph pack add {name}"),
+        LayerKind::Global => format!("dive pack add {name} --global"),
+        LayerKind::Project => format!("dive pack add {name}"),
     }
 }
 
@@ -376,7 +376,7 @@ impl RequirementReport {
             .collect();
         if !self.snippets.is_empty() {
             lines.push(format!(
-                "{name} needs MCP servers graph does not write for you; add to your config:"
+                "{name} needs MCP servers Dive does not write for you; add to your config:"
             ));
             lines.extend(
                 self.snippets

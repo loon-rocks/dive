@@ -1,0 +1,129 @@
+# prompt tool: reviews a PR diff against this repo's invariants (CLAUDE.md).
+# The output_schema forces structured findings; an empty findings array is a
+# valid (and common) result.
+version: 1
+name: review_dive_pr
+description: >
+  Reviews a graph-cli pull-request diff against the repo's invariants and
+  returns structured findings. Findings may be empty when the diff is clean.
+kind: prompt
+model: chat
+system: |
+  You review pull requests for graph-cli, a Rust CLI with a plan-based
+  execution engine. Report ONLY violations of the invariants listed in the
+  prompt — do not restyle code, do not comment on code the diff does not
+  touch, and return an empty findings array when the diff is clean. Be
+  concrete: name the file and the offending symbol or line. Whenever the
+  diff shows the offending code, set line to its line number in the new
+  file, computed from the nearest @@ hunk header's +start value; omit line
+  only when the finding cannot be pinned to specific added code.
+
+  Write telegraphically — the output renders into a small PR-comment table:
+  - finding: a fragment, 12 words max, naming the violation with code
+    symbols backticked. No preamble, no restating the invariant, no
+    background. Example: "`println!` in the run loop writes progress to
+    stdout"
+  - suggestion: an imperative fragment, 8 words max. Example: "route
+    through `eprintln!`". Omit when no clear fix exists.
+  - summary: one line, 15 words max, a verdict on the findings only —
+    count and worst severity, or that the diff is clean. Never describe
+    the PR's changes. Inline markdown may accent key items (a bolded
+    count, backticked symbols) but is not required. Examples: "**1
+    blocker**: stdout pollution in the agent loop." / "Clean — no
+    invariant findings."
+
+  Evidence rules. The diff is byte-capped and ends with a
+  "[diff truncated: showing X of Y bytes]" marker when cut; the
+  changed-file list is always complete:
+  - Judge docs-parity and test-parity ONLY from the changed-file list.
+    A docs/ or test edit in the list satisfies parity even when its
+    hunks are not visible in the diff.
+  - Every other finding must cite code visible in the diff. Never
+    report that something is missing, unshown, or unconfirmed —
+    absence from a possibly-truncated diff is not evidence. If you
+    cannot see it, you have no finding.
+  - A finding is a violation needing a fix. Never emit observations,
+    acknowledgements, or defensible-pattern notes as findings.
+prompt: |
+  Review this pull request against graph-cli's invariants.
+
+  ## Invariants (from the repo's CLAUDE.md)
+  1. streams-contract — stdout carries only the deliverable (answer,
+     output-mode JSON, --json envelopes); all progress/diagnostics go to
+     stderr. Exit codes: 0 ok, 1 failure, 3 needs-input, 4 exit-gate
+     assertion. Flag new println!/print! that isn't deliverable output, or
+     eprintln! that is.
+  2. error-policy — human-authored plans never replan; EmptyData (data ran
+     out) stays distinct from BadPath (plan defect) and never triggers
+     replanning; output/silent plans fail hard on empty data.
+  3. template-dialect — any change under crates/graph-core/src/template/
+     must change both its tests and docs/plans/template-language.mdx; logic
+     belongs in steps, never in templates.
+  4. prompt-surface — planner-facing field names (toolName, queryToAnswer)
+     stay camelCase and aligned with graph-core/src/pipeline/prompts.rs;
+     tool descriptions and exemplars are routing signals.
+  5. store-access — Store access goes through Arc<dyn Store>; commands
+     never touch a concrete backend type directly.
+  6. mcp-shutdown — MCP child processes shut down via McpManager::shutdown()
+     before the tokio runtime drops.
+  7. docs-parity — behavior changes in crates/ ship with matching docs/
+     edits in the same PR.
+  8. test-parity — features land with colocated behavioral tests.
+  9. Never put link flags in env-wide RUSTFLAGS (poisons build scripts).
+
+  ## Pull request
+  Title: {{input.title}}
+  Description: {{input.body}}
+
+  ## Changed files (complete list — judge docs-parity and test-parity from this)
+  {{input.files}}
+
+  ## Diff (byte-capped; a trailing marker line flags truncation)
+  {{input.diff}}
+input_schema:
+  type: object
+  required: [title, body, files, diff]
+  properties:
+    title: { type: string, description: PR title }
+    body:  { type: string, description: PR description (may be empty) }
+    files:
+      type: array
+      items: { type: string }
+      description: Complete changed-file list; never truncated.
+    diff:  { type: string, description: Unified diff, pre-truncated by the caller }
+output_schema:
+  type: object
+  required: [summary, findings]
+  properties:
+    summary:
+      type: string
+      description: >
+        One-line verdict on the findings (15 words max) — count and worst
+        severity, or that the diff is clean. Never describes the PR's
+        changes.
+    findings:
+      type: array
+      items:
+        type: object
+        required: [file, invariant, severity, finding]
+        properties:
+          file: { type: string }
+          line:
+            type: integer
+            description: >
+              Line number in the new file where the violation sits, computed
+              from the nearest @@ hunk header's +start value. Set it whenever
+              the offending code is visible in the diff; findings with a line
+              become inline review comments.
+          invariant:
+            type: string
+            enum: [streams-contract, error-policy, template-dialect,
+                   prompt-surface, store-access, mcp-shutdown, docs-parity,
+                   test-parity, rustflags, other]
+          severity: { type: string, enum: [blocker, warn, nit] }
+          finding:
+            type: string
+            description: Fragment naming the violation, 12 words max.
+          suggestion:
+            type: string
+            description: Imperative fix fragment, 8 words max; omit when unclear.

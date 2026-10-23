@@ -14,7 +14,7 @@ members = [
 version = "0.16.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/tylerdavis/graph"
+repository = "https://github.com/loon-rocks/dive"
 
 [workspace.dependencies]
 dive-core = { path = "crates/dive-core" }

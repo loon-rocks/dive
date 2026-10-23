@@ -6,7 +6,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use toml_edit::DocumentMut;
 
-pub const PACK_FORMAT: u32 = 1;
+pub const PACK_FORMAT: u32 = 2;
 pub const PACK_FORMAT_OLDEST: u32 = 1;
 pub const LOCK_FORMAT: u32 = 1;
 pub const LOCK_FORMAT_OLDEST: u32 = 1;
@@ -75,7 +75,7 @@ pub struct PackManifest {
 #[serde(deny_unknown_fields)]
 pub struct PackRequires {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub graph: Option<String>,
+    pub dive: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub os: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -131,8 +131,22 @@ pub const LOCK_KIND: &str = "lock";
 pub const SUPPORTED_OS: &[&str] = &["macos", "linux"];
 pub const HASH_PREFIX: &str = "sha256:";
 
-const PACK_MIGRATIONS: &[Migration] = &[];
+const PACK_MIGRATIONS: &[Migration] = &[requires_graph_becomes_dive];
 const LOCK_MIGRATIONS: &[Migration] = &[];
+
+fn requires_graph_becomes_dive(doc: &mut DocumentMut) -> Result<Vec<String>, String> {
+    let Some(requires) = doc.get_mut("requires").and_then(toml_edit::Item::as_table_like_mut) else {
+        return Ok(Vec::new());
+    };
+    let Some(graph) = requires.remove("graph") else {
+        return Ok(Vec::new());
+    };
+    if requires.contains_key("dive") {
+        return Err("requires: has both graph and dive; keep only dive".to_string());
+    }
+    requires.insert("dive", graph);
+    Ok(vec!["renamed requires.graph to requires.dive".to_string()])
+}
 
 pub fn pack_migration_count() -> usize {
     PACK_MIGRATIONS.len()
@@ -173,7 +187,7 @@ fn read_versioned<T: serde::de::DeserializeOwned>(
         .map_err(|e| format!("{what}: {e}"))?
         .ok_or_else(|| {
             format!(
-                "{what}: {FORMAT_KEY} is required; this graph writes {} version {}",
+                "{what}: {FORMAT_KEY} is required; this Dive writes {} version {}",
                 contract.kind, contract.current
             )
         })?;
@@ -208,8 +222,8 @@ impl PackManifest {
         if self.description.trim().is_empty() {
             problems.push("description: must not be empty".to_string());
         }
-        if let Some(graph) = &self.requires.graph {
-            problems.extend(semver_problem("requires.graph", graph));
+        if let Some(dive) = &self.requires.dive {
+            problems.extend(semver_problem("requires.dive", dive));
         }
         for os in &self.requires.os {
             if !SUPPORTED_OS.contains(&os.as_str()) {

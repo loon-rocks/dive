@@ -162,7 +162,7 @@ pub fn list(layers: &[Layer], offline: bool) -> Result<Outcome> {
     let outcome = Outcome::raw(listed.text(), serde_json::to_value(&listed)?);
     if listed.count == 0 {
         return Ok(
-            outcome.with_note("no packs installed; add one with `graph pack add <name|url>`")
+            outcome.with_note("no packs installed; add one with `dive pack add <name|url>`")
         );
     }
     Ok(outcome)

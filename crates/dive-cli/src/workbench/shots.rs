@@ -17,11 +17,11 @@
 //! is pinned to the spec's `turn_seconds` before rendering.
 //!
 //! Guard rails against stale fixtures: every scripted tool must exist in
-//! the real catalog (packs + `.graph/tools`), and every scripted outcome
+//! the real catalog (packs + `.dive/tools`), and every scripted outcome
 //! is validated against the tool's declared `output_schema`. Renames and
 //! shape changes fail generation instead of rendering a plausible lie.
 //!
-//! Regenerate with `GRAPH_UPDATE_SHOTS=1 cargo test -p dive-cli shots -- --nocapture`
+//! Regenerate with `DIVE_UPDATE_SHOTS=1 cargo test -p dive-cli shots -- --nocapture`
 //! (or `mise run shots`); output lands in `docs/images/workbench/`.
 
 use super::app::{self, App, Mode, Msg};
@@ -55,7 +55,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-const UPDATE_ENV: &str = "GRAPH_UPDATE_SHOTS";
+const UPDATE_ENV: &str = "DIVE_UPDATE_SHOTS";
 const SHOT_GITHUB_PACK: &str = "crates/dive-core/tests/fixtures/packs/github";
 
 // ── Scenario spec ────────────────────────────────────────────────────────
@@ -337,7 +337,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
     let router = Arc::new(ModelRouter::with_providers(providers, roles));
 
     let builtin_docs = load_builtin_tools().map_err(anyhow::Error::msg)?;
-    let user_docs = load_user_tools(&[root.join(".graph/tools")]).map_err(anyhow::Error::msg)?;
+    let user_docs = load_user_tools(&[root.join(".dive/tools")]).map_err(anyhow::Error::msg)?;
     let github = load_pack(
         PackSource {
             name: "github".to_string(),

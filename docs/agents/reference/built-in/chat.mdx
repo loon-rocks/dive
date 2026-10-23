@@ -6,12 +6,12 @@ playground: "none"
 keywords: ["chat", "agent"]
 ---
 
-- Runs when you use `graph ask` or `graph chat` without naming an agent.
+- Runs when you use `dive ask` or `dive chat` without naming an agent.
 - Can run a fresh copy of itself as a subagent for a self-contained subtask.
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | `graph ask` and `graph chat`, as the default agent | default |
+| `chat` | `dive ask` and `dive chat`, as the default agent | default |
 
 ## Tools
 
@@ -45,11 +45,11 @@ Today's date: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show chat > .graph/agents/chat.yaml
+dive agent show chat > .dive/agents/chat.yaml
 ```
 
 ```bash Run
-graph chat
+dive chat
 ```
 
 </RequestExample>

@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-const MANIFEST: &str = "version = 1\nname = \"example\"\ndescription = \"files\"\n";
+const MANIFEST: &str = "version = 2\nname = \"example\"\ndescription = \"files\"\n";
 
 const ECHO_TOOL: &str = r#"version: 2
 name: echo
@@ -678,12 +678,12 @@ fn other_os() -> &'static str {
 
 #[test]
 fn a_pack_needing_a_newer_graph_or_another_os_is_refused_by_name() {
-    let dir = pack_requiring("graph = \">=99\"");
+    let dir = pack_requiring("dive = \">=99\"");
     let errors = load_pack(source("example", dir.path()), &[], &[]).unwrap_err();
     assert_eq!(
         errors,
         [format!(
-            "pack 'example': requires.graph: needs graph >=99; this is graph {}",
+            "pack 'example': requires.dive: needs Dive >=99; this is Dive {}",
             env!("CARGO_PKG_VERSION")
         )]
     );
@@ -700,14 +700,14 @@ fn a_pack_needing_a_newer_graph_or_another_os_is_refused_by_name() {
     );
 
     let dir = pack_requiring(&format!(
-        "graph = \">=0.1\"\nos = [\"{}\"]",
+        "dive = \">=0.1\"\nos = [\"{}\"]",
         std::env::consts::OS
     ));
     assert!(load_pack(source("example", dir.path()), &[], &[]).is_ok());
 }
 
 const MISSING: &str =
-    "binaries = [\"graph-pack-no-such-binary\"]\nenv = [\"GRAPH_PACK_TEST_NEVER_SET\"]";
+    "binaries = [\"dive-pack-no-such-binary\"]\nenv = [\"DIVE_PACK_TEST_NEVER_SET\"]";
 
 #[test]
 fn a_pack_missing_a_binary_or_env_var_loads_with_the_gaps_recorded() {
@@ -716,8 +716,8 @@ fn a_pack_missing_a_binary_or_env_var_loads_with_the_gaps_recorded() {
     assert_eq!(
         pack.needs.unmet,
         [
-            "requires.binaries: graph-pack-no-such-binary not found on PATH",
-            "requires.env: GRAPH_PACK_TEST_NEVER_SET not set (or empty)",
+            "requires.binaries: dive-pack-no-such-binary not found on PATH",
+            "requires.env: DIVE_PACK_TEST_NEVER_SET not set (or empty)",
         ]
     );
     let mut set = PackSet::default();
@@ -855,7 +855,7 @@ async fn a_run_that_can_reach_a_pack_with_unmet_requirements_fails_before_its_fi
     };
     assert_eq!(
         message,
-        "pack 'example' has unmet requirements: requires.binaries: graph-pack-no-such-binary not found on PATH; requires.env: GRAPH_PACK_TEST_NEVER_SET not set (or empty)"
+        "pack 'example' has unmet requirements: requires.binaries: dive-pack-no-such-binary not found on PATH; requires.env: DIVE_PACK_TEST_NEVER_SET not set (or empty)"
     );
     assert_eq!(*gate.calls.lock().unwrap(), 0);
 
@@ -865,7 +865,7 @@ async fn a_run_that_can_reach_a_pack_with_unmet_requirements_fails_before_its_fi
         direct
             .result
             .to_string()
-            .contains("graph-pack-no-such-binary"),
+            .contains("dive-pack-no-such-binary"),
         "{}",
         direct.result
     );

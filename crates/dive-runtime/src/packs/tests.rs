@@ -92,7 +92,7 @@ fn a_configured_pack_with_no_copy_loads_with_a_warning_naming_the_add_command() 
     assert!(installed.packs.is_empty());
     assert_eq!(installed.warnings.len(), 1);
     assert!(
-        installed.warnings[0].contains("graph pack add example --global"),
+        installed.warnings[0].contains("dive pack add example --global"),
         "{:?}",
         installed.warnings
     );
@@ -116,7 +116,7 @@ fn a_project_entry_with_no_copy_leaves_the_global_copy_loaded() {
     assert!(installed.shadowed.is_empty());
     assert_eq!(installed.warnings.len(), 1);
     assert!(
-        installed.warnings[0].contains("run `graph pack add example`"),
+        installed.warnings[0].contains("run `dive pack add example`"),
         "{:?}",
         installed.warnings
     );

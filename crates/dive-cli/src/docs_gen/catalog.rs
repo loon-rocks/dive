@@ -102,20 +102,20 @@ const WORKBENCH_TOOL_GROUPS: &[(&str, &[&str])] = &[
 const MCP_TOOL_GROUPS: &[(&str, &[&str])] = &[(
     "",
     &[
-        "graph_plan_list",
-        "graph_plan_show",
-        "graph_plan_new",
-        "graph_plan_draft",
-        "graph_plan_set",
-        "graph_plan_unset",
-        "graph_plan_step_add",
-        "graph_plan_step_update",
-        "graph_plan_step_rename",
-        "graph_plan_step_rm",
-        "graph_plan_validate",
-        "graph_tools_list",
-        "graph_tools_show",
-        "graph_tools_test",
+        "dive_plan_list",
+        "dive_plan_show",
+        "dive_plan_new",
+        "dive_plan_draft",
+        "dive_plan_set",
+        "dive_plan_unset",
+        "dive_plan_step_add",
+        "dive_plan_step_update",
+        "dive_plan_step_rename",
+        "dive_plan_step_rm",
+        "dive_plan_validate",
+        "dive_tools_list",
+        "dive_tools_show",
+        "dive_tools_test",
     ],
 )];
 
@@ -369,7 +369,7 @@ fn tool_page(doc: &Yaml, words: &Content) -> String {
                 "Plan step",
                 step_yaml(&tool, doc.get("input_schema")),
             ),
-            ("bash", "Inspect", format!("graph tool show {tool}")),
+            ("bash", "Inspect", format!("dive tool show {tool}")),
         ],
     );
     finish(out)
@@ -390,7 +390,7 @@ fn steps() -> Section {
     }
     let overview = content(
         "sections/steps",
-        "Steps graph runs itself instead of calling a tool.",
+        "Steps Dive runs itself instead of calling a tool.",
     );
     files.insert(
         "plans/reference/control-steps.mdx".to_string(),
@@ -488,7 +488,7 @@ fn agents() -> Section {
         ));
         workbench.push(json!(path));
     }
-    let overview = content("sections/agents", "The agents that ship with graph.");
+    let overview = content("sections/agents", "The agents that ship with Dive.");
     files.insert(
         "agents/reference/built-in-agents.mdx".to_string(),
         index_page("Built-in agents", &overview, &rows),
@@ -523,13 +523,13 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
     page_head(&mut out, &title, name, words, &[name, "agent"]);
     let default_agent = name == dive_core::agent::doc::CHAT_AGENT;
     let runs = if name == "network_editor" {
-        "edit threads opened through `dive-runtime`; `graph chat --thread` reopens one".to_string()
+        "edit threads opened through `dive-runtime`; `dive chat --thread` reopens one".to_string()
     } else if workbench {
-        "`graph wb` only".to_string()
+        "`dive wb` only".to_string()
     } else if default_agent {
-        "`graph ask` and `graph chat`, as the default agent".to_string()
+        "`dive ask` and `dive chat`, as the default agent".to_string()
     } else {
-        format!("`graph ask --agent {name}`, `graph chat {name}`, plan steps as `agent__{name}`")
+        format!("`dive ask --agent {name}`, `dive chat {name}`, plan steps as `agent__{name}`")
     };
     let max = doc
         .get("max_iterations")
@@ -576,12 +576,12 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
     let mut blocks = vec![(
         "bash",
         "Customize",
-        format!("graph agent show {name} > .graph/agents/{name}.yaml"),
+        format!("dive agent show {name} > .dive/agents/{name}.yaml"),
     )];
     if default_agent {
-        blocks.push(("bash", "Run", "graph chat".to_string()));
+        blocks.push(("bash", "Run", "dive chat".to_string()));
     } else if !workbench {
-        blocks.push(("bash", "Run", format!("graph chat {name}")));
+        blocks.push(("bash", "Run", format!("dive chat {name}")));
     }
     panel(&mut out, "RequestExample", &blocks);
     finish(out)
@@ -622,7 +622,7 @@ fn plans() -> Section {
         rows.push((path.clone(), identifier.to_string(), words.summary.clone()));
         nav.push(json!(path));
     }
-    let overview = content("sections/plans", "The plans that ship with graph.");
+    let overview = content("sections/plans", "The plans that ship with Dive.");
     files.insert(
         "plans/reference/built-in-plans.mdx".to_string(),
         index_page("Built-in plans", &overview, &rows),
@@ -704,7 +704,7 @@ fn plan_page(doc: &Yaml, words: &Content) -> String {
             (
                 "bash",
                 "Customize",
-                format!("graph plan show {identifier} > .graph/plans/{identifier}.yaml"),
+                format!("dive plan show {identifier} > .dive/plans/{identifier}.yaml"),
             ),
         ],
     );
@@ -885,7 +885,7 @@ fn mcp_server_tools() -> Section {
             key: "mcp-server-tools",
             index: "integrating/mcp/reference/server-tools",
             title: "MCP server tools",
-            facts: "MCP clients of `graph mcp serve`",
+            facts: "MCP clients of `dive mcp serve`",
             step_example: false,
             groups: MCP_TOOL_GROUPS,
         },

@@ -8,7 +8,7 @@ keywords: ["tool selection", "descriptions", "exemplars", "plans as tools"]
 
 This `digest` plan gathers the commits since the latest release, but its description doesn't say so:
 
-```yaml .graph/plans/digest.yaml
+```yaml .dive/plans/digest.yaml
 version: 2
 identifier: digest
 name: Digest
@@ -31,7 +31,7 @@ finish:
 Ask a question the plan answers:
 
 ```bash
-graph ask "What have we merged since we last shipped?"
+dive ask "What have we merged since we last shipped?"
 ```
 
 `chat` skips the plan and makes the same calls itself:
@@ -47,7 +47,7 @@ graph ask "What have we merged since we last shipped?"
 
 Say what the plan returns in `description`, and list questions it answers under `exemplars`. The agent reads both in the plan's tool description:
 
-```yaml .graph/plans/digest.yaml
+```yaml .dive/plans/digest.yaml
 description: Team digest. The commits merged since the latest GitHub release.
 exemplars:
 - What have we merged since the last release?
@@ -57,7 +57,7 @@ exemplars:
 ## Ask again
 
 ```bash
-graph ask "What have we merged since we last shipped?"
+dive ask "What have we merged since we last shipped?"
 ```
 
 `chat` now calls the plan:
@@ -81,7 +81,7 @@ graph ask "What have we merged since we last shipped?"
     Change the `chat` agent itself.
   </Card>
   <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
-    Run agents with `graph ask` and `graph chat`.
+    Run agents with `dive ask` and `dive chat`.
   </Card>
   <Card title="Draft a plan in the workbench" icon="wand-magic-sparkles" href="/plans/guides/draft-in-workbench">
     Let the workbench write the plan and its description.

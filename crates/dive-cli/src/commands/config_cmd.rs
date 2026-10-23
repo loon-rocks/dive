@@ -1,4 +1,4 @@
-//! `graph config` — show/init/path/check/migrate.
+//! `dive config` — show/init/path/check/migrate.
 
 use crate::cli::ConfigCommand;
 use crate::commands::outcome::{report, Outcome};
@@ -22,7 +22,7 @@ fn show() -> Result<Outcome> {
     let shown = ops::config::show(&loaded)?;
     let body = serde_json::to_value(&shown)?;
     if loaded.sources.is_empty() {
-        eprintln!("# no config files found — showing defaults (run `graph config init`)");
+        eprintln!("# no config files found — showing defaults (run `dive config init`)");
     } else {
         for source in &loaded.sources {
             eprintln!("# merged from {}", source.display());

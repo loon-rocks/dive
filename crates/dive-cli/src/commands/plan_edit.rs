@@ -1,5 +1,5 @@
-//! `graph plan new/draft/set/unset/step …` — the authoring half of
-//! `graph plan`, and the surface a plan-managing agent drives.
+//! `dive plan new/draft/set/unset/step …` — the authoring half of
+//! `dive plan`, and the surface a plan-managing agent drives.
 //!
 //! Every command here is stateless: resolve a plan identifier-or-path, apply
 //! one edit, write the YAML back. There is no draft session and no `--undo`
@@ -91,7 +91,7 @@ fn write_edited(
 
 // ── Commands ─────────────────────────────────────────────────────────────
 
-/// `graph plan new` — scaffold a plan file with no steps.
+/// `dive plan new` — scaffold a plan file with no steps.
 ///
 /// Deliberately invalid on creation ("plan has no steps"): the edit guard
 /// only blocks *new* problems, so a scaffold stays editable and an agent can
@@ -138,13 +138,13 @@ pub fn new_plan(
     if doc.description.is_empty() {
         body["note"] = json!(
             "no description set — it is the plan's routing signal, so set it with \
-             `graph plan set <id> description '<what it does>'`"
+             `dive plan set <id> description '<what it does>'`"
         );
     }
     Ok(Outcome::ok(body))
 }
 
-/// `graph plan draft <goal>` — author a plan with the planner model.
+/// `dive plan draft <goal>` — author a plan with the planner model.
 ///
 /// The only command here that costs inference. Mirrors the workbench's
 /// `workbench__draft_plan` exactly: drafting validates each step as it is
@@ -246,13 +246,13 @@ pub async fn draft(
     if !problems.is_empty() {
         body["note"] = json!(
             "the draft is not valid yet — fix the problems with \
-             `graph plan set` / `graph plan step update`"
+             `dive plan set` / `dive plan step update`"
         );
     }
     Ok(Outcome::ok(body))
 }
 
-/// `graph plan set <target> <attribute> <value>...`
+/// `dive plan set <target> <attribute> <value>...`
 pub fn set(
     runtime: &Runtime,
     target: &str,
@@ -265,13 +265,13 @@ pub fn set(
     })
 }
 
-/// `graph plan unset <target> <attribute>`
+/// `dive plan unset <target> <attribute>`
 pub fn unset(runtime: &Runtime, target: &str, attribute: PlanAttribute) -> Result<Outcome> {
     match attribute {
         PlanAttribute::Name | PlanAttribute::Description | PlanAttribute::Identifier => {
             bail!(
                 "{} is required and cannot be cleared — change it with \
-                 `graph plan set <target> {} <value>`",
+                 `dive plan set <target> {} <value>`",
                 attribute.as_str(),
                 attribute.as_str()
             )
@@ -315,7 +315,7 @@ pub fn unset(runtime: &Runtime, target: &str, attribute: PlanAttribute) -> Resul
     }
 }
 
-/// `graph plan step …`
+/// `dive plan step …`
 pub fn step(runtime: &Runtime, command: StepCommand) -> Result<Outcome> {
     match command {
         StepCommand::Add {
@@ -359,7 +359,7 @@ pub fn step(runtime: &Runtime, command: StepCommand) -> Result<Outcome> {
                     if value.is_empty() {
                         bail!(
                             "reasoning cannot be set to an empty string — \
-                             clear it with `graph plan step unset {target} {id} reasoning`"
+                             clear it with `dive plan step unset {target} {id} reasoning`"
                         );
                     }
                     patch["reasoning"] = json!(value);
@@ -396,7 +396,7 @@ pub fn step(runtime: &Runtime, command: StepCommand) -> Result<Outcome> {
                 }
                 StepAttribute::Tool | StepAttribute::Input => bail!(
                     "a step's {} is required and cannot be cleared — change it with \
-                     `graph plan step update <target> <id> {} <value>`",
+                     `dive plan step update <target> <id> {} <value>`",
                     attribute.as_str(),
                     attribute.as_str()
                 ),
@@ -445,7 +445,7 @@ fn metadata_patch(attribute: PlanAttribute, values: &[String]) -> Result<Value> 
 }
 
 /// The single value a scalar attribute takes, or an error naming the
-/// attribute — `graph plan set demo name a b` should say which one is wrong.
+/// attribute — `dive plan set demo name a b` should say which one is wrong.
 fn one(attribute: PlanAttribute, values: &[String]) -> Result<&String> {
     match values {
         [only] => Ok(only),

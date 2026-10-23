@@ -1,11 +1,11 @@
 ---
 title: "Error handling"
 description: "How graph reports failures: exit codes, output streams, and machine-readable errors."
-keywords: ["exit codes", "errors", "stderr", "stdout", "GRAPH_EVENTS"]
+keywords: ["exit codes", "errors", "stderr", "stdout", "DIVE_EVENTS"]
 ---
 
-import EnvGraphEvents from "/snippets/generated/environment/graph-events.mdx";
-import EnvGraphLog from "/snippets/generated/environment/graph-log.mdx";
+import EnvDiveEvents from "/snippets/generated/environment/dive-events.mdx";
+import EnvDiveLog from "/snippets/generated/environment/dive-log.mdx";
 
 Every command reports success or failure through its exit code. Scripts and CI jobs should branch on the exit code, not on the text a command prints.
 
@@ -16,10 +16,10 @@ Every command reports success or failure through its exit code. Scripts and CI j
 | `0` | The command succeeded. |
 | `1` | The command failed, or an edit was refused. Details are on stderr. |
 | `2` | The arguments were invalid. graph prints usage help to stderr. |
-| `3` | `graph plan run` was missing an input, or an input didn't match the plan's `input_schema`. The schema is printed to stderr. |
+| `3` | `dive plan run` was missing an input, or an input didn't match the plan's `input_schema`. The schema is printed to stderr. |
 | `4` | A plan's `exit` step ended the run with `status: error`. |
 
-A tool that reports an error during `graph tool test --json` still exits `0`: the call completed, and the result's `isError` field says the tool failed.
+A tool that reports an error during `dive tool test --json` still exits `0`: the call completed, and the result's `isError` field says the tool failed.
 
 ## Output streams
 
@@ -31,8 +31,8 @@ When graph refuses a request, such as an invalid plan or a rejected edit, `--jso
 
 ### Related environment variables
 
-<EnvGraphEvents />
+<EnvDiveEvents />
 
-<EnvGraphLog />
+<EnvDiveLog />
 
 [Go to full reference](/reference/environment-variables)

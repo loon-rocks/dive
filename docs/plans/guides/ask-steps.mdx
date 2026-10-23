@@ -8,7 +8,7 @@ keywords: ["ask", "outputSchema", "whenUnanswered", "default", "human in the loo
 
 <RequestExample>
 
-```yaml .graph/plans/pick_changes.yaml
+```yaml .dive/plans/pick_changes.yaml
 version: 2
 identifier: pick_changes
 name: Pick changes
@@ -60,7 +60,7 @@ Later steps read the answer as `{{pick.answer.base}}`.
 ## Answer in the terminal
 
 ```bash
-graph plan run pick_changes
+dive plan run pick_changes
 ```
 
 The question appears on stderr. Type an answer and press <kbd>Enter</kbd>:
@@ -86,7 +86,7 @@ The question appears on stderr. Type an answer and press <kbd>Enter</kbd>:
 With no terminal to ask, as in a script or a scheduled job, the step uses `default`:
 
 ```bash
-graph plan run pick_changes </dev/null
+dive plan run pick_changes </dev/null
 ```
 
 ```json

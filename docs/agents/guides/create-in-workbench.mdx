@@ -11,7 +11,7 @@ The drafting architect designs the agent with you, sketches it with any tools or
 <Steps>
   <Step title="Open the workbench in agent mode">
     ```bash
-    graph workbench agent
+    dive workbench agent
     ```
   </Step>
   <Step title="Answer the architect's questions">
@@ -34,14 +34,14 @@ The drafting architect designs the agent with you, sketches it with any tools or
     </Frame>
   </Step>
   <Step title="Save">
-    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes tools to `./.graph/tools/` and the agent to `./.graph/agents/<name>.yaml`.
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes tools to `./.dive/tools/` and the agent to `./.dive/agents/<name>.yaml`.
   </Step>
 </Steps>
 
 ## Run the agent
 
 ```bash
-graph ask --agent release_notes \
+dive ask --agent release_notes \
   "What shipped since v0.15.0?"
 ```
 
@@ -52,7 +52,7 @@ graph ask --agent release_notes \
     Every field an agent file takes.
   </Card>
   <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
-    Use your agent in `graph ask` and `graph chat`.
+    Use your agent in `dive ask` and `dive chat`.
   </Card>
   <Card title="Create a tool in the workbench" icon="wrench" href="/tools/guides/create-in-workbench">
     Draft a tool on its own.

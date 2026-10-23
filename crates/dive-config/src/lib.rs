@@ -1,9 +1,10 @@
 //! Layered TOML configuration for the graph CLI.
 //!
-//! Precedence (later wins): ~/.config/graph/config.toml < ./.graph/config.toml
-//! < GRAPH_* environment variables < CLI flags.
+//! Precedence (later wins): ~/.config/dive/config.toml < ./.dive/config.toml
+//! < DIVE_* environment variables < CLI flags.
 
 mod format;
+pub mod legacy;
 mod load;
 mod model;
 pub mod pack;

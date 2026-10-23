@@ -5,7 +5,7 @@ const GLOBAL: &str = r#"version = 5
 
 [providers.anthropic]
 type = "anthropic"
-api_key = "${GRAPH_T_ANTHROPIC}"
+api_key = "${DIVE_T_ANTHROPIC}"
 
 [providers.local]
 type = "openai_compat"
@@ -33,7 +33,7 @@ const PROJECT: &str = r#"version = 5
 # keep this comment
 [providers.systemone]
 type = "systemone"
-api_key = "${GRAPH_T_SYSTEMONE}"
+api_key = "${DIVE_T_SYSTEMONE}"
 
 [models.planner]
 provider = "anthropic"
@@ -56,7 +56,7 @@ fn layers(global: &str, project: Option<&str>) -> (tempfile::TempDir, Layers) {
     let global_path = dir.path().join("global").join("config.toml");
     std::fs::create_dir_all(global_path.parent().unwrap()).unwrap();
     std::fs::write(&global_path, global).unwrap();
-    let file = dir.path().join("site").join(".graph").join("config.toml");
+    let file = dir.path().join("site").join(".dive").join("config.toml");
     if let Some(project) = project {
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, project).unwrap();
@@ -71,7 +71,7 @@ fn layers(global: &str, project: Option<&str>) -> (tempfile::TempDir, Layers) {
 }
 
 fn resolver() -> MemorySecrets {
-    MemorySecrets::store().with("GRAPH_T_ANTHROPIC", "sk-ant-value")
+    MemorySecrets::store().with("DIVE_T_ANTHROPIC", "sk-ant-value")
 }
 
 fn text(layers: &Layers) -> String {
@@ -159,7 +159,7 @@ fn renaming_a_provider_moves_the_roles_in_the_same_file_with_it() {
         &ProviderEdit {
             name: "jev".to_string(),
             kind: ProviderKind::Systemone,
-            api_key: Some("${GRAPH_T_SYSTEMONE}".to_string()),
+            api_key: Some("${DIVE_T_SYSTEMONE}".to_string()),
             base_url: None,
             region: None,
             profile: None,
@@ -404,7 +404,7 @@ async fn a_probe_without_its_key_says_which_name_is_missing() {
         &ProviderEdit {
             name: "anthropic".to_string(),
             kind: ProviderKind::Anthropic,
-            api_key: Some("${GRAPH_T_UNSET}".to_string()),
+            api_key: Some("${DIVE_T_UNSET}".to_string()),
             base_url: None,
             region: None,
             profile: None,
@@ -413,7 +413,7 @@ async fn a_probe_without_its_key_says_which_name_is_missing() {
     )
     .await;
     assert!(!probe.ok);
-    assert_eq!(probe.error.as_deref(), Some("GRAPH_T_UNSET isn't set"));
+    assert_eq!(probe.error.as_deref(), Some("DIVE_T_UNSET isn't set"));
     let bedrock = probe_with(
         &ProviderEdit {
             name: "b".to_string(),
@@ -433,13 +433,13 @@ async fn a_probe_without_its_key_says_which_name_is_missing() {
 fn keys_expand_from_references_and_defaults() {
     let resolver = resolver();
     assert_eq!(
-        expand_key(Some("${GRAPH_T_ANTHROPIC}"), &resolver)
+        expand_key(Some("${DIVE_T_ANTHROPIC}"), &resolver)
             .unwrap()
             .as_deref(),
         Some("sk-ant-value")
     );
     assert_eq!(
-        expand_key(Some("${GRAPH_T_NONE:-fallback}"), &resolver)
+        expand_key(Some("${DIVE_T_NONE:-fallback}"), &resolver)
             .unwrap()
             .as_deref(),
         Some("fallback")

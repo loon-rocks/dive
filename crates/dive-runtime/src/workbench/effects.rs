@@ -109,7 +109,7 @@ impl Workbench {
             }
             Err(other) => Err(other.to_string()),
         };
-        // Per turn, matching `graph chat`. The ledger is shared with
+        // Per turn, matching `dive chat`. The ledger is shared with
         // the pipeline, so a turn that called a plan tool reports that
         // plan's spend too.
         let usage = ctx.pipeline.usage.take();
@@ -464,7 +464,7 @@ pub fn save_draft(
         return Err("no draft".to_string());
     };
     // Where it lands, and the guards against clobbering another plan, are
-    // shared with `graph plan` via authoring::target_path / write_doc. The
+    // shared with `dive plan` via authoring::target_path / write_doc. The
     // draft's on-disk identity and dirty flag are this surface's own
     // bookkeeping, so they stay here.
     let path = authoring::target_path(doc, plans_dir).map_err(|e| e.to_string())?;

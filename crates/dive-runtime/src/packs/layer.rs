@@ -41,7 +41,7 @@ impl Layer {
     }
 
     pub fn command(&self, verb: &str, name: &str) -> String {
-        format!("graph pack {verb} {name}{}", self.flag)
+        format!("dive pack {verb} {name}{}", self.flag)
     }
 
     pub fn state(&self) -> Result<LayerState> {

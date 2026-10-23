@@ -1,0 +1,28 @@
+---
+title: "dive_plan_draft"
+sidebarTitle: "dive_plan_draft"
+description: "Drafts a whole plan from a goal with the planner model."
+playground: "none"
+keywords: ["dive_plan_draft"]
+---
+
+## Behavior
+
+- Costs inference and takes about 30 seconds.
+- Replaces every step. To correct a plan, use the edit tools instead.
+- `from` reuses an existing plan's identifier, name, description and input schema.
+- Mirrors `dive plan draft`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="from" type="string">
+  An existing plan whose identifier, name, description and input schema the draft should adopt. Its steps ARE replaced.
+</ParamField>
+
+<ParamField body="goal" type="string" required>
+  What the plan should do, as one self-contained instruction.
+</ParamField>

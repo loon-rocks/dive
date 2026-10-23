@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// The interactive hooks a host can hand a [`Pipeline`]. Both are
-/// optional and independent: `graph plan run` on a terminal installs an
+/// optional and independent: `dive plan run` on a terminal installs an
 /// interlocutor and no gate, the workbench installs both, and CI installs
 /// neither.
 #[derive(Default, Clone)]
@@ -626,7 +626,7 @@ fn storage_backend(
     Ok(match options.storage_backend.as_deref() {
         Some("memory") => dive_config::StorageBackend::Memory,
         Some("file") => dive_config::StorageBackend::File,
-        Some(other) => anyhow::bail!("GRAPH_STORAGE must be 'file' or 'memory', got '{other}'"),
+        Some(other) => anyhow::bail!("DIVE_STORAGE must be 'file' or 'memory', got '{other}'"),
         None => config.storage.backend,
     })
 }
@@ -645,7 +645,7 @@ pub async fn resolve_thread(
             let meta = store
                 .get_thread(&id)
                 .await?
-                .with_context(|| format!("no thread with id {id} (see `graph thread list`)"))?;
+                .with_context(|| format!("no thread with id {id} (see `dive thread list`)"))?;
             Ok(Some(meta))
         }
         Some(None) => Ok(store.latest_thread().await?),
@@ -667,8 +667,8 @@ pub fn deprecated_prompt<'a>(
         return None;
     }
     tracing::warn!(
-        "[prompts].{field} is deprecated: run `graph agent show {agent}`, save it as \
-         ./.graph/agents/{agent}.yaml, and edit its system_prompt instead"
+        "[prompts].{field} is deprecated: run `dive agent show {agent}`, save it as \
+         ./.dive/agents/{agent}.yaml, and edit its system_prompt instead"
     );
     Some(value)
 }
@@ -778,7 +778,7 @@ pub fn config_notices(loaded: &dive_config::LoadedConfig) -> Vec<String> {
                 ""
             };
             notices.push(format!(
-                "{} is config version {}; run `graph config migrate{flag}` to bring it to {}",
+                "{} is config version {}; run `dive config migrate{flag}` to bring it to {}",
                 layer.path.display(),
                 layer.version,
                 dive_config::CONFIG_FORMAT
@@ -814,7 +814,7 @@ impl Workspace {
     }
 
     pub fn project(&self) -> Option<String> {
-        if self.is_global() || !self.root.join(".graph").is_dir() {
+        if self.is_global() || !dive_config::legacy::project_dir(&self.root).is_dir() {
             return None;
         }
         let root = self
@@ -828,7 +828,7 @@ impl Workspace {
         if self.is_global() {
             global_config_dir()
         } else {
-            self.root.join(".graph")
+            dive_config::legacy::project_dir(&self.root)
         }
     }
 
@@ -838,7 +838,7 @@ impl Workspace {
         } else {
             vec![
                 dive_config::global_config_path(),
-                self.root.join(".graph").join("config.toml"),
+                dive_config::legacy::project_dir(&self.root).join("config.toml"),
             ]
         }
     }
@@ -901,7 +901,7 @@ mod tests {
         assert_eq!(workspace.root(), Path::new("/work/site"));
         assert_eq!(
             workspace.config_paths()[1],
-            PathBuf::from("/work/site/.graph/config.toml")
+            PathBuf::from("/work/site/.dive/config.toml")
         );
     }
 
@@ -920,11 +920,11 @@ mod tests {
     fn a_workspace_with_a_graph_folder_is_a_project_named_by_its_canonical_root() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("site");
-        std::fs::create_dir_all(root.join(".graph")).unwrap();
+        std::fs::create_dir_all(root.join(".dive")).unwrap();
         let expected = root.canonicalize().unwrap().to_string_lossy().into_owned();
         assert_eq!(Workspace::new(&root).project(), Some(expected.clone()));
         assert_eq!(
-            Workspace::new(root.join(".graph").join("..")).project(),
+            Workspace::new(root.join(".dive").join("..")).project(),
             Some(expected)
         );
     }
@@ -939,7 +939,7 @@ mod tests {
     #[test]
     fn config_notices_name_old_layers_and_migration_notes() {
         let global = dive_config::expand_tilde(&dive_config::global_config_path());
-        let project = PathBuf::from("/work/site/.graph/config.toml");
+        let project = PathBuf::from("/work/site/.dive/config.toml");
         let layer = |path: &PathBuf, version: u32, notes: Vec<String>| dive_config::LayerInfo {
             path: path.clone(),
             declared: Some(version),
@@ -962,11 +962,11 @@ mod tests {
         let notices = config_notices(&loaded);
         assert_eq!(notices.len(), 2, "{notices:?}");
         assert!(
-            notices[0].contains("graph config migrate --global"),
+            notices[0].contains("dive config migrate --global"),
             "{}",
             notices[0]
         );
-        assert_eq!(notices[1], "/work/site/.graph/config.toml: renamed x");
+        assert_eq!(notices[1], "/work/site/.dive/config.toml: renamed x");
     }
 
     fn thread(owner: &str, active: &str) -> ThreadMeta {

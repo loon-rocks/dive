@@ -1,5 +1,5 @@
 name: debug-breakpoint
-title: graph workbench — paused at a breakpoint
+title: dive workbench — paused at a breakpoint
 plan: docs/shots/plans/unreleased_changes.yaml
 grid: { cols: 120, rows: 36 }
 
@@ -17,7 +17,7 @@ tools:
     - tag: v0.15.0
       name: v0.15.0
       body: ""
-      url: https://github.com/tylerdavis/graph/releases/tag/v0.15.0
+      url: https://github.com/loon-rocks/dive/releases/tag/v0.15.0
       published_at: "2026-09-24T04:34:59Z"
       author: github-actions[bot]
       is_prerelease: false

@@ -167,7 +167,7 @@ fn step_schema_text() -> String {
 ///
 /// The single source of truth for the control-step vocabulary: the
 /// planner's catalog is built from it, and so is the `tools` command
-/// surface (`graph tool list`/`show`, and `graph_tools_*` over MCP). That
+/// surface (`dive tool list`/`show`, and `dive_tools_*` over MCP). That
 /// matters more than it looks — a control step that is not in a catalog an
 /// agent can query is a step it can only learn about by reading graph's
 /// source, which is exactly what agents did before this existed.

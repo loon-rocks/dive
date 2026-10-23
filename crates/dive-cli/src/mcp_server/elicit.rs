@@ -1,6 +1,6 @@
 //! The MCP binding for `ask` steps: `elicitation/create`.
 //!
-//! When a plan running behind `graph mcp serve` reaches an `ask` step, the
+//! When a plan running behind `dive mcp serve` reaches an `ask` step, the
 //! server turns the question around and asks the *client* — a server→client
 //! request issued from inside a `tools/call`. That is legal under the
 //! 2025-06-18 spec and is what lets one plan be interactive from Claude

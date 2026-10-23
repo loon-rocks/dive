@@ -1,9 +1,9 @@
 ---
-title: "graph plan validate"
+title: "dive plan validate"
 sidebarTitle: "validate"
 description: "Validate a plan document by name or file path"
 playground: "none"
-keywords: ["graph plan validate"]
+keywords: ["dive plan validate"]
 ---
 
 Checks structure (templates, references, step ids) and resolves every step's tool against the catalog: packs, user tools, plans, agents, and configured MCP servers. MCP tool names are checked at the server level only.
@@ -31,15 +31,15 @@ Problems exit 1; success prints nothing to stdout. A plan whose `requires_server
 <RequestExample>
 
 ```bash Usage
-graph plan validate [OPTIONS] <NAME_OR_PATH>
+dive plan validate [OPTIONS] <NAME_OR_PATH>
 ```
 
 ```bash Example 1
-graph plan validate weekly_changes
+dive plan validate weekly_changes
 ```
 
 ```bash Example 2
-graph plan validate .graph/plans/weekly_changes.yaml
+dive plan validate .dive/plans/weekly_changes.yaml
 ```
 
 </RequestExample>

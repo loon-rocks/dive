@@ -1,0 +1,23 @@
+---
+title: "dive_plan_list"
+sidebarTitle: "dive_plan_list"
+description: "Lists the plans available on this machine."
+playground: "none"
+keywords: ["dive_plan_list"]
+---
+
+## Result
+
+- The runnable plans
+- `skipped`: plan files that failed to load
+- `hidden`: plans that need an MCP server this machine doesn't configure
+
+Mirrors `dive plan list`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+Takes no input.

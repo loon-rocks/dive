@@ -196,7 +196,7 @@ fn a_pack_tool_is_refused_naming_the_pack() {
     )
     .unwrap_err();
     assert!(matches!(&refused, RemoveError::Pack { pack, .. } if pack == "example"));
-    assert!(refused.to_string().contains("graph pack remove example"));
+    assert!(refused.to_string().contains("dive pack remove example"));
 }
 
 #[test]

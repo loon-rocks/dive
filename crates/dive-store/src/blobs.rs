@@ -348,7 +348,7 @@ mod tests {
     }
 
     fn s3_settings_from_env() -> Option<S3Settings> {
-        let var = |name: &str| std::env::var(format!("GRAPH_TEST_S3_{name}")).ok();
+        let var = |name: &str| std::env::var(format!("DIVE_TEST_S3_{name}")).ok();
         Some(S3Settings {
             endpoint: var("ENDPOINT"),
             bucket: var("BUCKET")?,
@@ -362,7 +362,7 @@ mod tests {
     #[tokio::test]
     async fn files_in_s3_round_trip_and_are_located_by_a_signed_link() {
         let Some(settings) = s3_settings_from_env() else {
-            eprintln!("GRAPH_TEST_S3_* unset; skipping the S3 round trip");
+            eprintln!("DIVE_TEST_S3_* unset; skipping the S3 round trip");
             return;
         };
         let cache = tempfile::tempdir().unwrap();

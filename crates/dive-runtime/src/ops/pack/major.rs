@@ -219,7 +219,7 @@ pub async fn update(
 ) -> Result<PackUpdates, PackError> {
     if !majors.consent.yes && majors.consent.asker.is_none() {
         return Err(PackError::NoTerminal(
-            "`graph pack update --major` shows each migration's changes and asks before applying them, and there is no terminal to ask on; nothing was changed. Rerun with --yes to accept every major without asking".to_string(),
+            "`dive pack update --major` shows each migration's changes and asks before applying them, and there is no terminal to ask on; nothing was changed. Rerun with --yes to accept every major without asking".to_string(),
         ));
     }
     let state = layer.state()?;

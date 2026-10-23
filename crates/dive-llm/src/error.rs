@@ -22,7 +22,7 @@ pub enum LlmError {
     /// Configured, but cannot be used as configured — most commonly an
     /// unset `${VAR}` behind its api_key. The reason names the variable and
     /// the config path, because this message is often all a caller (or an
-    /// agent driving `graph mcp serve`) gets to diagnose with.
+    /// agent driving `dive mcp serve`) gets to diagnose with.
     #[error("provider '{provider}' is configured but not usable: {reason}")]
     ProviderUnavailable { provider: String, reason: String },
     #[error("no model configured for role '{0}' and no default set")]

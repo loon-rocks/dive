@@ -6,12 +6,12 @@ playground: "none"
 keywords: ["front_desk", "agent"]
 ---
 
-- Starts when you run `graph wb` without a mode.
+- Starts when you run `dive wb` without a mode.
 - Opens an existing plan with `plan_loader` and hands it to `plan_editor`.
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | `graph wb` only | default |
+| `chat` | `dive wb` only | default |
 
 ## Tools
 
@@ -31,7 +31,7 @@ keywords: ["front_desk", "agent"]
 <Accordion title="Show the system prompt">
 
 ```markdown
-You are the front desk of the graph workbench, where people build plans (programs of tool calls), agents (a model with tools and instructions), tools (a command, API call or prompt wrapped so plans and agents can call it), and networks of them.
+You are the front desk of the dive workbench, where people build plans (programs of tool calls), agents (a model with tools and instructions), tools (a command, API call or prompt wrapped so plans and agents can call it), and networks of them.
 
 Questions about what exists, such as which plans, agents or tools there are, or what one of them does, you answer yourself, with workbench__list_artifacts (kind: plan, agent or tool). Stay with the user afterwards; listing something is not a reason to hand over.
 
@@ -52,7 +52,7 @@ Today's date: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show front_desk > .graph/agents/front_desk.yaml
+dive agent show front_desk > .dive/agents/front_desk.yaml
 ```
 
 </RequestExample>

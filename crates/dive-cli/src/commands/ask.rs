@@ -1,4 +1,4 @@
-//! `graph ask` — one agent turn, persisted to a thread.
+//! `dive ask` — one agent turn, persisted to a thread.
 
 use anyhow::{bail, Result};
 use dive_core::NullSink;
@@ -22,7 +22,7 @@ pub async fn run(args: AskArgs) -> Result<()> {
         .as_deref()
         .filter(|name| crate::workbench::agents::is_workbench_only(name))
     {
-        bail!("{name} runs only in the workbench: start it with `graph wb`");
+        bail!("{name} runs only in the workbench: start it with `dive wb`");
     }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
@@ -38,7 +38,7 @@ pub async fn run(args: AskArgs) -> Result<()> {
         .input(serde_json::Value::String(message.clone()));
     let events: Arc<dyn dive_core::EventSink> = if args.json {
         // Quiet unless JSONL events were explicitly requested.
-        if std::env::var("GRAPH_EVENTS").as_deref() == Ok("jsonl") {
+        if dive_config::legacy::var("DIVE_EVENTS").as_deref() == Some("jsonl") {
             crate::output::make_sink(true, false, run)
         } else {
             crate::telemetry::attach(Arc::new(NullSink), run)
@@ -79,13 +79,13 @@ pub async fn run(args: AskArgs) -> Result<()> {
         } else {
             println!("{}", outcome.text);
         }
-        // Not under GRAPH_EVENTS=jsonl: stderr is the machine feed there,
+        // Not under DIVE_EVENTS=jsonl: stderr is the machine feed there,
         // and the `usage_summary` event already carries this.
         if !usage.is_empty() && !crate::output::jsonl_events() {
             eprintln!("\x1b[2m{}\x1b[0m", usage.summary());
         }
         eprintln!(
-            "\x1b[2mresume with `graph chat --thread {}`\x1b[0m",
+            "\x1b[2mresume with `dive chat --thread {}`\x1b[0m",
             thread_id
         );
     }

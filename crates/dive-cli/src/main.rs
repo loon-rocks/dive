@@ -49,6 +49,11 @@ async fn main() -> ExitCode {
             }
         },
     };
+    if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+        for notice in dive_config::legacy::notices() {
+            eprintln!("warning: {notice}");
+        }
+    }
     telemetry::shutdown().await;
     code
 }
@@ -58,7 +63,7 @@ fn telemetry_config_paths(command: &Command) -> Vec<PathBuf> {
     match command {
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: Some(dir) },
-        } => vec![global, dir.join(".graph/config.toml")],
+        } => vec![global, dive_config::legacy::project_dir(&dir).join("config.toml")],
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: None },
         } => vec![global],
@@ -104,7 +109,7 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
     }
 }
 
-/// Log to stderr; default WARN, raised by -v flags, overridable via GRAPH_LOG.
+/// Log to stderr; default WARN, raised by -v flags, overridable via DIVE_LOG.
 fn init_tracing(verbosity: u8) {
     let default = match verbosity {
         0 => "warn",
@@ -112,7 +117,9 @@ fn init_tracing(verbosity: u8) {
         2 => "debug",
         _ => "trace",
     };
-    let filter = EnvFilter::try_from_env("GRAPH_LOG").unwrap_or_else(|_| EnvFilter::new(default));
+    let filter = dive_config::legacy::var("DIVE_LOG")
+        .and_then(|filter| EnvFilter::try_new(filter).ok())
+        .unwrap_or_else(|| EnvFilter::new(default));
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     tracing_subscriber::fmt()

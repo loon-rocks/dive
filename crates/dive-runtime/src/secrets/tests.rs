@@ -18,31 +18,31 @@ fn layers(root: &Path) -> Vec<PathBuf> {
     write(
         &global,
         "config.toml",
-        "version = 4\n[providers.anthropic]\ntype = \"anthropic\"\napi_key = \"${GRAPH_T_ANTHROPIC}\"\n",
+        "version = 4\n[providers.anthropic]\ntype = \"anthropic\"\napi_key = \"${DIVE_T_ANTHROPIC}\"\n",
     );
     write(
         &project,
         "config.toml",
         &format!(
-            "version = 4\n[tools]\npaths = [\"{}\"]\n[mcp.linear]\nurl = \"https://mcp.linear.app/mcp\"\nheaders = {{ Authorization = \"Bearer ${{GRAPH_T_LINEAR}}\" }}\n[packs.web]\ngit = \"github.com/acme/graph-packs\"\npath = \"web\"\nref = \"v1\"\n",
+            "version = 4\n[tools]\npaths = [\"{}\"]\n[mcp.linear]\nurl = \"https://mcp.linear.app/mcp\"\nheaders = {{ Authorization = \"Bearer ${{DIVE_T_LINEAR}}\" }}\n[packs.web]\ngit = \"github.com/acme/graph-packs\"\npath = \"web\"\nref = \"v1\"\n",
             project.join("tools").display()
         ),
     );
     write(
         &project,
         "tools/search.yaml",
-        "version: 2\nname: search\ndescription: Searches\nkind: exec\ncommand: echo\nenv:\n  URL: \"${GRAPH_T_URL:-https://x}\"\n  KEY: \"${GRAPH_T_ANTHROPIC}\"\n",
+        "version: 2\nname: search\ndescription: Searches\nkind: exec\ncommand: echo\nenv:\n  URL: \"${DIVE_T_URL:-https://x}\"\n  KEY: \"${DIVE_T_ANTHROPIC}\"\n",
     );
     let copy = project.join("packs/web");
     write(
         &copy,
         "pack.toml",
-        "version = 1\nname = \"web\"\ndescription = \"d\"\n[requires]\nenv = [\"GRAPH_T_WEB_TOKEN\"]\n",
+        "version = 1\nname = \"web\"\ndescription = \"d\"\n[requires]\nenv = [\"DIVE_T_WEB_TOKEN\"]\n",
     );
     write(
         &copy,
         "tools/fetch.yaml",
-        "version: 2\nname: fetch\ndescription: Fetches\nkind: exec\ncommand: echo\nenv:\n  TOKEN: \"${GRAPH_T_WEB_TOKEN}\"\n",
+        "version: 2\nname: fetch\ndescription: Fetches\nkind: exec\ncommand: echo\nenv:\n  TOKEN: \"${DIVE_T_WEB_TOKEN}\"\n",
     );
     let hash = crate::packs::content_hash(&copy).unwrap();
     write(
@@ -59,11 +59,11 @@ fn the_listing_covers_config_layers_tools_and_packs_with_sources_and_shadowing()
     let paths = layers(dir.path());
     let secrets = secrets(
         MemorySecrets::env()
-            .with("GRAPH_T_LINEAR", "lin-env-value")
-            .with("GRAPH_T_WEB_TOKEN", "web-env-value"),
+            .with("DIVE_T_LINEAR", "lin-env-value")
+            .with("DIVE_T_WEB_TOKEN", "web-env-value"),
         MemorySecrets::store()
-            .with("GRAPH_T_ANTHROPIC", "sk-stored-value")
-            .with("GRAPH_T_WEB_TOKEN", "web-stored-value"),
+            .with("DIVE_T_ANTHROPIC", "sk-stored-value")
+            .with("DIVE_T_WEB_TOKEN", "web-stored-value"),
     );
     let list = listed(collect_layers(&paths, Path::new("."), &secrets), &secrets);
     assert!(list.problems.is_empty(), "{:?}", list.problems);
@@ -75,10 +75,10 @@ fn the_listing_covers_config_layers_tools_and_packs_with_sources_and_shadowing()
     assert_eq!(
         statuses,
         [
-            ("GRAPH_T_ANTHROPIC", SecretStatus::Store),
-            ("GRAPH_T_LINEAR", SecretStatus::Env),
-            ("GRAPH_T_URL", SecretStatus::Missing),
-            ("GRAPH_T_WEB_TOKEN", SecretStatus::EnvShadowsStore),
+            ("DIVE_T_ANTHROPIC", SecretStatus::Store),
+            ("DIVE_T_LINEAR", SecretStatus::Env),
+            ("DIVE_T_URL", SecretStatus::Missing),
+            ("DIVE_T_WEB_TOKEN", SecretStatus::EnvShadowsStore),
         ]
     );
     let anthropic = &list.secrets[0].references;
@@ -118,16 +118,16 @@ fn a_config_that_fails_to_load_still_lists_its_own_references() {
     write(
         dir.path(),
         "config.toml",
-        "version = 4\n[settings]\ndata_dir = \"${GRAPH_T_DATA_DIR}\"\n",
+        "version = 4\n[settings]\ndata_dir = \"${DIVE_T_DATA_DIR}\"\n",
     );
     let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
     let list = listed(
         collect_layers(&[dir.path().join("config.toml")], Path::new("."), &secrets),
         &secrets,
     );
-    assert_eq!(list.secrets[0].name, "GRAPH_T_DATA_DIR");
+    assert_eq!(list.secrets[0].name, "DIVE_T_DATA_DIR");
     assert_eq!(list.secrets[0].status, SecretStatus::Missing);
-    assert!(list.problems[0].contains("GRAPH_T_DATA_DIR"));
+    assert!(list.problems[0].contains("DIVE_T_DATA_DIR"));
 }
 
 #[test]
@@ -135,13 +135,13 @@ fn show_masks_values_to_their_last_four_characters() {
     let dir = tempfile::tempdir().unwrap();
     let paths = layers(dir.path());
     let secrets = secrets(
-        MemorySecrets::env().with("GRAPH_T_WEB_TOKEN", "short"),
-        MemorySecrets::store().with("GRAPH_T_WEB_TOKEN", "web-stored-value-wxyz"),
+        MemorySecrets::env().with("DIVE_T_WEB_TOKEN", "short"),
+        MemorySecrets::store().with("DIVE_T_WEB_TOKEN", "web-stored-value-wxyz"),
     );
     let shown = detail(
         collect_layers(&paths, Path::new("."), &secrets),
         &secrets,
-        "GRAPH_T_WEB_TOKEN",
+        "DIVE_T_WEB_TOKEN",
     );
     assert_eq!(shown.status, SecretStatus::EnvShadowsStore);
     assert_eq!(shown.in_use, Some(Layer::Env));
@@ -158,7 +158,7 @@ fn project_workspace(id: Option<&str>) -> (tempfile::TempDir, Workspace) {
     if let Some(id) = id {
         write(
             dir.path(),
-            ".graph/config.toml",
+            ".dive/config.toml",
             &format!("version = 5\n[project]\nid = \"{id}\"\n"),
         );
     }
@@ -202,7 +202,7 @@ fn set_and_remove_go_through_the_store() {
             .removed
     );
     assert_eq!(in_use(&secrets, &workspace, "NEW_KEY"), None);
-    assert!(!workspace.root().join(".graph/config.toml").exists());
+    assert!(!workspace.root().join(".dive/config.toml").exists());
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn the_first_project_set_writes_a_project_id_and_later_sets_reuse_it() {
     let (dir, workspace) = project_workspace(None);
     write(
         dir.path(),
-        ".graph/config.toml",
+        ".dive/config.toml",
         "version = 5\n\n# my models\n[models.default]\nprovider = \"anthropic\"\nmodel = \"claude\"\n",
     );
     let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
@@ -269,7 +269,7 @@ fn the_first_project_set_writes_a_project_id_and_later_sets_reuse_it() {
     let saved = set(&secrets, &workspace, "TOKEN", "project-value", project).unwrap();
     let id = saved.project.clone().unwrap();
     assert!(dive_core::secrets::is_project_id(&id), "{id}");
-    let text = std::fs::read_to_string(dir.path().join(".graph/config.toml")).unwrap();
+    let text = std::fs::read_to_string(dir.path().join(".dive/config.toml")).unwrap();
     assert!(text.contains("# my models"), "{text}");
     assert!(
         text.contains(&format!("[project]\nid = \"{id}\"")),
@@ -311,7 +311,7 @@ fn a_new_project_config_is_created_holding_only_the_id() {
     let (dir, workspace) = project_workspace(None);
     let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
     let saved = set(&secrets, &workspace, "TOKEN", "v", SecretScope::Project).unwrap();
-    let text = std::fs::read_to_string(dir.path().join(".graph/config.toml")).unwrap();
+    let text = std::fs::read_to_string(dir.path().join(".dive/config.toml")).unwrap();
     assert_eq!(
         text,
         format!(
@@ -339,7 +339,7 @@ fn removing_a_project_value_without_a_project_id_writes_nothing() {
             .unwrap()
             .removed
     );
-    assert!(!dir.path().join(".graph").exists());
+    assert!(!dir.path().join(".dive").exists());
     assert_eq!(secrets.store.get("TOKEN").unwrap().as_deref(), Some("x"));
 }
 
@@ -349,13 +349,13 @@ fn config_references_resolve_from_the_project_entry_first() {
     write(
         dir.path(),
         "config.toml",
-        "version = 5\n[project]\nid = \"p1\"\n[settings]\ndata_dir = \"${GRAPH_T_DIR}\"\n",
+        "version = 5\n[project]\nid = \"p1\"\n[settings]\ndata_dir = \"${DIVE_T_DIR}\"\n",
     );
     let secrets = secrets(
         MemorySecrets::env(),
         MemorySecrets::store()
-            .with("GRAPH_T_DIR", "/shared")
-            .with_project("GRAPH_T_DIR", "p1", "/project"),
+            .with("DIVE_T_DIR", "/shared")
+            .with_project("DIVE_T_DIR", "p1", "/project"),
     );
     let loaded =
         dive_config::load_from(&[dir.path().join("config.toml")], &secrets.resolver()).unwrap();
@@ -375,7 +375,7 @@ fn an_unavailable_store_is_reported_and_every_name_falls_back_to_the_environment
     assert!(!secrets.store_state().available);
     assert!(set(&secrets, &workspace, "SET", "x", SecretScope::Shared).is_err());
     assert!(set(&secrets, &workspace, "SET", "x", SecretScope::Project).is_err());
-    assert!(!workspace.root().join(".graph").exists());
+    assert!(!workspace.root().join(".dive").exists());
 }
 
 #[test]
@@ -480,7 +480,7 @@ fn a_tool_env_description_reaches_the_listing_and_the_detail() {
     write(
         &project,
         "tools/crm.yaml",
-        "version: 3\nname: crm\ndescription: Contacts\nkind: exec\ncommand: echo\nenv:\n  TOKEN:\n    value: \"${GRAPH_T_CRM_TOKEN}\"\n    description: \"A CRM token. Create one under [Settings](https://crm.example/settings).\"\n",
+        "version: 3\nname: crm\ndescription: Contacts\nkind: exec\ncommand: echo\nenv:\n  TOKEN:\n    value: \"${DIVE_T_CRM_TOKEN}\"\n    description: \"A CRM token. Create one under [Settings](https://crm.example/settings).\"\n",
     );
     let paths = vec![project.join("config.toml")];
     let secrets = secrets(MemorySecrets::env(), MemorySecrets::store());
@@ -489,7 +489,7 @@ fn a_tool_env_description_reaches_the_listing_and_the_detail() {
     let entry = list
         .secrets
         .iter()
-        .find(|entry| entry.name == "GRAPH_T_CRM_TOKEN")
+        .find(|entry| entry.name == "DIVE_T_CRM_TOKEN")
         .unwrap();
     assert_eq!(
         entry.description.as_deref(),
@@ -502,7 +502,7 @@ fn a_tool_env_description_reaches_the_listing_and_the_detail() {
     let detail = detail(
         collect_layers(&paths, Path::new("."), &secrets),
         &secrets,
-        "GRAPH_T_CRM_TOKEN",
+        "DIVE_T_CRM_TOKEN",
     );
     assert_eq!(detail.description, entry.description);
     let body = serde_json::to_value(&list).unwrap();

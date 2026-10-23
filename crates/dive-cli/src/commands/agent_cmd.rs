@@ -43,7 +43,7 @@ pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
         outcome
     } else {
         outcome.with_note(format!(
-            "{errors} agent file(s) failed to load — run `graph agent validate`"
+            "{errors} agent file(s) failed to load — run `dive agent validate`"
         ))
     }
 }

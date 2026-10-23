@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub fn options() -> RuntimeOptions {
     RuntimeOptions {
-        storage_backend: std::env::var("GRAPH_STORAGE").ok(),
+        storage_backend: dive_config::legacy::var("DIVE_STORAGE"),
         capture_content: crate::telemetry::captures_content(),
     }
 }

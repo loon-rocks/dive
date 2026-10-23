@@ -8,7 +8,7 @@ keywords: ["filter", "where", "infer", "items", "dropped"]
 
 <RequestExample>
 
-```yaml .graph/plans/breaking_changes.yaml
+```yaml .dive/plans/breaking_changes.yaml
 version: 2
 identifier: breaking_changes
 name: Breaking changes
@@ -49,7 +49,7 @@ finish:
 `where` compares a field of each item, read as `{{item.<field>}}`, with no model call. Run the plan from a release tag:
 
 ```bash
-graph plan run breaking_changes \
+dive plan run breaking_changes \
   --input base=v0.15.0
 ```
 
@@ -76,7 +76,7 @@ graph plan run breaking_changes \
 
 When no field decides, replace `where` with an `infer` question. Each item gets its own yes/no verdict, and `concurrency` sets how many run at once:
 
-```yaml .graph/plans/breaking_changes.yaml
+```yaml .dive/plans/breaking_changes.yaml
 - id: breaking
   tool_name: filter
   input:

@@ -22,14 +22,14 @@ fn stdout_carries_only_the_deliverable() {
 
     // A successful validate has no deliverable — the verdict is human-facing.
     scratch
-        .graph(&["plan", "validate", "echo_ok"])
+        .dive(&["plan", "validate", "echo_ok"])
         .code_is(0)
         .stdout_empty()
         .stderr_contains("ok: 'echo_ok'");
 
     // A mutating command without --json likewise reports on stderr only.
     scratch
-        .graph(&["plan", "new", "scratch_plan"])
+        .dive(&["plan", "new", "scratch_plan"])
         .code_is(0)
         .stdout_empty()
         .stderr_contains("scratch_plan.yaml");
@@ -41,8 +41,8 @@ fn an_output_mode_plan_puts_bare_json_on_stdout() {
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
     // Documented as the reason output-mode plans need no --json to be piped:
-    // `graph plan run … | jq` must work directly.
-    let run = scratch.graph(&["plan", "run", "echo_ok", r#"{"word":"hi"}"#]);
+    // `dive plan run … | jq` must work directly.
+    let run = scratch.dive(&["plan", "run", "echo_ok", r#"{"word":"hi"}"#]);
     run.code_is(0);
     assert_eq!(run.json(), serde_json::json!({"said": "hi"}));
 
@@ -56,9 +56,9 @@ fn tool_progress_never_reaches_stdout_under_jsonl_events() {
     let scratch = Scratch::new();
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph_env(
+    let run = scratch.dive_env(
         &["plan", "run", "echo_ok", r#"{"word":"hi"}"#],
-        &[("GRAPH_EVENTS", "jsonl")],
+        &[("DIVE_EVENTS", "jsonl")],
     );
     run.code_is(0);
     assert_eq!(run.json(), serde_json::json!({"said": "hi"}));
@@ -75,7 +75,7 @@ fn tool_progress_never_reaches_stdout_under_jsonl_events() {
         .collect();
     assert!(
         !events.is_empty(),
-        "GRAPH_EVENTS=jsonl should emit an event feed"
+        "DIVE_EVENTS=jsonl should emit an event feed"
     );
     assert!(
         events.iter().all(|event| event.get("event").is_some()),
@@ -93,7 +93,7 @@ fn a_missing_required_input_exits_three_and_prints_the_schema() {
     // 3 is "needs input" — distinct from 1 so a caller can branch on it and
     // supply what's missing rather than treating the run as broken.
     scratch
-        .graph(&["plan", "run", "echo_ok"])
+        .dive(&["plan", "run", "echo_ok"])
         .code_is(3)
         .stdout_empty()
         .stderr_contains("needs inputs")
@@ -110,7 +110,7 @@ fn a_fired_error_exit_gate_exits_four() {
     // 4 means "the assertion in the plan is real, infrastructure is fine" —
     // the whole basis of the CI-checks cookbook. It must not collapse into 1.
     scratch
-        .graph(&["plan", "run", "gate"])
+        .dive(&["plan", "run", "gate"])
         .code_is(4)
         .stdout_empty()
         .stderr_contains("no rows found");
@@ -138,7 +138,7 @@ finish:
 fn a_success_exit_in_a_solver_plan_answers_on_stdout() {
     let scratch = Scratch::new();
     scratch.write_plan("solver_exit", SOLVER_EXIT_PLAN);
-    let run = scratch.graph(&["plan", "run", "solver_exit"]);
+    let run = scratch.dive(&["plan", "run", "solver_exit"]);
     run.code_is(0);
     assert_eq!(run.stdout.trim(), "nothing to report");
 }
@@ -157,7 +157,7 @@ fn an_output_plan_exit_without_the_finish_keys_is_refused() {
         );
     scratch.write_plan("solver_exit", &plan);
     scratch
-        .graph(&["plan", "validate", "solver_exit"])
+        .dive(&["plan", "validate", "solver_exit"])
         .code_is(1)
         .stderr_contains("exit `output` keys must match `finish.output`: missing count");
 }
@@ -168,7 +168,7 @@ fn an_invalid_plan_exits_one_with_the_envelope_still_on_stdout() {
     scratch.write_plan("broken", BROKEN_PLAN);
 
     // "A non-zero code never truncates what was already written."
-    let run = scratch.graph(&["plan", "validate", "broken", "--json"]);
+    let run = scratch.dive(&["plan", "validate", "broken", "--json"]);
     run.code_is(1);
     let envelope = run.json();
     assert_eq!(envelope["ok"], serde_json::json!(false));
@@ -185,7 +185,7 @@ fn an_unknown_tool_is_an_ordinary_error_not_an_envelope() {
     // A bad argument, not a domain rejection: message on stderr, exit 1, and
     // deliberately no envelope even though --json was passed.
     scratch
-        .graph(&["tool", "show", "nope__missing", "--json"])
+        .dive(&["tool", "show", "nope__missing", "--json"])
         .code_is(1)
         .stdout_empty()
         .stderr_contains("unknown tool");
@@ -198,7 +198,7 @@ fn plan_run_json_envelope_carries_the_documented_keys() {
     let scratch = Scratch::new();
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph(&["plan", "run", "echo_ok", r#"{"word":"hi"}"#, "--json"]);
+    let run = scratch.dive(&["plan", "run", "echo_ok", r#"{"word":"hi"}"#, "--json"]);
     run.code_is(0);
     let envelope = run.json();
     assert_eq!(envelope["plan"], serde_json::json!("echo_ok"));
@@ -214,7 +214,7 @@ fn a_fired_gate_adds_an_exit_block_to_the_envelope() {
     let scratch = Scratch::new();
     scratch.write_plan("gate", GATE_PLAN);
 
-    let run = scratch.graph(&["plan", "run", "gate", "--json"]);
+    let run = scratch.dive(&["plan", "run", "gate", "--json"]);
     run.code_is(4);
     let envelope = run.json();
     let exit = &envelope["exit"];
@@ -244,7 +244,7 @@ fn plan_validate_separates_fatal_problems_from_notes() {
     let scratch = Scratch::new();
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph(&["plan", "validate", "echo_ok", "--json"]);
+    let run = scratch.dive(&["plan", "validate", "echo_ok", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     assert_eq!(envelope["ok"], serde_json::json!(true));
@@ -260,7 +260,7 @@ fn plan_list_reports_broken_and_valid_plans_separately() {
     scratch.write_plan("echo_ok", ECHO_PLAN);
     scratch.write_plan("broken", BROKEN_PLAN);
 
-    let run = scratch.graph(&["plan", "list", "--json"]);
+    let run = scratch.dive(&["plan", "list", "--json"]);
     run.code_is(0);
     let envelope = run.json();
 
@@ -289,7 +289,7 @@ fn the_tool_catalog_envelope_is_addressable_without_probing() {
     let scratch = Scratch::new();
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    let run = scratch.graph(&["tool", "list", "--json"]);
+    let run = scratch.dive(&["tool", "list", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     let tools = envelope["tools"].as_array().expect("tools array");
@@ -323,7 +323,7 @@ fn the_catalog_serves_the_control_steps_an_author_has_to_write() {
     // exactly what they did before these were listed.
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["tool", "list", "--json"]);
+    let run = scratch.dive(&["tool", "list", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     let tools = envelope["tools"].as_array().expect("tools array");
@@ -342,7 +342,7 @@ fn the_catalog_serves_the_control_steps_an_author_has_to_write() {
 
     // And each is fully described, schema included — a name alone is not
     // enough to write the step's input.
-    let run = scratch.graph(&["tool", "show", "ask", "--json"]);
+    let run = scratch.dive(&["tool", "show", "ask", "--json"]);
     run.code_is(0);
     let shown = run.json();
     assert_eq!(shown["name"], serde_json::json!("ask"));
@@ -361,7 +361,7 @@ fn a_control_step_refuses_to_be_tested_as_a_tool() {
     // refusal has to say what it is instead of failing in the registry.
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["tool", "test", "ask", "--input", "prompt=hi"]);
+    let run = scratch.dive(&["tool", "test", "ask", "--input", "prompt=hi"]);
     run.code_is(1);
     assert!(
         run.stderr.contains("control step"),
@@ -374,7 +374,7 @@ fn a_control_step_refuses_to_be_tested_as_a_tool() {
 fn tools_show_always_includes_every_schema_key() {
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["tool", "show", "builtin__reshape", "--json"]);
+    let run = scratch.dive(&["tool", "show", "builtin__reshape", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     assert_eq!(envelope["name"], serde_json::json!("builtin__reshape"));
@@ -395,7 +395,7 @@ fn tools_show_always_includes_every_schema_key() {
 fn a_scaffolded_plan_is_ok_but_reports_what_remains_wrong() {
     let scratch = Scratch::new();
 
-    let run = scratch.graph(&["plan", "new", "demo", "--json"]);
+    let run = scratch.dive(&["plan", "new", "demo", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     // The edit succeeded (ok) even though the plan is not yet runnable —
@@ -407,15 +407,15 @@ fn a_scaffolded_plan_is_ok_but_reports_what_remains_wrong() {
         envelope["problems"],
         serde_json::json!(["plan has no steps"])
     );
-    assert!(scratch.exists(".graph/plans/demo.yaml"));
+    assert!(scratch.exists(".dive/plans/demo.yaml"));
 }
 
 #[test]
 fn a_rejected_edit_exits_one_with_the_problem_list_on_stdout() {
     let scratch = Scratch::new();
-    scratch.graph(&["plan", "new", "demo", "--json"]).code_is(0);
+    scratch.dive(&["plan", "new", "demo", "--json"]).code_is(0);
 
-    let run = scratch.graph(&[
+    let run = scratch.dive(&[
         "plan",
         "step",
         "add",
@@ -437,16 +437,16 @@ fn a_rejected_edit_exits_one_with_the_problem_list_on_stdout() {
     );
 
     // The draft is unchanged — a rejected edit must not half-apply.
-    let yaml = scratch.read(".graph/plans/demo.yaml");
+    let yaml = scratch.read(".dive/plans/demo.yaml");
     assert!(!yaml.contains("E7"), "the file was modified: {yaml}");
 }
 
 #[test]
 fn changing_the_identifier_writes_a_new_file_and_says_so() {
     let scratch = Scratch::new();
-    scratch.graph(&["plan", "new", "demo", "--json"]).code_is(0);
+    scratch.dive(&["plan", "new", "demo", "--json"]).code_is(0);
 
-    let run = scratch.graph(&["plan", "set", "demo", "identifier", "renamed", "--json"]);
+    let run = scratch.dive(&["plan", "set", "demo", "identifier", "renamed", "--json"]);
     run.code_is(0);
     let envelope = run.json();
     assert_eq!(envelope["identifier"], serde_json::json!("renamed"));
@@ -455,9 +455,9 @@ fn changing_the_identifier_writes_a_new_file_and_says_so() {
         .as_str()
         .expect("renamedFrom")
         .ends_with("demo.yaml"));
-    assert!(scratch.exists(".graph/plans/renamed.yaml"));
+    assert!(scratch.exists(".dive/plans/renamed.yaml"));
     assert!(
-        scratch.exists(".graph/plans/demo.yaml"),
+        scratch.exists(".dive/plans/demo.yaml"),
         "the original is deliberately left in place"
     );
 }
@@ -465,9 +465,9 @@ fn changing_the_identifier_writes_a_new_file_and_says_so() {
 #[test]
 fn a_step_add_envelope_reports_where_the_step_landed() {
     let scratch = Scratch::new();
-    scratch.graph(&["plan", "new", "demo", "--json"]).code_is(0);
+    scratch.dive(&["plan", "new", "demo", "--json"]).code_is(0);
 
-    let run = scratch.graph(&[
+    let run = scratch.dive(&[
         "plan",
         "step",
         "add",
@@ -502,7 +502,7 @@ fn every_listing_command_answers_json_with_a_counted_envelope() {
         (vec!["shape", "list", "--json"], "shapes"),
         (vec!["mcp", "list", "--json"], "servers"),
     ] {
-        let run = scratch.graph(&args);
+        let run = scratch.dive(&args);
         run.code_is(0);
         let envelope = run.json();
         let items = envelope[key]
@@ -526,7 +526,7 @@ fn an_empty_listing_is_an_envelope_with_a_note_not_stderr_advice() {
 
     // Under --json the hint is data, so stderr stays completely silent: a
     // machine caller gets one parseable thing and nothing to scrape.
-    let run = scratch.graph(&["thread", "list", "--json"]);
+    let run = scratch.dive(&["thread", "list", "--json"]);
     run.code_is(0);
     assert_eq!(
         run.stderr, "",
@@ -539,7 +539,7 @@ fn an_empty_listing_is_an_envelope_with_a_note_not_stderr_advice() {
     // Without --json the same hint is the only thing the human gets, and it
     // is a diagnostic, so stdout stays empty rather than carrying prose.
     scratch
-        .graph(&["thread", "list"])
+        .dive(&["thread", "list"])
         .code_is(0)
         .stdout_empty()
         .stderr_contains("no threads yet");
@@ -552,7 +552,7 @@ fn tools_test_reports_a_failing_tool_without_failing_the_command() {
     // A tool that reports an error is not a CLI failure: the call completed
     // and its payload is the result worth reading. `isError` carries the
     // distinction that the exit code deliberately does not.
-    let run = scratch.graph(&[
+    let run = scratch.dive(&[
         "tool",
         "test",
         "builtin__reshape",
@@ -566,7 +566,7 @@ fn tools_test_reports_a_failing_tool_without_failing_the_command() {
     assert_eq!(envelope["result"], serde_json::json!({"a": "1"}));
 
     // Without --json the tool's own result is the deliverable, unwrapped.
-    let plain = scratch.graph(&["tool", "test", "builtin__reshape", r#"{"shape":{"a":"1"}}"#]);
+    let plain = scratch.dive(&["tool", "test", "builtin__reshape", r#"{"shape":{"a":"1"}}"#]);
     plain.code_is(0);
     assert_eq!(plain.json(), serde_json::json!({"a": "1"}));
 }
@@ -582,14 +582,14 @@ fn github_annotations_are_the_one_stdout_exception_and_only_on_failure() {
     // Failure: the annotation is a workflow command, and GitHub only parses
     // those from stdout — the sanctioned exception to stdout-is-deliverable.
     scratch
-        .graph_env(&["plan", "run", "gate"], &[("GRAPH_EVENTS", "github")])
+        .dive_env(&["plan", "run", "gate"], &[("DIVE_EVENTS", "github")])
         .code_is(4)
         .stdout_contains("::error::no rows found");
 
     // Success: no annotation, stdout stays a clean deliverable.
-    let ok = scratch.graph_env(
+    let ok = scratch.dive_env(
         &["plan", "run", "echo_ok", r#"{"word":"hi"}"#],
-        &[("GRAPH_EVENTS", "github")],
+        &[("DIVE_EVENTS", "github")],
     );
     ok.code_is(0);
     assert_eq!(ok.json(), serde_json::json!({"said": "hi"}));
@@ -602,9 +602,9 @@ fn json_suppresses_github_annotations() {
 
     // --json promises machine-parseable stdout, so it wins over the
     // annotation mode: the envelope must still parse.
-    let run = scratch.graph_env(
+    let run = scratch.dive_env(
         &["plan", "run", "gate", "--json"],
-        &[("GRAPH_EVENTS", "github")],
+        &[("DIVE_EVENTS", "github")],
     );
     run.code_is(4);
     assert!(

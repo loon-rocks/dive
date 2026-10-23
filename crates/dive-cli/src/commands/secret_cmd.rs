@@ -323,9 +323,9 @@ mod tests {
     #[test]
     fn show_lists_every_layer_and_marks_the_project_value_in_use() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".dive")).unwrap();
         std::fs::write(
-            dir.path().join(".graph/config.toml"),
+            dir.path().join(".dive/config.toml"),
             "version = 5\n[project]\nid = \"p1\"\n",
         )
         .unwrap();

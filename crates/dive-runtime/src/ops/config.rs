@@ -295,7 +295,7 @@ pub fn migrate(workspace: &Workspace, global: bool) -> Result<Migrated> {
     let target = target(workspace, global);
     if !target.exists() {
         bail!(
-            "{} does not exist (run `graph config init{}` to create it)",
+            "{} does not exist (run `dive config init{}` to create it)",
             target.display(),
             if global { " --global" } else { "" }
         );
@@ -329,7 +329,7 @@ mod tests {
     use serde_json::json;
 
     fn project(dir: &std::path::Path) -> std::path::PathBuf {
-        dir.join(".graph").join("config.toml")
+        dir.join(".dive").join("config.toml")
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(listed.count, 2);
         assert_eq!(listed.files[1].marker(), "missing");
 
-        std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".dive")).unwrap();
         std::fs::write(project(dir.path()), "[settings]\n").unwrap();
         let listed = path(&workspace);
         assert_eq!(listed.files[1].version, Some(1));
@@ -384,7 +384,7 @@ mod tests {
     async fn check_rejects_a_layer_from_a_newer_binary() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = Workspace::new(dir.path());
-        std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".dive")).unwrap();
         std::fs::write(
             project(dir.path()),
             format!("version = {}\n", CONFIG_FORMAT + 1),
@@ -396,7 +396,7 @@ mod tests {
         let readable = verdict
             .files
             .iter()
-            .find(|file| file.path().ends_with("config.toml") && file.path().contains(".graph"))
+            .find(|file| file.path().ends_with("config.toml") && file.path().contains(".dive"))
             .unwrap();
         assert!(readable.line().ends_with("\ttoo new\n"));
         let value = serde_json::to_value(&verdict).unwrap();
@@ -408,7 +408,7 @@ mod tests {
     async fn check_passes_a_current_project_layer_and_says_so() {
         let dir = tempfile::tempdir().unwrap();
         let workspace = Workspace::new(dir.path());
-        std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".dive")).unwrap();
         std::fs::write(
             project(dir.path()),
             format!(
@@ -422,7 +422,7 @@ mod tests {
             .files
             .iter()
             .map(FileCheck::line)
-            .find(|line| line.contains(".graph"))
+            .find(|line| line.contains(".dive"))
             .unwrap();
         assert!(project_line.ends_with("\tcurrent\n"), "{project_line}");
         if verdict.ok {
@@ -439,10 +439,10 @@ mod tests {
         let workspace = Workspace::new(dir.path());
         let error = migrate(&workspace, false).unwrap_err().to_string();
         assert!(
-            error.ends_with("does not exist (run `graph config init` to create it)"),
+            error.ends_with("does not exist (run `dive config init` to create it)"),
             "{error}"
         );
-        std::fs::create_dir_all(dir.path().join(".graph")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".dive")).unwrap();
         std::fs::write(project(dir.path()), "[settings]\n").unwrap();
         let migrated = migrate(&workspace, false).unwrap();
         assert_eq!((migrated.from, migrated.to), (1, CONFIG_FORMAT));

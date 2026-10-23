@@ -18,7 +18,7 @@ keywords: ["network_editor", "agent"]
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | edit threads opened through `dive-runtime`; `graph chat --thread` reopens one | default |
+| `chat` | edit threads opened through `dive-runtime`; `dive chat --thread` reopens one | default |
 
 ## Tools
 
@@ -95,7 +95,7 @@ Today's date: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show network_editor > .graph/agents/network_editor.yaml
+dive agent show network_editor > .dive/agents/network_editor.yaml
 ```
 
 </RequestExample>

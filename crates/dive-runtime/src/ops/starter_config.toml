@@ -2,13 +2,13 @@
 # Values in ${VAR} form are read from the environment at load time.
 
 [settings]
-# data_dir = "~/.local/share/graph"
+# data_dir = "~/.local/share/dive"
 # max_agent_iterations = 15
 # planning_attempts = 2
 
 # [storage]
 # backend = "file"      # default: plain files under data_dir
-# backend = "memory"    # ephemeral (CI jobs); or set GRAPH_STORAGE=memory
+# backend = "memory"    # ephemeral (CI jobs); or set DIVE_STORAGE=memory
 
 [providers.anthropic]
 type = "anthropic"
@@ -66,7 +66,7 @@ model = "claude-sonnet-5"
 # [telemetry]
 # endpoint = "https://cloud.langfuse.com/api/public/otel"
 # capture_content = true    # default; false keeps prompts, completions, and tool I/O off spans
-# logs = false              # also export the diagnostic log (-v / GRAPH_LOG)
+# logs = false              # also export the diagnostic log (-v / DIVE_LOG)
 # [telemetry.headers]
 # Authorization = "Basic ${LANGFUSE_AUTH}"   # base64 of pk-lf-…:sk-lf-…
 # "x-langfuse-ingestion-version" = "4"

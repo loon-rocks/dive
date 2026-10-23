@@ -1,0 +1,138 @@
+# Dogfood: graph's own plans gate graph's PRs, one `dive plan run` per job.
+# Jobs run inside the release container image (graph + git/jq/gh baked in),
+# so there is no install step; all logic lives in the repo-carried plans
+# and tools (./.dive/) and the bundled github tool pack. DIVE_EVENTS=github
+# turns failing gates into run annotations. docs-drift fails the check
+# (exit 4) on undocumented behavior changes; format-drift fails it on a
+# file-version schema change without a version bump; graph-review-9000 composes
+# plan__dive_review_core (the locally runnable review engine) with
+# plan__dive_review_thread_audit (thread lifecycle, decide-gated to runs
+# with prior findings), maintaining its eight-pass findings as living
+# review threads (new findings post, fixed ones resolve with a reply,
+# human-dismissed ones stay declined) plus a marker-keyed summary comment
+# refreshed in place on every push.
+name: graph checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  packages: read                   # pull the (private) release image
+
+concurrency:
+  group: dive-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  DIVE_STORAGE: memory            # ephemeral: leave no state behind in CI
+  DIVE_EVENTS: github             # failing plans annotate the run
+  GH_TOKEN: ${{ github.token }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  PR: ${{ github.event.pull_request.number }}
+  BASE: ${{ github.event.pull_request.base.sha }}
+  HEAD: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  docs-drift:
+    # Drafts pay nothing; fork PRs have no ANTHROPIC_API_KEY (the ${VAR} in
+    # .dive/config.toml hard-errors without it — that's the backstop).
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/loon-rocks/dive:v0.16.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # the plan diffs $BASE...$HEAD locally
+
+      - name: Docs drift gate
+        run: dive plan run docs_drift --input base="$BASE" --input head="$HEAD"
+
+  # Sibling gate: any schema change to a versioned file (config,
+  # plan/tool documents, the store layout) must raise the matching *_FORMAT
+  # constant — see RELEASING.md, "Version bumps".
+  # Zero LLM calls unless a model file changed.
+  format-drift:
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/loon-rocks/dive:v0.16.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Format drift gate
+        run: dive plan run format_drift --input base="$BASE" --input head="$HEAD"
+
+  dogfood-files:
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/loon-rocks/dive:v0.16.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Config and plans load in the pinned image
+        run: |
+          dive version
+          dive config check
+          for plan in .dive/plans/*.yaml; do
+            dive plan validate "$plan"
+          done
+
+  # The reviewer: dive_review_9000 wraps plan__dive_review_core (the
+  # engine, also runnable locally over a worktree) and
+  # plan__dive_review_thread_audit (thread transitions). Needs >= v0.11.0:
+  # the plans read and sync findings as review threads via
+  # gh_pr_review_threads / gh_pr_thread_sync,
+  # which earlier images don't ship. The plan run authenticates as the
+  # review App: the default Actions token
+  # cannot run the review-thread GraphQL mutations (resolveReviewThread /
+  # addPullRequestReviewThreadReply return "Resource not accessible by
+  # integration" even with pull-requests: write), so without the App
+  # token the plan's resolve/decline transitions silently no-op.
+  graph-review-9000:
+    if: >-
+      false &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/loon-rocks/dive:v0.16.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # the plan reads files at $HEAD via git_file
+
+      - uses: actions/create-github-app-token@v2
+        id: bot
+        with:
+          app-id: ${{ secrets.REVIEW_APP_ID }}
+          private-key: ${{ secrets.REVIEW_APP_KEY }}
+
+      - name: Deep review and comment
+        run: dive plan run dive_review_9000 --input pr="$PR"
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}   # the App, not github.token

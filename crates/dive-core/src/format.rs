@@ -147,7 +147,7 @@ impl Kind {
     }
 }
 
-pub fn graph_version() -> &'static str {
+pub fn dive_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 

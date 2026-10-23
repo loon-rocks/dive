@@ -136,11 +136,11 @@ command: sh
 args: ["-c", "printf %s \"$TOKEN\""]
 output: text
 env:
-  TOKEN: "${GRAPH_TEST_STORED_TOOL_TOKEN}"
+  TOKEN: "${DIVE_TEST_STORED_TOOL_TOKEN}"
 "#);
     let secrets = env_then_store(
         crate::secrets::MemorySecrets::env(),
-        crate::secrets::MemorySecrets::store().with("GRAPH_TEST_STORED_TOOL_TOKEN", "tok-1234"),
+        crate::secrets::MemorySecrets::store().with("DIVE_TEST_STORED_TOOL_TOKEN", "tok-1234"),
     );
     let registry = registry(vec![tool]).with_secrets(Arc::new(secrets));
     let outcome = registry
@@ -171,16 +171,16 @@ fn an_env_default_applies_only_when_both_sources_miss() {
 #[test]
 fn a_stored_secret_is_never_reported_unset() {
     let doc = crate::user_tools::parse_tool_source(
-        "name: search\ndescription: x\nkind: exec\ncommand: echo\nenv:\n  A: \"${GRAPH_TEST_ONLY_STORED}\"\n  B: \"${GRAPH_TEST_IN_NO_SOURCE}\"\n",
+        "name: search\ndescription: x\nkind: exec\ncommand: echo\nenv:\n  A: \"${DIVE_TEST_ONLY_STORED}\"\n  B: \"${DIVE_TEST_IN_NO_SOURCE}\"\n",
     )
     .unwrap();
     let secrets = env_then_store(
         crate::secrets::MemorySecrets::env(),
-        crate::secrets::MemorySecrets::store().with("GRAPH_TEST_ONLY_STORED", "s"),
+        crate::secrets::MemorySecrets::store().with("DIVE_TEST_ONLY_STORED", "s"),
     );
     assert_eq!(
         crate::user_tools::unset_env_vars(&doc, &secrets),
-        ["GRAPH_TEST_IN_NO_SOURCE"]
+        ["DIVE_TEST_IN_NO_SOURCE"]
     );
 }
 
@@ -1970,18 +1970,18 @@ fn coercion_recovers_parent_fields_leaked_into_a_json_string() {
 #[test]
 fn an_env_reference_can_carry_a_default_for_settings() {
     let doc = crate::user_tools::parse_tool_source(
-        "name: search\ndescription: x\nkind: exec\ncommand: echo\nenv:\n  URL: \"${GRAPH_TEST_NEVER_SET_URL:-https://search.example}\"\n  KEY: \"${GRAPH_TEST_NEVER_SET_KEY}\"\n",
+        "name: search\ndescription: x\nkind: exec\ncommand: echo\nenv:\n  URL: \"${DIVE_TEST_NEVER_SET_URL:-https://search.example}\"\n  KEY: \"${DIVE_TEST_NEVER_SET_KEY}\"\n",
     )
     .unwrap();
     assert_eq!(
         crate::user_tools::unset_env_vars(&doc, &crate::secrets::EnvSource),
-        ["GRAPH_TEST_NEVER_SET_KEY"],
+        ["DIVE_TEST_NEVER_SET_KEY"],
         "a reference with a default never counts as unset"
     );
     let supplied = crate::user_tools::with_env_values(
         &doc,
         &std::collections::BTreeMap::from([(
-            "GRAPH_TEST_NEVER_SET_KEY".to_string(),
+            "DIVE_TEST_NEVER_SET_KEY".to_string(),
             "k".to_string(),
         )]),
     );
@@ -1991,14 +1991,14 @@ fn an_env_reference_can_carry_a_default_for_settings() {
     assert_eq!(env["KEY"].value(), "k");
     assert_eq!(
         env["URL"].value(),
-        "${GRAPH_TEST_NEVER_SET_URL:-https://search.example}"
+        "${DIVE_TEST_NEVER_SET_URL:-https://search.example}"
     );
 }
 
 #[tokio::test]
 async fn pack_exec_tools_see_their_pack_directory_and_user_tools_do_not() {
     let doc = parse_tool_source(
-        "name: where\ndescription: d\nkind: exec\ncommand: sh\nargs: [\"-c\", 'printf %s \"${GRAPH_PACK_DIR-unset}\"']\noutput: text\n",
+        "name: where\ndescription: d\nkind: exec\ncommand: sh\nargs: [\"-c\", 'printf %s \"${DIVE_PACK_DIR-unset}\"']\noutput: text\n",
     )
     .unwrap();
     let dir = tempfile::tempdir().unwrap();

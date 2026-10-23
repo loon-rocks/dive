@@ -1,4 +1,4 @@
-//! `graph chat` — interactive REPL with persistent threads.
+//! `dive chat` — interactive REPL with persistent threads.
 
 use anyhow::{bail, Result};
 use dive_core::agent::conversation::view;
@@ -8,13 +8,13 @@ use std::sync::Arc;
 
 pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Result<()> {
     if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-        bail!("chat needs an interactive terminal — use `graph ask` for scripted queries");
+        bail!("chat needs an interactive terminal — use `dive ask` for scripted queries");
     }
     if let Some(name) = agent
         .as_deref()
         .filter(|name| crate::workbench::agents::is_workbench_only(name))
     {
-        bail!("{name} runs only in the workbench: start it with `graph wb`");
+        bail!("{name} runs only in the workbench: start it with `dive wb`");
     }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
@@ -44,7 +44,7 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
 
     let mut editor = Reedline::create();
     eprintln!(
-        "graph chat with {} — /quit to exit, /agent to see or switch agents, /state to inspect, /thread for the thread id",
+        "dive chat with {} — /quit to exit, /agent to see or switch agents, /state to inspect, /thread for the thread id",
         session.active()
     );
 
@@ -95,16 +95,16 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
     }
     runtime.shutdown().await;
     if let Some(meta) = session.thread() {
-        eprintln!("resume with `graph chat --thread {}`", meta.id);
+        eprintln!("resume with `dive chat --thread {}`", meta.id);
     }
     Ok(())
 }
 
 fn prompt_label(active: &str) -> String {
     if active == dive_core::agent::doc::CHAT_AGENT {
-        "graph".to_string()
+        "dive".to_string()
     } else {
-        format!("graph:{active}")
+        format!("dive:{active}")
     }
 }
 

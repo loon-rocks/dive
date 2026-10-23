@@ -34,7 +34,7 @@ include_tools = ["echo", "get-sum"]
 Every tool you load is offered to agents and drafters, so leaving out the ones you don't use keeps their prompts smaller and their choices easier.
 
 ```bash
-graph mcp tools everything
+dive mcp tools everything
 ```
 
 ```text
@@ -64,4 +64,4 @@ output_schema = { type = "object", properties = { text = { type = "string" } } }
 output_example = { text = "Echo: hello" }
 ```
 
-`graph tool show everything__echo` prints the description and output schema now in effect. graph also learns a tool's output shape as it runs; see [Improve what graph knows about a tool](/tools/guides/tool-shapes).
+`dive tool show everything__echo` prints the description and output schema now in effect. graph also learns a tool's output shape as it runs; see [Improve what graph knows about a tool](/tools/guides/tool-shapes).

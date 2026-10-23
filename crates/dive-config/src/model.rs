@@ -171,17 +171,17 @@ pub struct PromptConfig {
     /// date/time and `[user]` name/context are still appended after it.
     pub chat: Option<String>,
     /// Workbench framing and policy, appended to the chat prompt inside
-    /// `graph workbench`. The `workbench__*` tool rules are appended
+    /// `dive workbench`. The `workbench__*` tool rules are appended
     /// after it and are not overridable.
     pub workbench: Option<String>,
 }
 
-/// `graph workbench` settings.
+/// `dive workbench` settings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct WorkbenchConfig {
     /// Where the workbench writes its debug log (tilde-expanded). Default:
-    /// `<data_dir>/workbench.log`; the `GRAPH_WORKBENCH_LOG` env var wins
+    /// `<data_dir>/workbench.log`; the `DIVE_WORKBENCH_LOG` env var wins
     /// over both.
     pub log_path: Option<PathBuf>,
 }
@@ -229,7 +229,7 @@ pub enum TelemetryProtocol {
 }
 
 impl TelemetryConfig {
-    pub const DEFAULT_SERVICE_NAME: &'static str = "graph";
+    pub const DEFAULT_SERVICE_NAME: &'static str = "dive";
     pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
     pub fn with_env(&self, env: &dyn Fn(&str) -> Option<String>) -> Result<Self, String> {
@@ -363,7 +363,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            data_dir: PathBuf::from("~/.local/share/graph"),
+            data_dir: PathBuf::from("~/.local/share/dive"),
             max_agent_iterations: 15,
             planning_attempts: 2,
             history_limit: 20,
@@ -391,7 +391,7 @@ impl MissingEnv {
     /// e.g. `environment variable ANTHROPIC_API_KEY (providers.anthropic.api_key) is not set`.
     pub fn describe(&self, entry: &str) -> String {
         format!(
-            "environment variable {} ({entry}.{}) is not set; set it, or store it with `graph secret set {}`",
+            "environment variable {} ({entry}.{}) is not set; set it, or store it with `dive secret set {}`",
             self.var, self.field, self.var
         )
     }
@@ -689,7 +689,7 @@ impl McpServerConfig {
     pub fn validate(&self, name: &str) -> Result<(), String> {
         if crate::pack::RESERVED_NAMES.contains(&name) {
             return Err(format!(
-                "[mcp.{name}]: '{name}' is reserved for graph's own tool names ({}); rename the server",
+                "[mcp.{name}]: '{name}' is reserved for Dive's own tool names ({}); rename the server",
                 crate::pack::RESERVED_NAMES.join(", ")
             ));
         }
@@ -723,8 +723,8 @@ impl Default for PlanPaths {
     fn default() -> Self {
         Self {
             paths: vec![
-                PathBuf::from("./.graph/plans"),
-                PathBuf::from("~/.config/graph/plans"),
+                PathBuf::from("./.dive/plans"),
+                PathBuf::from("~/.config/dive/plans"),
             ],
         }
     }
@@ -741,8 +741,8 @@ impl Default for ToolPaths {
     fn default() -> Self {
         Self {
             paths: vec![
-                PathBuf::from("./.graph/tools"),
-                PathBuf::from("~/.config/graph/tools"),
+                PathBuf::from("./.dive/tools"),
+                PathBuf::from("~/.config/dive/tools"),
             ],
             always_loaded: [
                 "builtin__infer",

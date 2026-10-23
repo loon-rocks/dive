@@ -137,7 +137,7 @@ pub fn missing(loaded: &LoadedPlans, name: &str) -> String {
     }
     match loaded.skip_reason(name) {
         Some(reason) => format!("plan '{name}' failed to load — {reason}"),
-        None => format!("no plan named '{name}' (see `graph plan list`)"),
+        None => format!("no plan named '{name}' (see `dive plan list`)"),
     }
 }
 
@@ -275,7 +275,7 @@ mod tests {
         );
         assert_eq!(
             missing(&loaded, "nothing"),
-            "no plan named 'nothing' (see `graph plan list`)"
+            "no plan named 'nothing' (see `dive plan list`)"
         );
     }
 
@@ -297,7 +297,7 @@ mod tests {
         assert_eq!(verdict.ok, verdict.problems.is_empty());
 
         let error = show(&runtime, "absent").unwrap_err().to_string();
-        assert_eq!(error, "no plan named 'absent' (see `graph plan list`)");
+        assert_eq!(error, "no plan named 'absent' (see `dive plan list`)");
     }
 
     #[test]

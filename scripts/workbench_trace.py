@@ -2,7 +2,7 @@
 """Render a trace timeline from the workbench log.
 
 The workbench writes a timestamped tracing stream to
-`<data_dir>/workbench.log` (default ~/.local/share/graph/workbench.log).
+`<data_dir>/workbench.log` (default ~/.local/share/dive/workbench.log).
 This parses it into nested spans — session > turn > tool call, plus the
 two sibling phases of a plan draft: a single outline call that sketches
 stages, then a separate step-by-step drafting loop that turns each stage into
@@ -13,7 +13,7 @@ Usage:
     workbench_trace.py [--sessions N] [--log PATH] [--no-color] [--width N]
 
     --sessions N   Show the last N sessions (default 3).
-    --log PATH     Log file (default ~/.local/share/graph/workbench.log).
+    --log PATH     Log file (default ~/.local/share/dive/workbench.log).
     --width N      Truncate tool inputs/results to N chars (default 70; 0 = off).
     --no-color     Disable ANSI color.
 """
@@ -256,7 +256,7 @@ def render(session, width, color):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sessions", type=int, default=3)
-    ap.add_argument("--log", default=os.path.expanduser("~/.local/share/graph/workbench.log"))
+    ap.add_argument("--log", default=os.path.expanduser("~/.local/share/dive/workbench.log"))
     ap.add_argument("--width", type=int, default=70)
     ap.add_argument("--no-color", action="store_true")
     args = ap.parse_args()

@@ -4,7 +4,7 @@ description: "Where graph keeps threads, tool shapes and the workbench log."
 keywords: ["data directory", "data_dir", "storage", "threads", "shapes"]
 ---
 
-graph keeps its runtime state in one directory, `~/.local/share/graph` by default. Set [`settings.data_dir`](/reference/configuration#param-settings-data-dir) to move it. graph creates the directory the first time it needs it.
+graph keeps its runtime state in one directory, `~/.local/share/dive` by default. Set [`settings.data_dir`](/reference/configuration#param-settings-data-dir) to move it. graph creates the directory the first time it needs it.
 
 ## Layout
 
@@ -21,7 +21,7 @@ Every file is plain JSON or JSONL, so `cat` and `jq` can read it. Thread IDs are
 
 ## Thread projects
 
-`meta.json` records the project a thread was started in under `project`: the absolute path of the project's root folder, with symlinks resolved. A folder is a project when it has a `.graph` folder. A thread started anywhere else, or in `~/.config/graph`, is global and has no `project`, and so does every thread written before projects were recorded. `graph thread list` lists the current directory's threads; `--all` lists them all.
+`meta.json` records the project a thread was started in under `project`: the absolute path of the project's root folder, with symlinks resolved. A folder is a project when it has a `.dive` folder. A thread started anywhere else, or in `~/.config/dive`, is global and has no `project`, and so does every thread written before projects were recorded. `dive thread list` lists the current directory's threads; `--all` lists them all.
 
 ## Thread attachments
 
@@ -72,4 +72,4 @@ Keep the directory on a local filesystem. File locks aren't reliable on network 
 
 - To back up your state, copy the directory.
 - To discard learned shapes, delete `shapes/`. graph records them again as tools run.
-- To delete a thread, use [`graph thread rm`](/reference/cli/thread/rm).
+- To delete a thread, use [`dive thread rm`](/reference/cli/thread/rm).

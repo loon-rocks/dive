@@ -1,9 +1,9 @@
 ---
-title: "graph pack add"
+title: "dive pack add"
 sidebarTitle: "add"
-description: "Install a pack from git as a plain copy in the project, global or given graph directory"
+description: "Install a pack from git as a plain copy in the project, global or given Dive directory"
 playground: "none"
-keywords: ["graph pack add"]
+keywords: ["dive pack add"]
 ---
 
 packs.lock records the commit each release tag pointed at when it was installed. A published release must never move: when the repository's copy of a recorded tag now points elsewhere, or a clone checks out a different commit than git ls-remote reported, the install is refused and nothing changes. Branch-tracking packs are exempt.
@@ -35,11 +35,11 @@ packs.lock records the commit each release tag pointed at when it was installed.
 </ParamField>
 
 <ParamField query="--global" type="boolean">
-  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+  Target the global layer (~/.config/dive/) instead of the project's ./.dive/
 </ParamField>
 
 <ParamField query="--dir" type="string">
-  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+  Target this Dive directory, laid out like .dive/ (config.toml, packs/, packs.lock)
 
   Format: `PATH`.
 </ParamField>
@@ -57,7 +57,7 @@ packs.lock records the commit each release tag pointed at when it was installed.
 <RequestExample>
 
 ```bash Usage
-graph pack add [OPTIONS] <NAME|URL>
+dive pack add [OPTIONS] <NAME|URL>
 ```
 
 </RequestExample>

@@ -1,9 +1,9 @@
 ---
-title: "graph tool test"
+title: "dive tool test"
 sidebarTitle: "test"
 description: "Invoke a tool directly"
 playground: "none"
-keywords: ["graph tool test"]
+keywords: ["dive tool test"]
 ---
 
 Calls the tool and prints its result. With `--json`, prints `{tool, isError, result}`; a tool that reports an error still exits 0, with `isError` set.
@@ -11,7 +11,7 @@ Calls the tool and prints its result. With `--json`, prints `{tool, isError, res
 ## Arguments
 
 <ParamField path="NAME" type="string" required>
-  The tool's namespaced name, as `graph tool list` prints it
+  The tool's namespaced name, as `dive tool list` prints it
 </ParamField>
 
 <ParamField path="JSON|@FILE|-" type="string">
@@ -39,15 +39,15 @@ Calls the tool and prints its result. With `--json`, prints `{tool, isError, res
 <RequestExample>
 
 ```bash Usage
-graph tool test [OPTIONS] <NAME> [JSON|@FILE|-]
+dive tool test [OPTIONS] <NAME> [JSON|@FILE|-]
 ```
 
 ```bash Example 1
-graph tool test github__tool__git_log '{"base":"v0.15.0","head":"HEAD"}'
+dive tool test github__tool__git_log '{"base":"v0.15.0","head":"HEAD"}'
 ```
 
 ```bash Example 2
-graph tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json
+dive tool test github__tool__git_log --input base=v0.15.0 --input head=HEAD --json
 ```
 
 </RequestExample>

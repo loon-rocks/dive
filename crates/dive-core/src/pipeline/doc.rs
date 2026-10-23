@@ -1,5 +1,5 @@
 //! Plan documents: user-authored YAML plans, exposed to the agent as tools
-//! and runnable directly via `graph plan run`.
+//! and runnable directly via `dive plan run`.
 
 use super::plan::{check_step_id, Plan};
 use super::Finish;
@@ -212,7 +212,7 @@ pub fn load_plan_doc(path: &Path) -> Result<PlanDoc, DocError> {
 ///
 /// [`load_plan_doc`] refuses a document that fails [`validate_doc`], which is
 /// right for the runtime catalog and wrong for editing — a plan part-way
-/// through being built (a fresh `graph plan new` scaffold has no steps yet)
+/// through being built (a fresh `dive plan new` scaffold has no steps yet)
 /// must still be openable, or repairing it would be impossible. That is the
 /// same reason the edit guard tolerates pre-existing problems.
 ///

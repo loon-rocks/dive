@@ -1,19 +1,19 @@
 ---
 title: "Serve plans over MCP"
 description: "Let Claude, Cursor and other MCP clients run your plans as tools."
-keywords: ["MCP server", "graph mcp serve", "plan_", "elicitation", "Claude Desktop"]
+keywords: ["MCP server", "dive mcp serve", "plan_", "elicitation", "Claude Desktop"]
 ---
 
-`graph mcp serve` runs graph as an MCP server over stdio. Any MCP client can then call your plans as tools.
+`dive mcp serve` runs graph as an MCP server over stdio. Any MCP client can then call your plans as tools.
 
 ## Add graph to a client
 
-Point the client at `graph mcp serve`, and pass `--dir` with the project that holds your `.graph/` directory. Clients start servers in a directory of their own choosing, so without `--dir` graph may not find your plans.
+Point the client at `dive mcp serve`, and pass `--dir` with the project that holds your `.dive/` directory. Clients start servers in a directory of their own choosing, so without `--dir` graph may not find your plans.
 
 <CodeGroup>
 
 ```bash Claude Code
-claude mcp add graph -- graph mcp serve --dir /path/to/project
+claude mcp add graph -- dive mcp serve --dir /path/to/project
 ```
 
 ```json Claude Desktop and Cursor

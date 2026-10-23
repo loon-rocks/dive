@@ -103,7 +103,7 @@ pub fn ask_tool_def() -> crate::tools::ToolDef {
         }),
         output_schema: None,
         output_example: Some(json!({
-            "answer": {"repo": "tylerdavis/graph"},
+            "answer": {"repo": "loon-rocks/dive"},
             "answered": false,
             "reason": "unavailable"
         })),

@@ -54,7 +54,7 @@ pub fn subagent_io(doc: &AgentDoc) -> &'static str {
 
 fn source(doc: &AgentDoc, workbench: bool) -> String {
     if workbench {
-        "built-in, workbench only (graph wb)".to_string()
+        "built-in, workbench only (dive wb)".to_string()
     } else {
         doc.source.describe()
     }
@@ -209,7 +209,7 @@ mod tests {
             .find(|agent| agent.name == "wb_helper")
             .unwrap();
         assert!(helper.workbench_only);
-        assert_eq!(helper.source, "built-in, workbench only (graph wb)");
+        assert_eq!(helper.source, "built-in, workbench only (dive wb)");
         let value = serde_json::to_value(&listed).unwrap();
         assert_eq!(value["loadErrors"], json!([]));
         assert_eq!(
@@ -241,7 +241,7 @@ mod tests {
             "{}",
             detail.yaml
         );
-        assert_eq!(detail.label, "built-in, workbench only (graph wb)");
+        assert_eq!(detail.label, "built-in, workbench only (dive wb)");
         let value = serde_json::to_value(&detail).unwrap();
         assert_eq!(value["agent"]["name"], "wb_helper");
         let error = show(&[], &[], &[], "nope").unwrap_err().to_string();

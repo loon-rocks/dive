@@ -13,7 +13,7 @@ fn machine() -> Machine {
     }
     std::fs::write(bin.join("readme"), "not a program").unwrap();
     Machine {
-        graph: "0.17.2".to_string(),
+        dive: "0.17.2".to_string(),
         os: "macos".to_string(),
         path: vec![bin],
         env: BTreeMap::from([
@@ -32,7 +32,7 @@ fn requires(value: Value) -> PackRequires {
 fn a_machine_meeting_every_requirement_has_nothing_to_report() {
     let evaluation = evaluate(
         &requires(json!({
-            "graph": ">=0.17",
+            "dive": ">=0.17",
             "os": ["macos", "linux"],
             "binaries": ["jq"],
             "env": ["GH_TOKEN"]
@@ -45,13 +45,13 @@ fn a_machine_meeting_every_requirement_has_nothing_to_report() {
 #[test]
 fn a_newer_graph_or_another_os_refuses_naming_what_this_machine_has() {
     let evaluation = evaluate(
-        &requires(json!({"graph": ">=99", "os": ["linux"]})),
+        &requires(json!({"dive": ">=99", "os": ["linux"]})),
         &machine(),
     );
     assert_eq!(
         evaluation.refused,
         [
-            "requires.graph: needs graph >=99; this is graph 0.17.2",
+            "requires.dive: needs Dive >=99; this is Dive 0.17.2",
             "requires.os: needs linux; this machine runs macos",
         ]
     );
@@ -62,7 +62,7 @@ fn a_newer_graph_or_another_os_refuses_naming_what_this_machine_has() {
 fn missing_binaries_and_unset_or_empty_env_are_unmet_not_refused() {
     let evaluation = evaluate(
         &requires(json!({
-            "binaries": ["jq", "readme", "graph-pack-no-such-binary"],
+            "binaries": ["jq", "readme", "dive-pack-no-such-binary"],
             "env": ["GH_TOKEN", "EMPTY", "NEVER_SET"]
         })),
         &machine(),
@@ -71,7 +71,7 @@ fn missing_binaries_and_unset_or_empty_env_are_unmet_not_refused() {
     assert_eq!(
         evaluation.unmet,
         [
-            "requires.binaries: readme, graph-pack-no-such-binary not found on PATH",
+            "requires.binaries: readme, dive-pack-no-such-binary not found on PATH",
             "requires.env: EMPTY, NEVER_SET not set (or empty)",
         ]
     );

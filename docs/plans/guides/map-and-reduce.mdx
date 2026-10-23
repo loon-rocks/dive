@@ -8,7 +8,7 @@ keywords: ["map", "reduce", "over", "do", "concurrency", "accumulator"]
 
 <RequestExample>
 
-```yaml .graph/plans/unreleased_changes.yaml
+```yaml .dive/plans/unreleased_changes.yaml
 version: 2
 identifier: unreleased_changes
 name: Unreleased changes
@@ -84,7 +84,7 @@ The final value is `{{changelog.result}}`.
 ## Run it
 
 ```bash
-graph plan run unreleased_changes
+dive plan run unreleased_changes
 ```
 
 stderr shows the `map` starting four commits at once, then the `reduce` working through the notes:

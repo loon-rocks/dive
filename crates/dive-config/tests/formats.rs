@@ -216,7 +216,7 @@ fn an_unset_secret_in_file_storage_is_recorded_instead_of_failing_the_load() {
     std::fs::write(
         &path,
         format!(
-            "version = {CONFIG_FORMAT}\n[storage.files]\nbackend = \"s3\"\nbucket = \"b\"\nsecret_access_key = \"${{GRAPH_TEST_NEVER_SET_FILES_SECRET}}\"\n"
+            "version = {CONFIG_FORMAT}\n[storage.files]\nbackend = \"s3\"\nbucket = \"b\"\nsecret_access_key = \"${{DIVE_TEST_NEVER_SET_FILES_SECRET}}\"\n"
         ),
     )
     .unwrap();
@@ -226,6 +226,6 @@ fn an_unset_secret_in_file_storage_is_recorded_instead_of_failing_the_load() {
     assert_eq!(files.missing_env[0].field, "secret_access_key");
     assert_eq!(
         files.missing_env[0].var,
-        "GRAPH_TEST_NEVER_SET_FILES_SECRET"
+        "DIVE_TEST_NEVER_SET_FILES_SECRET"
     );
 }

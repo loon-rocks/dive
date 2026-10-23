@@ -70,7 +70,7 @@ impl Outcome {
         }
     }
 
-    /// Attach a hint for the human — "no threads yet, run `graph ask`".
+    /// Attach a hint for the human — "no threads yet, run `dive ask`".
     ///
     /// It lives in `body` rather than being printed at the call site so that
     /// it reaches a machine caller as data, and so a `--json` run does not

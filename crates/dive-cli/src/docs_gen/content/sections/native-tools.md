@@ -1,5 +1,5 @@
 ---
-summary: Tools built into graph that any agent or plan step can call, with no pack to enable.
+summary: Tools built into Dive that any agent or plan step can call, with no pack to enable.
 ---
 
 - Always in the catalog under `builtin__`, like the [built-in tools](/tools/reference/builtin-tools), but implemented inside graph.

@@ -2,7 +2,7 @@
 
 A plan engine for repeatable, AI-augmented workflows.
 
-`graph` runs multi-step plans where the steps are deterministic and
+`dive` runs multi-step plans where the steps are deterministic and
 inference happens only where you put it. Author a plan once, review it,
 and run it forever — in your terminal or in CI.
 
@@ -23,7 +23,7 @@ and run it forever — in your terminal or in CI.
   concurrent runs, and trivially backed up.
 - **Bring your own models** — Anthropic, OpenAI, OpenAI-compatible (local),
   and AWS Bedrock, assignable per role (chat, planner, solver, judge, …).
-- **Chat workbench** — `graph ask` and `graph chat` run a tool-calling agent
+- **Chat workbench** — `dive ask` and `dive chat` run a tool-calling agent
   loop for probing tools and prototyping workflows before freezing them into
   plans.
 

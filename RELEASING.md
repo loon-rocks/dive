@@ -39,7 +39,7 @@ Mintlify deploys from, to the tag. Docs merged to `main` between releases
 stay unpublished until then. Editing a snippet's text needs no further step, because the page
 imports the snippet. Adding, removing, or moving a snippet file changes the
 page's imports, so after that re-run
-`GRAPH_STORAGE=memory graph plan run compose_changelog --input tag=vX.Y.Z`
+`DIVE_STORAGE=memory dive plan run compose_changelog --input tag=vX.Y.Z`
 and review the page again; publish refuses a page whose imports name a
 snippet that does not exist. It also refuses a tree with changes outside
 the release's file set, and it re-derives everything the tag needs from the
@@ -74,9 +74,9 @@ directly instead.
 verdict are inferred and meant to be curated. Edit the snippet files
 freely — they are never regenerated, and the page imports them as they
 are at publish time. To correct a release that is already out, edit its snippet, re-run
-`graph plan run compose_changelog --input tag=""`, and commit. Never edit
+`dive plan run compose_changelog --input tag=""`, and commit. Never edit
 `docs/changelog.mdx` by hand; it is composed in full every time.
-Requires `graph` ≥ v0.10.0 on PATH (`mise run install`); the release
+Requires `dive` ≥ v0.10.0 on PATH (`mise run install`); the release
 script validates this before touching anything. The pushed tag triggers
 `.github/workflows/release.yaml`, which builds and uploads release binaries
 (macOS arm64, Linux x86_64) with checksums to the GitHub release.
@@ -170,8 +170,8 @@ only at a major release. A bump ships as one PR containing all of:
    states the contract and never lists versions. The release script refuses
    to cut without the commit.
 
-The `format_drift` check (`.graph/plans/format_drift.yaml`, run by
-`graph-checks.yaml`) fails a PR that changes a model file's schema without
+The `format_drift` check (`.dive/plans/format_drift.yaml`, run by
+`dive-checks.yaml`) fails a PR that changes a model file's schema without
 step 1; the fixture tests catch a removed or renamed key mechanically. At
 release time the script diffs the seven constants between the last tag and
 `HEAD`, checks step 4 both ways, writes the result into the
@@ -179,10 +179,10 @@ tag message (`file versions: config 2 (from 1), plan 1, tool 1, store 1` —
 the tag is the source of truth, so the changelog reads it from there on
 every regeneration), and passes the delta to `changelog_entry` as its
 `formats` input, which forces `migration_needed` and builds the migration
-prompt around `graph config check` and the `migrate` commands rather than
-inferring from commit subjects. Move any `ghcr.io/tylerdavis/graph:vX.Y.Z`
+prompt around `dive config check` and the `migrate` commands rather than
+inferring from commit subjects. Move any `ghcr.io/loon-rocks/dive:vX.Y.Z`
 pin in `.github/workflows/` in the same PR that stamps this repo's own
-`.graph/` files — an older image refuses a newer file version by name.
+`.dive/` files — an older image refuses a newer file version by name.
 
 ## Commit convention
 
@@ -193,7 +193,7 @@ effect. `test:`/`chore:`/`ci:`/`style:` commits are excluded from the
 changelog.
 
 The changelog's audience is graph's users, not graph's developers. Work on
-this repo's own dogfooding — the review plans under `.graph/`, the drift
+this repo's own dogfooding — the review plans under `.dive/`, the drift
 gate, the CI workflows, the release plans — ships to nobody, so it is typed
 `ci:` and stays out of the release notes. Ask before typing a commit: would
 someone who installs this version get this change? If not, it is `ci:`.

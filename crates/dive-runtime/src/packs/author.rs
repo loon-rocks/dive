@@ -458,7 +458,7 @@ pub async fn run_migration_case(
         return Ok(run);
     }
     let scratch = tempfile::tempdir()?;
-    let root = scratch.path().join("graph");
+    let root = scratch.path().join("dive");
     copy_tree(case, &root)?;
     for step in majors.iter().copied().filter(|step| *step >= major) {
         if let Err(error) = session.migrate(step, &root, true).await {

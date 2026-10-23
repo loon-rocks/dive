@@ -25,18 +25,18 @@ properties:
     description: Where to read about the pack, such as its directory in the repository.
   requires:
     type: object
-    description: What the pack needs to run. `graph` and `os` are checked when the pack is installed or loaded, and a mismatch refuses it. `binaries`, `env` and `mcp` are reported by `graph config check`, and a plan run that reaches the pack fails before its first step when one is missing.
+    description: What the pack needs to run. `dive` and `os` are checked when the pack is installed or loaded, and a mismatch refuses it. `binaries`, `env` and `mcp` are reported by `dive config check`, and a plan run that reaches the pack fails before its first step when one is missing.
     required: [os]
     properties:
-      graph:
+      dive:
         type: string
-        description: The graph versions the pack works with, as a semver requirement such as `">=0.15"`.
+        description: The Dive versions the pack works with, as a semver requirement such as `">=0.15"`.
       os:
         type: array
         items:
           type: string
           enum: [macos, linux]
-        description: The systems the pack runs on, `macos`, `linux` or both. `graph pack check` refuses a pack that leaves it empty.
+        description: The systems the pack runs on, `macos`, `linux` or both. `dive pack check` refuses a pack that leaves it empty.
       binaries:
         type: array
         items:
@@ -49,7 +49,7 @@ properties:
         description: Environment variables the pack's tools read, which must be set and not empty, either in the environment or in the OS credential store.
       mcp:
         type: object
-        description: MCP servers the pack's plans and agents call, as `[requires.mcp.<name>]`, where `<name>` is the `[mcp.<name>]` server their calls use, as in `<name>__<tool>`. `graph pack check` checks each call against the server when one is configured under that name.
+        description: MCP servers the pack's plans and agents call, as `[requires.mcp.<name>]`, where `<name>` is the `[mcp.<name>]` server their calls use, as in `<name>__<tool>`. `dive pack check` checks each call against the server when one is configured under that name.
         additionalProperties:
           type: object
           properties:
@@ -63,12 +63,12 @@ properties:
               type: string
               description: The server's URL, shown in the error when no `[mcp.<name>]` is configured.
 examples:
-  - version: 1
+  - version: 2
     name: github
     description: Read and comment on pull requests, releases and git history.
     license: MIT
     homepage: https://github.com/tylerdavis/graph-packs/tree/main/github
     requires:
-      graph: ">=0.15"
+      dive: ">=0.15"
       os: [macos, linux]
       binaries: [bash, git, gh, jq]

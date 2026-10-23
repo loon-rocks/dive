@@ -1,13 +1,13 @@
 ---
 title: "CLI reference"
-description: "Every graph command, generated from the CLI's own definitions."
+description: "Every dive command, generated from the CLI's own definitions."
 keywords: ["cli", "commands", "flags", "options"]
 ---
 
 A command-line agent with a plan-based execution engine
 
 ```bash
-graph [OPTIONS] <COMMAND>
+dive [OPTIONS] <COMMAND>
 ```
 
 ## Global options
@@ -22,65 +22,65 @@ These options work with every command.
 
 | Command | Description |
 | --- | --- |
-| [`graph ask`](/reference/cli/ask) | Ask a one-shot question (runs one agent turn) |
-| [`graph chat`](/reference/cli/chat) | Interactive chat (REPL) |
-| [`graph plan list`](/reference/cli/plan/list) | List available plan documents |
-| [`graph plan show`](/reference/cli/plan/show) | Show a plan document |
-| [`graph plan validate`](/reference/cli/plan/validate) | Validate a plan document by name or file path |
-| [`graph plan rm`](/reference/cli/plan/rm) | Delete a plan file |
-| [`graph plan migrate`](/reference/cli/plan/migrate) | Rewrite a plan file to the current plan format |
-| [`graph plan run`](/reference/cli/plan/run) | Run a plan directly (bypasses the agent loop) |
-| [`graph plan new`](/reference/cli/plan/new) | Scaffold an empty plan file to build up with `set` and `step add` |
-| [`graph plan draft`](/reference/cli/plan/draft) | Draft a plan from a goal using the planner model (costs inference) |
-| [`graph plan set`](/reference/cli/plan/set) | Set one plan attribute |
-| [`graph plan unset`](/reference/cli/plan/unset) | Clear one optional plan attribute |
-| [`graph plan step add`](/reference/cli/plan/step/add) | Append a step, or anchor it before/after an existing one |
-| [`graph plan step update`](/reference/cli/plan/step/update) | Set one attribute of a step |
-| [`graph plan step rename`](/reference/cli/plan/step/rename) | Rename a step, rewriting every downstream &#123;&#123;id.*&#125;&#125; reference |
-| [`graph plan step unset`](/reference/cli/plan/step/unset) | Clear one optional attribute of a step |
-| [`graph plan step rm`](/reference/cli/plan/step/rm) | Remove a step |
-| [`graph tool list`](/reference/cli/tool/list) | List every tool visible to the agent and planner |
-| [`graph tool show`](/reference/cli/tool/show) | Show one tool's description and schemas |
-| [`graph tool test`](/reference/cli/tool/test) | Invoke a tool directly |
-| [`graph tool rm`](/reference/cli/tool/rm) | Delete a user tool file or a built-in tool's override |
-| [`graph tool migrate`](/reference/cli/tool/migrate) | Rewrite a user tool file to the current tool format |
-| [`graph agent list`](/reference/cli/agent/list) | List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents) |
-| [`graph agent show`](/reference/cli/agent/show) | Print an agent's effective definition, the file to copy when customizing it |
-| [`graph agent validate`](/reference/cli/agent/validate) | Validate every agent, or one agent file against the others |
-| [`graph agent rm`](/reference/cli/agent/rm) | Delete an agent file |
-| [`graph agent migrate`](/reference/cli/agent/migrate) | Rewrite an agent file to the current agent format |
-| [`graph thread list`](/reference/cli/thread/list) | List threads |
-| [`graph thread show`](/reference/cli/thread/show) | Show a thread's messages |
-| [`graph thread rm`](/reference/cli/thread/rm) | Delete a thread |
-| [`graph secret set`](/reference/cli/secret/set) | Store a secret in the OS credential store |
-| [`graph secret rm`](/reference/cli/secret/rm) | Remove a secret from the OS credential store |
-| [`graph secret list`](/reference/cli/secret/list) | List every variable name the config, tools and packs reference, and where each resolves from |
-| [`graph secret show`](/reference/cli/secret/show) | Show where one name resolves from and what references it |
-| [`graph mcp list`](/reference/cli/mcp/list) | List configured servers and their status |
-| [`graph mcp tools`](/reference/cli/mcp/tools) | List tools exposed by servers |
-| [`graph mcp test`](/reference/cli/mcp/test) | Connect to a server and verify initialize + tools/list |
-| [`graph mcp serve`](/reference/cli/mcp/serve) | Serve graph's plans and authoring commands to an agent over MCP (stdio) |
-| [`graph mcp probe`](/reference/cli/mcp/probe) | Pre-warm the observed-shape cache by invoking read-only tools |
-| [`graph shape list`](/reference/cli/shape/list) | List cached tool shapes |
-| [`graph shape show`](/reference/cli/shape/show) | Show one tool's cached schema and example |
-| [`graph config show`](/reference/cli/config/show) | Print the merged effective configuration |
-| [`graph config init`](/reference/cli/config/init) | Write a starter config file |
-| [`graph config path`](/reference/cli/config/path) | Print the config file locations and which exist |
-| [`graph config check`](/reference/cli/config/check) | Report each config file's format and whether the merged config loads |
-| [`graph config migrate`](/reference/cli/config/migrate) | Rewrite a config file to the current config format, comments intact |
-| [`graph pack add`](/reference/cli/pack/add) | Install a pack from git as a plain copy in the project, global or given graph directory |
-| [`graph pack list`](/reference/cli/pack/list) | List installed packs with their tags, newer releases, local edits, shadowing and moved release tags |
-| [`graph pack update`](/reference/cli/pack/update) | Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each |
-| [`graph pack remove`](/reference/cli/pack/remove) | Delete a pack's copy, config entry and lock entry, and list files that still call it |
-| [`graph pack new`](/reference/cli/pack/new) | Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md |
-| [`graph pack check`](/reference/cli/pack/check) | Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements |
-| [`graph pack run`](/reference/cli/pack/run) | Run one of a pack's items, private and migration ones included, under its manifest name |
-| [`graph pack test`](/reference/cli/pack/test) | Run check, then every migration over its sample files in tests/migrations/v&lt;N&gt;/ and validate the result |
-| [`graph pack release`](/reference/cli/pack/release) | Compare the public interface with the previous release tag and create the next annotated tag, without pushing |
-| [`graph workbench`](/reference/cli/workbench) | Interactive workbench: a dual-pane TUI for building plans, agents and tools |
-| [`graph workbench plan`](/reference/cli/workbench/plan) | Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation |
-| [`graph workbench agent`](/reference/cli/workbench/agent) | Open the workbench in agent mode: draft a new agent, or edit an existing one |
-| [`graph workbench tool`](/reference/cli/workbench/tool) | Open the workbench in tool mode: draft a new user tool, or edit an existing one |
-| [`graph version`](/reference/cli/version) | Print the binary version and the file formats it reads and writes |
+| [`dive ask`](/reference/cli/ask) | Ask a one-shot question (runs one agent turn) |
+| [`dive chat`](/reference/cli/chat) | Interactive chat (REPL) |
+| [`dive plan list`](/reference/cli/plan/list) | List available plan documents |
+| [`dive plan show`](/reference/cli/plan/show) | Show a plan document |
+| [`dive plan validate`](/reference/cli/plan/validate) | Validate a plan document by name or file path |
+| [`dive plan rm`](/reference/cli/plan/rm) | Delete a plan file |
+| [`dive plan migrate`](/reference/cli/plan/migrate) | Rewrite a plan file to the current plan format |
+| [`dive plan run`](/reference/cli/plan/run) | Run a plan directly (bypasses the agent loop) |
+| [`dive plan new`](/reference/cli/plan/new) | Scaffold an empty plan file to build up with `set` and `step add` |
+| [`dive plan draft`](/reference/cli/plan/draft) | Draft a plan from a goal using the planner model (costs inference) |
+| [`dive plan set`](/reference/cli/plan/set) | Set one plan attribute |
+| [`dive plan unset`](/reference/cli/plan/unset) | Clear one optional plan attribute |
+| [`dive plan step add`](/reference/cli/plan/step/add) | Append a step, or anchor it before/after an existing one |
+| [`dive plan step update`](/reference/cli/plan/step/update) | Set one attribute of a step |
+| [`dive plan step rename`](/reference/cli/plan/step/rename) | Rename a step, rewriting every downstream &#123;&#123;id.*&#125;&#125; reference |
+| [`dive plan step unset`](/reference/cli/plan/step/unset) | Clear one optional attribute of a step |
+| [`dive plan step rm`](/reference/cli/plan/step/rm) | Remove a step |
+| [`dive tool list`](/reference/cli/tool/list) | List every tool visible to the agent and planner |
+| [`dive tool show`](/reference/cli/tool/show) | Show one tool's description and schemas |
+| [`dive tool test`](/reference/cli/tool/test) | Invoke a tool directly |
+| [`dive tool rm`](/reference/cli/tool/rm) | Delete a user tool file or a built-in tool's override |
+| [`dive tool migrate`](/reference/cli/tool/migrate) | Rewrite a user tool file to the current tool format |
+| [`dive agent list`](/reference/cli/agent/list) | List every agent: built-in, global (~/.config/dive/agents), and project (./.dive/agents) |
+| [`dive agent show`](/reference/cli/agent/show) | Print an agent's effective definition, the file to copy when customizing it |
+| [`dive agent validate`](/reference/cli/agent/validate) | Validate every agent, or one agent file against the others |
+| [`dive agent rm`](/reference/cli/agent/rm) | Delete an agent file |
+| [`dive agent migrate`](/reference/cli/agent/migrate) | Rewrite an agent file to the current agent format |
+| [`dive thread list`](/reference/cli/thread/list) | List threads |
+| [`dive thread show`](/reference/cli/thread/show) | Show a thread's messages |
+| [`dive thread rm`](/reference/cli/thread/rm) | Delete a thread |
+| [`dive secret set`](/reference/cli/secret/set) | Store a secret in the OS credential store |
+| [`dive secret rm`](/reference/cli/secret/rm) | Remove a secret from the OS credential store |
+| [`dive secret list`](/reference/cli/secret/list) | List every variable name the config, tools and packs reference, and where each resolves from |
+| [`dive secret show`](/reference/cli/secret/show) | Show where one name resolves from and what references it |
+| [`dive mcp list`](/reference/cli/mcp/list) | List configured servers and their status |
+| [`dive mcp tools`](/reference/cli/mcp/tools) | List tools exposed by servers |
+| [`dive mcp test`](/reference/cli/mcp/test) | Connect to a server and verify initialize + tools/list |
+| [`dive mcp serve`](/reference/cli/mcp/serve) | Serve graph's plans and authoring commands to an agent over MCP (stdio) |
+| [`dive mcp probe`](/reference/cli/mcp/probe) | Pre-warm the observed-shape cache by invoking read-only tools |
+| [`dive shape list`](/reference/cli/shape/list) | List cached tool shapes |
+| [`dive shape show`](/reference/cli/shape/show) | Show one tool's cached schema and example |
+| [`dive config show`](/reference/cli/config/show) | Print the merged effective configuration |
+| [`dive config init`](/reference/cli/config/init) | Write a starter config file |
+| [`dive config path`](/reference/cli/config/path) | Print the config file locations and which exist |
+| [`dive config check`](/reference/cli/config/check) | Report each config file's format and whether the merged config loads |
+| [`dive config migrate`](/reference/cli/config/migrate) | Rewrite a config file to the current config format, comments intact |
+| [`dive pack add`](/reference/cli/pack/add) | Install a pack from git as a plain copy in the project, global or given Dive directory |
+| [`dive pack list`](/reference/cli/pack/list) | List installed packs with their tags, newer releases, local edits, shadowing and moved release tags |
+| [`dive pack update`](/reference/cli/pack/update) | Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each |
+| [`dive pack remove`](/reference/cli/pack/remove) | Delete a pack's copy, config entry and lock entry, and list files that still call it |
+| [`dive pack new`](/reference/cli/pack/new) | Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md |
+| [`dive pack check`](/reference/cli/pack/check) | Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements |
+| [`dive pack run`](/reference/cli/pack/run) | Run one of a pack's items, private and migration ones included, under its manifest name |
+| [`dive pack test`](/reference/cli/pack/test) | Run check, then every migration over its sample files in tests/migrations/v&lt;N&gt;/ and validate the result |
+| [`dive pack release`](/reference/cli/pack/release) | Compare the public interface with the previous release tag and create the next annotated tag, without pushing |
+| [`dive workbench`](/reference/cli/workbench) | Interactive workbench: a dual-pane TUI for building plans, agents and tools |
+| [`dive workbench plan`](/reference/cli/workbench/plan) | Open the workbench in plan mode: draft a new plan, or open an existing one to inspect, edit and run — fully, or gated with per-tool-call confirmation |
+| [`dive workbench agent`](/reference/cli/workbench/agent) | Open the workbench in agent mode: draft a new agent, or edit an existing one |
+| [`dive workbench tool`](/reference/cli/workbench/tool) | Open the workbench in tool mode: draft a new user tool, or edit an existing one |
+| [`dive version`](/reference/cli/version) | Print the binary version and the file formats it reads and writes |
 
 Exit codes and output streams are covered in [Error handling](/reference/cli/error-handling).

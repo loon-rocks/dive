@@ -9,7 +9,7 @@ keywords: ["workbench", "network_drafter", "plan drafter", "compose_plan", "draf
 <Steps>
   <Step title="Open the workbench in plan mode">
     ```bash
-    graph workbench plan
+    dive workbench plan
     ```
   </Step>
   <Step title="Describe the goal">
@@ -38,14 +38,14 @@ keywords: ["workbench", "network_drafter", "plan drafter", "compose_plan", "draf
     </Frame>
   </Step>
   <Step title="Save">
-    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes the plan to `./.graph/plans/unreleased_changes.yaml`.
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd>. graph writes the plan to `./.dive/plans/unreleased_changes.yaml`.
   </Step>
 </Steps>
 
 ## Run the plan
 
 ```bash
-graph plan run unreleased_changes
+dive plan run unreleased_changes
 ```
 
 ```json

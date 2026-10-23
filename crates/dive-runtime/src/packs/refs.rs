@@ -185,7 +185,7 @@ pub fn clone_moved(target: &Target, url: &str, head: &str) -> Option<String> {
 
 fn moved_message(tag: &str, url: &str, now: &str, before: &str, how: &str) -> String {
     format!(
-        "the tag {tag} in {url} now points at {now} but {how} {before}; a published release must never move, so graph won't install it; contact the pack's maintainers"
+        "the tag {tag} in {url} now points at {now} but {how} {before}; a published release must never move, so Dive won't install it; contact the pack's maintainers"
     )
 }
 
@@ -314,7 +314,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             moved,
-            "the tag pk/v1.0.0 in /r now points at sha0 but was installed from old; a published release must never move, so graph won't install it; contact the pack's maintainers"
+            "the tag pk/v1.0.0 in /r now points at sha0 but was installed from old; a published release must never move, so Dive won't install it; contact the pack's maintainers"
         );
         for (git, path, entry) in [
             ("/r", "pk", locked("/r", "pk", Some("pk/v1.0.0"), "sha0")),

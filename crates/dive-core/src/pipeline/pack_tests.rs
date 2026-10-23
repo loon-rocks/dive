@@ -94,7 +94,7 @@ fn source_of(name: &str) -> Option<PackSource> {
         name: pack.to_string(),
         tag: Some("v1.0.0".to_string()),
         layer: dive_config::pack::LayerKind::Project,
-        dir: std::path::PathBuf::from(".graph/packs").join(pack),
+        dir: std::path::PathBuf::from(".dive/packs").join(pack),
     })
 }
 

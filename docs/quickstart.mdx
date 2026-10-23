@@ -22,32 +22,32 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         From your project directory:
 
         ```bash
-        graph config init
+        dive config init
         ```
 
-        This writes a commented starter to `./.graph/config.toml`. That directory is where a project's config, plans, and tools live — checked into the repo, reviewed like any other code.
+        This writes a commented starter to `./.dive/config.toml`. That directory is where a project's config, plans, and tools live — checked into the repo, reviewed like any other code.
       </Step>
       <Step title="Let your agent finish the setup">
         Install the setup skill, then ask your coding agent to run it:
 
         ```bash
-        npx skills add tylerdavis/graph
+        npx skills add loon-rocks/dive
         ```
 
-        This installs `/graph-project-setup` for Claude Code, Cursor, Codex, and most other agents. Point your agent at it — "set up graph in this project" — and it asks a few questions, then picks a provider and models, finds and connects the MCP servers or tools you want, scaffolds a first plan against your real data, and runs it end to end. It reads the live docs and example plans as it goes, so the result matches the current release.
+        This installs `/dive-project-setup` for Claude Code, Cursor, Codex, and most other agents. Point your agent at it — "set up graph in this project" — and it asks a few questions, then picks a provider and models, finds and connects the MCP servers or tools you want, scaffolds a first plan against your real data, and runs it end to end. It reads the live docs and example plans as it goes, so the result matches the current release.
 
         <Tip>
-          The same `npx skills add` command installs two more: `/graph-plan-authoring`, which teaches the agent to build and repair plans with the [authoring commands](/reference/cli/plan), and `/graph-github-actions-setup`, which scaffolds a merge gate or PR reviewer as a plan.
+          The same `npx skills add` command installs two more: `/dive-plan-authoring`, which teaches the agent to build and repair plans with the [authoring commands](/reference/cli/plan), and `/dive-github-actions-setup`, which scaffolds a merge gate or PR reviewer as a plan.
         </Tip>
       </Step>
       <Step title="Open it in the workbench">
         Before you commit the plan, open it in the [workbench](/getting-started/workbench) — a dual-pane TUI for reviewing, tweaking, and test-running plans:
 
         ```bash
-        graph workbench plan project_status
+        dive workbench plan project_status
         ```
 
-        The plan renders as a flowchart on the right, an agent sits on the left. Read each step, `v` to validate, `r` to run it, or `g` to step through with a debugger that pauses on every tool call and shows the exact input and result. Ask the agent to change a step in plain English — "add a step that filters to open issues" — and watch the draft update and re-validate. `Ctrl+S` writes it back to `./.graph/plans/`.
+        The plan renders as a flowchart on the right, an agent sits on the left. Read each step, `v` to validate, `r` to run it, or `g` to step through with a debugger that pauses on every tool call and shows the exact input and result. Ask the agent to change a step in plain English — "add a step that filters to open issues" — and watch the draft update and re-validate. `Ctrl+S` writes it back to `./.dive/plans/`.
 
         <Frame caption="A loaded plan in the workbench: chat agent left, step tree and detail right.">
           ![A loaded plan in the workbench: chat agent left, step tree and detail right.](/images/workbench/workbench-overview.svg)
@@ -57,7 +57,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         Once it's right, run it:
 
         ```bash
-        graph plan run project_status '{"project":"New Relic"}'
+        dive plan run project_status '{"project":"New Relic"}'
         ```
 
         The deliverable goes to stdout; tool activity streams dimmed to stderr. This is the form you schedule on cron or wire into CI.
@@ -76,7 +76,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         ```toml
         [providers.anthropic]
         type = "anthropic"
-        api_key = "${ANTHROPIC_API_KEY}"   # read from your environment, or from `graph secret set ANTHROPIC_API_KEY`
+        api_key = "${ANTHROPIC_API_KEY}"   # read from your environment, or from `dive secret set ANTHROPIC_API_KEY`
         
         [models.default]
         provider = "anthropic"
@@ -93,18 +93,18 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
       </Step>
       <Step title="Check your tools are live">
         ```bash
-        graph mcp test linear
+        dive mcp test linear
         # ok: 'linear' initialized in 1.7s — 57 tools (0 declare output schemas)
         
-        graph tool list
+        dive tool list
         ```
       </Step>
       <Step title="Probe the tools you'll build on">
         Before writing a step, see each tool's input schema and _actual_ output shape:
 
         ```bash
-        graph tool show linear__list_issues
-        graph tool test linear__list_issues '{"priority":1,"limit":5}'
+        dive tool show linear__list_issues
+        dive tool test linear__list_issues '{"priority":1,"limit":5}'
         ```
 
         Every probe also teaches graph what the tool returns (its [shape](/tools/guides/tool-shapes)), so the references you write next are grounded in real output — and the workbench's drafting agent gets smarter too.
@@ -113,14 +113,14 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         Open a blank draft and describe the goal — the agent drafts the plan into the side pane, where you inspect, validate, and test-run it:
 
         ```bash
-        graph wb plan     # or just graph wb, and say you want a plan
+        dive wb plan     # or just dive wb, and say you want a plan
         ```
 
-        Prefer to write the YAML yourself? The [plan file reference](/plans/reference/plan-file) covers every field. Either way, `Ctrl+S` (or a save in the workbench) writes it to `./.graph/plans/`.
+        Prefer to write the YAML yourself? The [plan file reference](/plans/reference/plan-file) covers every field. Either way, `Ctrl+S` (or a save in the workbench) writes it to `./.dive/plans/`.
       </Step>
       <Step title="Run it headless">
         ```bash
-        graph plan run project_status '{"project":"New Relic"}'
+        dive plan run project_status '{"project":"New Relic"}'
         ```
 
         Same contract as the fast path: the deliverable on stdout, progress on stderr, and a file you can commit, schedule, and wire into CI.
@@ -133,11 +133,11 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
 
 | Path | What |
 | --- | --- |
-| `./.graph/config.toml` | project config, deep-merged over global |
-| `~/.config/graph/config.toml` | optional global config (providers, models, MCP servers) |
-| `./.graph/plans/` | your [plan files](/plans/reference/plan-file) (`~/.config/graph/plans/` for global ones) |
-| `./.graph/tools/` | your [tool files](/tools/reference/tool-file) (`~/.config/graph/tools/` for global ones) |
-| `~/.local/share/graph/` | threads and learned tool shapes, as plain files |
+| `./.dive/config.toml` | project config, deep-merged over global |
+| `~/.config/dive/config.toml` | optional global config (providers, models, MCP servers) |
+| `./.dive/plans/` | your [plan files](/plans/reference/plan-file) (`~/.config/dive/plans/` for global ones) |
+| `./.dive/tools/` | your [tool files](/tools/reference/tool-file) (`~/.config/dive/tools/` for global ones) |
+| `~/.local/share/dive/` | threads and learned tool shapes, as plain files |
 
 ## What's next
 
