@@ -1,5 +1,5 @@
 name: tool-try
-title: graph workbench — test-running a tool
+title: dive workbench — test-running a tool
 grid: { cols: 120, rows: 36 }
 
 agent: network_drafter

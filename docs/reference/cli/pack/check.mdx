@@ -1,12 +1,12 @@
 ---
-title: "graph pack check"
+title: "dive pack check"
 sidebarTitle: "check"
 description: "Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements"
 playground: "none"
-keywords: ["graph pack check"]
+keywords: ["dive pack check"]
 ---
 
-Loads the pack under its manifest name and checks every plan and agent against the pack plus graph's built-ins, including each step's literal input against the called tool's input schema. pack.toml must list the systems the pack runs on in `requires.os` (`macos`, `linux`). Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.
+Loads the pack under its manifest name and checks every plan and agent against the pack plus Dive's built-ins, including each step's literal input against the called tool's input schema. pack.toml must list the systems the pack runs on in `requires.os` (`macos`, `linux`). Calls to MCP servers named in `requires.mcp` are checked against the server when one is configured under that name, and reported as unchecked otherwise. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is checked. Exits 1 when there is any problem.
 
 ## Arguments
 
@@ -29,15 +29,15 @@ Loads the pack under its manifest name and checks every plan and agent against t
 <RequestExample>
 
 ```bash Usage
-graph pack check [OPTIONS] [PATH]
+dive pack check [OPTIONS] [PATH]
 ```
 
 ```bash Example 1
-graph pack check
+dive pack check
 ```
 
 ```bash Example 2
-graph pack check files --json
+dive pack check files --json
 ```
 
 </RequestExample>

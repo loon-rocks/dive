@@ -1,0 +1,68 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Agent file
+description: One named agent, in `./.dive/agents/` or `~/.config/dive/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs.
+x-format: YAML
+x-locations:
+  - "`./.dive/agents/<name>.yaml` (project)"
+  - "`~/.config/dive/agents/<name>.yaml` (global)"
+type: object
+required: [name, description, model, tools, system_prompt]
+additionalProperties: false
+properties:
+  version:
+    type: integer
+    description: The file version the document is written in. Omitted means 1; files Dive writes always carry it.
+  name:
+    type: string
+    pattern: "^[a-z][a-z0-9_]*$"
+    description: Starts with a lowercase letter; lowercase letters, digits and `_` only. Other agents and plan steps call it as `agent__<name>`.
+  description:
+    type: string
+    description: What the agent is for, written for the people and agents choosing it.
+  model:
+    type: string
+    description: The model role the agent runs on, standard (`chat`) or custom.
+  tools:
+    type: array
+    items:
+      type: string
+    description: Catalog tools the agent may call, as exact names or `*` globs such as `linear__*`. `[]` means none and `["*"]` means the whole catalog. Control step names and generated `agent__` and `transfer_to_` names aren't allowed. A name that matches no tool, such as a tool from a pack that isn't installed, is skipped, so the agent still loads and runs without it. The tools aren't loaded up front. The agent gets `plan__search_tools`, which searches only this list, and each tool a search returns stays loaded for the rest of the thread. Handoffs, subagents, workbench tools and the `[tools].always_loaded` tools the list matches are loaded from the start. Naming `plan__search_tools` here makes its search cover the whole catalog as well as this list, for agents that find tools for others.
+  subagents:
+    type: array
+    items:
+      type: string
+    description: Agents this one can run as a subagent, each in a fresh context, called as `agent__<name>`. Listing the agent's own name lets it run a fresh copy of itself. Nesting is capped at 3.
+  handoffs:
+    type: array
+    items:
+      type: string
+    description: Agents this one can hand the conversation to, called as `transfer_to_<name>`. An agent can't hand off to itself, and an agent handed the conversation gets `transfer_back` without listing it.
+  input_schema:
+    type: object
+    description: Typed input when the agent runs as a subagent or plan step. An object schema with a `description` on every property. Without it, a call takes `{prompt}`.
+  output_schema:
+    type: object
+    description: Typed output when the agent runs as a subagent or plan step. An object schema. Without it, a call returns the final reply as `{result}`.
+  max_iterations:
+    type: integer
+    minimum: 1
+    description: A cap on model rounds. Omitted means no cap as a subagent; in a conversation, `[settings].max_agent_iterations` applies.
+  attachments:
+    type: array
+    items:
+      type: string
+      enum: [network, plan, evidence]
+    description: The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network` or the call an edit session is about for `evidence`. A new thread whose first message goes to an agent that reads `network` gets a network attachment; an `evidence` attachment comes only with an edit session started from a call. Omitted means none.
+  system_prompt:
+    type: string
+    description: The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else. `{{session.date}}` is today's date with no time of day, so the prompt stays the same all day and a resumed thread keeps its prompt cache.
+examples:
+  - version: 3
+    name: release_notes
+    description: Answers questions about what shipped, from the repo's commit history.
+    model: chat
+    tools: [plan__weekly_changes, github__tool__git_log]
+    subagents: [chat]
+    system_prompt: |
+      You answer questions about what shipped in this repository.
+      Today's date: {{session.date}}

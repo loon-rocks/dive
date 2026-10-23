@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "One user tool, in `./.graph/tools/` or `~/.config/graph/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the built-in tool it names instead.",
+  "description": "One user tool, in `./.dive/tools/` or `~/.config/dive/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the built-in tool it names instead.",
   "oneOf": [
     {
       "description": "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.",
@@ -63,7 +63,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "description": {
-                    "description": "Markdown saying what the value is and where to get it, links included. Shown wherever the secret is asked for, and by `graph secret list`.",
+                    "description": "Markdown saying what the value is and where to get it, links included. Shown wherever the secret is asked for, and by `dive secret list`.",
                     "type": "string"
                   },
                   "value": {
@@ -78,7 +78,7 @@
               }
             ]
           },
-          "description": "Extra environment variables. Each value is a string, or `{value, description}` to say what a secret is and where to get it. Values expand `${VAR}` from graph's environment or, when it's unset or empty there, from the OS credential store (the project's value first, then the global one). `${VAR:-default}` falls back to the default when neither has a value; a `${VAR}` with no default is a secret the tool needs. A tool from an installed pack also gets `GRAPH_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.",
+          "description": "Extra environment variables. Each value is a string, or `{value, description}` to say what a secret is and where to get it. Values expand `${VAR}` from Dive's environment or, when it's unset or empty there, from the OS credential store (the project's value first, then the global one). `${VAR:-default}` falls back to the default when neither has a value; a `${VAR}` with no default is a secret the tool needs. A tool from an installed pack also gets `DIVE_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.",
           "type": "object"
         },
         "kind": {
@@ -329,7 +329,7 @@
       "type": "boolean"
     },
     "version": {
-      "description": "The file version the document is written in. Omitted means 1; `graph tool migrate` brings a file to the current version.",
+      "description": "The file version the document is written in. Omitted means 1; `dive tool migrate` brings a file to the current version.",
       "type": "integer"
     }
   },
@@ -342,8 +342,8 @@
   "type": "object",
   "x-format": "YAML",
   "x-locations": [
-    "`./.graph/tools/<name>.yaml` (project)",
-    "`~/.config/graph/tools/<name>.yaml` (global)",
+    "`./.dive/tools/<name>.yaml` (project)",
+    "`~/.config/dive/tools/<name>.yaml` (global)",
     "`<tools dir>/builtin/<name>.yaml` (replaces a built-in tool)"
   ]
 }

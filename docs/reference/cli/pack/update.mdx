@@ -1,9 +1,9 @@
 ---
-title: "graph pack update"
+title: "dive pack update"
 sidebarTitle: "update"
 description: "Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each"
 playground: "none"
-keywords: ["graph pack update"]
+keywords: ["dive pack update"]
 ---
 
 A pack whose installed release tag now points at a different commit than packs.lock recorded is refused and left as installed: a published release must never move. The same holds when a clone checks out a different commit than git ls-remote reported. Branch-tracking packs are exempt, and a pinned pack is skipped without contacting the remote.
@@ -29,11 +29,11 @@ A pack whose installed release tag now points at a different commit than packs.l
 </ParamField>
 
 <ParamField query="--global" type="boolean">
-  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+  Target the global layer (~/.config/dive/) instead of the project's ./.dive/
 </ParamField>
 
 <ParamField query="--dir" type="string">
-  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+  Target this Dive directory, laid out like .dive/ (config.toml, packs/, packs.lock)
 
   Format: `PATH`.
 </ParamField>
@@ -51,7 +51,7 @@ A pack whose installed release tag now points at a different commit than packs.l
 <RequestExample>
 
 ```bash Usage
-graph pack update [OPTIONS] [NAME]...
+dive pack update [OPTIONS] [NAME]...
 ```
 
 </RequestExample>

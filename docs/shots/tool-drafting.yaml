@@ -1,5 +1,5 @@
 name: tool-drafting
-title: graph workbench — drafting a tool
+title: dive workbench — drafting a tool
 grid: { cols: 120, rows: 36 }
 
 agent: network_drafter
@@ -15,15 +15,15 @@ llm:
       reply: |-
         My read: a tool that lists what merged into this repository since a date, for release notes or a weekly summary. 70% confident; missing: which repository.
 
-        Question: should it take a repository as input, or always use the one graph runs in?
-        My guess: the one graph runs in. The gh CLI already knows it, so the tool needs only the date and no model at all.
+        Question: should it take a repository as input, or always use the one Dive runs in?
+        My guess: the one Dive runs in. The gh CLI already knows it, so the tool needs only the date and no model at all.
       confidence: 70
       missing: which repository
-      question: Should it take a repository as input, or always use the one graph runs in?
-      guess: The one graph runs in; the gh CLI already knows it.
+      question: Should it take a repository as input, or always use the one Dive runs in?
+      guess: The one Dive runs in; the gh CLI already knows it.
       facts:
         - { label: Outcome, text: Pull requests merged since a date, state: known }
-        - { label: Where, text: The repository graph runs in, state: asking }
+        - { label: Where, text: The repository Dive runs in, state: asking }
         - { label: Returns, text: "Number, title and merge time", state: guess }
 
 capture:

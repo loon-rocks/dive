@@ -1,9 +1,9 @@
 ---
-title: "graph plan run"
+title: "dive plan run"
 sidebarTitle: "run"
 description: "Run a plan directly (bypasses the agent loop)"
 playground: "none"
-keywords: ["graph plan run"]
+keywords: ["dive plan run"]
 ---
 
 Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.
@@ -13,7 +13,7 @@ Missing or invalid inputs exit 3 with the input schema on stderr. An exit step t
 ## Arguments
 
 <ParamField path="NAME" type="string" required>
-  The plan's identifier, as `graph plan list` prints it
+  The plan's identifier, as `dive plan list` prints it
 </ParamField>
 
 <ParamField path="JSON|@FILE|-" type="string">
@@ -41,19 +41,19 @@ Missing or invalid inputs exit 3 with the input schema on stderr. An exit step t
 <RequestExample>
 
 ```bash Usage
-graph plan run [OPTIONS] <NAME> [JSON|@FILE|-]
+dive plan run [OPTIONS] <NAME> [JSON|@FILE|-]
 ```
 
 ```bash Example 1
-graph plan run weekly_changes
+dive plan run weekly_changes
 ```
 
 ```bash Example 2
-graph plan run weekly_changes '{"base":"v0.15.0"}'
+dive plan run weekly_changes '{"base":"v0.15.0"}'
 ```
 
 ```bash Example 3
-graph plan run weekly_changes @inputs.json --input base=v0.14.0
+dive plan run weekly_changes @inputs.json --input base=v0.14.0
 ```
 
 </RequestExample>

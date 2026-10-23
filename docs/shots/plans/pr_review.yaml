@@ -1,5 +1,5 @@
 # Docs-screenshot fixture (docs/shots/workbench-overview.yaml). This was
-# the repo's live PR reviewer until graph_review_9000 replaced it in CI; it
+# the repo's live PR reviewer until dive_review_9000 replaced it in CI; it
 # is kept here, out of the live catalog, because that screenshot is shot
 # against it.
 # Not shipped to users, not run by CI.
@@ -10,11 +10,11 @@
 # comments, and posts/updates the summary comment — each finding's File
 # cell links to its inline comment. Silent finish — the comments are the
 # deliverable. The CI step is one line:
-#   graph plan run pr_review --input pr=$PR
+#   dive plan run pr_review --input pr=$PR
 identifier: pr_review
 name: Specialized PR review
 description: >
-  Reviews a pull request against graph-cli's invariants, anchors findings
+  Reviews a pull request against dive-cli's invariants, anchors findings
   as inline diff comments, and posts a summary comment linking to them
   (all refreshed in place on repeated runs). Needs gh auth and a checkout
   with history.
@@ -57,7 +57,7 @@ steps:
       message: empty diff — nothing to review
     reasoning: Nothing to review means a clean, zero-LLM exit, no comment.
   - id: E3
-    tool_name: user__review_graph_pr
+    tool_name: user__review_dive_pr
     input:
       title: "{{E0.title}}"
       body: "{{E0.body}}"
@@ -73,7 +73,7 @@ steps:
     input:
       pr: "{{input.pr}}"
       head_sha: "{{E0.head_sha}}"
-      marker: "graph:pr_review"
+      marker: "dive:pr_review"
       comments: "{{E4.comments}}"
     reasoning: >
       Anchor line-resolvable findings on the diff; earlier runs' comments
@@ -82,9 +82,9 @@ steps:
     tool_name: github__tool__gh_pr_comment
     input:
       pr: "{{input.pr}}"
-      marker: "graph:pr_review:summary"
+      marker: "dive:pr_review:summary"
       body: |
-        Graph PR review — managed by [`pr_review.yaml`](https://github.com/tylerdavis/graph/blob/main/.graph/plans/pr_review.yaml)
+        Dive PR review — managed by [`pr_review.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/pr_review.yaml)
 
         {{^E5.comments}}
         No issues found.

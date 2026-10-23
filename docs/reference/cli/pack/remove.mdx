@@ -1,9 +1,9 @@
 ---
-title: "graph pack remove"
+title: "dive pack remove"
 sidebarTitle: "remove"
 description: "Delete a pack's copy, config entry and lock entry, and list files that still call it"
 playground: "none"
-keywords: ["graph pack remove"]
+keywords: ["dive pack remove"]
 ---
 
 ## Arguments
@@ -15,11 +15,11 @@ keywords: ["graph pack remove"]
 ## Options
 
 <ParamField query="--global" type="boolean">
-  Target the global layer (~/.config/graph/) instead of the project's ./.graph/
+  Target the global layer (~/.config/dive/) instead of the project's ./.dive/
 </ParamField>
 
 <ParamField query="--dir" type="string">
-  Target this graph directory, laid out like .graph/ (config.toml, packs/, packs.lock)
+  Target this Dive directory, laid out like .dive/ (config.toml, packs/, packs.lock)
 
   Format: `PATH`.
 </ParamField>
@@ -37,7 +37,7 @@ keywords: ["graph pack remove"]
 <RequestExample>
 
 ```bash Usage
-graph pack remove [OPTIONS] <NAME>
+dive pack remove [OPTIONS] <NAME>
 ```
 
 </RequestExample>

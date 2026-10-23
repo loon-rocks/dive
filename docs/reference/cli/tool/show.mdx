@@ -1,9 +1,9 @@
 ---
-title: "graph tool show"
+title: "dive tool show"
 sidebarTitle: "show"
 description: "Show one tool's description and schemas"
 playground: "none"
-keywords: ["graph tool show"]
+keywords: ["dive tool show"]
 ---
 
 For a `builtin__`, `user__` or pack tool, also names its source on stderr: the tool file's path, `built-in`, or `pack <name> <tag> (<layer>)`. `--json` prints the whole definition, including `inputSchema`, with absent keys as `null`.
@@ -11,7 +11,7 @@ For a `builtin__`, `user__` or pack tool, also names its source on stderr: the t
 ## Arguments
 
 <ParamField path="NAME" type="string" required>
-  The tool's namespaced name, as `graph tool list` prints it
+  The tool's namespaced name, as `dive tool list` prints it
 </ParamField>
 
 ## Options
@@ -29,15 +29,15 @@ For a `builtin__`, `user__` or pack tool, also names its source on stderr: the t
 <RequestExample>
 
 ```bash Usage
-graph tool show [OPTIONS] <NAME>
+dive tool show [OPTIONS] <NAME>
 ```
 
 ```bash Example 1
-graph tool show github__tool__git_log
+dive tool show github__tool__git_log
 ```
 
 ```bash Example 2
-graph tool show linear__list_issues --json
+dive tool show linear__list_issues --json
 ```
 
 </RequestExample>

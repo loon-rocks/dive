@@ -1,0 +1,13 @@
+name: packs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/loon-rocks/dive:v@VERSION@
+    steps:
+      - uses: actions/checkout@v4
+      - run: dive pack test

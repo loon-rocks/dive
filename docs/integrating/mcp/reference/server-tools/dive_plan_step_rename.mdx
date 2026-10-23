@@ -1,0 +1,25 @@
+---
+title: "dive_plan_step_rename"
+sidebarTitle: "dive_plan_step_rename"
+description: "Renames a step and rewrites every later reference to it."
+playground: "none"
+keywords: ["dive_plan_step_rename"]
+---
+
+- Mirrors `dive plan step rename`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="id" type="string" required>
+</ParamField>
+
+<ParamField body="new_id" type="string" required>
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>

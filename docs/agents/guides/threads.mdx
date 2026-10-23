@@ -1,31 +1,31 @@
 ---
 title: "Manage threads"
 description: "Find the conversation where chat looked up the latest Rust release, see what its researcher did, continue it, and delete it."
-keywords: ["threads", "history", "graph thread", "resume"]
+keywords: ["threads", "history", "dive thread", "resume"]
 ---
 
 ## Find the thread
 
 ```bash
-graph thread list
+dive thread list
 ```
 
 ```text
 169a26420daf  2026-10-13 13:46    4 msgs  What is the latest stable version of Rust?
 ```
 
-A thread belongs to the project it was started in: the current directory when it has a `.graph` folder. `graph thread list` lists the threads of the project you're in, or the global threads outside one. Add `--all` to list every thread:
+A thread belongs to the project it was started in: the current directory when it has a `.dive` folder. `dive thread list` lists the threads of the project you're in, or the global threads outside one. Add `--all` to list every thread:
 
 ```bash
-graph thread list --all
+dive thread list --all
 ```
 
-The other `graph thread` commands take a thread's id, so they work on any thread from anywhere.
+The other `dive thread` commands take a thread's id, so they work on any thread from anywhere.
 
 ## Read it
 
 ```bash
-graph thread show 169a26420daf
+dive thread show 169a26420daf
 ```
 
 The thread records each message with its author, every tool call, and the subagents that ran:
@@ -49,7 +49,7 @@ chat> The latest stable version of Rust is **1.99.0**, released October 1, 2026.
 Pass the thread's id with `--thread`, after the message:
 
 ```bash
-graph ask "When is the next one due?" \
+dive ask "When is the next one due?" \
   --thread 169a26420daf
 ```
 
@@ -60,7 +60,7 @@ The next stable release, **Rust 1.100.0**, is due **November 12, 2026**…
 A thread where the drafting architect built a network of tools, plans and agents reopens with that network, rebuilt from the thread's history:
 
 ```bash
-graph chat --thread 4be1c0a9d2e7
+dive chat --thread 4be1c0a9d2e7
 ```
 
 An edit thread, opened by `network_editor` on the agents, plans or tools to fix, reopens the same way, with those items, the edits made to them and the call the edit started from.
@@ -68,7 +68,7 @@ An edit thread, opened by `network_editor` on the agents, plans or tools to fix,
 ## Delete it
 
 ```bash
-graph thread rm 169a26420daf
+dive thread rm 169a26420daf
 ```
 
 ```text
@@ -79,7 +79,7 @@ deleted 169a26420daf
 
 <CardGroup cols={2}>
   <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
-    Start conversations with `graph ask` and `graph chat`.
+    Start conversations with `dive ask` and `dive chat`.
   </Card>
   <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
     Give `chat` the researcher subagent used here.

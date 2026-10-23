@@ -1,9 +1,9 @@
 ---
-title: "graph agent list"
+title: "dive agent list"
 sidebarTitle: "list"
-description: "List every agent: built-in, global (~/.config/graph/agents), and project (./.graph/agents)"
+description: "List every agent: built-in, global (~/.config/dive/agents), and project (./.dive/agents)"
 playground: "none"
-keywords: ["graph agent list"]
+keywords: ["dive agent list"]
 ---
 
 Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).
@@ -23,15 +23,15 @@ Prints each agent's name, source and description. `--json` adds its model, subag
 <RequestExample>
 
 ```bash Usage
-graph agent list [OPTIONS]
+dive agent list [OPTIONS]
 ```
 
 ```bash Example 1
-graph agent list
+dive agent list
 ```
 
 ```bash Example 2
-graph agent list --json
+dive agent list --json
 ```
 
 </RequestExample>

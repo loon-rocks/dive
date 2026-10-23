@@ -8,7 +8,7 @@ keywords: ["workbench", "debugger", "breakpoints", "debug run"]
 
 <RequestExample>
 
-```yaml .graph/plans/unreleased_changes.yaml
+```yaml .dive/plans/unreleased_changes.yaml
 version: 2
 identifier: unreleased_changes
 name: Unreleased changes
@@ -33,7 +33,7 @@ finish:
 <Steps>
   <Step title="Open the plan in the workbench">
     ```bash
-    graph workbench plan \
+    dive workbench plan \
       unreleased_changes
     ```
   </Step>
@@ -44,7 +44,7 @@ finish:
     Press <kbd>g</kbd>. The run calls `release` and pauses before `commits`, showing the input it's about to send:
 
     <Frame caption="Paused before commits: base is the release's URL, not its tag.">
-      <img src="/images/workbench/debug-breakpoint.svg" alt="The workbench paused at a breakpoint on commits, with release marked done and the debug pane showing the rendered input: base is https://github.com/tylerdavis/graph/releases/tag/v0.15.0 and head is HEAD." />
+      <img src="/images/workbench/debug-breakpoint.svg" alt="The workbench paused at a breakpoint on commits, with release marked done and the debug pane showing the rendered input: base is https://github.com/loon-rocks/dive/releases/tag/v0.15.0 and head is HEAD." />
     </Frame>
 
     `base` is the release page's URL, which git can't read as a revision. It should be the release's `tag`.
@@ -56,7 +56,7 @@ finish:
     Press <kbd>r</kbd>. The run finishes, and <kbd>3</kbd> opens the run tab with each step's result.
   </Step>
   <Step title="Save">
-    Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to write the fix to `./.graph/plans/unreleased_changes.yaml`.
+    Press <kbd>Ctrl</kbd>+<kbd>S</kbd> to write the fix to `./.dive/plans/unreleased_changes.yaml`.
   </Step>
 </Steps>
 

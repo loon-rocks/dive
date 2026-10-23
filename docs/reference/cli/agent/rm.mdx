@@ -1,12 +1,12 @@
 ---
-title: "graph agent rm"
+title: "dive agent rm"
 sidebarTitle: "rm"
 description: "Delete an agent file"
 playground: "none"
-keywords: ["graph agent rm"]
+keywords: ["dive agent rm"]
 ---
 
-Deletes the file defining the agent, without asking. A project agent that shadows a global one hands over to it, and an agent file that replaces a built-in agent reverts it to the shipped version. Plans and agents that still call it, hand off to it or run it as a subagent are listed; nothing else is changed. Pack agents can't be removed one at a time — remove a pack with `graph pack remove`.
+Deletes the file defining the agent, without asking. A project agent that shadows a global one hands over to it, and an agent file that replaces a built-in agent reverts it to the shipped version. Plans and agents that still call it, hand off to it or run it as a subagent are listed; nothing else is changed. Pack agents can't be removed one at a time — remove a pack with `dive pack remove`.
 
 ## Arguments
 
@@ -29,15 +29,15 @@ Deletes the file defining the agent, without asking. A project agent that shadow
 <RequestExample>
 
 ```bash Usage
-graph agent rm [OPTIONS] <NAME>
+dive agent rm [OPTIONS] <NAME>
 ```
 
 ```bash Example 1
-graph agent rm release_notes
+dive agent rm release_notes
 ```
 
 ```bash Example 2
-graph agent rm chat --json
+dive agent rm chat --json
 ```
 
 </RequestExample>

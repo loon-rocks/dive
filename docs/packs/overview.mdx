@@ -5,19 +5,19 @@ description: "Shareable sets of tools, plans and agents, installed from git as p
 keywords: ["packs", "install", "pack.toml", "packs.lock", "releases"]
 ---
 
-A pack is a directory of [tools](/tools/overview), [plans](/plans/overview) and [agents](/agents/overview) with a [`pack.toml`](/packs/reference/pack-file), published in a git repository. `graph pack add` copies it into a config layer, and its items join the catalog under the pack's name.
+A pack is a directory of [tools](/tools/overview), [plans](/plans/overview) and [agents](/agents/overview) with a [`pack.toml`](/packs/reference/pack-file), published in a git repository. `dive pack add` copies it into a config layer, and its items join the catalog under the pack's name.
 
 ## Install a pack
 
 ```bash
-graph pack add github
+dive pack add github
 ```
 
 A bare name installs that directory of [tylerdavis/graph-packs](https://github.com/tylerdavis/graph-packs), which holds the official packs. A git URL installs from any repository.
 
-graph copies the pack into `./.graph/packs/github/`, adds a `[packs.github]` entry to `config.toml` and records the release in `./.graph/packs.lock`. Commit all three, and everyone who clones the project gets the same pack without installing anything. `--global` installs into `~/.config/graph/` instead.
+Dive copies the pack into `./.dive/packs/github/`, adds a `[packs.github]` entry to `config.toml` and records the release in `./.dive/packs.lock`. Commit all three, and everyone who clones the project gets the same pack without installing anything. `--global` installs into `~/.config/dive/` instead.
 
-A `[packs.<name>]` entry without its copy under `packs/` still loads. graph warns that the pack's items are unavailable and names the `graph pack add` command that installs it. If a global copy is installed, graph uses that copy until the project's copy is installed.
+A `[packs.<name>]` entry without its copy under `packs/` still loads. Dive warns that the pack's items are unavailable and names the `dive pack add` command that installs it. If a global copy is installed, Dive uses that copy until the project's copy is installed.
 
 ## Names
 
@@ -39,27 +39,27 @@ A pack's releases are git tags named after its directory, such as `github/v1.2.0
 
 | `ref` | Follows |
 | --- | --- |
-| `v1` | The newest `v1.x.y` release. `graph pack add` writes this by default. |
+| `v1` | The newest `v1.x.y` release. `dive pack add` writes this by default. |
 | `v1.2.0` | That release only. |
 | A branch name | The branch's latest commit. |
 
-`graph pack update` moves a pack to the newest release its `ref` allows. A new major release is never installed until you run `graph pack update --major`, which runs the pack's migration over your files and asks before applying it.
+`dive pack update` moves a pack to the newest release its `ref` allows. A new major release is never installed until you run `dive pack update --major`, which runs the pack's migration over your files and asks before applying it.
 
 ## Releases never change
 
-`packs.lock` records the commit and a content hash for every installed release. graph refuses to install or update a pack whose release tag now points at a different commit, and `graph pack list` reports the moved tag. Packs that follow a branch are exempt.
+`packs.lock` records the commit and a content hash for every installed release. Dive refuses to install or update a pack whose release tag now points at a different commit, and `dive pack list` reports the moved tag. Packs that follow a branch are exempt.
 
 The official packs' tags are protected from moving or deletion, and each release on GitHub lists the content hash that `packs.lock` should record.
 
 ## Change a pack
 
-The installed pack is a plain copy, so you can edit its files. `graph pack list` reports a copy that differs from `packs.lock`, and `graph pack update` refuses to overwrite it unless you pass `--force`.
+The installed pack is a plain copy, so you can edit its files. `dive pack list` reports a copy that differs from `packs.lock`, and `dive pack update` refuses to overwrite it unless you pass `--force`.
 
 To hide items from your own plans and agents, list glob patterns over `<kind>__<item>` in the entry's [`include`](/reference/configuration#param-packs-name-include) or [`exclude`](/reference/configuration#param-packs-name-exclude). The pack's own plans and agents can still call everything.
 
 ## Requirements
 
-A pack's `pack.toml` lists what it needs: a graph version, operating systems, programs on `PATH`, environment variables and MCP servers. graph refuses to install or load a pack for another graph version or system. `graph config check` reports anything else that's missing, and a plan run that reaches the pack fails before its first step. See [`requires`](/packs/reference/pack-file#param-requires).
+A pack's `pack.toml` lists what it needs: a dive version, operating systems, programs on `PATH`, environment variables and MCP servers. Dive refuses to install or load a pack for another dive version or system. `dive config check` reports anything else that's missing, and a plan run that reaches the pack fails before its first step. See [`requires`](/packs/reference/pack-file#param-requires).
 
 ## Guides
 

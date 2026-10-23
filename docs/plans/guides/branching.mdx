@@ -8,7 +8,7 @@ keywords: ["route", "branch", "if", "then", "else"]
 
 <RequestExample>
 
-```yaml .graph/plans/changes_since.yaml
+```yaml .dive/plans/changes_since.yaml
 version: 2
 identifier: changes_since
 name: Changes since
@@ -58,7 +58,7 @@ finish:
 Run the plan over the last two commits:
 
 ```bash
-graph plan run changes_since \
+dive plan run changes_since \
   --input base=HEAD~2
 ```
 
@@ -89,7 +89,7 @@ graph plan run changes_since \
 Run it from a release tag with 28 commits since:
 
 ```bash
-graph plan run changes_since \
+dive plan run changes_since \
   --input base=v0.15.0
 ```
 

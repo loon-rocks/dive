@@ -1,19 +1,19 @@
 ---
 title: "Stream run events"
-description: "Read graph's progress as JSON events on stderr, for scripts, dashboards and CI annotations."
-keywords: ["GRAPH_EVENTS", "jsonl", "events", "github"]
+description: "Read Dive's progress as JSON events on stderr, for scripts, dashboards and CI annotations."
+keywords: ["DIVE_EVENTS", "jsonl", "events", "github"]
 ---
 
-import EnvGraphEvents from "/snippets/generated/environment/graph-events.mdx";
+import EnvDiveEvents from "/snippets/generated/environment/dive-events.mdx";
 
-Set `GRAPH_EVENTS=jsonl` and graph writes its progress to stderr as one JSON object per line, instead of text for people. stdout still carries only the result, so you can read both from one run:
+Set `DIVE_EVENTS=jsonl` and Dive writes its progress to stderr as one JSON object per line, instead of text for people. stdout still carries only the result, so you can read both from one run:
 
 ```bash
-GRAPH_EVENTS=jsonl graph plan run weekly_changes \
+DIVE_EVENTS=jsonl dive plan run weekly_changes \
   --input base=v0.15.0 2> events.jsonl
 ```
 
-The stream covers `graph plan run`, `graph ask` and `graph chat`. Every event has an `event` field naming its type.
+The stream covers `dive plan run`, `dive ask` and `dive chat`. Every event has an `event` field naming its type.
 
 <ResponseExample>
 
@@ -156,7 +156,7 @@ A model call finished.
 
 ### usage_summary
 
-What the whole run spent, sent once at the end, including when the run fails. graph skips it when the run made no model calls.
+What the whole run spent, sent once at the end, including when the run fails. Dive skips it when the run made no model calls.
 
 <ResponseField name="usage.calls" type="integer">
   Model calls in the run.
@@ -180,6 +180,6 @@ What the whole run spent, sent once at the end, including when the run fails. gr
 
 ## Related environment variables
 
-<EnvGraphEvents />
+<EnvDiveEvents />
 
 [Go to full reference](/reference/environment-variables)

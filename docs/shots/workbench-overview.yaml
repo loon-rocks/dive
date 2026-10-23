@@ -2,7 +2,7 @@
 # Used in the quickstart's
 # "Open it in the workbench" step.
 name: workbench-overview
-title: graph workbench — pr_review
+title: dive workbench — pr_review
 plan: docs/shots/plans/pr_review.yaml
 grid: { cols: 120, rows: 36 }
 

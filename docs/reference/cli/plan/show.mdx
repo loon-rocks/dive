@@ -1,9 +1,9 @@
 ---
-title: "graph plan show"
+title: "dive plan show"
 sidebarTitle: "show"
 description: "Show a plan document"
 playground: "none"
-keywords: ["graph plan show"]
+keywords: ["dive plan show"]
 ---
 
 Prints the plan's YAML to stdout and its source, `built-in` or the file path, to stderr. A plan file whose identifier matches a built-in plan replaces it. Opens plans that are invalid or hidden by `requires_servers`.
@@ -29,15 +29,15 @@ Prints the plan's YAML to stdout and its source, `built-in` or the file path, to
 <RequestExample>
 
 ```bash Usage
-graph plan show [OPTIONS] <NAME>
+dive plan show [OPTIONS] <NAME>
 ```
 
 ```bash Example 1
-graph plan show weekly_changes
+dive plan show weekly_changes
 ```
 
 ```bash Example 2
-graph plan show .graph/plans/weekly_changes.yaml --json
+dive plan show .dive/plans/weekly_changes.yaml --json
 ```
 
 </RequestExample>

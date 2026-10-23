@@ -1,24 +1,24 @@
 ---
 title: "MCP server tools"
-description: "The plan authoring and catalog tools `graph mcp serve` gives an MCP client."
+description: "The plan authoring and catalog tools `dive mcp serve` gives an MCP client."
 keywords: ["MCP server tools"]
 ---
 
-`graph mcp serve` adds these tools alongside one tool per plan ([Serve plans over MCP](/integrating/mcp/guides/serve-over-mcp)). Each mirrors a `graph plan` or `graph tool` CLI command.
+`dive mcp serve` adds these tools alongside one tool per plan ([Serve plans over MCP](/integrating/mcp/guides/serve-over-mcp)). Each mirrors a `dive plan` or `dive tool` CLI command.
 
 | Name | Description |
 | --- | --- |
-| [`graph_plan_list`](/integrating/mcp/reference/server-tools/graph_plan_list) | Lists the plans available on this machine. |
-| [`graph_plan_show`](/integrating/mcp/reference/server-tools/graph_plan_show) | Returns one plan's full definition. |
-| [`graph_plan_new`](/integrating/mcp/reference/server-tools/graph_plan_new) | Writes an empty plan file to fill in with the edit tools. |
-| [`graph_plan_draft`](/integrating/mcp/reference/server-tools/graph_plan_draft) | Drafts a whole plan from a goal with the planner model. |
-| [`graph_plan_set`](/integrating/mcp/reference/server-tools/graph_plan_set) | Sets one plan-level attribute. |
-| [`graph_plan_unset`](/integrating/mcp/reference/server-tools/graph_plan_unset) | Clears one optional plan attribute. |
-| [`graph_plan_step_add`](/integrating/mcp/reference/server-tools/graph_plan_step_add) | Adds a step to a plan, at the end or before or after another step. |
-| [`graph_plan_step_update`](/integrating/mcp/reference/server-tools/graph_plan_step_update) | Changes one step's `tool`, `input` or `reasoning`. |
-| [`graph_plan_step_rename`](/integrating/mcp/reference/server-tools/graph_plan_step_rename) | Renames a step and rewrites every later reference to it. |
-| [`graph_plan_step_rm`](/integrating/mcp/reference/server-tools/graph_plan_step_rm) | Removes a step from a plan. |
-| [`graph_plan_validate`](/integrating/mcp/reference/server-tools/graph_plan_validate) | Checks a plan's structure, template references and tool names against this machine. |
-| [`graph_tools_list`](/integrating/mcp/reference/server-tools/graph_tools_list) | Lists every name a plan step's `tool` can use on this machine. |
-| [`graph_tools_show`](/integrating/mcp/reference/server-tools/graph_tools_show) | Returns one tool's or control step's description and schemas. |
-| [`graph_tools_test`](/integrating/mcp/reference/server-tools/graph_tools_test) | Calls one tool directly and returns its result. |
+| [`dive_plan_list`](/integrating/mcp/reference/server-tools/dive_plan_list) | Lists the plans available on this machine. |
+| [`dive_plan_show`](/integrating/mcp/reference/server-tools/dive_plan_show) | Returns one plan's full definition. |
+| [`dive_plan_new`](/integrating/mcp/reference/server-tools/dive_plan_new) | Writes an empty plan file to fill in with the edit tools. |
+| [`dive_plan_draft`](/integrating/mcp/reference/server-tools/dive_plan_draft) | Drafts a whole plan from a goal with the planner model. |
+| [`dive_plan_set`](/integrating/mcp/reference/server-tools/dive_plan_set) | Sets one plan-level attribute. |
+| [`dive_plan_unset`](/integrating/mcp/reference/server-tools/dive_plan_unset) | Clears one optional plan attribute. |
+| [`dive_plan_step_add`](/integrating/mcp/reference/server-tools/dive_plan_step_add) | Adds a step to a plan, at the end or before or after another step. |
+| [`dive_plan_step_update`](/integrating/mcp/reference/server-tools/dive_plan_step_update) | Changes one step's `tool`, `input` or `reasoning`. |
+| [`dive_plan_step_rename`](/integrating/mcp/reference/server-tools/dive_plan_step_rename) | Renames a step and rewrites every later reference to it. |
+| [`dive_plan_step_rm`](/integrating/mcp/reference/server-tools/dive_plan_step_rm) | Removes a step from a plan. |
+| [`dive_plan_validate`](/integrating/mcp/reference/server-tools/dive_plan_validate) | Checks a plan's structure, template references and tool names against this machine. |
+| [`dive_tools_list`](/integrating/mcp/reference/server-tools/dive_tools_list) | Lists every name a plan step's `tool` can use on this machine. |
+| [`dive_tools_show`](/integrating/mcp/reference/server-tools/dive_tools_show) | Returns one tool's or control step's description and schemas. |
+| [`dive_tools_test`](/integrating/mcp/reference/server-tools/dive_tools_test) | Calls one tool directly and returns its result. |

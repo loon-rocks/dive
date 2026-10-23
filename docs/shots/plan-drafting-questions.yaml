@@ -1,5 +1,5 @@
 name: plan-drafting-questions
-title: graph workbench — drafting a plan
+title: dive workbench — drafting a plan
 grid: { cols: 120, rows: 36 }
 
 agent: network_drafter

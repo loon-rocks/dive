@@ -1,0 +1,46 @@
+---
+title: "dive_plan_step_add"
+sidebarTitle: "dive_plan_step_add"
+description: "Adds a step to a plan, at the end or before or after another step."
+playground: "none"
+keywords: ["dive_plan_step_add"]
+---
+
+## Behavior
+
+- Refused if the step references anything other than `input` or an earlier step.
+- Mirrors `dive plan step add`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="after" type="string">
+  Insert after this step id instead of appending.
+</ParamField>
+
+<ParamField body="before" type="string">
+  Insert before this step id instead of appending.
+</ParamField>
+
+<ParamField body="id" type="string" required>
+  Step id — how later steps reference it as &#123;&#123;&lt;id&gt;.field&#125;&#125;.
+</ParamField>
+
+<ParamField body="input" type="object" required>
+  The step's input object. Leaf strings may be templates over earlier results, e.g. &#123;&#123;E1.field&#125;&#125; or &#123;&#123;input.x&#125;&#125;.
+</ParamField>
+
+<ParamField body="reasoning" type="string">
+  Why this step exists, carried into the plan for readers.
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>
+
+<ParamField body="tool" type="string" required>
+  A tool name from dive_tools_list, or a control step: exit, agent, ask, route, filter, map, reduce.
+</ParamField>

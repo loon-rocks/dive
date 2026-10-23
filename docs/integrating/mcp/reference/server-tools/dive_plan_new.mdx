@@ -1,0 +1,31 @@
+---
+title: "dive_plan_new"
+sidebarTitle: "dive_plan_new"
+description: "Writes an empty plan file to fill in with the edit tools."
+playground: "none"
+keywords: ["dive_plan_new"]
+---
+
+## Behavior
+
+- The new plan has no steps, so `problems` lists that until you add one; `ok` is still true.
+- Needs no model credentials.
+- Mirrors `dive plan new`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="description" type="string">
+  What the plan does — this is the routing signal an agent selects on.
+</ParamField>
+
+<ParamField body="identifier" type="string" required>
+  Tool-name-safe id, also the file name: [a-zA-Z0-9_-].
+</ParamField>
+
+<ParamField body="name" type="string">
+  Display name. Defaults to the identifier.
+</ParamField>

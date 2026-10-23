@@ -2,7 +2,7 @@
   "reference/cli/ask",
   "reference/cli/chat",
   {
-    "group": "graph plan",
+    "group": "dive plan",
     "pages": [
       "reference/cli/plan/list",
       "reference/cli/plan/show",
@@ -15,7 +15,7 @@
       "reference/cli/plan/set",
       "reference/cli/plan/unset",
       {
-        "group": "graph plan step",
+        "group": "dive plan step",
         "pages": [
           "reference/cli/plan/step/add",
           "reference/cli/plan/step/update",
@@ -29,7 +29,7 @@
     "root": "reference/cli/plan"
   },
   {
-    "group": "graph tool",
+    "group": "dive tool",
     "pages": [
       "reference/cli/tool/list",
       "reference/cli/tool/show",
@@ -40,7 +40,7 @@
     "root": "reference/cli/tool"
   },
   {
-    "group": "graph agent",
+    "group": "dive agent",
     "pages": [
       "reference/cli/agent/list",
       "reference/cli/agent/show",
@@ -51,7 +51,7 @@
     "root": "reference/cli/agent"
   },
   {
-    "group": "graph thread",
+    "group": "dive thread",
     "pages": [
       "reference/cli/thread/list",
       "reference/cli/thread/show",
@@ -60,7 +60,7 @@
     "root": "reference/cli/thread"
   },
   {
-    "group": "graph secret",
+    "group": "dive secret",
     "pages": [
       "reference/cli/secret/set",
       "reference/cli/secret/rm",
@@ -70,7 +70,7 @@
     "root": "reference/cli/secret"
   },
   {
-    "group": "graph mcp",
+    "group": "dive mcp",
     "pages": [
       "reference/cli/mcp/list",
       "reference/cli/mcp/tools",
@@ -81,7 +81,7 @@
     "root": "reference/cli/mcp"
   },
   {
-    "group": "graph shape",
+    "group": "dive shape",
     "pages": [
       "reference/cli/shape/list",
       "reference/cli/shape/show"
@@ -89,7 +89,7 @@
     "root": "reference/cli/shape"
   },
   {
-    "group": "graph config",
+    "group": "dive config",
     "pages": [
       "reference/cli/config/show",
       "reference/cli/config/init",
@@ -100,7 +100,7 @@
     "root": "reference/cli/config"
   },
   {
-    "group": "graph pack",
+    "group": "dive pack",
     "pages": [
       "reference/cli/pack/add",
       "reference/cli/pack/list",
@@ -115,7 +115,7 @@
     "root": "reference/cli/pack"
   },
   {
-    "group": "graph workbench",
+    "group": "dive workbench",
     "pages": [
       "reference/cli/workbench/plan",
       "reference/cli/workbench/agent",

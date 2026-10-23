@@ -22,7 +22,7 @@ Because plans and agents are tools too, anything you build can be called by the 
 
 ## Tool files
 
-A tool file is a YAML file in `./.graph/tools/` or `~/.config/graph/tools/`. Its `kind` decides what it runs:
+A tool file is a YAML file in `./.dive/tools/` or `~/.config/dive/tools/`. Its `kind` decides what it runs:
 
 | Kind | Runs | Calls a model |
 | --- | --- | --- |
@@ -35,17 +35,17 @@ Only `prompt` and `decision` tools spend tokens, so moving work into `exec` and 
 
 Mark a tool `read_only` when it has no side effects. `reshape` and `decision` tools are read-only by default.
 
-Tool names must be unique across both directories. To change a built-in tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces graph's version. `graph tool rm builtin__<name>` deletes the override and brings graph's version back; `graph tool rm <name>` deletes a user tool. A pack is a plain copy in `packs/<name>/`, so you change its tools by editing them there; `graph pack list` reports the edits.
+Tool names must be unique across both directories. To change a built-in tool for a project, put a file with the same name in the `builtin/` subdirectory of a tools directory, and it replaces Dive's version. `dive tool rm builtin__<name>` deletes the override and brings Dive's version back; `dive tool rm <name>` deletes a user tool. A pack is a plain copy in `packs/<name>/`, so you change its tools by editing them there; `dive pack list` reports the edits.
 
 ## Inspect and run tools
 
 ```bash
-graph tool list
-graph tool show github__tool__git_log
-graph tool test github__tool__git_log --input base=v0.15.0
+dive tool list
+dive tool show github__tool__git_log
+dive tool test github__tool__git_log --input base=v0.15.0
 ```
 
-`graph tool list` lists the catalog, `graph tool show` prints a tool's description, schemas and source, and `graph tool test` calls it and prints the result.
+`dive tool list` lists the catalog, `dive tool show` prints a tool's description, schemas and source, and `dive tool test` calls it and prints the result.
 
 ## Guides
 
@@ -56,7 +56,7 @@ graph tool test github__tool__git_log --input base=v0.15.0
   <Card title="Test a tool" icon="flask" href="/tools/guides/test-a-tool">
     Run any tool directly and see exactly what it returns.
   </Card>
-  <Card title="Improve what graph knows about a tool" icon="shapes" href="/tools/guides/tool-shapes">
+  <Card title="Improve what Dive knows about a tool" icon="shapes" href="/tools/guides/tool-shapes">
     Give drafters and the workbench accurate output shapes for your tools.
   </Card>
 </CardGroup>

@@ -1,9 +1,9 @@
 ---
-title: "graph plan step add"
+title: "dive plan step add"
 sidebarTitle: "add"
 description: "Append a step, or anchor it before/after an existing one"
 playground: "none"
-keywords: ["graph plan step add"]
+keywords: ["dive plan step add"]
 ---
 
 Adds one step and validates the plan. The edit is refused if it adds a validation problem.
@@ -59,15 +59,15 @@ Adds one step and validates the plan. The edit is refused if it adds a validatio
 <RequestExample>
 
 ```bash Usage
-graph plan step add [OPTIONS] <NAME|PATH> <ID> <TOOL> <JSON|@FILE|->
+dive plan step add [OPTIONS] <NAME|PATH> <ID> <TOOL> <JSON|@FILE|->
 ```
 
 ```bash Example 1
-graph plan step add weekly_changes E1 github__tool__git_log '{"base":"{{input.base}}","head":"HEAD"}'
+dive plan step add weekly_changes E1 github__tool__git_log '{"base":"{{input.base}}","head":"HEAD"}'
 ```
 
 ```bash Example 2
-graph plan step add weekly_changes G1 exit '{"when":{"value":"{{E1.count}}","op":"eq","to":0},"status":"success","message":"Nothing shipped"}' --after E1
+dive plan step add weekly_changes G1 exit '{"when":{"value":"{{E1.count}}","op":"eq","to":0},"status":"success","message":"Nothing shipped"}' --after E1
 ```
 
 </RequestExample>

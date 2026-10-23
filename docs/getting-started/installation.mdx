@@ -5,7 +5,7 @@ description: "Release binaries and the container image"
 
 import BinaryDownloads from "/shared/binary_downloads.mdx";
 
-graph ships as a single binary and a container image — grab whichever fits. Current release: {{release_version}}.
+Dive ships as a single binary and a container image — grab whichever fits. Current release: {{release_version}}.
 
 ## Release binaries
 
@@ -18,16 +18,16 @@ Or from the command line:
 <Tabs>
   <Tab title="macOS (arm64)">
     ```bash
-    curl -fsSLO "https://github.com/tylerdavis/graph/releases/download/{{release_version}}/graph-{{release_version}}-macos-arm64.tar.gz"
-    tar xzf graph-*.tar.gz && install -m 0755 graph ~/.local/bin/
-    graph --help
+    curl -fsSLO "https://github.com/loon-rocks/dive/releases/download/{{release_version}}/dive-{{release_version}}-macos-arm64.tar.gz"
+    tar xzf dive-*.tar.gz && install -m 0755 dive ~/.local/bin/
+    dive --help
     ```
   </Tab>
   <Tab title="Linux (x86_64)">
     ```bash
-    curl -fsSLO "https://github.com/tylerdavis/graph/releases/download/{{release_version}}/graph-{{release_version}}-linux-x86_64.tar.gz"
-    tar xzf graph-*.tar.gz && install -m 0755 graph ~/.local/bin/
-    graph --help
+    curl -fsSLO "https://github.com/loon-rocks/dive/releases/download/{{release_version}}/dive-{{release_version}}-linux-x86_64.tar.gz"
+    tar xzf dive-*.tar.gz && install -m 0755 dive ~/.local/bin/
+    dive --help
     ```
   </Tab>
 </Tabs>
@@ -38,15 +38,15 @@ Or from the command line:
 
 ## Container image
 
-Each release also publishes [ghcr.io/tylerdavis/graph](https://github.com/tylerdavis/graph/pkgs/container/graph) with git, gh, jq and curl installed, ready to use in CI:
+Each release also publishes [ghcr.io/loon-rocks/dive](https://github.com/loon-rocks/dive/pkgs/container/dive) with git, gh, jq and curl installed, ready to use in CI:
 
 ```bash
 docker run --rm \
            -e ANTHROPIC_API_KEY \
-           -e GRAPH_STORAGE=memory \
+           -e DIVE_STORAGE=memory \
            -v "$PWD:/work" \
            -w /work \
-           ghcr.io/tylerdavis/graph:{{release_version}} plan list
+           ghcr.io/loon-rocks/dive:{{release_version}} plan list
 ```
 
 ## Requirements
@@ -58,5 +58,22 @@ docker run --rm \
 
 ## First-run notes
 
-- graph creates its [data directory](/reference/data-directory) at `~/.local/share/graph/` on first use (configurable via `[settings] data_dir`).
-- State is plain files under the data directory, safe under concurrent runs. Use `GRAPH_STORAGE=memory` for ephemeral runs that should leave nothing behind.
+- Dive creates its [data directory](/reference/data-directory) at `~/.local/share/dive/` on first use (configurable via `[settings] data_dir`).
+- State is plain files under the data directory, safe under concurrent runs. Use `DIVE_STORAGE=memory` for ephemeral runs that should leave nothing behind.
+
+## Upgrading from graph
+
+Dive was called graph until v0.17.0. Dive still reads graph's files and settings, so an existing setup keeps working:
+
+| graph | Dive | Read when |
+| --- | --- | --- |
+| `./.graph/` | `./.dive/` | the project has no `./.dive/` |
+| `~/.config/graph/` | `~/.config/dive/` | there is no `~/.config/dive/` |
+| `~/.local/share/graph/` | `~/.local/share/dive/` | there is no `~/.local/share/dive/` |
+| `GRAPH_*` variables | `DIVE_*` variables | the `DIVE_` name is unset |
+| credential store service `graph` | service `dive` | a name has no value under `dive` |
+| `requires.graph` in `pack.toml` | `requires.dive` | the manifest is version 1 |
+
+Each run that falls back to an old name prints a warning on stderr saying what to rename. Dive never moves, rewrites or deletes the old files. Rename the directories yourself, set the `DIVE_` variables, and store secrets again with `dive secret set` to clear the warnings. `dive secret rm` removes a name under both services. Exec tools in packs get both `DIVE_PACK_DIR` and `GRAPH_PACK_DIR`.
+
+Support for the graph names ends at v1.0.

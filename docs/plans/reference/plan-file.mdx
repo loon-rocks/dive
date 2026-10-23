@@ -1,20 +1,20 @@
 ---
 title: "Plan file"
-description: "One plan, in `./.graph/plans/` or `~/.config/graph/plans/`, run with `graph plan run` and called by agents and other plans as `plan__<identifier>`."
+description: "One plan, in `./.dive/plans/` or `~/.config/dive/plans/`, run with `dive plan run` and called by agents and other plans as `plan__<identifier>`."
 playground: "none"
 keywords: ["Plan file", "schema", "YAML"]
 ---
 
 | File type | Location |
 | --- | --- |
-| YAML | `./.graph/plans/<identifier>.yaml` (project)<br />`~/.config/graph/plans/<identifier>.yaml` (global) |
+| YAML | `./.dive/plans/<identifier>.yaml` (project)<br />`~/.config/dive/plans/<identifier>.yaml` (global) |
 
-Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/tylerdavis/graph/main/docs/schemas/plan.schema.json`.
+Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/loon-rocks/dive/main/docs/schemas/plan.schema.json`.
 
 ## Fields
 
 <ParamField body="version" type="integer">
-  The file version the document is written in. Omitted means 1; `graph plan migrate` brings a file to the current version.
+  The file version the document is written in. Omitted means 1; `dive plan migrate` brings a file to the current version.
 </ParamField>
 
 <ParamField body="identifier" type="string" required>

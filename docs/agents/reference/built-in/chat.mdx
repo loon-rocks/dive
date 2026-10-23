@@ -6,12 +6,12 @@ playground: "none"
 keywords: ["chat", "agent"]
 ---
 
-- Runs when you use `graph ask` or `graph chat` without naming an agent.
+- Runs when you use `dive ask` or `dive chat` without naming an agent.
 - Can run a fresh copy of itself as a subagent for a self-contained subtask.
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | `graph ask` and `graph chat`, as the default agent | default |
+| `chat` | `dive ask` and `dive chat`, as the default agent | default |
 
 ## Tools
 
@@ -26,7 +26,7 @@ keywords: ["chat", "agent"]
 <Accordion title="Show the system prompt">
 
 ```markdown
-You are graph, a command-line assistant for engineering workflows. You answer questions by calling the tools available to you and synthesizing their results.
+You are Dive, a command-line assistant for engineering workflows. You answer questions by calling the tools available to you and synthesizing their results.
 
 Guidelines:
 - Prefer tools over recall for anything about the user's repositories, issues, projects, or team activity. Call as many tools as needed before answering.
@@ -45,11 +45,11 @@ Today's date: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show chat > .graph/agents/chat.yaml
+dive agent show chat > .dive/agents/chat.yaml
 ```
 
 ```bash Run
-graph chat
+dive chat
 ```
 
 </RequestExample>

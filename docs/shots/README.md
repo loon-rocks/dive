@@ -4,7 +4,7 @@ Every SVG in `docs/images/workbench/` is generated from a scenario in
 this directory by `mise run shots` — an executed headless workbench
 session (real agent loop, pipeline, and debugger; only the LLM and tool
 I/O are scripted), never a hand-staged mockup. See
-`crates/graph-cli/src/workbench/shots.rs` for the spec format and the
+`crates/dive-cli/src/workbench/shots.rs` for the spec format and the
 harness.
 
 Docs pages embed the SVGs with a plain Mintlify `<Frame>` + `<img>`

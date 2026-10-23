@@ -8,7 +8,7 @@ keywords: ["agent step", "outputSchema", "maxIterations", "tools"]
 
 <RequestExample>
 
-```yaml .graph/plans/risky_changes.yaml
+```yaml .dive/plans/risky_changes.yaml
 version: 2
 identifier: risky_changes
 name: Risky changes
@@ -76,7 +76,7 @@ The `review` step's input tells the agent what to do and what to return:
 ## Run it
 
 ```bash
-graph plan run risky_changes \
+dive plan run risky_changes \
   --input base=v0.15.0
 ```
 

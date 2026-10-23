@@ -1,12 +1,12 @@
 ---
-title: "graph pack new"
+title: "dive pack new"
 sidebarTitle: "new"
 description: "Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md"
 playground: "none"
-keywords: ["graph pack new"]
+keywords: ["dive pack new"]
 ---
 
-Writes the files from a scaffold built into graph, so it works offline, into &lt;PATH&gt;/&lt;NAME&gt;/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `graph pack test` over every pack, and a `.gitignore` for `.graph/` when it has none. The scaffold passes `graph pack check` and `graph pack test` as written.
+Writes the files from a scaffold built into Dive, so it works offline, into &lt;PATH&gt;/&lt;NAME&gt;/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `dive pack test` over every pack, and a `.gitignore` for `.dive/` when it has none. The scaffold passes `dive pack check` and `dive pack test` as written.
 
 ## Arguments
 
@@ -33,15 +33,15 @@ Writes the files from a scaffold built into graph, so it works offline, into &lt
 <RequestExample>
 
 ```bash Usage
-graph pack new [OPTIONS] <NAME> [PATH]
+dive pack new [OPTIONS] <NAME> [PATH]
 ```
 
 ```bash Example 1
-graph pack new files
+dive pack new files
 ```
 
 ```bash Example 2
-graph pack new files ../graph-packs
+dive pack new files ../graph-packs
 ```
 
 </RequestExample>

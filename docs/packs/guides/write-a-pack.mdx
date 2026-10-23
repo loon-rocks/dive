@@ -1,7 +1,7 @@
 ---
 title: "Write a pack"
 description: "Scaffold a pack in a packs repository, check and test it, and release it as a tag."
-keywords: ["graph pack new", "graph pack check", "graph pack test", "graph pack release", "pack.toml"]
+keywords: ["dive pack new", "dive pack check", "dive pack test", "dive pack release", "pack.toml"]
 ---
 
 A packs repository holds one pack per directory, so one repository can publish all of your packs. Each pack is released as tags named after its directory, such as `files/v1.0.0`.
@@ -11,10 +11,10 @@ A packs repository holds one pack per directory, so one repository can publish a
 From the repository's root:
 
 ```bash
-graph pack new files
+dive pack new files
 ```
 
-graph writes a pack that passes its own checks as written:
+Dive writes a pack that passes its own checks as written:
 
 ```text
 files/
@@ -27,7 +27,7 @@ files/
 └── agents/word_counter.yaml
 ```
 
-When the repository has no `.github/workflows/packs.yaml`, graph also writes one that runs `graph pack test` on every push and pull request.
+When the repository has no `.github/workflows/packs.yaml`, Dive also writes one that runs `dive pack test` on every push and pull request.
 
 Replace the sample tool, plan and agent with your own, in the same formats as [tool](/tools/reference/tool-file), [plan](/plans/reference/plan-file) and [agent](/agents/reference/agent-file) files. Then fill in [`pack.toml`](/packs/reference/pack-file), including the systems the pack runs on in `requires.os`:
 
@@ -37,17 +37,17 @@ name = "files"
 description = "Count and summarize the files in a directory."
 
 [requires]
-graph = ">=0.15"
+dive = ">=0.15"
 os = ["macos", "linux"]
 binaries = ["sh", "wc", "tr"]
 ```
 
 ## Try an item
 
-`graph pack run` runs one of the pack's items without installing it:
+`dive pack run` runs one of the pack's items without installing it:
 
 ```bash
-graph pack run tool__word_count --input file=files/README.md --path files
+dive pack run tool__word_count --input file=files/README.md --path files
 ```
 
 ```json
@@ -58,17 +58,17 @@ graph pack run tool__word_count --input file=files/README.md --path files
 
 ### Ship files with the pack
 
-A pack's exec tools run with `GRAPH_PACK_DIR` set to the pack's installed directory, so a tool can run a script or binary the pack ships instead of one on `PATH`:
+A pack's exec tools run with `DIVE_PACK_DIR` set to the pack's installed directory, so a tool can run a script or binary the pack ships instead of one on `PATH`:
 
 ```yaml
 command: bash
-args: ["-c", 'exec "$GRAPH_PACK_DIR/bin/word-count" "$1"', "word_count", "{{input.file}}"]
+args: ["-c", 'exec "$DIVE_PACK_DIR/bin/word-count" "$1"', "word_count", "{{input.file}}"]
 ```
 
 ## Check and test
 
 ```bash
-graph pack test
+dive pack test
 ```
 
 ```text
@@ -77,14 +77,14 @@ graph pack test
     no tests/migrations/v<N>/ sample files to migrate
 ```
 
-`graph pack test` first runs `graph pack check`, which loads the pack the way an install would and checks every plan and agent against it. Then it runs each major's migration over the sample files in `tests/migrations/v<N>/`. Run at the repository's root, it covers every pack.
+`dive pack test` first runs `dive pack check`, which loads the pack the way an install would and checks every plan and agent against it. Then it runs each major's migration over the sample files in `tests/migrations/v<N>/`. Run at the repository's root, it covers every pack.
 
 ## Release
 
 Commit your changes, then create the release tag:
 
 ```bash
-graph pack release major files
+dive pack release major files
 ```
 
 ```text
@@ -99,7 +99,7 @@ Push the tag to publish the release:
 git push origin files/v1.0.0
 ```
 
-For later releases, `graph pack release` compares every public item's name, input schema and output schema with the previous release, and refuses a bump too small for the changes:
+For later releases, `dive pack release` compares every public item's name, input schema and output schema with the previous release, and refuses a bump too small for the changes:
 
 ```text
 ✗ a minor release can't carry these changes since files/v1.0.1; they need a major
@@ -108,10 +108,10 @@ For later releases, `graph pack release` compares every public item's name, inpu
     - tool__word_count: output property 'count' added (minor)
 ```
 
-A major release also needs a `## v1 to v2` section in `MIGRATING.md` or a migration plan in `plans/migrations/migrate_v2.yaml`. `graph pack update --major` runs that plan over your users' files.
+A major release also needs a `## v1 to v2` section in `MIGRATING.md` or a migration plan in `plans/migrations/migrate_v2.yaml`. `dive pack update --major` runs that plan over your users' files.
 
 <Warning>
-graph refuses to install or update a release whose tag has moved. Never move or delete a pushed release tag; release a new version instead. Protect release tags in your repository's settings so they can't be changed.
+Dive refuses to install or update a release whose tag has moved. Never move or delete a pushed release tag; release a new version instead. Protect release tags in your repository's settings so they can't be changed.
 </Warning>
 
 ## Related guides

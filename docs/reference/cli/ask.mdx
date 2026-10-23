@@ -1,9 +1,9 @@
 ---
-title: "graph ask"
-sidebarTitle: "graph ask"
+title: "dive ask"
+sidebarTitle: "dive ask"
 description: "Ask a one-shot question (runs one agent turn)"
 playground: "none"
-keywords: ["graph ask"]
+keywords: ["dive ask"]
 ---
 
 Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.
@@ -51,23 +51,23 @@ With `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, 
 <RequestExample>
 
 ```bash Usage
-graph ask [OPTIONS] [MESSAGE]
+dive ask [OPTIONS] [MESSAGE]
 ```
 
 ```bash Example 1
-graph ask "Which issues are blocking the release?"
+dive ask "Which issues are blocking the release?"
 ```
 
 ```bash Example 2
-git diff | graph ask "Review this diff"
+git diff | dive ask "Review this diff"
 ```
 
 ```bash Example 3
-graph ask --agent release_notes "What shipped this week?"
+dive ask --agent release_notes "What shipped this week?"
 ```
 
 ```bash Example 4
-graph ask "And the week before?" --thread
+dive ask "And the week before?" --thread
 ```
 
 </RequestExample>

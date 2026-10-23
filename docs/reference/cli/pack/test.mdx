@@ -1,12 +1,12 @@
 ---
-title: "graph pack test"
+title: "dive pack test"
 sidebarTitle: "test"
 description: "Run check, then every migration over its sample files in tests/migrations/v<N>/ and validate the result"
 playground: "none"
-keywords: ["graph pack test"]
+keywords: ["dive pack test"]
 ---
 
-For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is tested, so a repository's CI is `graph pack test` at its root.
+For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `migrate_v<N>` and every later migration with `apply: true`, then validates the migrated plans, agents and tools against the pack as it is now: every pack item they call must be public, and every literal step input must match the called tool's input schema. Migrations that call `builtin__infer` use your configured model providers. Exits 1 on any problem, naming the file. A directory without pack.toml is a packs repository: every immediate subdirectory holding one is tested, so a repository's CI is `dive pack test` at its root.
 
 ## Arguments
 
@@ -29,15 +29,15 @@ For each `tests/migrations/v<N>/`, copies it to a temporary directory, runs `mig
 <RequestExample>
 
 ```bash Usage
-graph pack test [OPTIONS] [PATH]
+dive pack test [OPTIONS] [PATH]
 ```
 
 ```bash Example 1
-graph pack test
+dive pack test
 ```
 
 ```bash Example 2
-graph pack test files --json
+dive pack test files --json
 ```
 
 </RequestExample>

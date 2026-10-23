@@ -1,5 +1,5 @@
 name: agent-drafting
-title: graph workbench — drafting an agent
+title: dive workbench — drafting an agent
 grid: { cols: 120, rows: 36 }
 
 agent: network_drafter
