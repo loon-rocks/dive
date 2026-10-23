@@ -4,6 +4,7 @@
 //! and graph-store respectively.
 
 pub mod agent;
+pub mod files;
 pub mod format;
 pub mod list_tools;
 pub mod packs;

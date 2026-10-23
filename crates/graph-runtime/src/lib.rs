@@ -2,6 +2,7 @@ pub mod attachment;
 pub mod cancel;
 pub mod chat;
 pub mod evidence;
+mod files;
 pub mod ops;
 pub mod packs;
 pub mod runtime;
