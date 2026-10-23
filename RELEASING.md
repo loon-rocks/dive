@@ -1,12 +1,12 @@
 # Releasing
 
-graph uses semantic versioning, driven by conventional commits.
+Dive uses semantic versioning, driven by conventional commits.
 
 ## Cut a release
 
 ```bash
 mise run release:patch    # or release:minor / release:major — prepare, then stop
-# review docs/snippets/changelog/graph/<version>/ (and CHANGELOG.md)
+# review docs/snippets/changelog/dive/<version>/ (and CHANGELOG.md)
 mise run release:publish  # commit, tag, push
 ```
 
@@ -14,18 +14,18 @@ Two steps, with the review in between. **Prepare** bumps the single
 workspace version in `Cargo.toml` and the docs' `release_version` variable
 in `docs/docs.json` (the installation page and download cards
 render from it), regenerates `CHANGELOG.md`, and rebuilds the
-docs changelog page — graph dogfooding itself: the `changelog_entry` plan
+docs changelog page — Dive dogfooding itself: the `changelog_entry` plan
 infers the release's summary (and a migration prompt when consumers must
-act) into `docs/snippets/changelog/graph/<version>/`, and the `compose_changelog`
+act) into `docs/snippets/changelog/dive/<version>/`, and the `compose_changelog`
 plan renders `docs/changelog.mdx`, which imports those snippets (Mintlify
 snippets are never published as standalone pages), so each piece of prose
 exists in exactly one file. Nothing is committed: the tree is left holding
 exactly the release's files for you to read and edit.
 
 Snippets live one directory per changelog entry, `<module>/<version>/`:
-`graph/v0.14.0/` for the binary, `config/v2/` (or `plan/`, `tool/`,
+`dive/v0.14.0/` for the binary, `config/v2/` (or `plan/`, `tool/`,
 `agent/`, `store/`, `pack/`, `lock/`) for a file version the release bumps. `changelog_entry` only
-ever writes the `graph/` directory; when the release bumps a file version,
+ever writes the `dive/` directory; when the release bumps a file version,
 move the inferred migration prompt (and a summary, if you write one) into
 that kind's directory during the review, and the page renders it under
 the kind's own entry instead of the binary's. Summary themes are `###`
@@ -70,7 +70,7 @@ build to its heading format; `release_subjects` now reads the tag
 directly instead.
 
 **The review between prepare and publish is for
-`docs/snippets/changelog/graph/<version>/`**: the summary and the migration
+`docs/snippets/changelog/dive/<version>/`**: the summary and the migration
 verdict are inferred and meant to be curated. Edit the snippet files
 freely — they are never regenerated, and the page imports them as they
 are at publish time. To correct a release that is already out, edit its snippet, re-run
@@ -102,7 +102,7 @@ refused too.
 ## Changelog entries
 
 The changelog is a flat list of entries, one per **module version**, newest
-first. Cutting a binary release produces a `Graph v0.13.0` entry; a release
+first. Cutting a binary release produces a `Dive v0.13.0` entry; a release
 that also bumps a file version produces one more entry per bumped kind —
 `Config v2`, `Plan v2`, `Tool v2`, `Agent v2`, `Store v2`, `Pack v2`, `Lock v2` — each with its own heading and
 the same date (on the docs page, each `<Update>` card is also tagged with
@@ -113,9 +113,9 @@ Which commits go where:
 
 - a **breaking commit scoped `config`, `plan`, `tool`, `agent`, `store`, `pack`, or `lock`** is that
   kind's entry, when the release bumps that kind;
-- everything else is the `Graph` entry;
+- everything else is the `Dive` entry;
 - a kind whose version is new in this release (its first constant) gets an
-  entry that says `Introduced with graph vX.Y.Z` when no commit is scoped to
+  entry that says `Introduced with Dive vX.Y.Z` when no commit is scoped to
   it.
 
 Both renderings — `CHANGELOG.md` via `cliff.toml`, `docs/changelog.mdx` via
@@ -164,7 +164,7 @@ only at a major release. A bump ships as one PR containing all of:
    `crates/dive-config/tests/fixtures/pack/v<N>/` and `lock/v<N>/`.
    Fixtures for every version in the window must keep loading.
 4. A breaking commit scoped to the file kind (`feat(config)!: …`) whose
-   footer names the new version — `BREAKING CHANGE: config version 2 (graph
+   footer names the new version — `BREAKING CHANGE: config version 2 (Dive
    config migrate)` — which is what gives it the changelog's own `Config v2`
    entry. That entry is the record of what changed; the file-versions page
    states the contract and never lists versions. The release script refuses
@@ -192,7 +192,7 @@ generated from them, so the subject line should describe the user-visible
 effect. `test:`/`chore:`/`ci:`/`style:` commits are excluded from the
 changelog.
 
-The changelog's audience is graph's users, not graph's developers. Work on
+The changelog's audience is Dive's users, not Dive's developers. Work on
 this repo's own dogfooding — the review plans under `.dive/`, the drift
 gate, the CI workflows, the release plans — ships to nobody, so it is typed
 `ci:` and stays out of the release notes. Ask before typing a commit: would

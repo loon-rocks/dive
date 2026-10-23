@@ -224,8 +224,5 @@ fn an_unset_secret_in_file_storage_is_recorded_instead_of_failing_the_load() {
     let files = loaded.config.storage.files.unwrap();
     assert_eq!(files.missing_env.len(), 1);
     assert_eq!(files.missing_env[0].field, "secret_access_key");
-    assert_eq!(
-        files.missing_env[0].var,
-        "DIVE_TEST_NEVER_SET_FILES_SECRET"
-    );
+    assert_eq!(files.missing_env[0].var, "DIVE_TEST_NEVER_SET_FILES_SECRET");
 }

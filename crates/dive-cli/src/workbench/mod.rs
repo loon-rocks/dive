@@ -27,9 +27,9 @@ use crossterm::event::{
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use futures::StreamExt;
 use dive_runtime::runtime::Runtime;
 use dive_runtime::workbench::{Workbench, WorkbenchEvent};
+use futures::StreamExt;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{IsTerminal, Stdout};
@@ -64,7 +64,10 @@ pub async fn run(command: Option<WorkbenchCommand>, verbosity: u8) -> Result<()>
 /// The path resolves `DIVE_WORKBENCH_LOG` → `[workbench].log_path` →
 /// `<data_dir>/workbench.log` (appended across sessions).
 fn init_debug_log(runtime: &Runtime, verbosity: u8) -> Option<std::path::PathBuf> {
-    let path = log_path(&runtime.config, dive_config::legacy::var_os("DIVE_WORKBENCH_LOG"));
+    let path = log_path(
+        &runtime.config,
+        dive_config::legacy::var_os("DIVE_WORKBENCH_LOG"),
+    );
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use futures::StreamExt;
 use dive_config::{ModelChoice, ModelRoles};
 use dive_core::NullSink;
 use dive_llm::types::{ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, Usage};
@@ -7,6 +6,7 @@ use dive_llm::{ChatProvider, LlmError, ModelRouter};
 use dive_runtime::chat::ChatStart;
 use dive_runtime::packs::InstalledPacks;
 use dive_runtime::runtime::{PipelineHooks, Runtime, RuntimeOptions};
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use futures::StreamExt;
 use dive_config::{ModelChoice, ModelRoles};
 use dive_llm::types::{
     ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
@@ -9,6 +8,7 @@ use dive_runtime::packs::InstalledPacks;
 use dive_runtime::runtime::{Runtime, RuntimeOptions};
 use dive_runtime::workbench::artifact::{SET_ARTIFACT, TRY_ARTIFACT};
 use dive_runtime::workbench::{GateKind, Start, UiDecision, Workbench, WorkbenchEvent};
+use futures::StreamExt;
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};

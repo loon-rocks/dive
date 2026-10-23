@@ -15,9 +15,9 @@ dive pack add github
 
 A bare name installs that directory of [tylerdavis/graph-packs](https://github.com/tylerdavis/graph-packs), which holds the official packs. A git URL installs from any repository.
 
-graph copies the pack into `./.dive/packs/github/`, adds a `[packs.github]` entry to `config.toml` and records the release in `./.dive/packs.lock`. Commit all three, and everyone who clones the project gets the same pack without installing anything. `--global` installs into `~/.config/dive/` instead.
+Dive copies the pack into `./.dive/packs/github/`, adds a `[packs.github]` entry to `config.toml` and records the release in `./.dive/packs.lock`. Commit all three, and everyone who clones the project gets the same pack without installing anything. `--global` installs into `~/.config/dive/` instead.
 
-A `[packs.<name>]` entry without its copy under `packs/` still loads. graph warns that the pack's items are unavailable and names the `dive pack add` command that installs it. If a global copy is installed, graph uses that copy until the project's copy is installed.
+A `[packs.<name>]` entry without its copy under `packs/` still loads. Dive warns that the pack's items are unavailable and names the `dive pack add` command that installs it. If a global copy is installed, Dive uses that copy until the project's copy is installed.
 
 ## Names
 
@@ -47,7 +47,7 @@ A pack's releases are git tags named after its directory, such as `github/v1.2.0
 
 ## Releases never change
 
-`packs.lock` records the commit and a content hash for every installed release. graph refuses to install or update a pack whose release tag now points at a different commit, and `dive pack list` reports the moved tag. Packs that follow a branch are exempt.
+`packs.lock` records the commit and a content hash for every installed release. Dive refuses to install or update a pack whose release tag now points at a different commit, and `dive pack list` reports the moved tag. Packs that follow a branch are exempt.
 
 The official packs' tags are protected from moving or deletion, and each release on GitHub lists the content hash that `packs.lock` should record.
 
@@ -59,7 +59,7 @@ To hide items from your own plans and agents, list glob patterns over `<kind>__<
 
 ## Requirements
 
-A pack's `pack.toml` lists what it needs: a dive version, operating systems, programs on `PATH`, environment variables and MCP servers. graph refuses to install or load a pack for another dive version or system. `dive config check` reports anything else that's missing, and a plan run that reaches the pack fails before its first step. See [`requires`](/packs/reference/pack-file#param-requires).
+A pack's `pack.toml` lists what it needs: a dive version, operating systems, programs on `PATH`, environment variables and MCP servers. Dive refuses to install or load a pack for another dive version or system. `dive config check` reports anything else that's missing, and a plan run that reaches the pack fails before its first step. See [`requires`](/packs/reference/pack-file#param-requires).
 
 ## Guides
 

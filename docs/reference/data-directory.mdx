@@ -1,10 +1,10 @@
 ---
 title: "Data directory"
-description: "Where graph keeps threads, tool shapes and the workbench log."
+description: "Where Dive keeps threads, tool shapes and the workbench log."
 keywords: ["data directory", "data_dir", "storage", "threads", "shapes"]
 ---
 
-graph keeps its runtime state in one directory, `~/.local/share/dive` by default. Set [`settings.data_dir`](/reference/configuration#param-settings-data-dir) to move it. graph creates the directory the first time it needs it.
+Dive keeps its runtime state in one directory, `~/.local/share/dive` by default. Set [`settings.data_dir`](/reference/configuration#param-settings-data-dir) to move it. Dive creates the directory the first time it needs it.
 
 ## Layout
 
@@ -60,16 +60,16 @@ Each item in `calls` has a `kind`:
 | `model` | `role`, the model role; `site`, where the call was made, such as `agent:front_desk/agent__tool_drafter` or `plan__digest/E1`; `decision`, present and `true` for a decision model; `ms`; and `usage`, as above. |
 | `tool` | `name`; `ms`; `is_error`, present and `true` when the call failed; and `calls`, the calls it made in turn, left out when there are none. |
 
-These fields are left out when graph has nothing to record: on user messages, handoffs, subagent runs, the messages of a turn that failed, tool calls that made no calls of their own, and entries written before graph recorded them.
+These fields are left out when Dive has nothing to record: on user messages, handoffs, subagent runs, the messages of a turn that failed, tool calls that made no calls of their own, and entries written before Dive recorded them.
 
 ## Share a directory between processes
 
-Several graph processes can use one data directory at the same time. Whole files are written to a temporary file and renamed into place, so a reader never sees a partial write. Appends to a thread are serialized by its lock file. When two processes record the same tool shape, the last write wins.
+Several Dive processes can use one data directory at the same time. Whole files are written to a temporary file and renamed into place, so a reader never sees a partial write. Appends to a thread are serialized by its lock file. When two processes record the same tool shape, the last write wins.
 
 Keep the directory on a local filesystem. File locks aren't reliable on network filesystems such as NFS.
 
 ## Back up and reset
 
 - To back up your state, copy the directory.
-- To discard learned shapes, delete `shapes/`. graph records them again as tools run.
+- To discard learned shapes, delete `shapes/`. Dive records them again as tools run.
 - To delete a thread, use [`dive thread rm`](/reference/cli/thread/rm).

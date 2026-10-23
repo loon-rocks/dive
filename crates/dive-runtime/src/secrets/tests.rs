@@ -225,8 +225,7 @@ fn a_project_value_wins_over_the_shared_one_and_the_environment_wins_over_both()
     assert_eq!(shown.project.as_deref(), Some("p1"));
     assert_eq!(shown.project_value.as_deref(), Some("****alue"));
     assert_eq!(shown.shared_value.as_deref(), Some("****alue"));
-    let resolver =
-        dive_config::secrets::InProject::new(secrets.resolver(), project_id(&workspace));
+    let resolver = dive_config::secrets::InProject::new(secrets.resolver(), project_id(&workspace));
     assert_eq!(
         resolver.resolve("SLACK_BOT_TOKEN").unwrap().value,
         "xoxb-project-value"

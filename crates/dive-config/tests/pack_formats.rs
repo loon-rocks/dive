@@ -103,7 +103,8 @@ fn migration_chains_match_the_current_versions() {
 
 #[test]
 fn the_everything_manifest_reads_every_field() {
-    let manifest = load_manifest(&fixture_dir("pack", PACK_FORMAT).join("everything.toml")).unwrap();
+    let manifest =
+        load_manifest(&fixture_dir("pack", PACK_FORMAT).join("everything.toml")).unwrap();
     assert_eq!(manifest.name, "example");
     assert_eq!(manifest.license.as_deref(), Some("MIT"));
     assert_eq!(manifest.requires.dive.as_deref(), Some(">=0.17"));

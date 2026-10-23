@@ -17,7 +17,7 @@ version: 1
 name: release_subjects
 description: >
   The commit subjects for one release, from git-cliff's context (the tag,
-  not CHANGELOG.md), as the plain text an inference reads: a "## Graph
+  not CHANGELOG.md), as the plain text an inference reads: a "## Dive
   vX.Y.Z" section, then one "## Config v2" / "## Plan v2" / … section per
   file version the release bumps (holding that kind's breaking commits),
   each grouped with Breaking first. Fails when git-cliff knows no such
@@ -58,11 +58,11 @@ args:
           . as $release | (bumps) as $bumps | ($bumps | map(.kind)) as $bumped
           | (.commits | map(select(.group != null))) as $commits
           | ($commits | map(select((.breaking and .scope != null and (.scope as $s | $bumped | index($s)) != null) | not))) as $binary
-          | ([ "## Graph " + $release.version + "\n\n" + ($binary | groups) ]
+          | ([ "## Dive " + $release.version + "\n\n" + ($binary | groups) ]
              + [ $bumps[] as $bump
                  | ($commits | map(select(.breaking and .scope == $bump.kind))) as $own
                  | "## " + ($bump.kind | .[0:1] | ascii_upcase) + ($bump.kind | .[1:]) + " v" + $bump.version + "\n\n"
-                   + (if ($own | length) == 0 then "- Introduced with graph " + $release.version + "." else ($own | groups) end) ])
+                   + (if ($own | length) == 0 then "- Introduced with Dive " + $release.version + "." else ($own | groups) end) ])
           | join("\n\n")
         end' <<<"$context")
     [ -n "$text" ] || { echo "git-cliff knows no release $version" >&2; exit 1; }

@@ -1,4 +1,4 @@
-//! The tool catalog graph serves over MCP.
+//! The tool catalog Dive serves over MCP.
 //!
 //! Two populations, deliberately named apart:
 //!
@@ -10,7 +10,7 @@
 //!   `input_schema`. This is the half that makes a plan a capability inside
 //!   somebody else's agent.
 //!
-//! The `graph_` prefix on the authoring half is what keeps a plan named
+//! The `dive_` prefix on the authoring half is what keeps a plan named
 //! `tools_list` from colliding with the verb of the same name.
 
 use dive_core::packs::{ItemKind, Origin, PackSet};
@@ -251,7 +251,7 @@ pub fn authoring_tools() -> Vec<Tool> {
 /// A plan, as a callable MCP tool.
 ///
 /// The description is the plan's own description plus its exemplars, because
-/// that is exactly what graph itself routes on when an agent picks a plan —
+/// that is exactly what Dive itself routes on when an agent picks a plan —
 /// the calling agent deserves the same signal.
 pub fn plan_tool(doc: &PlanDoc) -> Tool {
     plan_tool_named(format!("{PLAN_PREFIX}{}", doc.identifier), doc)
@@ -321,7 +321,7 @@ steps:
         let tool = plan_tool(&doc());
         assert_eq!(tool.name, "plan_sprint_report");
         // The plan's schema is the tool's schema: a calling agent gets the
-        // same argument checking graph applies internally.
+        // same argument checking Dive applies internally.
         assert_eq!(tool.input_schema["required"], json!(["team"]));
         assert_eq!(tool.title.as_deref(), Some("Sprint Report"));
     }
@@ -331,7 +331,7 @@ steps:
         let tool = plan_tool(&doc());
         let description = tool.description.unwrap();
         assert!(description.contains("Summarize the current sprint."));
-        // Exemplars are how graph itself routes to a plan; an agent calling
+        // Exemplars are how Dive itself routes to a plan; an agent calling
         // over MCP is making the same decision and needs the same evidence.
         assert!(
             description.contains("how is the sprint going"),

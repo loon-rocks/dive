@@ -1,14 +1,14 @@
 # github
 
-A [graph](https://github.com/loon-rocks/dive) pack for reading and commenting on pull requests, releases and git history. Its tools run `git`, `gh` and `jq`, so plans can review a pull request, write release notes or summarize what changed between two refs.
+A [graph](https://github.com/tylerdavis/graph) pack for reading and commenting on pull requests, releases and git history. Its tools run `git`, `gh` and `jq`, so plans can review a pull request, write release notes or summarize what changed between two refs.
 
 ## Install
 
 ```bash
-dive pack add github
+graph pack add github
 ```
 
-That installs the pack into the project's `.dive/packs/github`. Add `--global` to install it for every project.
+That installs the pack into the project's `.graph/packs/github`. Add `--global` to install it for every project.
 
 ## Requirements
 
@@ -38,13 +38,13 @@ That installs the pack into the project's `.dive/packs/github`. Add `--global` t
 
 ## Upgrading from graph v0.15
 
-These tools shipped inside graph up to v0.15 as `builtin__gh_*` and `builtin__git_*`, enabled with `[tools].packs = ["github"]`. From graph v0.16, install this pack with `dive pack add github` and call `github__tool__<name>` wherever your plans and agents called `builtin__<name>`.
+These tools shipped inside graph up to v0.15 as `builtin__gh_*` and `builtin__git_*`, enabled with `[tools].packs = ["github"]`. From graph v0.16, install this pack with `graph pack add github` and call `github__tool__<name>` wherever your plans and agents called `builtin__<name>`.
 
 ## Develop
 
 | Command | What it does |
 |---|---|
-| `dive pack check` | loads the pack the way an install would and reports every problem |
-| `dive pack run tool__git_log --input base=HEAD~5 --input head=HEAD` | runs one of the pack's tools |
-| `dive pack test` | runs `check`, then each migration over its sample files |
-| `dive pack release <major\|minor\|patch>` | compares the public interface with the previous tag and creates the next tag |
+| `graph pack check` | loads the pack the way an install would and reports every problem |
+| `graph pack run tool__git_log --input base=HEAD~5 --input head=HEAD` | runs one of the pack's tools |
+| `graph pack test` | runs `check`, then each migration over its sample files |
+| `graph pack release <major\|minor\|patch>` | compares the public interface with the previous tag and creates the next tag |

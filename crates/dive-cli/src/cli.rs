@@ -702,7 +702,7 @@ pub enum McpCommand {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
-    /// Serve graph's plans and authoring commands to an agent over MCP (stdio)
+    /// Serve Dive's plans and authoring commands to an agent over MCP (stdio)
     #[command(after_long_help = "Examples:\n  dive mcp serve --dir ~/code/my-project")]
     Serve {
         /// Project directory to serve from — the one holding `.dive/`.

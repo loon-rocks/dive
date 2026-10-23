@@ -1,10 +1,10 @@
 ---
 title: "File versions"
-description: "The version each kind of graph file carries, which versions a graph release reads, and how to upgrade files."
+description: "The version each kind of Dive file carries, which versions a Dive release reads, and how to upgrade files."
 keywords: ["file versions", "migrate", "compatibility", "upgrade"]
 ---
 
-Each kind of file graph reads carries its own version number, separate from graph's release version and from each other.
+Each kind of file Dive reads carries its own version number, separate from Dive's release version and from each other.
 
 | File | Current version |
 | --- | --- |
@@ -16,9 +16,9 @@ Each kind of file graph reads carries its own version number, separate from grap
 | [pack.toml](/packs/reference/pack-file) | {{pack_file_version}} |
 | packs.lock | {{pack_lock_version}} |
 
-## Check which versions your graph reads
+## Check which versions your Dive reads
 
-[`dive version`](/reference/cli/version) prints the version graph writes for each kind of file, and the oldest it still reads when that differs:
+[`dive version`](/reference/cli/version) prints the version Dive writes for each kind of file, and the oldest it still reads when that differs:
 
 ```bash
 dive version
@@ -28,14 +28,14 @@ dive version
 
 ## Compatibility
 
-- graph reads every version from the oldest it supports to the current one. It upgrades an older file in memory as it loads and leaves the file on disk unchanged.
-- graph refuses a file outside that range before reading its contents. The error names the file, the version it found and the versions graph reads.
+- Dive reads every version from the oldest it supports to the current one. It upgrades an older file in memory as it loads and leaves the file on disk unchanged.
+- Dive refuses a file outside that range before reading its contents. The error names the file, the version it found and the versions Dive reads.
 
-Files graph writes, such as a plan saved from the workbench, always carry the current version. A graph release that doesn't read that version refuses them, even if they use no new keys.
+Files Dive writes, such as a plan saved from the workbench, always carry the current version. A Dive release that doesn't read that version refuses them, even if they use no new keys.
 
 ## Deprecation
 
-graph currently reads every file version, back to version 1. A future release will drop the oldest versions, and a deprecation process will give you notice and time to migrate before it does.
+Dive currently reads every file version, back to version 1. A future release will drop the oldest versions, and a deprecation process will give you notice and time to migrate before it does.
 
 ## Upgrade your files
 
@@ -50,16 +50,16 @@ dive tool migrate .dive/tools/summarize.yaml
 dive agent migrate .dive/agents/release_notes.yaml
 ```
 
-- **config.toml.** `dive config check` reports each config file's version as `current`, `migrate`, `too new` or `too old`. `dive config migrate` keeps comments and layout. graph upgrades the global and project files separately, so they can be at different versions. In a terminal, graph prints a reminder to migrate when it loads an older config file.
+- **config.toml.** `dive config check` reports each config file's version as `current`, `migrate`, `too new` or `too old`. `dive config migrate` keeps comments and layout. Dive upgrades the global and project files separately, so they can be at different versions. In a terminal, Dive prints a reminder to migrate when it loads an older config file.
 - **Plan, tool and agent files.** Migrating keeps the order of keys and the comment block at the top of the file. Comments further down are dropped, and the command reports how many.
 
 ## Files outside the range
 
-- A plan file graph can't read is left out of the catalog. `dive plan list --json` lists it under `skipped`, and running it by name reports the version problem.
-- A tool file graph can't read fails tool loading with the file's name.
-- An agent file graph can't read is reported with its path by `dive agent list` and `dive agent validate`.
-- A `pack.toml` or `packs.lock` graph can't read stops the pack from installing or loading, with the file's name.
+- A plan file Dive can't read is left out of the catalog. `dive plan list --json` lists it under `skipped`, and running it by name reports the version problem.
+- A tool file Dive can't read fails tool loading with the file's name.
+- An agent file Dive can't read is reported with its path by `dive agent list` and `dive agent validate`.
+- A `pack.toml` or `packs.lock` Dive can't read stops the pack from installing or loading, with the file's name.
 
 ## Data directory upgrades
 
-graph upgrades an older data directory in place the first time a newer release opens it. Concurrent graph processes wait for the upgrade to finish rather than run it twice. Afterwards, releases that don't read the new version refuse the directory, so copy it first if you may need to go back to an older graph.
+Dive upgrades an older data directory in place the first time a newer release opens it. Concurrent Dive processes wait for the upgrade to finish rather than run it twice. Afterwards, releases that don't read the new version refuse the directory, so copy it first if you may need to go back to an older Dive.

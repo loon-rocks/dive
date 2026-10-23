@@ -217,7 +217,7 @@ fn a_plan_tool_carries_the_plans_own_input_schema() {
         .find(|tool| tool["name"] == json!("plan_echo_ok"))
         .expect("plan_echo_ok")
         .clone();
-    // The calling agent gets the same argument contract graph enforces
+    // The calling agent gets the same argument contract Dive enforces
     // internally — not a generic "run a plan" tool with a free-form blob.
     assert_eq!(tool["inputSchema"]["required"], json!(["word"]));
     assert_eq!(
@@ -471,7 +471,7 @@ fn without_dir_the_working_directorys_project_is_not_loaded() {
     let scratch = Scratch::new();
     scratch.write_plan("echo_ok", ECHO_PLAN);
 
-    // The scratch IS a graph project, and the server is started inside it.
+    // The scratch IS a Dive project, and the server is started inside it.
     // It must still be ignored: an MCP client picks the working directory,
     // so a `.dive/` found there carries no user intent — and it can name
     // `[mcp.*]` child processes and exec tools.
@@ -502,9 +502,7 @@ fn an_unpinned_server_writes_to_the_global_plans_dir_not_the_clients_cwd() {
     assert!(!is_error, "{body}");
 
     let saved = body["savedTo"].as_str().expect("savedTo");
-    let global = scratch
-        .path()
-        .join(".config/dive/plans/written_where.yaml");
+    let global = scratch.path().join(".config/dive/plans/written_where.yaml");
     assert_eq!(
         std::path::Path::new(saved),
         global,
@@ -667,9 +665,7 @@ fn a_config_that_cannot_load_still_serves_and_explains_itself() {
 
     // The authoring tools are still listed, and calling one reports the
     // load error rather than hanging or dying.
-    assert!(session
-        .tool_names()
-        .contains(&"dive_plan_list".to_string()));
+    assert!(session.tool_names().contains(&"dive_plan_list".to_string()));
     let reply = session.request(
         "tools/call",
         json!({"name": "dive_plan_list", "arguments": {}}),

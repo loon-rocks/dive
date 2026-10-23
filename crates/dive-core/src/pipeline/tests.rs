@@ -146,9 +146,8 @@ fn pipeline_with_named(
     // The ledger is both the router's meter and the pipeline's tally, exactly
     // as `Runtime` wires it, so tests exercise the real attribution path.
     let usage = Arc::new(crate::usage::UsageLedger::unpriced());
-    let router = Arc::new(
-        dive_llm::ModelRouter::with_providers(providers, roles).with_meter(usage.clone()),
-    );
+    let router =
+        Arc::new(dive_llm::ModelRouter::with_providers(providers, roles).with_meter(usage.clone()));
     (
         Pipeline {
             router,
@@ -1732,7 +1731,7 @@ async fn caller_shape_survives_model_authored_template_syntax() {
     // the full scope, so `{{item.text}}` is already substituted when
     // `builtin__reshape` is dispatched. A second, tool-level render would
     // parse that substituted text — here an LLM quoting Helm, Actions, and
-    // mustache tags — as graph templates and fail the step.
+    // mustache tags — as Dive templates and fail the step.
     let items = json!({"values": [
         {"text": "quoting a helm chart: {{ index .Values.image.tag }}"},
         {"text": "and an action: ${{ github.token }}"},
@@ -4789,7 +4788,7 @@ async fn an_exit_gate_can_branch_on_whether_a_human_answered() {
 fn every_control_step_is_described_in_the_catalog() {
     // The catalog is the only way an authoring agent can learn a control
     // step exists or what its input looks like. A step missing here sends
-    // it to read graph's source instead — which is what happened before
+    // it to read Dive's source instead — which is what happened before
     // `control_step_defs` was the single source of truth.
     let described: Vec<String> = control_step_defs().into_iter().map(|d| d.name).collect();
     for name in [

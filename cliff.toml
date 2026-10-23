@@ -5,7 +5,7 @@
 header = """
 # Changelog
 
-All notable changes to graph. Generated from conventional commits by git-cliff.
+All notable changes to Dive. Generated from conventional commits by git-cliff.
 """
 body = """
 {%- set file_kinds = ["config", "plan", "tool", "agent", "store", "pack", "lock"] -%}
@@ -25,7 +25,7 @@ body = """
 {%- endfor -%}
 {%- endif -%}
 {%- if version %}
-## Graph {{ version }}{% if timestamp %} — {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
+## Dive {{ version }}{% if timestamp %} — {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
 {%- else %}
 ## Unreleased
 {%- endif -%}
@@ -75,7 +75,7 @@ body = """
 {%- endfor %}
 {%- else %}
 
-- Introduced{% if version %} with graph {{ version }}{% endif %}.
+- Introduced{% if version %} with Dive {{ version }}{% endif %}.
 {%- endif -%}
 {%- endif -%}
 {%- endfor %}
@@ -130,7 +130,7 @@ commit_parsers = [
   { message = "^chore\\(release\\)", skip = true },
   { message = "^chore|^ci|^style", skip = true },
 ]
-# Backstop for the audience rule: the changelog is for graph's users, and
+# Backstop for the audience rule: the changelog is for Dive's users, and
 # `.dive/`/`.github/` hold this repo's own dogfooding plans and workflows,
 # which ship to nobody. A commit is dropped only when EVERY file it touches
 # is excluded, so mixed commits still land — which is why the primary

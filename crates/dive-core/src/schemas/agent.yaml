@@ -11,7 +11,7 @@ additionalProperties: false
 properties:
   version:
     type: integer
-    description: The file version the document is written in. Omitted means 1; files graph writes always carry it.
+    description: The file version the document is written in. Omitted means 1; files Dive writes always carry it.
   name:
     type: string
     pattern: "^[a-z][a-z0-9_]*$"

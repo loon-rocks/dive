@@ -14,7 +14,7 @@ From the repository's root:
 dive pack new files
 ```
 
-graph writes a pack that passes its own checks as written:
+Dive writes a pack that passes its own checks as written:
 
 ```text
 files/
@@ -27,7 +27,7 @@ files/
 └── agents/word_counter.yaml
 ```
 
-When the repository has no `.github/workflows/packs.yaml`, graph also writes one that runs `dive pack test` on every push and pull request.
+When the repository has no `.github/workflows/packs.yaml`, Dive also writes one that runs `dive pack test` on every push and pull request.
 
 Replace the sample tool, plan and agent with your own, in the same formats as [tool](/tools/reference/tool-file), [plan](/plans/reference/plan-file) and [agent](/agents/reference/agent-file) files. Then fill in [`pack.toml`](/packs/reference/pack-file), including the systems the pack runs on in `requires.os`:
 
@@ -37,7 +37,7 @@ name = "files"
 description = "Count and summarize the files in a directory."
 
 [requires]
-graph = ">=0.15"
+dive = ">=0.15"
 os = ["macos", "linux"]
 binaries = ["sh", "wc", "tr"]
 ```
@@ -111,7 +111,7 @@ For later releases, `dive pack release` compares every public item's name, input
 A major release also needs a `## v1 to v2` section in `MIGRATING.md` or a migration plan in `plans/migrations/migrate_v2.yaml`. `dive pack update --major` runs that plan over your users' files.
 
 <Warning>
-graph refuses to install or update a release whose tag has moved. Never move or delete a pushed release tag; release a new version instead. Protect release tags in your repository's settings so they can't be changed.
+Dive refuses to install or update a release whose tag has moved. Never move or delete a pushed release tag; release a new version instead. Protect release tags in your repository's settings so they can't be changed.
 </Warning>
 
 ## Related guides

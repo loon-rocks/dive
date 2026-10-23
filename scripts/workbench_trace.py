@@ -26,7 +26,7 @@ from datetime import datetime
 TS = re.compile(r"^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s+(\w+)\s+workbench:\s+(.*)$")
 
 # One matcher per event kind we care about. Each returns a dict of fields.
-SESSION = re.compile(r"── session started \(graph ([\d.]+)\) ──")
+SESSION = re.compile(r"── session started \((?:dive|graph) ([\d.]+)\) ──")
 CONTEXT = re.compile(r"context loaded: (\d+) tools, (\d+) shapes")
 TURN_START = re.compile(r"agent turn started \((\d+) chars\)")
 TURN_TOOK = re.compile(r"agent turn took ([\d.]+)s \((\d+) messages")
@@ -104,7 +104,7 @@ def render(session, width, color):
         return ts.strftime("%H:%M:%S")
 
     ver = SESSION.search(session[0]["body"]).group(1)
-    out.append(c("bold", f"┏━ session {clk(start)}  ·  graph {ver}"))
+    out.append(c("bold", f"┏━ session {clk(start)}  ·  Dive {ver}"))
 
     pending_invoke = None  # (tool, input, ts) awaiting its finished line
     in_turn = False

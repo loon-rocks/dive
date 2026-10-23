@@ -4,7 +4,7 @@ description: "Connect a model provider and decide which model runs each job."
 keywords: ["models", "providers", "roles", "fallbacks", "decision models", "pricing"]
 ---
 
-graph never names a model in an agent, plan or tool. They name a role, such as `chat` or `judge`, and `config.toml` maps each role to a provider and a model.
+Dive never names a model in an agent, plan or tool. They name a role, such as `chat` or `judge`, and `config.toml` maps each role to a provider and a model.
 
 <RequestExample>
 
@@ -63,7 +63,7 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 
 ## Roles
 
-`[models.<role>]` maps a role to a `provider` and a `model`. Agent files, `agent` steps, prompt tools, `builtin__infer` and `infer` conditions select a role by name. graph's own model calls use these roles:
+`[models.<role>]` maps a role to a `provider` and a `model`. Agent files, `agent` steps, prompt tools, `builtin__infer` and `infer` conditions select a role by name. Dive's own model calls use these roles:
 
 | Role | Used for |
 | --- | --- |
@@ -86,7 +86,7 @@ A `description` on a role is what the plan drafter reads when it picks a model f
 
 ## Fallbacks
 
-`fallbacks` on any role, standard or custom, lists other models to try, in order, when the role's provider is down. graph moves to the next one only after the provider's own retries run out, and only on errors that look like an outage. A bad request fails right away. Each fallback names its own provider and model.
+`fallbacks` on any role, standard or custom, lists other models to try, in order, when the role's provider is down. Dive moves to the next one only after the provider's own retries run out, and only on errors that look like an outage. A bad request fails right away. Each fallback names its own provider and model.
 
 ## Decision models
 
@@ -102,7 +102,7 @@ provider = "typesafe"
 model = "jev-latest"
 ```
 
-Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies#decide), [decision tools](/tools/reference/tool-file/decision) such as `builtin__decide`, and tool search when graph drafts a plan. Without one, tool search ranks tools by keyword. graph never swaps a chat model for a decision model or the reverse, and refuses a config that maps one to the other's role.
+Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies#decide), [decision tools](/tools/reference/tool-file/decision) such as `builtin__decide`, and tool search when Dive drafts a plan. Without one, tool search ranks tools by keyword. Dive never swaps a chat model for a decision model or the reverse, and refuses a config that maps one to the other's role.
 
 ## What a run cost
 
@@ -112,7 +112,7 @@ Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies
 1 call · 53k in / 10 out · $0.20
 ```
 
-graph ships no prices. Add `[pricing."<model>"]` with input and output prices in US dollars per million tokens, or the line shows tokens only. See [config.toml](/reference/configuration) for every key.
+Dive ships no prices. Add `[pricing."<model>"]` with input and output prices in US dollars per million tokens, or the line shows tokens only. See [config.toml](/reference/configuration) for every key.
 
 Some models charge more once a prompt passes a size. Claude Haiku 5.5, for example, costs five times as much per token for a prompt over 100,000 tokens. Add a tier for each threshold:
 
@@ -128,6 +128,6 @@ input = 0.50
 output = 2.50
 ```
 
-graph prices each call on its own. A prompt's size counts its input, cache-write and cache-read tokens. A call whose prompt has more tokens than a tier's `above` pays that tier's rates for every token, output included. A tier that leaves out a cache rate scales it from the base rate by the same factor as input.
+Dive prices each call on its own. A prompt's size counts its input, cache-write and cache-read tokens. A call whose prompt has more tokens than a tier's `above` pays that tier's rates for every token, output included. A tier that leaves out a cache rate scales it from the base rate by the same factor as input.
 
 The desktop app fills these entries for you from the [models.dev](https://models.dev) catalogue, tiers included, and marks them `source = "models.dev"`. Its refresh updates only entries with that mark, so a price you edit by hand stays as you set it.

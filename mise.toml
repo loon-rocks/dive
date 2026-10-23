@@ -44,7 +44,7 @@ description = "Remove worktrees under .claude/worktrees whose pull request merge
 run = "scripts/clean-worktrees.sh"
 
 [tasks.run]
-description = "Run the graph binary (pass args after --)"
+description = "Run the dive binary (pass args after --)"
 run = "cargo run -p dive-cli --"
 
 [tasks.release]
@@ -56,10 +56,10 @@ description = "Built and install a release binary on the system (re-signed with 
 run = [
     "cargo install --path crates/dive-cli",
     '''
-if [ -n "${DIVE_DEV_SIGN_IDENTITY:-}" ] && [ "$(uname -s)" = "Darwin" ]; then
-  installed="${CARGO_INSTALL_ROOT:-${CARGO_HOME:-$HOME/.cargo}}/bin/graph"
-  codesign --force --sign "$DIVE_DEV_SIGN_IDENTITY" "$installed"
-  echo "signed $installed with $DIVE_DEV_SIGN_IDENTITY"
+if [ -n "${DIVE_DEV_SIGN_IDENTITY:-${GRAPH_DEV_SIGN_IDENTITY:-}}" ] && [ "$(uname -s)" = "Darwin" ]; then
+  installed="${CARGO_INSTALL_ROOT:-${CARGO_HOME:-$HOME/.cargo}}/bin/dive"
+  codesign --force --sign "${DIVE_DEV_SIGN_IDENTITY:-$GRAPH_DEV_SIGN_IDENTITY}" "$installed"
+  echo "signed $installed"
 fi
 ''',
 ]

@@ -59,12 +59,12 @@ impl Scratch {
         self.path().join(relative).exists()
     }
 
-    /// Run `graph <args>` inside the scratch.
+    /// Run `dive <args>` inside the scratch.
     pub fn dive(&self, args: &[&str]) -> Run {
         self.dive_env(args, &[])
     }
 
-    /// Run `graph <args>` with extra environment variables.
+    /// Run `dive <args>` with extra environment variables.
     pub fn dive_env(&self, args: &[&str], env: &[(&str, &str)]) -> Run {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dive"));
         command

@@ -1,7 +1,7 @@
 A user tool is one YAML file. Once saved, it's called as `user__<name>` by agents, plan steps and the CLI.
 
 Top-level keys:
-- `version`: the file version; leave it out and graph stamps the current one.
+- `version`: the file version; leave it out and Dive stamps the current one.
 - `name` (required): letters, digits, `_` and `-` only. Short and specific: `weather_now`, `gh_pr_checks`.
 - `description` (required): what the tool returns and when to use it. Planners pick tools by this text, so name the system, the input and what comes back ("Current weather for a city from wttr.in: temperature, sky, wind").
 - `kind` (required): `exec`, `prompt`, `reshape` or `decision`.
@@ -14,7 +14,7 @@ Templates in a tool reference only its input: `{{input.city}}`, `{{input.repo}}`
 `exec` runs a command:
 - `command` (required): the executable, such as `curl`, `gh`, `git`, `jq`, `python3`.
 - `args`: a list of arguments, each a string that may contain `{{input.*}}` templates. Each list entry is one argument, so no shell quoting is needed, and there is no shell: pipes and `&&` need `command: bash` with `args: ["-c", "<script>", "--", "{{input.x}}"]`, reading the input as `$1`.
-- `env`: extra environment variables; values may use `${VAR}` from the environment graph runs in. A value is a string, or `{value, description}` when it needs explaining.
+- `env`: extra environment variables; values may use `${VAR}` from the environment Dive runs in. A value is a string, or `{value, description}` when it needs explaining.
   - A setting that differs between machines, such as a self-hosted service's URL, gets a default with `${VAR:-default}`: `SEARXNG_URL: "${SEARXNG_URL:-https://search.example.com}"`. It works as written and another machine can override it. The default must be a value the user gave you: when you don't know their URL, host, account or ID, ask them. Never fill one in with a public service, a demo host or a placeholder.
   - A secret, such as an API token, is referenced with no default, and always gets a `description`: markdown saying what the value is (with the scopes or permissions it needs) and where to get it, with a link, taken from the docs you read. The user sees it when they're asked to set the secret.
     ```yaml

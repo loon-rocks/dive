@@ -7,7 +7,7 @@ input_schema:
   required: [pr, path]
   properties:
     pr: { type: integer, description: Pull request number }
-    path: { type: string, description: Path prefix, e.g. crates/graph-core/ }
+    path: { type: string, description: Path prefix, e.g. crates/dive-core/ }
 steps:
   - id: meta
     tool_name: github__tool__gh_pr_meta

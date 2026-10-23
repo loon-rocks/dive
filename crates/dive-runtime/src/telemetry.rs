@@ -1148,8 +1148,7 @@ mod tests {
                 .iter()
                 .filter(|span| {
                     attribute(span, "dive.site") == Some(&OtelValue::from(agent.to_string()))
-                        || attribute(span, "dive.site")
-                            == Some(&OtelValue::from(inner.to_string()))
+                        || attribute(span, "dive.site") == Some(&OtelValue::from(inner.to_string()))
                 })
                 .collect();
             assert_eq!(generations.len(), 2, "{agent}");

@@ -4,12 +4,12 @@
 version: 1
 name: review_dive_pr
 description: >
-  Reviews a graph-cli pull-request diff against the repo's invariants and
+  Reviews a dive-cli pull-request diff against the repo's invariants and
   returns structured findings. Findings may be empty when the diff is clean.
 kind: prompt
 model: chat
 system: |
-  You review pull requests for graph-cli, a Rust CLI with a plan-based
+  You review pull requests for dive-cli, a Rust CLI with a plan-based
   execution engine. Report ONLY violations of the invariants listed in the
   prompt — do not restyle code, do not comment on code the diff does not
   touch, and return an empty findings array when the diff is clean. Be
@@ -45,7 +45,7 @@ system: |
   - A finding is a violation needing a fix. Never emit observations,
     acknowledgements, or defensible-pattern notes as findings.
 prompt: |
-  Review this pull request against graph-cli's invariants.
+  Review this pull request against dive-cli's invariants.
 
   ## Invariants (from the repo's CLAUDE.md)
   1. streams-contract — stdout carries only the deliverable (answer,
@@ -56,11 +56,11 @@ prompt: |
   2. error-policy — human-authored plans never replan; EmptyData (data ran
      out) stays distinct from BadPath (plan defect) and never triggers
      replanning; output/silent plans fail hard on empty data.
-  3. template-dialect — any change under crates/graph-core/src/template/
+  3. template-dialect — any change under crates/dive-core/src/template/
      must change both its tests and docs/plans/template-language.mdx; logic
      belongs in steps, never in templates.
   4. prompt-surface — planner-facing field names (toolName, queryToAnswer)
-     stay camelCase and aligned with graph-core/src/pipeline/prompts.rs;
+     stay camelCase and aligned with dive-core/src/pipeline/prompts.rs;
      tool descriptions and exemplars are routing signals.
   5. store-access — Store access goes through Arc<dyn Store>; commands
      never touch a concrete backend type directly.

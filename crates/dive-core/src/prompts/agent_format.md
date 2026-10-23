@@ -1,7 +1,7 @@
 An agent is one YAML file. Once saved, it can be chatted with (`dive chat <name>`) and called from a plan step as `agent__<name>`.
 
 Keys:
-- `version`: the file version; leave it out and graph stamps the current one.
+- `version`: the file version; leave it out and Dive stamps the current one.
 - `name` (required): starts with a lowercase letter; lowercase letters, digits and `_` only.
 - `description` (required): what the agent is for, written for the people and agents choosing it.
 - `model` (required): a configured model role, usually `chat`.

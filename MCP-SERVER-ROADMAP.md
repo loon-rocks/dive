@@ -1,7 +1,7 @@
-# graph as an MCP server — roadmap
+# Dive as an MCP server — roadmap
 
-Goal: expose graph's plan pipeline over MCP (stdio first) so that any agent can
-author graph plans and call them as tools. The CLI commands added for the plan
+Goal: expose Dive's plan pipeline over MCP (stdio first) so that any agent can
+author Dive plans and call them as tools. The CLI commands added for the plan
 workbench already cover most of the surface; this document tracks what stands
 between those commands and a server.
 
@@ -174,7 +174,7 @@ terminal and are not served over MCP.
 
 - ☑ Authoring tools: `dive_plan_{list,show,validate,new,draft,set,unset}`,
   `dive_plan_step_{add,update,rename,rm}`, `dive_tools_{list,show,test}`.
-  The `graph_` prefix keeps a plan named `tools_list` from colliding with
+  The `dive_` prefix keeps a plan named `tools_list` from colliding with
   the verb.
 - ☑ Execution tools: each catalog plan as `plan_<identifier>`, carrying its
   own `input_schema`, with description + exemplars as the routing signal.
@@ -209,5 +209,5 @@ do not project onto MCP.
 - `Runtime` built once per session instead of per call.
 - Per-plan tools: whole catalog, or opt-in via a config allowlist? Serving
   everything is right for a small catalog and probably wrong for a large one.
-- `ask`/`chat` over MCP: decided against. An agent calling graph does not
+- `ask`/`chat` over MCP: decided against. An agent calling Dive does not
   need another agent, it needs the plans.

@@ -20,7 +20,7 @@ pub enum ChatMessage {
         /// back unchanged on the next turn — the documented multi-turn
         /// pattern, and what lets a tool-calling loop keep its own reasoning
         /// across rounds instead of re-deriving it. Opaque on purpose: the
-        /// API rejects blocks whose content has been modified, so graph
+        /// API rejects blocks whose content has been modified, so Dive
         /// stores them exactly as received and never inspects them.
         ///
         /// Empty for providers with no such concept, and `serde(default)`

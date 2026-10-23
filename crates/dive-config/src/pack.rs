@@ -135,7 +135,10 @@ const PACK_MIGRATIONS: &[Migration] = &[requires_graph_becomes_dive];
 const LOCK_MIGRATIONS: &[Migration] = &[];
 
 fn requires_graph_becomes_dive(doc: &mut DocumentMut) -> Result<Vec<String>, String> {
-    let Some(requires) = doc.get_mut("requires").and_then(toml_edit::Item::as_table_like_mut) else {
+    let Some(requires) = doc
+        .get_mut("requires")
+        .and_then(toml_edit::Item::as_table_like_mut)
+    else {
         return Ok(Vec::new());
     };
     let Some(graph) = requires.remove("graph") else {

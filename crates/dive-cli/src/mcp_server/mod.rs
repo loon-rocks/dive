@@ -1,6 +1,6 @@
-//! `dive mcp serve` — graph as an MCP server over stdio.
+//! `dive mcp serve` — Dive as an MCP server over stdio.
 //!
-//! graph is already an MCP *client* (`dive-mcp`). This is the other
+//! Dive is already an MCP *client* (`dive-mcp`). This is the other
 //! direction: it exposes the plan pipeline to somebody else's agent, as two
 //! populations of tools (see [`catalog`]) — the authoring commands, so an
 //! agent can build and check a plan without a shell, and every plan in the

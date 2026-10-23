@@ -455,8 +455,8 @@ mod tests {
     use super::*;
     use crate::types::{ChatResponse, StopReason, StreamEvent, Usage};
     use async_trait::async_trait;
-    use futures::StreamExt;
     use dive_config::FallbackChoice;
+    use futures::StreamExt;
 
     /// Always answers with its own tag so tests can see who served the call.
     struct TaggedProvider {

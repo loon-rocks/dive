@@ -1,5 +1,5 @@
 # exec tool: worktree-capable variant of the github pack's git_grep
-# (crates/graph-core/src/packs/github/git_grep.yaml — keep the jq shaping in
+# (crates/dive-core/src/packs/github/git_grep.yaml — keep the jq shaping in
 # lockstep). Empty `ref` searches the working tree's tracked files; a
 # non-empty `ref` searches that committed tree. The ltrimstr on the jq side
 # is a no-op for the worktree case (no ref prefix on match lines). Named

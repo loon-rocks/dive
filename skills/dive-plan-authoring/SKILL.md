@@ -1,18 +1,18 @@
 ---
 name: dive-plan-authoring
-description: Drive graph's own commands to draft, write, edit, validate, and
+description: Drive Dive's own commands to draft, write, edit, validate, and
   test plans. Use when creating a new plan, repairing or extending an existing
   one, adding or reordering steps, changing a plan's inputs or finish mode, or
   driving the plan workbench's authoring tools from a script instead of the TUI.
 ---
 
-# Graph Plan Authoring
+# Dive Plan Authoring
 
 <Note>
-If graph is connected as an **MCP server** (`dive mcp serve`), you already have these as tools: `dive_plan_draft`, `dive_plan_set`, `dive_plan_step_add`, `dive_plan_validate`, `dive_tools_test`, and one `plan_<name>` tool per plan. Use those instead of shelling out — same commands, same validation, structured results. Everything below applies verbatim; only the invocation differs.
+If Dive is connected as an **MCP server** (`dive mcp serve`), you already have these as tools: `dive_plan_draft`, `dive_plan_set`, `dive_plan_step_add`, `dive_plan_validate`, `dive_tools_test`, and one `plan_<name>` tool per plan. Use those instead of shelling out — same commands, same validation, structured results. Everything below applies verbatim; only the invocation differs.
 </Note>
 
-**graph drafts, writes, edits, and tests plans. Your job is to drive those commands and judge the results.** Every stage of the lifecycle is already a command — aimed at this machine's real tool catalog, enforcing validation on every write:
+**Dive drafts, writes, edits, and tests plans. Your job is to drive those commands and judge the results.** Every stage of the lifecycle is already a command — aimed at this machine's real tool catalog, enforcing validation on every write:
 
 | Stage | The command | Do *not* substitute |
 |---|---|---|
@@ -107,7 +107,7 @@ dive plan set commit_digest solver '{"query_to_answer":"Summarize the notable ch
 
 ## Testing what you built
 
-Don't reason about whether a plan works — graph runs it.
+Don't reason about whether a plan works — Dive runs it.
 
 ```bash
 dive plan validate commit_digest --json                          # static: refs, ids, tools resolve
@@ -172,7 +172,7 @@ Also worth branching on: `availableSteps` (unknown step id), `renamedFrom` (an `
 - [ ] `dive plan validate <plan> --json` → `ok: true` (notes acceptable)
 - [ ] `dive plan run <plan> '<input>'` exits 0 against real input
 - [ ] Rejections resolved by fixing the named cause, not by editing YAML directly
-- [ ] Every stage went through a graph command — no hand-written YAML, no hand-run harness
+- [ ] Every stage went through a Dive command — no hand-written YAML, no hand-run harness
 
 ## Reference — read only when needed
 

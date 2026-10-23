@@ -131,7 +131,7 @@ input_schema:
         Payload tag prefix embedded in every new comment as
         `<!-- <marker> {json} -->`; pass the same marker to
         gh_pr_review_threads to read the findings back. Use one marker
-        per plan, e.g. "graph:pr_review:finding".
+        per plan, e.g. "dive:pr_review:finding".
     creates:
       type: array
       description: >

@@ -10,11 +10,11 @@ pub use events::{EventSink, NullSink, RunStart, TeeSink};
 
 use crate::store::{EntryUsage, Stamp};
 use crate::tools::{ToolOutcome, ToolRegistry};
-use futures::StreamExt;
 use dive_llm::types::{
     ChatMessage, ChatRequest, ChatResponse, StopReason, StreamEvent, ToolCall, ToolSpec, Usage,
 };
 use dive_llm::ChatProvider;
+use futures::StreamExt;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;

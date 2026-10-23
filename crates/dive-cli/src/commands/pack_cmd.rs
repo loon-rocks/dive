@@ -57,8 +57,7 @@ pub async fn run(command: PackCommand) -> Result<()> {
                 asker: crate::interlocutor::tty(),
             };
             let config =
-                dive_config::load_from(&layer.config_paths, &dive_core::secrets::system())?
-                    .config;
+                dive_config::load_from(&layer.config_paths, &dive_core::secrets::system())?.config;
             let majors = major::Majors {
                 consent: &consent,
                 config: &config,
@@ -161,9 +160,7 @@ pub fn list(layers: &[Layer], offline: bool) -> Result<Outcome> {
     let listed = ops::list(layers, offline)?;
     let outcome = Outcome::raw(listed.text(), serde_json::to_value(&listed)?);
     if listed.count == 0 {
-        return Ok(
-            outcome.with_note("no packs installed; add one with `dive pack add <name|url>`")
-        );
+        return Ok(outcome.with_note("no packs installed; add one with `dive pack add <name|url>`"));
     }
     Ok(outcome)
 }

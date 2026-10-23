@@ -453,8 +453,7 @@ mod tests {
     fn show_renders_toml_with_the_version_stamp() {
         let dir = tempfile::tempdir().unwrap();
         let loaded =
-            dive_config::load_from(&[project(dir.path())], &dive_core::secrets::EnvSource)
-                .unwrap();
+            dive_config::load_from(&[project(dir.path())], &dive_core::secrets::EnvSource).unwrap();
         let shown = show(&loaded).unwrap();
         assert!(shown
             .toml

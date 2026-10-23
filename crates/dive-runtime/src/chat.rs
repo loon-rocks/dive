@@ -619,7 +619,6 @@ mod tests {
     use crate::packs::InstalledPacks;
     use crate::runtime::RuntimeOptions;
     use async_trait::async_trait;
-    use futures::StreamExt;
     use dive_config::{ModelChoice, ModelRoles};
     use dive_core::agent::doc::{builtin_agents, AgentSet};
     use dive_core::NullSink;
@@ -627,6 +626,7 @@ mod tests {
         ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
     };
     use dive_llm::{ChatProvider, LlmError, ModelRouter};
+    use futures::StreamExt;
     use serde_json::{json, Value};
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;

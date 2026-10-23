@@ -1,5 +1,5 @@
 # exec tool: worktree-capable variant of the github pack's git_changed_files
-# (crates/graph-core/src/packs/github/git_changed_files.yaml — keep the jq
+# (crates/dive-core/src/packs/github/git_changed_files.yaml — keep the jq
 # shaping in lockstep). Empty `head` compares the working tree (staged +
 # unstaged; untracked files only after `git add -N`) against the merge-base
 # of `base` and HEAD; a non-empty `head` is the pack's three-dot range diff.

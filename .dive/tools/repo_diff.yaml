@@ -1,5 +1,5 @@
 # exec tool: worktree-capable variant of the github pack's git_diff
-# (crates/graph-core/src/packs/github/git_diff.yaml — keep the truncation
+# (crates/dive-core/src/packs/github/git_diff.yaml — keep the truncation
 # behavior in lockstep). Empty `head` diffs the working tree (staged +
 # unstaged; untracked files only after `git add -N`) against the merge-base
 # of `base` and HEAD; a non-empty `head` is the pack's three-dot range diff.

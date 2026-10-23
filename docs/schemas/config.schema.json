@@ -214,7 +214,7 @@
             "type": "string"
           },
           "ref": {
-            "description": "The release line (`v1`), exact release (`v1.2.0`) or branch to install. Release refs name the pack's own version; graph adds the `<path>/` tag prefix.",
+            "description": "The release line (`v1`), exact release (`v1.2.0`) or branch to install. Release refs name the pack's own version; dive adds the `<path>/` tag prefix.",
             "type": "string"
           }
         },
@@ -314,7 +314,7 @@
       "description": "This project's identity. Belongs in the project config.",
       "properties": {
         "id": {
-          "description": "An id graph generates the first time you store a project secret with `dive secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.",
+          "description": "An id Dive generates the first time you store a project secret with `dive secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.",
           "type": "string"
         }
       },
@@ -399,7 +399,7 @@
       "type": "object"
     },
     "storage": {
-      "description": "Where graph keeps state.",
+      "description": "Where Dive keeps state.",
       "properties": {
         "backend": {
           "default": "file",
@@ -579,7 +579,7 @@
       "group": "Output and logging",
       "variables": [
         {
-          "description": "How graph reports progress and failures on stderr. Unset, stderr is for people.",
+          "description": "How Dive reports progress and failures on stderr. Unset, stderr is for people.",
           "name": "DIVE_EVENTS",
           "values": {
             "github": "A failing `dive plan run` also prints a `::error::` annotation to stdout, which GitHub Actions shows on the run.",
@@ -587,7 +587,7 @@
           }
         },
         {
-          "description": "A log filter for stderr, such as `info` or `graph=debug`. `-v`, `-vv` and `-vvv` set `info`, `debug` and `trace`.",
+          "description": "A log filter for stderr, such as `info` or `dive_core=debug`. `-v`, `-vv` and `-vvv` set `info`, `debug` and `trace`.",
           "name": "DIVE_LOG",
           "type": "string"
         }
@@ -603,7 +603,7 @@
           "name": "DIVE_SECRET_STORE",
           "values": {
             "none": "Read the environment only.",
-            "os": "Read the macOS Keychain, or the Secret Service on Linux, under service `dive`. Where neither is available, graph reads the environment only."
+            "os": "Read the macOS Keychain, or the Secret Service on Linux, under service `dive`. Where neither is available, Dive reads the environment only."
           }
         }
       ]
@@ -613,7 +613,7 @@
       "variables": [
         {
           "default": "file",
-          "description": "Where graph keeps threads and the shape cache.",
+          "description": "Where Dive keeps threads and the shape cache.",
           "name": "DIVE_STORAGE",
           "overrides": "storage.backend",
           "values": {
@@ -682,7 +682,7 @@
   ],
   "x-sections": [
     {
-      "body": "A string value can include `${NAME}` references, such as `api_key = \"${ANTHROPIC_API_KEY}\"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, graph reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.\n\nA name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.\n\nWhere no credential store is available, as in a container or on Linux without a Secret Service daemon, graph reads the environment only. Set `DIVE_SECRET_STORE` to `none` to skip the store on purpose.",
+      "body": "A string value can include `${NAME}` references, such as `api_key = \"${ANTHROPIC_API_KEY}\"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, Dive reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.\n\nA name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.\n\nWhere no credential store is available, as in a container or on Linux without a Secret Service daemon, Dive reads the environment only. Set `DIVE_SECRET_STORE` to `none` to skip the store on purpose.",
       "heading": "Secret references"
     }
   ]

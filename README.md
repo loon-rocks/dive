@@ -1,4 +1,4 @@
-# graph
+# Dive
 
 A plan engine for repeatable, AI-augmented workflows.
 
@@ -68,7 +68,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Special thanks
 
-To the people whose ideas and code shaped graph's design:
+To the people whose ideas and code shaped Dive's design:
 [@salscode](https://github.com/salscode),
 [@mrhamric](https://github.com/mrhamric),
 [@gjdame](https://github.com/gjdame),

@@ -60,7 +60,7 @@ Every pack moves to the newest release its `ref` allows. Name packs to update on
 dive pack update --major github
 ```
 
-For each newer major, graph runs the pack's migration over your plans, agents and tools as a dry run, shows the changes and asks before applying them. It then moves the pack's `ref` to the new major. Pass `--yes` to accept every migration without asking, such as in CI.
+For each newer major, Dive runs the pack's migration over your plans, agents and tools as a dry run, shows the changes and asks before applying them. It then moves the pack's `ref` to the new major. Pass `--yes` to accept every migration without asking, such as in CI.
 
 ## Remove a pack
 
@@ -68,7 +68,7 @@ For each newer major, graph runs the pack's migration over your plans, agents an
 dive pack remove github
 ```
 
-graph deletes the copy, its config entry and its `packs.lock` entry, and lists any of your files that still call the pack's items.
+Dive deletes the copy, its config entry and its `packs.lock` entry, and lists any of your files that still call the pack's items.
 
 ## Related guides
 

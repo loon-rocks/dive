@@ -136,7 +136,12 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
 
 fn settle_legacy_paths(config: &mut Config) {
     config.settings.data_dir = crate::legacy::resolve(&config.settings.data_dir);
-    for path in config.plans.paths.iter_mut().chain(config.tools.paths.iter_mut()) {
+    for path in config
+        .plans
+        .paths
+        .iter_mut()
+        .chain(config.tools.paths.iter_mut())
+    {
         *path = crate::legacy::resolve(path);
     }
 }

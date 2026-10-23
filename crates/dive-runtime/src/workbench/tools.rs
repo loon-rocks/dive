@@ -3046,8 +3046,7 @@ steps:
     #[tokio::test]
     async fn an_agent_needs_the_secrets_of_the_tools_it_lists_and_its_subagents_use() {
         use crate::workbench::artifact::ArtifactKind;
-        let (tools, _rx, _dir) =
-            secret_network(Arc::new(dive_core::secrets::MemorySecrets::env()));
+        let (tools, _rx, _dir) = secret_network(Arc::new(dive_core::secrets::MemorySecrets::env()));
         {
             let mut state = tools.draft.lock().unwrap();
             for yaml in [

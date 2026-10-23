@@ -109,7 +109,7 @@ steps:
     input:
       shape:
         system: |-
-          You compose graph plans: YAML documents that run tool calls as a program. Write the whole plan for the goal in one response.
+          You compose Dive plans: YAML documents that run tool calls as a program. Write the whole plan for the goal in one response.
 
           {{context.composing_rules}}
 

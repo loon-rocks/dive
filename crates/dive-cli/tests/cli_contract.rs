@@ -319,7 +319,7 @@ fn the_tool_catalog_envelope_is_addressable_without_probing() {
 fn the_catalog_serves_the_control_steps_an_author_has_to_write() {
     // A plan step's tool_name is either a catalog tool or a control step.
     // If the catalog only answers for half of that, an agent authoring a
-    // plan has to read graph's source to learn the other half — which is
+    // plan has to read Dive's source to learn the other half — which is
     // exactly what they did before these were listed.
     let scratch = Scratch::new();
 

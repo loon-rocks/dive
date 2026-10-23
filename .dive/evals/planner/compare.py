@@ -43,8 +43,8 @@ def set_plan_paths(include_eval):
     CONFIG.write_text(text)
 
 
-def graph(args, inputs=None, timeout=600):
-    command = ['graph', *args]
+def dive(args, inputs=None, timeout=600):
+    command = ["dive", *args]
     if inputs is not None:
         command.append(json.dumps(inputs))
     started = time.time()
@@ -127,7 +127,7 @@ REFERENCES = {}
 
 def run_reference(goal):
     if goal.get('reference'):
-        ran = graph(['plan', 'run', goal['reference']], goal['inputs'], timeout=300)
+        ran = dive(['plan', 'run', goal['reference']], goal['inputs'], timeout=300)
         REFERENCES[goal['id']] = (ran['body'] or {}).get('output') or ran['stderr'][-1500:]
 
 
@@ -137,7 +137,7 @@ def reference_output(goal):
 
 def draft(planner, goal, rep=0):
     record = {'planner': planner, 'goal': goal['id'], 'rep': rep}
-    drafted = graph(['plan', 'run', planner], {'goal': goal['goal']})
+    drafted = dive(['plan', 'run', planner], {'goal': goal['goal']})
     usage = (drafted['body'] or {}).get('usage') or {}
     record.update(draft_seconds=drafted['seconds'], draft_exit=drafted['exit_code'],
                   draft_cost=usage.get('cost_usd'), draft_calls=usage.get('calls'),
@@ -241,7 +241,7 @@ def execute(record, goal):
     doc = record['plan']
     identifier = doc['identifier']
     path = SCRATCH / 'plans' / f'{identifier}.yaml'
-    check = subprocess.run(['graph', 'plan', 'validate', str(path)], cwd=ROOT, capture_output=True, text=True)
+    check = subprocess.run(["dive", "plan", "validate", str(path)], cwd=ROOT, capture_output=True, text=True)
     record['valid'] = check.returncode == 0
     record['validation'] = (check.stdout + check.stderr).strip()[-800:]
     if goal.get('reference') is None:
@@ -255,7 +255,7 @@ def execute(record, goal):
         return record
     inputs = map_inputs(doc, goal['inputs'])
     record['run_inputs'] = inputs
-    ran = graph(['plan', 'run', identifier], inputs, timeout=600)
+    ran = dive(['plan', 'run', identifier], inputs, timeout=600)
     record.update(run_seconds=ran['seconds'], run_exit=ran['exit_code'])
     body = ran['body'] or {}
     candidate = body.get('output') or body.get('answer') or body.get('exit') or ran['stderr'][-1500:]
@@ -266,7 +266,7 @@ def execute(record, goal):
             record.update(correct=correct, score=1.0 if correct else 0.0, reason=reason, judged_by='check')
             return record
     record['judged_by'] = 'model'
-    verdict = graph(['plan', 'run', 'planner_eval_judge'], {
+    verdict = dive(['plan', 'run', 'planner_eval_judge'], {
         'goal': goal['goal'], 'rubric': goal['rubric'],
         'reference_output': json.dumps(reference_output(goal))[:30000],
         'candidate_output': json.dumps(candidate)[:30000],

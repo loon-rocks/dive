@@ -17,12 +17,12 @@
 //! is advisory and may lose increments under contention. Advisory locks
 //! assume a local filesystem (flock over NFS is unreliable).
 
-use fs4::fs_std::FileExt;
 use dive_core::store::{
     message_entries, Attachment, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta,
     ToolShape,
 };
 use dive_llm::types::ChatMessage;
+use fs4::fs_std::FileExt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

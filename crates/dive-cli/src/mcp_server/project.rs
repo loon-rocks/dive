@@ -1,6 +1,6 @@
 //! Which project the server is allowed to load.
 //!
-//! On the command line, graph merges a global config layer
+//! On the command line, Dive merges a global config layer
 //! (`~/.config/dive/config.toml`) with a project one (`./.dive/config.toml`)
 //! and searches both `./.dive/plans` and `~/.config/dive/plans`. That is
 //! right for a CLI: the human chose the directory and typed the command, so
@@ -12,7 +12,7 @@
 //! that directory. Loading its `.dive/` anyway would mean an arbitrary
 //! checkout could contribute:
 //!
-//! - `[mcp.<name>] command = …`, a child process graph spawns;
+//! - `[mcp.<name>] command = …`, a child process Dive spawns;
 //! - `./.dive/tools/*.yaml`, user tools that shell out (`user_tools.rs`
 //!   spawns `tokio::process::Command`);
 //! - prompts, providers, and model routing.

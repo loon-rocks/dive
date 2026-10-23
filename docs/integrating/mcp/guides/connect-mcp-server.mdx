@@ -16,7 +16,7 @@ You need the server's launch command or its URL. If it needs a token, put the to
 
 <Steps>
   <Step title="Add an [mcp.<name>] table">
-    The table name becomes the prefix of every tool from the server. Use `command` for a server graph starts itself over stdio, or `url` for a streamable HTTP server.
+    The table name becomes the prefix of every tool from the server. Use `command` for a server Dive starts itself over stdio, or `url` for a streamable HTTP server.
 
     <CodeGroup>
 
@@ -36,7 +36,7 @@ You need the server's launch command or its URL. If it needs a token, put the to
 
     </CodeGroup>
 
-    `description` is optional, but setting it generally improves how well the planner chooses the server's tools. Values in `env` and `headers` expand `${VAR}` from your environment. If a variable isn't set, graph doesn't connect to that server and names the missing variable.
+    `description` is optional, but setting it generally improves how well the planner chooses the server's tools. Values in `env` and `headers` expand `${VAR}` from your environment. If a variable isn't set, Dive doesn't connect to that server and names the missing variable.
   </Step>
   <Step title="Test the connection">
     ```bash
@@ -51,7 +51,7 @@ You need the server's launch command or its URL. If it needs a token, put the to
 
 ## Check it worked
 
-List the server's tools, then call one through graph:
+List the server's tools, then call one through Dive:
 
 ```bash
 dive mcp tools everything
@@ -64,7 +64,7 @@ dive tool test everything__echo --input message=hello
 }
 ```
 
-graph returns a tool's structured content when the server sends it. Otherwise it parses the text the tool returns as JSON, or wraps plain text as `{"text": ...}`, as here.
+Dive returns a tool's structured content when the server sends it. Otherwise it parses the text the tool returns as JSON, or wraps plain text as `{"text": ...}`, as here.
 
 To load only some of a server's tools, or fix a tool's description, see [Filter and override a server's tools](/integrating/mcp/guides/filter-and-override-tools). If the server won't connect, see [Test an MCP server](/integrating/mcp/guides/test-an-mcp-server).
 

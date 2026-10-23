@@ -68,7 +68,7 @@ steps:
   tool_name: builtin__infer
   input:
     instruction: |-
-      You are the review-thread auditor for dive_review_9000, the graph-cli PR reviewer. Below are the findings it posted on PR {{input.pr}} as inline review threads, each with its current state and any human replies, followed by the PR's current diff and full file contents at head. Decide, for each finding, whether its state should transition, and echo the full list.
+      You are the review-thread auditor for dive_review_9000, the dive-cli PR reviewer. Below are the findings it posted on PR {{input.pr}} as inline review threads, each with its current state and any human replies, followed by the PR's current diff and full file contents at head. Decide, for each finding, whether its state should transition, and echo the full list.
 
       Rules:
       - Findings whose state is already 'resolved' or 'declined' are terminal: echo them unchanged with transition 'none' and note ''.

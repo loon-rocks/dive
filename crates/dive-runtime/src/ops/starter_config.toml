@@ -1,4 +1,4 @@
-# graph configuration
+# Dive configuration
 # Values in ${VAR} form are read from the environment at load time.
 
 [settings]

@@ -59,10 +59,10 @@ use crate::template::{render_input, render_str, RenderError, Roots};
 use crate::tools::{ErrorKind, ErrorResult, ToolOutcome, ToolRegistry};
 use crate::usage::CallSite;
 use crate::EventSink;
-use futures::StreamExt;
 use dive_config::Role;
 use dive_llm::types::{ChatMessage, ChatRequest};
 use dive_llm::ModelRouter;
+use futures::StreamExt;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -169,7 +169,7 @@ fn step_schema_text() -> String {
 /// planner's catalog is built from it, and so is the `tools` command
 /// surface (`dive tool list`/`show`, and `dive_tools_*` over MCP). That
 /// matters more than it looks — a control step that is not in a catalog an
-/// agent can query is a step it can only learn about by reading graph's
+/// agent can query is a step it can only learn about by reading Dive's
 /// source, which is exactly what agents did before this existed.
 ///
 /// These are *descriptions*, not registry entries: control steps are

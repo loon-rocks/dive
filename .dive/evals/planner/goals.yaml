@@ -18,10 +18,10 @@
 
 - id: pr_changed_files
   goal: List the files a pull request changed under a given path.
-  inputs: { pr: 144, path: crates/graph-core/ }
+  inputs: { pr: 144, path: crates/dive-core/ }
   reference: ref_pr_changed_files
-  check: { kind: set, reference_field: files, pattern: 'crates/graph-core/[A-Za-z0-9_./-]*[A-Za-z0-9]' }
-  rubric: The files under crates/graph-core/ that pull request 144 changed, with their change status. No files outside that path.
+  check: { kind: set, reference_field: files, pattern: 'crates/dive-core/[A-Za-z0-9_./-]*[A-Za-z0-9]' }
+  rubric: The files under crates/dive-core/ that pull request 144 changed, with their change status. No files outside that path.
 
 - id: issue_discussion
   goal: Summarize the discussion on a Linear issue.
@@ -83,7 +83,7 @@
   rubric: Exactly the project's open issues that have no comments, each with title and link; no completed, canceled or duplicate issues and none that have comments.
 
 - id: snippet_or_subjects
-  goal: Check whether a release's changelog snippet already exists under docs/snippets/changelog/graph/<tag>; if it does, stop and say so, and otherwise return the release's commit subjects so someone can write it.
+  goal: Check whether a release's changelog snippet already exists under docs/snippets/changelog/dive/<tag>; if it does, stop and say so, and otherwise return the release's commit subjects so someone can write it.
   inputs: { tag: v0.15.0 }
   reference: ref_snippet_or_subjects
   rubric: Reports that the changelog snippet for v0.15.0 already exists. Listing the subjects as well is not an error, but saying the snippet is missing is.

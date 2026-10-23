@@ -16,7 +16,7 @@ Each goal reports:
 Run it from the repo root:
 
 ```bash
-cargo build --example network_eval -p graph-runtime
+cargo build --example network_eval -p dive-runtime
 EVAL_ROLES="chat=anthropic:claude-sonnet-5-5,drafter=anthropic:claude-haiku-5-5" \
   target/debug/examples/network_eval --workers 4 --out /tmp/network-eval/results.json
 ```

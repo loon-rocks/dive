@@ -1,16 +1,16 @@
 ---
 name: dive-github-actions-setup
-description: Set up graph as a GitHub Actions check on a repository. Use when
-  installing graph in CI, adding an LLM-powered merge gate or PR reviewer,
-  wiring graph plans into GitHub Actions, or scaffolding a repo-carried
+description: Set up Dive as a GitHub Actions check on a repository. Use when
+  installing Dive in CI, adding an LLM-powered merge gate or PR reviewer,
+  wiring Dive plans into GitHub Actions, or scaffolding a repo-carried
   ./.dive/ directory for CI use.
 ---
 
-# Graph GitHub Actions Setup
+# Dive GitHub Actions Setup
 
-The [graph repository](https://github.com/loon-rocks/dive) is the source of truth — it dogfoods this exact setup on its own PRs. Before generating anything, read the worked example: [`.github/workflows/dive-checks.yaml`](https://github.com/loon-rocks/dive/blob/main/.github/workflows/dive-checks.yaml) (live workflow), and [`.dive/`](https://github.com/loon-rocks/dive/tree/main/.dive) (live config, plans, and tools). Those move ahead of this skill; prefer them over memory.
+The [Dive repository](https://github.com/loon-rocks/dive) is the source of truth — it dogfoods this exact setup on its own PRs. Before generating anything, read the worked example: [`.github/workflows/dive-checks.yaml`](https://github.com/loon-rocks/dive/blob/main/.github/workflows/dive-checks.yaml) (live workflow), and [`.dive/`](https://github.com/loon-rocks/dive/tree/main/.dive) (live config, plans, and tools). Those move ahead of this skill; prefer them over memory.
 
-The finished shape: a workflow job runs in graph's release container image (graph + `git`/`jq`/`gh` baked in — no install step), executes one `dive plan run` per check, and the repo carries everything the check needs under `./.dive/` (config, plans, tools), reviewed like any other code.
+The finished shape: a workflow job runs in Dive's release container image (Dive + `git`/`jq`/`gh` baked in — no install step), executes one `dive plan run` per check, and the repo carries everything the check needs under `./.dive/` (config, plans, tools), reviewed like any other code.
 
 ## Interactive Workflow
 
@@ -20,7 +20,7 @@ The finished shape: a workflow job runs in graph's release container image (grap
 2. **Detect the default branch** — `git symbolic-ref refs/remotes/origin/HEAD`. Don't assume `main`.
 3. **Resolve the image pin** — fetch the latest release tag: `gh release view --repo loon-rocks/dive --json tagName -q .tagName`. Pin the container image to that exact `vX.Y.Z` tag; never use `latest` in CI.
 4. **Confirm an Anthropic API key exists** (or another supported provider). The user needs it as a repository secret in Step 5; ask now so nothing blocks at the end.
-5. **Local graph install is optional but recommended** — it lets the user author and test plans before pushing (`dive plan run` locally). See [installation](https://github.com/loon-rocks/dive/blob/main/docs/getting-started/installation.mdx).
+5. **Local Dive install is optional but recommended** — it lets the user author and test plans before pushing (`dive plan run` locally). See [installation](https://github.com/loon-rocks/dive/blob/main/docs/getting-started/installation.mdx).
 
 ### Step 2: Decide the checks — gate or reporter?
 
@@ -41,7 +41,7 @@ Ask, in order:
 
 ### Step 3: Scaffold `./.dive/`
 
-Run `dive config init` (targets `./.dive/` by default) or create the directory by hand. The repo carries five things, all committed: `config.toml`, `plans/`, `tools/`, `packs/` and `packs.lock`. Anything else graph writes under `.dive/` stays gitignored.
+Run `dive config init` (targets `./.dive/` by default) or create the directory by hand. The repo carries five things, all committed: `config.toml`, `plans/`, `tools/`, `packs/` and `packs.lock`. Anything else Dive writes under `.dive/` stays gitignored.
 
 `config.toml` — secrets as `${ENV}` references, which fail loudly when the variable is missing (that's the fork-PR backstop, keep it):
 
@@ -109,7 +109,7 @@ Verify plans load: `dive plan list` from the repo root.
 Create `.github/workflows/dive-checks.yaml`, one job per check. Adapt this template (mirror of the [live workflow](https://github.com/loon-rocks/dive/blob/main/.github/workflows/dive-checks.yaml)):
 
 ```yaml
-name: graph checks
+name: dive checks
 
 on:
   pull_request:
@@ -160,15 +160,15 @@ Non-negotiables baked into the template:
 - **`DIVE_STORAGE=memory`** — runs are stateless, nothing to clean up.
 - **Draft + fork guards.** Drafts cost nothing (a `ready_for_review` trigger runs the check when the draft flips). Fork PRs are skipped because secrets don't flow to them.
 
-For reporters that should post under their own name/avatar instead of **github-actions[bot]**, swap in a GitHub App token on the one posting step — no graph changes.
+For reporters that should post under their own name/avatar instead of **github-actions[bot]**, swap in a GitHub App token on the one posting step — no Dive changes.
 
 ### Step 5: Secrets
 
-Add `ANTHROPIC_API_KEY` (or the provider key the config references): Repository Settings → Secrets and variables → Actions → New repository secret. While the graph image is private, the pulling account also needs `read:packages` on `ghcr.io/loon-rocks/dive` — the workflow's `GITHUB_TOKEN` covers this once the user has access to the graph repo.
+Add `ANTHROPIC_API_KEY` (or the provider key the config references): Repository Settings → Secrets and variables → Actions → New repository secret. While the Dive image is private, the pulling account also needs `read:packages` on `ghcr.io/loon-rocks/dive` — the workflow's `GITHUB_TOKEN` covers this once the user has access to the Dive repo.
 
 ### Step 6: Verify before merging
 
-1. **Locally, if graph is installed** — run each plan against real refs with ephemeral storage:
+1. **Locally, if Dive is installed** — run each plan against real refs with ephemeral storage:
    ```bash
    DIVE_STORAGE=memory dive plan run my_check \
      --input base="$(git merge-base origin/main HEAD)" --input head=HEAD
@@ -182,7 +182,7 @@ Add `ANTHROPIC_API_KEY` (or the provider key the config references): Repository 
 
 **Streams are disciplined.** stdout carries only the deliverable; all progress goes to stderr (`DIVE_EVENTS=jsonl` for machine-parseable events). The one exception: `DIVE_EVENTS=github` prints a `::error::` annotation to stdout on failing runs, because GitHub only parses workflow commands from stdout.
 
-**The container image is the runtime.** `ghcr.io/loon-rocks/dive:vX.Y.Z` ships graph plus pinned `git`, `jq`, and `gh` (distro packages lag the flags the pack tools use) and the `safe.directory` git config Actions' workspace mounts require. No install step, no version drift between graph and its tool dependencies.
+**The container image is the runtime.** `ghcr.io/loon-rocks/dive:vX.Y.Z` ships Dive plus pinned `git`, `jq`, and `gh` (distro packages lag the flags the pack tools use) and the `safe.directory` git config Actions' workspace mounts require. No install step, no version drift between Dive and its tool dependencies.
 
 **Plans are code.** The repo-carried `.dive/` is reviewed, diffed, and versioned with everything else. Prompt wording in an `infer` gate or rubric tool is behavior — treat changes to it like changes to a linter config.
 

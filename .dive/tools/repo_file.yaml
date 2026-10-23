@@ -1,5 +1,5 @@
 # exec tool: worktree-capable variant of the github pack's git_file
-# (crates/graph-core/src/packs/github/git_file.yaml — keep the truncation
+# (crates/dive-core/src/packs/github/git_file.yaml — keep the truncation
 # behavior in lockstep). Empty `ref` reads the file from the working tree;
 # a non-empty `ref` is the pack's `git show ref:path`. A missing path fails
 # the step loudly either way. Named repo_* to avoid shadowing the pack tool.

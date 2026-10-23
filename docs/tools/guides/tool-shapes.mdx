@@ -1,5 +1,5 @@
 ---
-title: "Improve what graph knows about a tool"
+title: "Improve what Dive knows about a tool"
 description: "Record what a tool returns by running it, then declare its output schema in the tool file."
 keywords: ["shape cache", "output schema", "dive shape", "drafting"]
 ---
@@ -39,7 +39,7 @@ input_schema:
 
 ## Record a shape by running the tool
 
-graph records the shape of each successful result. Before the first call, there's nothing for `recent_releases`:
+Dive records the shape of each successful result. Before the first call, there's nothing for `recent_releases`:
 
 ```bash
 dive shape show user__recent_releases

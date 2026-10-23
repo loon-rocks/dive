@@ -1,12 +1,12 @@
 ---
 title: "Stream run events"
-description: "Read graph's progress as JSON events on stderr, for scripts, dashboards and CI annotations."
+description: "Read Dive's progress as JSON events on stderr, for scripts, dashboards and CI annotations."
 keywords: ["DIVE_EVENTS", "jsonl", "events", "github"]
 ---
 
 import EnvDiveEvents from "/snippets/generated/environment/dive-events.mdx";
 
-Set `DIVE_EVENTS=jsonl` and graph writes its progress to stderr as one JSON object per line, instead of text for people. stdout still carries only the result, so you can read both from one run:
+Set `DIVE_EVENTS=jsonl` and Dive writes its progress to stderr as one JSON object per line, instead of text for people. stdout still carries only the result, so you can read both from one run:
 
 ```bash
 DIVE_EVENTS=jsonl dive plan run weekly_changes \
@@ -156,7 +156,7 @@ A model call finished.
 
 ### usage_summary
 
-What the whole run spent, sent once at the end, including when the run fails. graph skips it when the run made no model calls.
+What the whole run spent, sent once at the end, including when the run fails. Dive skips it when the run made no model calls.
 
 <ResponseField name="usage.calls" type="integer">
   Model calls in the run.

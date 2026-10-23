@@ -808,12 +808,12 @@ impl ToolRegistry for ConversationTools {
 mod tests {
     use super::*;
     use crate::agent::doc::builtin_agents;
-    use futures::StreamExt;
     use dive_config::{ModelChoice, ModelRoles};
     use dive_llm::types::{
         ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
     };
     use dive_llm::{ChatProvider, LlmError};
+    use futures::StreamExt;
     use std::collections::HashMap;
 
     struct Scripted {

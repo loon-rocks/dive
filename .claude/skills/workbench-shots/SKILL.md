@@ -10,26 +10,26 @@ workbench session — real agent loop, pipeline, validator, and debugger; only t
 LLM responses and tool I/O are scripted. Never hand-edit an SVG and never stage a
 mockup: author a scenario, run the harness, and commit the scenario + SVG together.
 
-The harness lives in `crates/graph-cli/src/workbench/shots.rs` (spec structs at the
+The harness lives in `crates/dive-cli/src/workbench/shots.rs` (spec structs at the
 top are the authoritative field reference). Scenarios live in `docs/shots/*.yaml`;
 demo plans that exist only for screenshots live in `docs/shots/plans/`.
 
 ## Workflow
 
-1. **Pick or write the plan.** Real repo plans (`.graph/plans/docs_drift.yaml`) or a
+1. **Pick or write the plan.** Real repo plans (`.dive/plans/docs_drift.yaml`) or a
    demo plan under `docs/shots/plans/` (which also holds `pr_review.yaml`, the
    retired reviewer kept as a fixture for the workbench shots). Demo plans validate against the real
    catalog, so they may only use pack tools (`builtin__*`) and the repo's
-   `.graph/tools/` user tools — **MCP tools (`linear__*` etc.) cannot be scripted**
+   `.dive/tools/` user tools — **MCP tools (`linear__*` etc.) cannot be scripted**
    (no server is configured in the harness). Start a demo plan with a comment
    naming the scenario that uses it and "Not shipped to users."
 2. **Write the scenario** (`docs/shots/<name>.yaml`) — spec below. Output lands at
    `docs/images/workbench/<name>.svg`.
 3. **Generate:** `mise run shots` (equivalently
-   `GRAPH_UPDATE_SHOTS=1 cargo test -p graph-cli shots -- --nocapture`). It regenerates every scenario;
+   `DIVE_UPDATE_SHOTS=1 cargo test -p dive-cli shots -- --nocapture`). It regenerates every scenario;
    regeneration is byte-identical, so a diff in an SVG you didn't touch means
    rendering behavior changed — review that like code. Without
-   `GRAPH_UPDATE_SHOTS=1`, the test compares every scenario with its committed
+   `DIVE_UPDATE_SHOTS=1`, the test compares every scenario with its committed
    SVG and fails on any that are out of date, so `mise run test` and CI catch a
    change that forgot to regenerate.
 4. **Inspect the SVG as text** (don't guess from the browser alone) and iterate on
@@ -65,7 +65,7 @@ demo plans that exist only for screenshots live in `docs/shots/plans/`.
 
 ```yaml
 name: my-shot            # output: docs/images/workbench/my-shot.svg
-title: graph workbench — …   # window chrome title (ignored by crops)
+title: dive workbench — …   # window chrome title (ignored by crops)
 plan: docs/shots/plans/demo.yaml   # omit → blank draft (drafting shots)
 grid: { cols: 120, rows: 36 }      # default 110x32; 120x36 for full frames
 draft_strategy: incremental        # optional; for drafting-overlay shots

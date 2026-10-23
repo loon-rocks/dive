@@ -247,11 +247,8 @@ impl Runtime {
             named(dive_core::user_tools::BUILTIN_TOOL_PREFIX, docs.builtins);
         let user_tools = named(dive_core::user_tools::USER_TOOL_PREFIX, docs.user);
         for (source, tools) in docs.packs {
-            let prefix = dive_core::packs::catalog_name(
-                &source.name,
-                dive_core::packs::ItemKind::Tool,
-                "",
-            );
+            let prefix =
+                dive_core::packs::catalog_name(&source.name, dive_core::packs::ItemKind::Tool, "");
             named(&prefix, tools);
         }
         for def in dive_core::list_tools::list_tool_defs() {

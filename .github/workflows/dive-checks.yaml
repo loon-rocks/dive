@@ -1,17 +1,17 @@
-# Dogfood: graph's own plans gate graph's PRs, one `dive plan run` per job.
-# Jobs run inside the release container image (graph + git/jq/gh baked in),
+# Dogfood: Dive's own plans gate Dive's PRs, one `dive plan run` per job.
+# Jobs run inside the release container image (dive + git/jq/gh baked in),
 # so there is no install step; all logic lives in the repo-carried plans
 # and tools (./.dive/) and the bundled github tool pack. DIVE_EVENTS=github
 # turns failing gates into run annotations. docs-drift fails the check
 # (exit 4) on undocumented behavior changes; format-drift fails it on a
-# file-version schema change without a version bump; graph-review-9000 composes
+# file-version schema change without a version bump; dive-review-9000 composes
 # plan__dive_review_core (the locally runnable review engine) with
 # plan__dive_review_thread_audit (thread lifecycle, decide-gated to runs
 # with prior findings), maintaining its eight-pass findings as living
 # review threads (new findings post, fixed ones resolve with a reply,
 # human-dismissed ones stay declined) plus a marker-keyed summary comment
 # refreshed in place on every push.
-name: graph checks
+name: dive checks
 
 on:
   pull_request:
@@ -29,6 +29,8 @@ concurrency:
 env:
   DIVE_STORAGE: memory            # ephemeral: leave no state behind in CI
   DIVE_EVENTS: github             # failing plans annotate the run
+  GRAPH_STORAGE: memory           # the pre-rename image reads GRAPH_*
+  GRAPH_EVENTS: github
   GH_TOKEN: ${{ github.token }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   PR: ${{ github.event.pull_request.number }}
@@ -44,7 +46,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.16.0
+      image: ghcr.io/tylerdavis/graph:v0.16.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -52,6 +54,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0            # the plan diffs $BASE...$HEAD locally
+
+      - name: Bridge the pre-rename image
+        run: |
+          ln -sf "$(command -v graph)" /usr/local/bin/dive
+          ln -sfn .dive .graph
 
       - name: Docs drift gate
         run: dive plan run docs_drift --input base="$BASE" --input head="$HEAD"
@@ -66,7 +73,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.16.0
+      image: ghcr.io/tylerdavis/graph:v0.16.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -74,6 +81,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Bridge the pre-rename image
+        run: |
+          ln -sf "$(command -v graph)" /usr/local/bin/dive
+          ln -sfn .dive .graph
 
       - name: Format drift gate
         run: dive plan run format_drift --input base="$BASE" --input head="$HEAD"
@@ -84,12 +96,17 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.16.0
+      image: ghcr.io/tylerdavis/graph:v0.16.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Bridge the pre-rename image
+        run: |
+          ln -sf "$(command -v graph)" /usr/local/bin/dive
+          ln -sfn .dive .graph
 
       - name: Config and plans load in the pinned image
         run: |
@@ -110,14 +127,14 @@ jobs:
   # addPullRequestReviewThreadReply return "Resource not accessible by
   # integration" even with pull-requests: write), so without the App
   # token the plan's resolve/decline transitions silently no-op.
-  graph-review-9000:
+  dive-review-9000:
     if: >-
       false &&
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.16.0
+      image: ghcr.io/tylerdavis/graph:v0.16.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -125,6 +142,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0            # the plan reads files at $HEAD via git_file
+
+      - name: Bridge the pre-rename image
+        run: |
+          ln -sf "$(command -v graph)" /usr/local/bin/dive
+          ln -sfn .dive .graph
 
       - uses: actions/create-github-app-token@v2
         id: bot

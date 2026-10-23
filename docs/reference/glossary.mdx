@@ -1,6 +1,6 @@
 ---
 title: "Glossary"
-description: "The terms graph's docs use, each with a short definition and a link."
+description: "The terms Dive's docs use, each with a short definition and a link."
 keywords: ["glossary", "terms", "definitions"]
 ---
 
@@ -26,7 +26,7 @@ The [steps](#step) a `route` branch, `map` or `reduce` runs: a single call or an
 
 ## Built-in
 
-An [agent](#agent), [plan](#plan) or [tool](#tool) that ships with graph. See [Customize a built-in agent](/agents/guides/customize-built-ins).
+An [agent](#agent), [plan](#plan) or [tool](#tool) that ships with Dive. See [Customize a built-in agent](/agents/guides/customize-built-ins).
 
 ## Catalog
 
@@ -42,7 +42,7 @@ A model that answers a fixed question with a likelihood or a choice among option
 
 ## File version
 
-The schema version a config, [plan](#plan), [tool](#tool) or [agent](#agent) file carries in its `version` key, separate from graph's release version. Each graph release reads a range of file versions and upgrades older files as they load. See [File versions](/reference/file-versions).
+The schema version a config, [plan](#plan), [tool](#tool) or [agent](#agent) file carries in its `version` key, separate from Dive's release version. Each Dive release reads a range of file versions and upgrades older files as they load. See [File versions](/reference/file-versions).
 
 ## Finish
 
@@ -58,7 +58,7 @@ One [agent](#agent) passing the conversation to another through a `transfer_to_<
 
 ## Layer
 
-One of the three places graph loads [agents](#agent), [plans](#plan), [tools](#tool) and config from. [Built-ins](#built-in) load first, then your global files in `~/.config/dive/`, then project files in `./.dive/`. A file in a later layer replaces one with the same name in an earlier layer. See [Core concepts](/getting-started/concepts).
+One of the three places Dive loads [agents](#agent), [plans](#plan), [tools](#tool) and config from. [Built-ins](#built-in) load first, then your global files in `~/.config/dive/`, then project files in `./.dive/`. A file in a later layer replaces one with the same name in an earlier layer. See [Core concepts](/getting-started/concepts).
 
 ## Model role
 
@@ -74,7 +74,7 @@ A file of [steps](#step) wired together by their results. Each step's input draw
 
 ## Shape
 
-The observed output schema of a [tool](#tool), with an example, recorded each time the tool runs. See [Improve what graph knows about a tool](/tools/guides/tool-shapes).
+The observed output schema of a [tool](#tool), with an example, recorded each time the tool runs. See [Improve what Dive knows about a tool](/tools/guides/tool-shapes).
 
 ## Step
 

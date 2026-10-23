@@ -1,4 +1,4 @@
-//! Layered TOML configuration for the graph CLI.
+//! Layered TOML configuration for the Dive CLI.
 //!
 //! Precedence (later wins): ~/.config/dive/config.toml < ./.dive/config.toml
 //! < DIVE_* environment variables < CLI flags.

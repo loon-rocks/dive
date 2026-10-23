@@ -636,7 +636,7 @@ async fn builtin_reshape_returns_the_callers_shape_verbatim() {
     // surrounding step's scope, before the tool is dispatched. The tool
     // itself never renders it: text that survived that pass — LLM prose
     // quoting Helm/Actions/mustache tags, most of all — must not be
-    // re-parsed as graph templates. See
+    // re-parsed as Dive templates. See
     // `caller_shape_survives_model_authored_template_syntax` for the
     // plan-level counterpart.
     let outcome = registry

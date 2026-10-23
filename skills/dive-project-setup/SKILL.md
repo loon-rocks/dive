@@ -1,14 +1,14 @@
 ---
 name: dive-project-setup
-description: Set up graph locally in a project and land a first working plan. Use
-  when installing graph for local use, scaffolding a ./.dive/ directory, wiring
+description: Set up Dive locally in a project and land a first working plan. Use
+  when installing Dive for local use, scaffolding a ./.dive/ directory, wiring
   a provider and models, connecting MCP servers or tools, or authoring and
   running a first plan against a user's own data.
 ---
 
-# Graph Project Setup
+# Dive Project Setup
 
-The [graph repository](https://github.com/loon-rocks/dive) is the source of truth. Before generating anything, read the current onboarding docs — they move ahead of this skill; prefer them over memory:
+The [Dive repository](https://github.com/loon-rocks/dive) is the source of truth. Before generating anything, read the current onboarding docs — they move ahead of this skill; prefer them over memory:
 
 - [`docs/quickstart.mdx`](https://github.com/loon-rocks/dive/blob/main/docs/quickstart.mdx) — the install → scaffold → run arc this skill drives.
 - [`docs/getting-started/concepts.mdx`](https://github.com/loon-rocks/dive/blob/main/docs/getting-started/concepts.mdx) — plans, the tool catalog, the shape cache.
@@ -23,7 +23,7 @@ The finished shape: a `./.dive/` directory carrying `config.toml` (a provider, m
 
 ### Step 0: Preflight
 
-1. **Confirm graph is installed** — `graph --help`. If it fails, point at [installation](https://github.com/loon-rocks/dive/blob/main/docs/getting-started/installation.mdx) and stop here.
+1. **Confirm Dive is installed** — `dive --help`. If it fails, point at [installation](https://github.com/loon-rocks/dive/blob/main/docs/getting-started/installation.mdx) and stop here.
 2. **Detect an existing `./.dive/`** — if one exists, don't clobber it. Read the current `config.toml` and plans, and extend rather than overwrite.
 3. **Confirm a provider key is reachable** in the environment (e.g. `ANTHROPIC_API_KEY`). Surface this now — the user needs it before the first plan runs, so flag a missing key early rather than at the end.
 
@@ -61,7 +61,7 @@ Run `dive config init` first if `./.dive/config.toml` doesn't exist yet (it targ
 
 ### Step 3: What data does the plan touch? — connect the tools
 
-This is the interactive heart of the setup. graph reaches external systems through **MCP servers**; it also ships [bundled tool packs](https://github.com/loon-rocks/dive/blob/main/docs/tools/reference/packs.mdx) and supports [user-defined tools](https://github.com/loon-rocks/dive/blob/main/docs/tools/reference/tool-file.mdx) that wrap a CLI or query.
+This is the interactive heart of the setup. Dive reaches external systems through **MCP servers**; it also ships [bundled tool packs](https://github.com/loon-rocks/dive/blob/main/docs/tools/reference/packs.mdx) and supports [user-defined tools](https://github.com/loon-rocks/dive/blob/main/docs/tools/reference/tool-file.mdx) that wrap a CLI or query.
 
 1. **Ask what systems/data the plan needs** — free-form. E.g. "our Linear issues", "a Postgres orders table", "files in this repo", "Slack messages".
 
@@ -74,7 +74,7 @@ This is the interactive heart of the setup. graph reaches external systems throu
 
 3. **Present a multi-select** of the servers you found: name, one-line purpose, transport, and the key it requires. Include an explicit **"none — use a bundled pack or a user tool instead"** option so an ETL/CLI plan isn't forced through MCP. Let the user pick any subset.
 
-4. **Wire each chosen server** into `./.dive/config.toml` as an `[mcp.<name>]` block, secrets as `${ENV}` references — **never** a live token inline (that's graph's fail-loud contract). Then test **by transport type**:
+4. **Wire each chosen server** into `./.dive/config.toml` as an `[mcp.<name>]` block, secrets as `${ENV}` references — **never** a live token inline (that's Dive's fail-loud contract). Then test **by transport type**:
 
    **Remote / HTTP** (`url` + auth header):
    ```toml
@@ -99,7 +99,7 @@ This is the interactive heart of the setup. graph reaches external systems throu
 
 6. **Confirm the catalog last** — `dive tool list`. Run this **after** the pending servers are either installed or explicitly noted as expected-to-fail: unlike per-server tests, `dive tool list` enumerates *every* server, so one un-installed stdio block will surface as an error there and make the whole catalog look broken. This step gives you the real tool names the next step builds `{{...}}` paths from.
 
-**graph connects to MCP servers; it does not install them.** For `npx`/`uvx` servers the launcher handles fetching on first run; everything else is the user's install to run. Say so — never claim graph installs a server.
+**Dive connects to MCP servers; it does not install them.** For `npx`/`uvx` servers the launcher handles fetching on first run; everything else is the user's install to run. Say so — never claim Dive installs a server.
 
 ### Step 4: How should the plan finish?
 
@@ -140,7 +140,7 @@ Ask: just locally, or also on cron / in CI later?
 
 ## Key Concepts
 
-**graph connects, it doesn't install.** An `[mcp.<name>]` block is a connection, not an installation. `npx`/`uvx` servers self-fetch on first launch; anything else the user installs. A block for an un-installed server is inert until connected to.
+**Dive connects, it doesn't install.** An `[mcp.<name>]` block is a connection, not an installation. `npx`/`uvx` servers self-fetch on first launch; anything else the user installs. A block for an un-installed server is inert until connected to.
 
 **Per-server tests are isolated; the catalog is not.** `dive mcp test <name>` touches only that server — a broken block fails only its own test. `dive tool list` and any full-catalog load (a `dive ask`, a plan run) enumerate every server, so a pending stdio block surfaces there. Test individually while setting up; confirm the whole catalog last.
 

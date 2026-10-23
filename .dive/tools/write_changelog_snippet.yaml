@@ -1,5 +1,5 @@
 # exec tool (side-effecting): persist one release's inferred changelog
-# front matter as docs/snippets/changelog/graph/<version>/summary.mdx (+
+# front matter as docs/snippets/changelog/dive/<version>/summary.mdx (+
 # migration.mdx when migration is needed). A migration prompt that
 # belongs to a bumped file kind is moved by hand during the review to
 # that kind's directory (config/v2/migration.mdx), where compose renders
@@ -14,7 +14,7 @@
 version: 1
 name: write_changelog_snippet
 description: >
-  Write docs/snippets/changelog/graph/<version>/summary.mdx, plus a
+  Write docs/snippets/changelog/dive/<version>/summary.mdx, plus a
   fence-wrapped migration.mdx when migration_needed is "true".
   Overwrites — callers gate on snippet_status first so curated snippets
   are never clobbered.
@@ -25,7 +25,7 @@ args:
   - "pipefail"
   - |
     version=$1 summary=$2 needed=$3 prompt=$4
-    dir="docs/snippets/changelog/graph/$version"
+    dir="docs/snippets/changelog/dive/$version"
     mkdir -p "$dir"
     printf '%s\n' "$summary" > "$dir/summary.mdx"
     written='["summary.mdx"]'

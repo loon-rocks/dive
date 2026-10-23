@@ -40,7 +40,7 @@ and require \`!\`, e.g.
 
     feat($scope)!: <what changed in the file's schema>
 
-    BREAKING CHANGE: $scope version <N> (graph $scope migrate)
+    BREAKING CHANGE: $scope version <N> (dive $scope migrate)
 
 For an ordinary change to the crate that reads those files, use a different
 scope (dive-config, plans, tools, packs, storage) or none. See RELEASING.md >

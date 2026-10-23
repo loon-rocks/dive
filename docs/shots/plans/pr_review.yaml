@@ -73,7 +73,7 @@ steps:
     input:
       pr: "{{input.pr}}"
       head_sha: "{{E0.head_sha}}"
-      marker: "graph:pr_review"
+      marker: "dive:pr_review"
       comments: "{{E4.comments}}"
     reasoning: >
       Anchor line-resolvable findings on the diff; earlier runs' comments
@@ -82,9 +82,9 @@ steps:
     tool_name: github__tool__gh_pr_comment
     input:
       pr: "{{input.pr}}"
-      marker: "graph:pr_review:summary"
+      marker: "dive:pr_review:summary"
       body: |
-        Graph PR review — managed by [`pr_review.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/pr_review.yaml)
+        Dive PR review — managed by [`pr_review.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/pr_review.yaml)
 
         {{^E5.comments}}
         No issues found.

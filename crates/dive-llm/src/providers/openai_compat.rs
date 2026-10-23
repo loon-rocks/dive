@@ -307,7 +307,7 @@ fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
             ChatMessage::Assistant {
                 content,
                 tool_calls,
-                // No reasoning-block concept on this wire format; graph
+                // No reasoning-block concept on this wire format; Dive
                 // never populates it for these providers.
                 thinking: _,
             } => {

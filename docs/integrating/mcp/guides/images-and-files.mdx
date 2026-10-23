@@ -4,7 +4,7 @@ description: "Keep the images and audio MCP tools return, and pass them to other
 keywords: ["mcp", "images", "screenshots", "files", "storage.files", "s3", "blob"]
 ---
 
-When an MCP tool returns an image or audio, such as a browser screenshot, graph stores the file and gives the agent a short reference to it instead of the bytes. The agent can pass that reference to another tool, and graph hands the tool the file in the form it expects.
+When an MCP tool returns an image or audio, such as a browser screenshot, Dive stores the file and gives the agent a short reference to it instead of the bytes. The agent can pass that reference to another tool, and Dive hands the tool the file in the form it expects.
 
 <RequestExample>
 
@@ -27,7 +27,7 @@ secret_access_key = "${DIVE_S3_SECRET}"
 
 ## What a tool's result looks like
 
-graph stores every image and audio item in a tool's result: inline `image` and `audio` content, embedded resources with binary contents, and `resource_link` items whose MIME type is an image or audio, which graph reads from the server. The result lists them under `files`, next to whatever text or structured content the tool returned:
+Dive stores every image and audio item in a tool's result: inline `image` and `audio` content, embedded resources with binary contents, and `resource_link` items whose MIME type is an image or audio, which Dive reads from the server. The result lists them under `files`, next to whatever text or structured content the tool returned:
 
 ```json
 {
@@ -44,13 +44,13 @@ graph stores every image and audio item in a tool's result: inline `image` and `
 }
 ```
 
-When the tool's result isn't an object, or already has its own `files` key, graph puts it under `result` instead, as `{"result": …, "files": […]}`.
+When the tool's result isn't an object, or already has its own `files` key, Dive puts it under `result` instead, as `{"result": …, "files": […]}`.
 
 A reference names the file by its SHA-256 hash, so the same image stored twice is kept once. It stays the same wherever the file is kept, and threads and plan results that mention it keep working if you move file storage to another backend and copy the files across.
 
 ## Pass a file to another tool
 
-Any argument whose whole value is a reference is replaced before graph calls the tool. A reference inside longer text is left as it is. Each server's `files` setting decides what the tool receives:
+Any argument whose whole value is a reference is replaced before Dive calls the tool. A reference inside longer text is left as it is. Each server's `files` setting decides what the tool receives:
 
 | `files` | The tool receives |
 |---|---|
@@ -61,7 +61,7 @@ Any argument whose whole value is a reference is replaced before graph calls the
 
 Use `url` for a server running on another machine, which can't read your local paths, and `base64` for a server that only accepts file contents in its arguments. Most local servers take a path.
 
-If graph can't read a referenced file, the tool isn't called and the agent gets an error naming the reference.
+If Dive can't read a referenced file, the tool isn't called and the agent gets an error naming the reference.
 
 ## Where files are kept
 
@@ -73,4 +73,4 @@ To keep files somewhere else, set `[storage.files].backend`:
 - `memory` keeps files only for the length of the run.
 - `s3` keeps files in an S3 bucket, or a bucket on an S3-compatible server such as Garage or MinIO. Set `endpoint` for an S3-compatible server, and `region` to the region it expects. Keys go under `prefix` when you set one, so several stores can share a bucket.
 
-Credentials expand `${NAME}` references like the rest of config.toml, so you can keep them in the OS credential store with `dive secret set DIVE_S3_SECRET`. When `access_key_id` and `secret_access_key` are omitted, graph reads the standard `AWS_*` environment variables. If a referenced secret isn't set, graph still starts. A tool call that receives a file then fails naming the missing variable, and files a tool returns are left out of its result, with a warning in the log.
+Credentials expand `${NAME}` references like the rest of config.toml, so you can keep them in the OS credential store with `dive secret set DIVE_S3_SECRET`. When `access_key_id` and `secret_access_key` are omitted, Dive reads the standard `AWS_*` environment variables. If a referenced secret isn't set, Dive still starts. A tool call that receives a file then fails naming the missing variable, and files a tool returns are left out of its result, with a warning in the log.

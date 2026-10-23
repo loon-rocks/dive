@@ -1,10 +1,10 @@
 ---
 title: "Filter and override a server's tools"
-description: "Choose which of an MCP server's tools graph exposes, and correct their descriptions and output shapes."
+description: "Choose which of an MCP server's tools Dive exposes, and correct their descriptions and output shapes."
 keywords: ["mcp", "include_tools", "exclude_tools", "tool_overrides"]
 ---
 
-These settings go in the server's `[mcp.<name>]` table in config.toml. They change what graph shows agents and drafters, not what the server does.
+These settings go in the server's `[mcp.<name>]` table in config.toml. They change what Dive shows agents and drafters, not what the server does.
 
 <RequestExample>
 
@@ -24,7 +24,7 @@ output_example = { text = "Echo: hello" }
 
 ## Limit which tools load
 
-List the tools you want in `include_tools`, or the ones you don't in `exclude_tools`. Use the server's own tool names, without the `<name>__` prefix. When you set both, graph loads the included tools that aren't excluded.
+List the tools you want in `include_tools`, or the ones you don't in `exclude_tools`. Use the server's own tool names, without the `<name>__` prefix. When you set both, Dive loads the included tools that aren't excluded.
 
 ```toml
 [mcp.everything]
@@ -64,4 +64,4 @@ output_schema = { type = "object", properties = { text = { type = "string" } } }
 output_example = { text = "Echo: hello" }
 ```
 
-`dive tool show everything__echo` prints the description and output schema now in effect. graph also learns a tool's output shape as it runs; see [Improve what graph knows about a tool](/tools/guides/tool-shapes).
+`dive tool show everything__echo` prints the description and output schema now in effect. Dive also learns a tool's output shape as it runs; see [Improve what Dive knows about a tool](/tools/guides/tool-shapes).

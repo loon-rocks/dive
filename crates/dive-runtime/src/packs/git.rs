@@ -1,7 +1,7 @@
 use crate::packs::refs::Target;
+use dive_config::pack::DEFAULT_REPO;
 use gix::bstr::{BStr, BString, ByteSlice};
 use gix::objs::tree::EntryKind;
-use dive_config::pack::DEFAULT_REPO;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};

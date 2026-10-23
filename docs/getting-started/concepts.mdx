@@ -24,7 +24,7 @@ A plan is a list of steps that run in order, the same way every time. A step's i
 
 ## Tools
 
-A tool is anything an agent or a plan step can call: a command wrapped in a tool file, a tool from an MCP server, a tool built into graph, or another plan or agent. See [Tools](/tools/overview).
+A tool is anything an agent or a plan step can call: a command wrapped in a tool file, a tool from an MCP server, a tool built into Dive, or another plan or agent. See [Tools](/tools/overview).
 
 ## The catalog
 
@@ -34,7 +34,7 @@ Every tool sits in one catalog, and its name says where it comes from:
 | --- | --- | --- |
 | `<server>__<tool>` | An MCP server | `web__fetch` |
 | `user__<name>` | Your tool files | `user__merged_prs` |
-| `builtin__<name>` | graph itself | `builtin__infer` |
+| `builtin__<name>` | dive itself | `builtin__infer` |
 | `<pack>__<kind>__<name>` | An installed [pack](/packs/overview) | `github__tool__git_log` |
 | `plan__<identifier>` | A plan | `plan__unreleased_changes` |
 | `agent__<name>` | An agent | `agent__reviewer` |

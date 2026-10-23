@@ -545,7 +545,7 @@ fn check_shape_templates(
 // ── Registry ─────────────────────────────────────────────────────────────
 
 /// Registry over declarative tool documents. Serves user-authored tools
-/// under `user__`, graph's built-in tools under `builtin__` and installed
+/// under `user__`, Dive's built-in tools under `builtin__` and installed
 /// pack tools under `<pack>__tool__` — same YAML format, same validation,
 /// different namespace so the catalog says who ships each tool.
 pub struct UserToolRegistry {
@@ -577,7 +577,7 @@ impl UserToolRegistry {
         self
     }
 
-    /// A registry serving graph's built-in tools under `builtin__`.
+    /// A registry serving Dive's built-in tools under `builtin__`.
     pub fn builtins(tools: Vec<UserToolDoc>, router: Arc<ModelRouter>) -> Self {
         Self {
             tools,
@@ -751,7 +751,7 @@ impl UserToolRegistry {
                     // {{Ex.field}} / {{item.*}} / {{input.*}}. Rendering
                     // again here would parse the *substituted* text —
                     // often LLM output quoting Helm/Actions/mustache tags
-                    // like `{{ index .Values.tag }}` — as graph templates
+                    // like `{{ index .Values.tag }}` — as Dive templates
                     // and fail the step. Nothing resolves at this level
                     // anyway: the tool-level roots hold only `input`,
                     // whose sole key is `shape`.

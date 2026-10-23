@@ -2,7 +2,7 @@
 
 All notable changes to graph. Generated from conventional commits by git-cliff.
 
-## Graph v0.16.0 — 2026-10-14
+## Dive v0.16.0 — 2026-10-14
 
 ### Breaking
 
@@ -98,7 +98,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - Introduced with graph v0.16.0.
 
-## Graph v0.15.0 — 2026-09-24
+## Dive v0.15.0 — 2026-09-24
 
 ### Added
 
@@ -110,7 +110,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - OTLP telemetry export for run traces and logs via [telemetry] (config version 3) (#129) — config version 3 (graph config migrate)
 
-## Graph v0.14.0 — 2026-09-23
+## Dive v0.14.0 — 2026-09-23
 
 ## Config v2 — 2026-09-23
 
@@ -118,7 +118,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - every model is a role: [models.<role>] replaces the fixed role slots and [models.named] (#125) — config version 2 (graph config migrate)
 
-## Graph v0.13.0 — 2026-09-02
+## Dive v0.13.0 — 2026-09-02
 
 ### Added
 
@@ -144,7 +144,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - Introduced with graph v0.13.0.
 
-## Graph v0.12.0 — 2026-08-12
+## Dive v0.12.0 — 2026-08-12
 
 ### Added
 
@@ -160,7 +160,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - explain missing env vars at first use instead of dying silently
 
-## Graph v0.11.0 — 2026-08-04
+## Dive v0.11.0 — 2026-08-04
 
 ### Added
 
@@ -182,7 +182,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - release script keeps the docs release_version in step
 
-## Graph v0.10.0 — 2026-08-04
+## Dive v0.10.0 — 2026-08-04
 
 ### Added
 
@@ -218,7 +218,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - serve the control steps from the tool catalog
 - keep MCP writes inside the server's own config layer
 
-## Graph v0.9.0 — 2026-07-30
+## Dive v0.9.0 — 2026-07-30
 
 ### Breaking
 
@@ -261,7 +261,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - keep plan list and validate off stdout
 - stop re-rendering caller-supplied reshape shapes
 
-## Graph v0.8.1 — 2026-07-17
+## Dive v0.8.1 — 2026-07-17
 
 ### Added
 
@@ -274,7 +274,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - wheel scrolls the steps/tool list view (#63)
 - hide list highlight when selection scrolls out of view (#64)
 
-## Graph v0.8.0 — 2026-07-17
+## Dive v0.8.0 — 2026-07-17
 
 ### Added
 
@@ -304,7 +304,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - carry failing tool error into aborted run result (#56)
 - default output_schema type + reset workbench iteration budget on progress (#57)
 
-## Graph v0.7.0 — 2026-07-15
+## Dive v0.7.0 — 2026-07-15
 
 ### Breaking
 
@@ -335,7 +335,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - section-scoped bare keys are not roots in plan validation (#34)
 - a broken plan file no longer takes down the whole catalog (#35)
 
-## Graph v0.6.0 — 2026-07-11
+## Dive v0.6.0 — 2026-07-11
 
 ### Added
 
@@ -344,13 +344,13 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - map and reduce steps iterate a body over a list (#18)
 - pr_review anchors findings as inline diff comments (#20)
 
-## Graph v0.5.0 — 2026-07-10
+## Dive v0.5.0 — 2026-07-10
 
 ### Added
 
 - grouped listing for graph tools list, tighter layout (#14)
 
-## Graph v0.4.1 — 2026-07-10
+## Dive v0.4.1 — 2026-07-10
 
 ### Added
 
@@ -360,7 +360,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - rewrite README, add MIT license (#12)
 
-## Graph v0.4.0 — 2026-07-10
+## Dive v0.4.0 — 2026-07-10
 
 ### Added
 
@@ -373,7 +373,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - CI cookbook — the dogfooded plans and workflow, annotated (#7)
 - cookbook as a section — pages by solution category (#8)
 
-## Graph v0.3.0 — 2026-07-10
+## Dive v0.3.0 — 2026-07-10
 
 ### Added
 
@@ -383,7 +383,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - portable version bump in release.sh; align workspace version with v0.2.0
 
-## Graph v0.2.0 — 2026-07-10
+## Dive v0.2.0 — 2026-07-10
 
 ### Added
 
@@ -394,7 +394,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 - bring CLAUDE.md current — composability, exit gates, storage, build story, conventions
 
-## Graph v0.1.0 — 2026-07-10
+## Dive v0.1.0 — 2026-07-10
 
 ### Added
 

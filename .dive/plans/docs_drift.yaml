@@ -59,7 +59,7 @@ steps:
     tool_name: exit
     input:
       infer: |
-        Does this diff change user-visible behavior of the graph CLI — CLI
+        Does this diff change user-visible behavior of the Dive CLI — CLI
         surface, plan or tool file formats, template semantics, error
         handling, exit codes, prompts the planner sees, or configuration —
         such that the documentation under docs/ would need an update? Pure

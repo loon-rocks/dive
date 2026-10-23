@@ -6,9 +6,7 @@ use dive_core::packs::{ItemKind, PackSource};
 use dive_core::pipeline::doc::PlanDoc;
 use dive_core::pipeline::Pipeline;
 use dive_core::secrets::SecretSource;
-use dive_core::user_tools::{
-    UserToolDoc, UserToolRegistry, BUILTIN_TOOL_PREFIX, USER_TOOL_PREFIX,
-};
+use dive_core::user_tools::{UserToolDoc, UserToolRegistry, BUILTIN_TOOL_PREFIX, USER_TOOL_PREFIX};
 use dive_core::{CompositeRegistry, ToolDef, ToolError, ToolOutcome, ToolRegistry};
 use serde_json::{json, Value};
 use std::path::PathBuf;

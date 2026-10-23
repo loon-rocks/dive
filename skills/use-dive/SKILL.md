@@ -1,15 +1,15 @@
 ---
 name: use-dive
-description: General entry point for working with graph. Use when running or
+description: General entry point for working with Dive. Use when running or
   inspecting plans, probing the tool catalog, reading a run's exit code or
-  output, prototyping with ask/chat, or deciding which deeper graph skill
+  output, prototyping with ask/chat, or deciding which deeper Dive skill
   (project setup, plan authoring, GitHub Actions setup) the task actually
   needs.
 ---
 
-# Using graph
+# Using Dive
 
-graph is a CLI agent whose core product is **plans**: YAML documents of tool
+Dive is a CLI agent whose core product is **plans**: YAML documents of tool
 calls chained by a typed, logic-less template language, executed
 deterministically with inference only where the plan puts it. Everything else —
 the `ask`/`chat` agent loop, the workbench TUI, the MCP surfaces — exists to
@@ -24,9 +24,9 @@ reaches it.
 
 | The task is… | Go to |
 |---|---|
-| Installing graph, scaffolding `./.dive/`, wiring a provider or MCP servers, landing a first plan | [`/dive-project-setup`](https://github.com/loon-rocks/dive/blob/main/skills/dive-project-setup/SKILL.md) |
+| Installing Dive, scaffolding `./.dive/`, wiring a provider or MCP servers, landing a first plan | [`/dive-project-setup`](https://github.com/loon-rocks/dive/blob/main/skills/dive-project-setup/SKILL.md) |
 | Creating a new plan, or editing/repairing/extending an existing one | [`/dive-plan-authoring`](https://github.com/loon-rocks/dive/blob/main/skills/dive-plan-authoring/SKILL.md) |
-| Putting graph in CI — merge gates, PR reviewers, GitHub Actions | [`/dive-github-actions-setup`](https://github.com/loon-rocks/dive/blob/main/skills/dive-github-actions-setup/SKILL.md) |
+| Putting Dive in CI — merge gates, PR reviewers, GitHub Actions | [`/dive-github-actions-setup`](https://github.com/loon-rocks/dive/blob/main/skills/dive-github-actions-setup/SKILL.md) |
 | Running, inspecting, probing, debugging what already exists | stay here |
 
 The [docs site](https://github.com/loon-rocks/dive/tree/main/docs) is the
@@ -159,7 +159,7 @@ committing it. See
 (The workbench is this TUI; `ask`/`chat` is the agent loop, not the
 workbench.)
 
-## graph over MCP
+## Dive over MCP
 
 Both directions, one catalog:
 

@@ -20,7 +20,7 @@ def main():
     try:
         compare.set_plan_paths(include_eval=True)
         with ThreadPoolExecutor(max_workers=4) as pool:
-            runs = list(pool.map(lambda goal: compare.graph(['plan', 'run', goal['reference']], goal['inputs'], timeout=600), goals))
+            runs = list(pool.map(lambda goal: compare.dive(['plan', 'run', goal['reference']], goal['inputs'], timeout=600), goals))
     finally:
         compare.restore_config()
     for goal, ran in zip(goals, runs):

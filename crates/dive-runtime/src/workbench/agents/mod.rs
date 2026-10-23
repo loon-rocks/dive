@@ -99,9 +99,7 @@ fn decision_line(pipeline: &Pipeline) -> String {
         .roles()
         .known_names()
         .into_iter()
-        .filter(|name| {
-            pipeline.router.kind_of_role(name) == Some(dive_config::ModelKind::Decision)
-        })
+        .filter(|name| pipeline.router.kind_of_role(name) == Some(dive_config::ModelKind::Decision))
         .map(|name| format!("`{name}`"))
         .collect();
     if deciders.is_empty() {

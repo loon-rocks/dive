@@ -63,7 +63,10 @@ fn telemetry_config_paths(command: &Command) -> Vec<PathBuf> {
     match command {
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: Some(dir) },
-        } => vec![global, dive_config::legacy::project_dir(&dir).join("config.toml")],
+        } => vec![
+            global,
+            dive_config::legacy::project_dir(dir).join("config.toml"),
+        ],
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: None },
         } => vec![global],

@@ -89,11 +89,11 @@ Model calls happen only in `agent` steps, model-backed tools such as `builtin__i
 - Agents and other plans call it as `plan__<identifier>`.
 - `dive mcp serve` offers it to MCP clients as `plan_<identifier>`.
 
-A failing step fails the run. graph doesn't rewrite a plan you wrote to work around it.
+A failing step fails the run. Dive doesn't rewrite a plan you wrote to work around it.
 
 ## Where plans live
 
-graph reads `./.dive/plans/` before `~/.config/dive/plans/`, and the first plan with an identifier wins, so a project plan replaces one in your home directory. A plan with a [built-in plan's](/plans/reference/built-in-plans) identifier replaces the built-in. `dive plan rm <identifier>` deletes the plan's file, and whatever it was shadowing takes over. Commit `./.dive/plans/` to give your whole team the same plans.
+Dive reads `./.dive/plans/` before `~/.config/dive/plans/`, and the first plan with an identifier wins, so a project plan replaces one in your home directory. A plan with a [built-in plan's](/plans/reference/built-in-plans) identifier replaces the built-in. `dive plan rm <identifier>` deletes the plan's file, and whatever it was shadowing takes over. Commit `./.dive/plans/` to give your whole team the same plans.
 
 ## Guides
 

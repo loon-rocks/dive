@@ -13,7 +13,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
     Grab a binary, scaffold a project, and hand the setup to your coding agent. A [skill](#let-your-agent-finish-the-setup) walks the agent through wiring a provider, adding tools, and drafting a first plan against your own data — then you review it in the [workbench](/getting-started/workbench) and run it. Prefer to do it by hand?
 
     <Steps>
-      <Step title="Install graph">
+      <Step title="Install Dive">
         Grab the latest release binary — macOS (arm64) or Linux (x86_64). Each release publishes version-pinned tarballs with SHA-256 checksum:
 
         <BinaryDownloads />
@@ -34,7 +34,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         npx skills add loon-rocks/dive
         ```
 
-        This installs `/dive-project-setup` for Claude Code, Cursor, Codex, and most other agents. Point your agent at it — "set up graph in this project" — and it asks a few questions, then picks a provider and models, finds and connects the MCP servers or tools you want, scaffolds a first plan against your real data, and runs it end to end. It reads the live docs and example plans as it goes, so the result matches the current release.
+        This installs `/dive-project-setup` for Claude Code, Cursor, Codex, and most other agents. Point your agent at it — "set up Dive in this project" — and it asks a few questions, then picks a provider and models, finds and connects the MCP servers or tools you want, scaffolds a first plan against your real data, and runs it end to end. It reads the live docs and example plans as it goes, so the result matches the current release.
 
         <Tip>
           The same `npx skills add` command installs two more: `/dive-plan-authoring`, which teaches the agent to build and repair plans with the [authoring commands](/reference/cli/plan), and `/dive-github-actions-setup`, which scaffolds a merge gate or PR reviewer as a plan.
@@ -88,7 +88,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         ```
 
         <Tip>
-          `${VAR}` references fail loudly when the variable is unset — misconfigured secrets never silently send empty strings. For provider and MCP entries the failure comes at first use rather than at load, naming the variable, so the rest of graph keeps working without the secret.
+          `${VAR}` references fail loudly when the variable is unset — misconfigured secrets never silently send empty strings. For provider and MCP entries the failure comes at first use rather than at load, naming the variable, so the rest of Dive keeps working without the secret.
         </Tip>
       </Step>
       <Step title="Check your tools are live">
@@ -107,7 +107,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
         dive tool test linear__list_issues '{"priority":1,"limit":5}'
         ```
 
-        Every probe also teaches graph what the tool returns (its [shape](/tools/guides/tool-shapes)), so the references you write next are grounded in real output — and the workbench's drafting agent gets smarter too.
+        Every probe also teaches Dive what the tool returns (its [shape](/tools/guides/tool-shapes)), so the references you write next are grounded in real output — and the workbench's drafting agent gets smarter too.
       </Step>
       <Step title="Build the plan in the workbench">
         Open a blank draft and describe the goal — the agent drafts the plan into the side pane, where you inspect, validate, and test-run it:
@@ -144,7 +144,7 @@ import BinaryDownloads from "/shared/binary_downloads.mdx";
 <Columns cols={2}>
   <Column>
     <Card title="Core concepts" icon="sparkles" href="/getting-started/concepts">
-      learn about the graph primitives
+      learn about the Dive primitives
     </Card>
   </Column>
   <Column>

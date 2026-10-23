@@ -67,12 +67,23 @@ pub fn resolve(path: &Path) -> PathBuf {
     if !expanded.exists() {
         return path.to_path_buf();
     }
+    let (old, new) = renamed_root(&expanded, &current);
     note(format!(
         "{} is deprecated; rename it to {}",
-        expanded.display(),
-        current.display()
+        old.display(),
+        new.display()
     ));
     legacy
+}
+
+fn renamed_root(legacy: &Path, current: &Path) -> (PathBuf, PathBuf) {
+    let mut old = legacy.to_path_buf();
+    let mut new = current.to_path_buf();
+    while old.file_name() == new.file_name() && old.parent().is_some() && new.parent().is_some() {
+        old.pop();
+        new.pop();
+    }
+    (old, new)
 }
 
 pub fn project_dir(root: &Path) -> PathBuf {
@@ -130,9 +141,10 @@ mod tests {
 
         std::fs::create_dir_all(&legacy).unwrap();
         assert_eq!(resolve(&current), legacy);
+        let root = dir.path().join(".graph").display().to_string();
         assert!(notices()
             .iter()
-            .any(|notice| notice.contains(".graph") && notice.contains("rename it to")));
+            .any(|notice| notice.starts_with(&format!("{root} is deprecated; rename it to"))));
 
         std::fs::create_dir_all(&current).unwrap();
         assert_eq!(resolve(&current), current);

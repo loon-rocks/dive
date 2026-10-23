@@ -40,7 +40,7 @@ semver.workspace = true
 tempfile = "3"
 rpassword = "7"
 toml_edit.workspace = true
-# graph as an MCP *server* (`dive mcp serve`). dive-mcp holds the client
+# Dive as an MCP *server* (`dive mcp serve`). dive-mcp holds the client
 # half; the server lives here because what it serves is this crate's command
 # layer. Feature-unified with dive-mcp's client build.
 rmcp = { version = "2.2", default-features = false, features = [

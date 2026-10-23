@@ -1,6 +1,6 @@
 ---
 title: "Error handling"
-description: "How graph reports failures: exit codes, output streams, and machine-readable errors."
+description: "How Dive reports failures: exit codes, output streams, and machine-readable errors."
 keywords: ["exit codes", "errors", "stderr", "stdout", "DIVE_EVENTS"]
 ---
 
@@ -15,7 +15,7 @@ Every command reports success or failure through its exit code. Scripts and CI j
 | --- | --- |
 | `0` | The command succeeded. |
 | `1` | The command failed, or an edit was refused. Details are on stderr. |
-| `2` | The arguments were invalid. graph prints usage help to stderr. |
+| `2` | The arguments were invalid. Dive prints usage help to stderr. |
 | `3` | `dive plan run` was missing an input, or an input didn't match the plan's `input_schema`. The schema is printed to stderr. |
 | `4` | A plan's `exit` step ended the run with `status: error`. |
 
@@ -25,7 +25,7 @@ A tool that reports an error during `dive tool test --json` still exits `0`: the
 
 stdout carries only the command's result: an answer, a plan's output, a listing, or a `--json` envelope. Progress, warnings and error messages go to stderr.
 
-When graph refuses a request, such as an invalid plan or a rejected edit, `--json` still prints the envelope describing why to stdout before exiting `1`. Other failures are reported on stderr only.
+When Dive refuses a request, such as an invalid plan or a rejected edit, `--json` still prints the envelope describing why to stdout before exiting `1`. Other failures are reported on stderr only.
 
 ## Machine-readable output and logs
 

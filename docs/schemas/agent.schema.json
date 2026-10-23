@@ -83,7 +83,7 @@
       "type": "array"
     },
     "version": {
-      "description": "The file version the document is written in. Omitted means 1; files graph writes always carry it.",
+      "description": "The file version the document is written in. Omitted means 1; files Dive writes always carry it.",
       "type": "integer"
     }
   },

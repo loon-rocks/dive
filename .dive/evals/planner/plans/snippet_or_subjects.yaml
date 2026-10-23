@@ -10,7 +10,7 @@ input_schema:
 steps:
   - id: status
     tool_name: user__snippet_status
-    input: { dir: "graph/{{input.tag}}" }
+    input: { dir: "dive/{{input.tag}}" }
   - id: exists
     tool_name: exit
     input:

@@ -26,7 +26,7 @@ steps:
     input:
       base: "{{input.base}}"
       head: "{{input.head}}"
-      paths: "crates/graph-config/src/model.rs crates/graph-core/src/pipeline/doc.rs crates/graph-core/src/pipeline/plan.rs crates/graph-core/src/pipeline/condition.rs crates/graph-core/src/pipeline/body.rs crates/graph-core/src/pipeline/exit.rs crates/graph-core/src/pipeline/route.rs crates/graph-core/src/pipeline/filter.rs crates/graph-core/src/pipeline/iterate.rs crates/graph-core/src/pipeline/agent.rs crates/graph-core/src/pipeline/ask.rs crates/graph-core/src/user_tools.rs crates/graph-core/src/agent/doc.rs crates/graph-store/src/file.rs"
+      paths: "crates/dive-config/src/model.rs crates/dive-core/src/pipeline/doc.rs crates/dive-core/src/pipeline/plan.rs crates/dive-core/src/pipeline/condition.rs crates/dive-core/src/pipeline/body.rs crates/dive-core/src/pipeline/exit.rs crates/dive-core/src/pipeline/route.rs crates/dive-core/src/pipeline/filter.rs crates/dive-core/src/pipeline/iterate.rs crates/dive-core/src/pipeline/agent.rs crates/dive-core/src/pipeline/ask.rs crates/dive-core/src/user_tools.rs crates/dive-core/src/agent/doc.rs crates/dive-store/src/file.rs"
       exclude: ""
       max_bytes: 150000
     reasoning: The diff over every file that defines a versioned format's shape — config structs, plan and control-step grammars, tool docs, the store layout.
@@ -43,7 +43,7 @@ steps:
     input:
       base: "{{input.base}}"
       head: "{{input.head}}"
-      paths: "crates/graph-config/src/format.rs crates/graph-core/src/format.rs crates/graph-store/src/file.rs"
+      paths: "crates/dive-config/src/format.rs crates/dive-core/src/format.rs crates/dive-store/src/file.rs"
       exclude: ""
       max_bytes: 40000
     reasoning: Where the version constants and migration chains live; a raised `*_FORMAT` constant shows here as a changed line.
@@ -56,11 +56,11 @@ steps:
         least one kind is unaccounted for; otherwise answer no.
 
         The file kinds, their model files, and their version constants:
-        - config: crates/graph-config/src/model.rs — `CONFIG_FORMAT`
-        - plan documents: crates/graph-core/src/pipeline/*.rs — `PLAN_FORMAT`
-        - tool documents: crates/graph-core/src/user_tools.rs — `TOOL_FORMAT`
-        - agent documents: crates/graph-core/src/agent/doc.rs — `AGENT_FORMAT`
-        - store: crates/graph-store/src/file.rs — `STORE_FORMAT`
+        - config: crates/dive-config/src/model.rs — `CONFIG_FORMAT`
+        - plan documents: crates/dive-core/src/pipeline/*.rs — `PLAN_FORMAT`
+        - tool documents: crates/dive-core/src/user_tools.rs — `TOOL_FORMAT`
+        - agent documents: crates/dive-core/src/agent/doc.rs — `AGENT_FORMAT`
+        - store: crates/dive-store/src/file.rs — `STORE_FORMAT`
 
         For each kind whose model files appear in the MODEL DIFF, in order:
 
