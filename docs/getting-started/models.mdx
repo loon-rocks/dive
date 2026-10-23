@@ -93,7 +93,7 @@ provider = "typesafe"
 model = "jev-latest"
 ```
 
-Standard roles have a fixed type: `decider` is `decision`, `image` is `image`, and the rest are `chat`. Dive never works out a role's type from its provider or model, so a config that puts a role on a provider of the wrong type fails to load and names the fix.
+Standard roles have a fixed type: `decider` is `decision`, `image` is `image`, and the rest are `chat`. Once a role is saved its type stays: the agents, plans and tools that use it expect that kind of model, so Settings and `dive`'s model commands refuse to change it. Add a new role for another type instead. Dive never works out a role's type from its provider or model, so a config that puts a role on a provider of the wrong type fails to load and names the fix.
 
 A `description` on a role is what the plan drafter reads when it picks a model for a step, and it prefers the smallest one that fits. A role without one is still usable by name in files you write.
 
