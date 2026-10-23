@@ -30,7 +30,7 @@ the refactor is provably behavior-preserving.
 | **`commands/plan_cmd.rs`** | **0** | owns exit codes 3 and 4 |
 | `tools_cmd`, `threads_cmd`, `shapes_cmd`, `mcp_cmd`, `ask`, `chat_cmd`, `runtime`, `cli`, `main` | 0 | — |
 
-No `crates/graph-cli/tests/` directory existed; no process-level test anywhere;
+No `crates/dive-cli/tests/` directory existed; no process-level test anywhere;
 nothing asserted the streams contract. The only end-to-end coverage is
 dogfooding in `.github/workflows/graph-checks.yaml` (two plans, needs
 `ANTHROPIC_API_KEY`, smoke-tests success rather than asserting shape).
@@ -56,8 +56,8 @@ dogfooding in `.github/workflows/graph-checks.yaml` (two plans, needs
 - ☑ Wired into CI: `ci.yaml` already runs `cargo test --workspace`, and the
   suite needs no secrets and no network.
 
-Landed as `crates/graph-cli/tests/{cli_contract.rs,support/mod.rs}` — 19 tests,
-under a second, on the first `crates/graph-cli/tests/` directory in the repo.
+Landed as `crates/dive-cli/tests/{cli_contract.rs,support/mod.rs}` — 19 tests,
+under a second, on the first `crates/dive-cli/tests/` directory in the repo.
 
 The hermeticity guard is load-bearing and self-proving:
 `plan_list_reports_broken_and_valid_plans_separately` asserts the catalog holds
@@ -155,11 +155,11 @@ terminal and are not served over MCP.
 
 - ☑ `graph mcp serve`, rmcp `server` + `transport-io`.
 - ☑ **Not** a separate crate, contrary to the original plan. What is being
-  served is `graph-cli`'s own command layer (`Runtime`, `commands::*`), none
+  served is `dive-cli`'s own command layer (`Runtime`, `commands::*`), none
   of which is extractable without turning the binary into a library first. A
   second crate would have meant a second implementation to keep in sync —
   the exact failure Phase 1 existed to remove. It lives in
-  `graph-cli/src/mcp_server/`.
+  `dive-cli/src/mcp_server/`.
 - ☑ Rooting via `--dir`. Load-bearing: MCP clients launch servers with an
   arbitrary cwd, so without it the catalog comes up empty.
 - ☑ Concurrency: plan writes take a mutex, since MCP request handling is

@@ -127,7 +127,7 @@ produces the same entries.
 The seven scopes are therefore reserved: they mean "this commit bumps that
 file kind's version", nothing else. `check-commit-subject.sh` rejects a
 reserved scope without `!` (an ordinary change to the crate that reads those
-files takes another scope: `graph-config`, `plans`, `tools`, `agents`, `packs`, `storage`, or
+files takes another scope: `dive-config`, `plans`, `tools`, `agents`, `packs`, `storage`, or
 none), and `release.sh` checks the other direction before cutting: a moved
 constant needs a `(kind)!` commit whose `BREAKING CHANGE:` footer names the
 new version, and a `(kind)!` commit needs a moved constant.
@@ -150,10 +150,10 @@ is a **version bump**: the number is the schema's generation, and a binary
 reads a window of generations (`*_FORMAT_OLDEST..=*_FORMAT`) that narrows
 only at a major release. A bump ships as one PR containing all of:
 
-1. The constant raised: `CONFIG_FORMAT` (`crates/graph-config/src/format.rs`),
-   `PLAN_FORMAT` / `TOOL_FORMAT` / `AGENT_FORMAT` (`crates/graph-core/src/format.rs`),
-   `STORE_FORMAT` (`crates/graph-store/src/file.rs`), or `PACK_FORMAT` /
-   `LOCK_FORMAT` (`crates/graph-config/src/pack.rs`).
+1. The constant raised: `CONFIG_FORMAT` (`crates/dive-config/src/format.rs`),
+   `PLAN_FORMAT` / `TOOL_FORMAT` / `AGENT_FORMAT` (`crates/dive-core/src/format.rs`),
+   `STORE_FORMAT` (`crates/dive-store/src/file.rs`), or `PACK_FORMAT` /
+   `LOCK_FORMAT` (`crates/dive-config/src/pack.rs`).
 2. A migration appended to that file kind's chain — a forward-only function
    from version N to N+1 over the raw document, returning notes for anything
    it could not carry over. An additive change appends a no-op step.
@@ -161,7 +161,7 @@ only at a major release. A bump ships as one PR containing all of:
    `tests/fixtures/v<N>/`, its version N+1 twin lands under `v<N+1>/` with the
    same file name, and the golden-pair test proves they load identically.
    Pack manifests and lockfiles keep theirs under
-   `crates/graph-config/tests/fixtures/pack/v<N>/` and `lock/v<N>/`.
+   `crates/dive-config/tests/fixtures/pack/v<N>/` and `lock/v<N>/`.
    Fixtures for every version in the window must keep loading.
 4. A breaking commit scoped to the file kind (`feat(config)!: …`) whose
    footer names the new version — `BREAKING CHANGE: config version 2 (graph

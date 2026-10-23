@@ -1,0 +1,124 @@
+mod cli;
+mod commands;
+#[cfg(test)]
+mod docs_gen;
+mod host;
+mod interlocutor;
+mod mcp_server;
+mod output;
+mod workbench;
+
+use anyhow::Result;
+use clap::Parser;
+use cli::{Cli, Command};
+pub(crate) use dive_runtime::telemetry;
+use output::SilentExit;
+use std::path::PathBuf;
+use std::process::ExitCode;
+use tracing_subscriber::EnvFilter;
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let telemetry = telemetry::init(&telemetry_config_paths(&cli.command), &|name| {
+        std::env::var(name).ok()
+    });
+    // The workbench owns the terminal, so it routes tracing to a log file
+    // itself instead of stderr.
+    if !matches!(cli.command, Command::Workbench { .. }) {
+        init_tracing(cli.verbose);
+    }
+    for warning in &telemetry.warnings {
+        tracing::warn!("{warning}");
+    }
+
+    // The one place a command's outcome becomes a process exit status. Commands
+    // signal a specific code with `SilentExit` rather than `process::exit`, so
+    // that everything they own is dropped — MCP children shut down, stdout
+    // flushed — before the process ends. See `output::SilentExit`.
+    let code = match dispatch(cli.command, cli.verbose).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => match error.downcast::<SilentExit>() {
+            // Already reported on the command's own terms; don't print twice.
+            Ok(exit) => ExitCode::from(exit.code as u8),
+            // Same rendering anyhow's own `Termination` gives: message chain,
+            // plus a backtrace when RUST_BACKTRACE is set.
+            Err(error) => {
+                eprintln!("Error: {error:?}");
+                ExitCode::FAILURE
+            }
+        },
+    };
+    telemetry::shutdown().await;
+    code
+}
+
+fn telemetry_config_paths(command: &Command) -> Vec<PathBuf> {
+    let global = dive_config::global_config_path();
+    match command {
+        Command::Mcp {
+            command: cli::McpCommand::Serve { dir: Some(dir) },
+        } => vec![global, dir.join(".graph/config.toml")],
+        Command::Mcp {
+            command: cli::McpCommand::Serve { dir: None },
+        } => vec![global],
+        _ => vec![global, dive_config::project_config_path()],
+    }
+}
+
+async fn dispatch(command: Command, verbose: u8) -> Result<()> {
+    match command {
+        Command::Config { command } => commands::config_cmd::run(command).await,
+        Command::Pack { command } => commands::pack_cmd::run(command).await,
+        // `serve` owns stdio for the whole process, so it never reaches the
+        // McpCommand dispatcher (which opens a client manager first).
+        Command::Mcp {
+            command: cli::McpCommand::Serve { dir },
+        } => mcp_server::serve(dir).await,
+        Command::Mcp { command } => commands::mcp_cmd::run(command).await,
+        Command::Tool { command } => commands::tool_cmd::run(command).await,
+        Command::Agent { command } => commands::agent_cmd::run(command),
+        Command::Ask {
+            message,
+            agent,
+            thread,
+            json,
+            no_stream,
+        } => {
+            commands::ask::run(commands::ask::AskArgs {
+                message,
+                agent,
+                thread,
+                json,
+                no_stream,
+            })
+            .await
+        }
+        Command::Chat { agent, thread } => commands::chat_cmd::run(agent, thread).await,
+        Command::Thread { command } => commands::thread_cmd::run(command).await,
+        Command::Secret { command } => commands::secret_cmd::run(command),
+        Command::Shape { command } => commands::shape_cmd::run(command).await,
+        Command::Plan { command } => commands::plan_cmd::run(command).await,
+        Command::Workbench { command } => workbench::run(command, verbose).await,
+        Command::Version { json } => commands::version_cmd::run(json),
+    }
+}
+
+/// Log to stderr; default WARN, raised by -v flags, overridable via GRAPH_LOG.
+fn init_tracing(verbosity: u8) {
+    let default = match verbosity {
+        0 => "warn",
+        1 => "info",
+        2 => "debug",
+        _ => "trace",
+    };
+    let filter = EnvFilter::try_from_env("GRAPH_LOG").unwrap_or_else(|_| EnvFilter::new(default));
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .finish()
+        .with(telemetry::logs_layer())
+        .init();
+}

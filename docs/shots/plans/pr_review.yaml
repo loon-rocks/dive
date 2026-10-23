@@ -14,7 +14,7 @@
 identifier: pr_review
 name: Specialized PR review
 description: >
-  Reviews a pull request against graph-cli's invariants, anchors findings
+  Reviews a pull request against dive-cli's invariants, anchors findings
   as inline diff comments, and posts a summary comment linking to them
   (all refreshed in place on repeated runs). Needs gh auth and a checkout
   with history.

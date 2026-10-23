@@ -1,4 +1,4 @@
-# System dependencies and task runner for graph-cli.
+# System dependencies and task runner for dive-cli.
 # https://mise.jdx.dev
 #
 # openssl itself is not managed here — any source works (nix, homebrew, ...)
@@ -45,7 +45,7 @@ run = "scripts/clean-worktrees.sh"
 
 [tasks.run]
 description = "Run the graph binary (pass args after --)"
-run = "cargo run -p graph-cli --"
+run = "cargo run -p dive-cli --"
 
 [tasks.release]
 description = "Build the release binary"
@@ -54,7 +54,7 @@ run = "cargo build --release"
 [tasks.install]
 description = "Built and install a release binary on the system (re-signed with $GRAPH_DEV_SIGN_IDENTITY on macOS when it is set)"
 run = [
-    "cargo install --path crates/graph-cli",
+    "cargo install --path crates/dive-cli",
     '''
 if [ -n "${GRAPH_DEV_SIGN_IDENTITY:-}" ] && [ "$(uname -s)" = "Darwin" ]; then
   installed="${CARGO_INSTALL_ROOT:-${CARGO_HOME:-$HOME/.cargo}}/bin/graph"
@@ -91,8 +91,8 @@ run = "cd docs && mint dev"
 
 [tasks.shots]
 description = "Regenerate the workbench docs screenshots from docs/shots/ scenarios"
-run = "GRAPH_UPDATE_SHOTS=1 cargo test -p graph-cli shots -- --nocapture"
+run = "GRAPH_UPDATE_SHOTS=1 cargo test -p dive-cli shots -- --nocapture"
 
 [tasks."docs:generate"]
 description = "Regenerate the reference pages generated from code: the CLI, packs, control steps, built-in agents and built-in plans"
-run = "GRAPH_UPDATE_DOCS=1 cargo test -p graph-cli docs_gen"
+run = "GRAPH_UPDATE_DOCS=1 cargo test -p dive-cli docs_gen"

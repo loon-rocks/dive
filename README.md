@@ -31,12 +31,12 @@ and run it forever — in your terminal or in CI.
 
 | Crate | Contents |
 |---|---|
-| `graph-cli` | binary: command tree, REPL, output UX |
-| `graph-core` | agent loop, plan pipeline, template renderer, prompts |
-| `graph-llm` | provider abstraction (tool use, structured output, streaming) |
-| `graph-mcp` | MCP client manager and tool adaptation |
-| `graph-store` | file-based and in-memory storage backends |
-| `graph-config` | layered TOML config + YAML plan/tool documents |
+| `dive-cli` | binary: command tree, REPL, output UX |
+| `dive-core` | agent loop, plan pipeline, template renderer, prompts |
+| `dive-llm` | provider abstraction (tool use, structured output, streaming) |
+| `dive-mcp` | MCP client manager and tool adaptation |
+| `dive-store` | file-based and in-memory storage backends |
+| `dive-config` | layered TOML config + YAML plan/tool documents |
 
 ## Building (macOS)
 

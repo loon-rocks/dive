@@ -43,13 +43,13 @@ require_graph() {
 format_table() {
   local ref=$1
   for spec in \
-    "config crates/graph-config/src/format.rs CONFIG_FORMAT" \
-    "plan crates/graph-core/src/format.rs PLAN_FORMAT" \
-    "tool crates/graph-core/src/format.rs TOOL_FORMAT" \
-    "agent crates/graph-core/src/format.rs AGENT_FORMAT" \
-    "store crates/graph-store/src/file.rs STORE_FORMAT" \
-    "pack crates/graph-config/src/pack.rs PACK_FORMAT" \
-    "lock crates/graph-config/src/pack.rs LOCK_FORMAT"; do
+    "config crates/dive-config/src/format.rs CONFIG_FORMAT" \
+    "plan crates/dive-core/src/format.rs PLAN_FORMAT" \
+    "tool crates/dive-core/src/format.rs TOOL_FORMAT" \
+    "agent crates/dive-core/src/format.rs AGENT_FORMAT" \
+    "store crates/dive-store/src/file.rs STORE_FORMAT" \
+    "pack crates/dive-config/src/pack.rs PACK_FORMAT" \
+    "lock crates/dive-config/src/pack.rs LOCK_FORMAT"; do
     set -- $spec
     source=$(git show "$ref:$2" 2>/dev/null || true)
     version=$(printf '%s\n' "$source" | sed -n "s/^pub const $3: u32 = \([0-9]*\);.*/\1/p" | head -1)

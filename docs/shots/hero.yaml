@@ -38,14 +38,14 @@ llm:
 tools:
   github__tool__git_changed_files:
     - files:
-        - crates/graph-store/src/file.rs
-        - crates/graph-core/src/pipeline/mod.rs
+        - crates/dive-store/src/file.rs
+        - crates/dive-core/src/pipeline/mod.rs
         - docs/reference/data-directory.mdx
         - .github/workflows/ci.yaml
       count: 4
   github__tool__git_diff:
     - text: |
-        diff --git a/crates/graph-store/src/file.rs b/crates/graph-store/src/file.rs
+        diff --git a/crates/dive-store/src/file.rs b/crates/dive-store/src/file.rs
         @@ -142,9 +142,14 @@ impl FileStore {
         -    fs::write(&path, payload)?;
         +    let tmp = path.with_extension("tmp");

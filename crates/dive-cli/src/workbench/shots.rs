@@ -1,0 +1,713 @@
+//! Scenario-driven docs screenshots: an integration harness, not a diorama.
+//!
+//! Each `docs/shots/*.yaml` spec describes a session — the plan, what the
+//! user types, scripted LLM responses, scripted tool outcomes — and the
+//! harness *runs* it through the production code path: the real agent
+//! loop, the real pipeline (template rendering, condition evaluation,
+//! catalog resolution), the real `UiGate` debugger, the real `ChannelSink`
+//! → `update()` reducer. Only the two outermost seams are scripted: the
+//! LLM provider and tool I/O. Step statuses, rendered inputs, chat
+//! activity lines, and pause states are all *produced*, never stated —
+//! so a behavioral change either shows up as an SVG diff or fails the
+//! run loudly.
+//!
+//! Determinism: the "terminal" is a `TestBackend` at the spec's grid size
+//! (the viewport is an input, not an environment property), the pipeline
+//! date is fixed, and the only wall clock the UI shows (the turn timer)
+//! is pinned to the spec's `turn_seconds` before rendering.
+//!
+//! Guard rails against stale fixtures: every scripted tool must exist in
+//! the real catalog (packs + `.graph/tools`), and every scripted outcome
+//! is validated against the tool's declared `output_schema`. Renames and
+//! shape changes fail generation instead of rendering a plausible lie.
+//!
+//! Regenerate with `GRAPH_UPDATE_SHOTS=1 cargo test -p dive-cli shots -- --nocapture`
+//! (or `mise run shots`); output lands in `docs/images/workbench/`.
+
+use super::app::{self, App, Mode, Msg};
+use super::run_effect;
+use super::screenshot::buffer_to_svg;
+use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use dive_config::{ModelChoice, ModelRoles};
+use dive_core::agent::conversation::Conversation;
+use dive_core::packs::{load_pack, PackSet, PackSource};
+use dive_core::pipeline::doc::load_plan_doc;
+use dive_core::pipeline::{Pipeline, ToolCatalog};
+use dive_core::user_tools::{load_builtin_tools, load_user_tools, UserToolRegistry};
+use dive_core::{CompositeRegistry, Store, ToolDef, ToolError, ToolOutcome, ToolRegistry};
+use dive_llm::types::{
+    ChatRequest, ChatResponse, EventStream, StopReason, StreamEvent, ToolCall, Usage,
+};
+use dive_llm::{ChatProvider, LlmError, ModelRouter};
+use dive_runtime::workbench::sink::ChannelSink;
+use dive_runtime::workbench::tools::{progress_tools, WorkbenchTools};
+use dive_runtime::workbench::{Workbench, WorkbenchEvent};
+use dive_store::MemoryStore;
+use ratatui::backend::TestBackend;
+use ratatui::Terminal;
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::sync::mpsc;
+
+const UPDATE_ENV: &str = "GRAPH_UPDATE_SHOTS";
+const SHOT_GITHUB_PACK: &str = "crates/dive-core/tests/fixtures/packs/github";
+
+// ── Scenario spec ────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShotSpec {
+    /// Output name: `docs/images/workbench/<name>.svg`.
+    name: String,
+    /// Window-chrome title on the rendered SVG. Pane crops render without
+    /// chrome and ignore it.
+    title: String,
+    /// Repo-relative path of the plan to load into the workbench.
+    /// Omitted: the workbench starts with an empty draft.
+    #[serde(default)]
+    plan: Option<String>,
+    #[serde(default)]
+    grid: Grid,
+    /// The user's chat message, typed through the real reducer.
+    /// Omitted: no agent turn runs (pure workspace shots).
+    #[serde(default)]
+    chat: Option<String>,
+    /// Scripted LLM responses, consumed in order across all roles —
+    /// interleave agent, solver, and planner responses in call order.
+    #[serde(default)]
+    llm: Vec<LlmScript>,
+    #[serde(default)]
+    answers: VecDeque<Value>,
+    #[serde(default)]
+    agent: Option<String>,
+    /// Scripted tool outcomes per namespaced tool name, consumed in call
+    /// order. Every name must resolve in the real catalog; outcomes are
+    /// validated against the tool's declared output schema.
+    #[serde(default)]
+    tools: BTreeMap<String, VecDeque<Value>>,
+    capture: Capture,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Grid {
+    cols: u16,
+    rows: u16,
+}
+
+impl Default for Grid {
+    fn default() -> Self {
+        // Sized for a docs content column, not a maximized desktop.
+        Self {
+            cols: 110,
+            rows: 32,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, untagged)]
+enum LlmScript {
+    /// An assistant tool call, optionally with text before it.
+    Call {
+        call: String,
+        #[serde(default)]
+        input: Value,
+        #[serde(default)]
+        text: Option<String>,
+    },
+    /// A structured-output response (planner outline / step drafts).
+    Structured { structured: Value },
+    /// A plain assistant text response (chat replies, solver output).
+    Text { text: String },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Capture {
+    /// Capture at the debugger pause on this step path (e.g. "E5", or
+    /// "E1/do.1" for a map body call). Pauses before the target are
+    /// answered with a real `c` keypress, so loop-line breakpoints step
+    /// iteration by iteration to the one you want.
+    #[serde(default)]
+    pause_at: Option<String>,
+    /// Named capture point: `loaded` (booted, validated, and any chat
+    /// turn finished — no run) or `finished` (a run completed and the
+    /// turn ended).
+    #[serde(default)]
+    at: Option<NamedCapture>,
+    /// Keys fed through the reducer after the capture state is reached,
+    /// before rendering — switch tabs ("tab", "2"), move selection ("j").
+    #[serde(default)]
+    keys: Vec<String>,
+    /// What the status bar's turn timer shows, in seconds.
+    #[serde(default)]
+    turn_seconds: Option<f32>,
+    /// Render only one pane instead of the full frame.
+    #[serde(default)]
+    crop: Option<CropPane>,
+}
+
+#[derive(Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum NamedCapture {
+    Loaded,
+    Finished,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum CropPane {
+    Chat,
+    Workspace,
+    /// The steps/tool list (borders included).
+    Steps,
+    /// The active tab's scrollable body (detail/debug/run).
+    Body,
+    /// The one-line status bar.
+    Status,
+}
+
+// ── Scripted seams: the LLM provider and tool I/O ────────────────────────
+
+struct ScriptedChat(Mutex<VecDeque<ChatResponse>>);
+
+impl ScriptedChat {
+    fn new(scripts: Vec<LlmScript>) -> Self {
+        let responses = scripts
+            .into_iter()
+            .enumerate()
+            .map(|(i, script)| match script {
+                LlmScript::Text { text } => ChatResponse {
+                    content: Some(text),
+                    tool_calls: Vec::new(),
+                    thinking: Vec::new(),
+                    structured: None,
+                    stop_reason: StopReason::EndTurn,
+                    usage: Usage::default(),
+                },
+                LlmScript::Call { call, input, text } => ChatResponse {
+                    thinking: Vec::new(),
+                    content: text,
+                    tool_calls: vec![ToolCall {
+                        id: format!("shot-{i}"),
+                        name: call,
+                        arguments: input,
+                    }],
+                    structured: None,
+                    stop_reason: StopReason::ToolUse,
+                    usage: Usage::default(),
+                },
+                LlmScript::Structured { structured } => ChatResponse {
+                    content: None,
+                    tool_calls: Vec::new(),
+                    thinking: Vec::new(),
+                    structured: Some(structured),
+                    stop_reason: StopReason::EndTurn,
+                    usage: Usage::default(),
+                },
+            })
+            .collect();
+        Self(Mutex::new(responses))
+    }
+
+    fn pop(&self) -> Result<ChatResponse, LlmError> {
+        self.0.lock().unwrap().pop_front().ok_or_else(|| {
+            LlmError::Unsupported(
+                "scripted LLM responses exhausted — add more to the shot's `llm` list".to_string(),
+            )
+        })
+    }
+}
+
+#[async_trait]
+impl ChatProvider for ScriptedChat {
+    async fn chat(&self, _req: ChatRequest) -> Result<ChatResponse, LlmError> {
+        self.pop()
+    }
+
+    async fn chat_stream(&self, _req: ChatRequest) -> Result<EventStream, LlmError> {
+        use futures::StreamExt;
+        let response = self.pop()?;
+        let mut events: Vec<Result<StreamEvent, LlmError>> = Vec::new();
+        if let Some(text) = &response.content {
+            events.push(Ok(StreamEvent::TextDelta(text.clone())));
+        }
+        for call in &response.tool_calls {
+            events.push(Ok(StreamEvent::ToolCallStarted {
+                name: call.name.clone(),
+            }));
+        }
+        events.push(Ok(StreamEvent::Completed(response)));
+        Ok(futures::stream::iter(events).boxed())
+    }
+}
+
+/// Real definitions, scripted invocation: `tools()` serves the catalog
+/// built from the actual packs and user tools, `invoke` pops the shot's
+/// canned outcomes. An unscripted or exhausted tool fails the run.
+struct ScriptedTools {
+    defs: Vec<ToolDef>,
+    outcomes: Mutex<BTreeMap<String, VecDeque<Value>>>,
+}
+
+#[async_trait]
+impl ToolRegistry for ScriptedTools {
+    async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
+        Ok(self.defs.clone())
+    }
+
+    async fn invoke(&self, name: &str, _input: Value) -> Result<ToolOutcome, ToolError> {
+        let mut outcomes = self.outcomes.lock().unwrap();
+        // Unknown (not Transport) for unscripted names: the composite
+        // registry falls through to the workbench tools only on Unknown.
+        // A plan step calling an unscripted tool still fails loudly —
+        // the pipeline's registry is this one alone.
+        let queue = outcomes
+            .get_mut(name)
+            .ok_or_else(|| ToolError::Unknown(name.to_string()))?;
+        let result = queue.pop_front().ok_or_else(|| {
+            ToolError::Transport(format!("scripted outcomes for {name} exhausted"))
+        })?;
+        Ok(ToolOutcome {
+            result,
+            is_error: false,
+        })
+    }
+}
+
+/// The stale-fixture gate: every scripted tool must exist in the real
+/// catalog, and outcomes must match the tool's declared output schema.
+fn validate_outcomes(defs: &[ToolDef], tools: &BTreeMap<String, VecDeque<Value>>) -> Vec<String> {
+    let by_name: HashMap<&str, &ToolDef> = defs.iter().map(|d| (d.name.as_str(), d)).collect();
+    let mut problems = Vec::new();
+    for (name, outcomes) in tools {
+        let Some(def) = by_name.get(name.as_str()) else {
+            problems.push(format!(
+                "{name}: not in the tool catalog — renamed or removed?"
+            ));
+            continue;
+        };
+        let Some(schema) = &def.output_schema else {
+            continue;
+        };
+        let Ok(validator) = jsonschema::validator_for(schema) else {
+            problems.push(format!("{name}: declared output_schema does not compile"));
+            continue;
+        };
+        for (index, outcome) in outcomes.iter().enumerate() {
+            if let Err(error) = validator.validate(outcome) {
+                problems.push(format!("{name} outcome [{index}]: {error}"));
+            }
+        }
+    }
+    problems
+}
+
+// ── The harness ──────────────────────────────────────────────────────────
+
+async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
+    let doc = match &spec.plan {
+        Some(plan) => Some(load_plan_doc(&root.join(plan)).context("loading the shot's plan")?),
+        None => None,
+    };
+    let (tx, mut rx) = mpsc::unbounded_channel::<WorkbenchEvent>();
+
+    // Every model role resolves to the scripted provider.
+    let chat_provider = Arc::new(ScriptedChat::new(spec.llm));
+    let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
+    providers.insert("scripted".to_string(), chat_provider.clone());
+    let roles = ModelRoles::from([(
+        "default",
+        ModelChoice {
+            provider: "scripted".to_string(),
+            model: "scripted".to_string(),
+            temperature: None,
+            description: None,
+            fallbacks: Vec::new(),
+            context_window: None,
+        },
+    )]);
+    let router = Arc::new(ModelRouter::with_providers(providers, roles));
+
+    let builtin_docs = load_builtin_tools().map_err(anyhow::Error::msg)?;
+    let user_docs = load_user_tools(&[root.join(".graph/tools")]).map_err(anyhow::Error::msg)?;
+    let github = load_pack(
+        PackSource {
+            name: "github".to_string(),
+            tag: Some("v1.0.0".to_string()),
+            layer: dive_config::pack::LayerKind::Project,
+            dir: root.join(SHOT_GITHUB_PACK),
+        },
+        &[],
+        &[],
+    )
+    .map_err(|problems| anyhow::anyhow!(problems.join("; ")))?;
+    let mut pack_set = PackSet::default();
+    pack_set.add(&github);
+    let mut defs = UserToolRegistry::builtins(builtin_docs, router.clone())
+        .tools()
+        .await?;
+    defs.extend(
+        UserToolRegistry::new(user_docs, router.clone())
+            .tools()
+            .await?,
+    );
+    defs.extend(
+        UserToolRegistry::pack("github", github.tools, router.clone())
+            .tools()
+            .await?,
+    );
+
+    let problems = validate_outcomes(&defs, &spec.tools);
+    if !problems.is_empty() {
+        bail!(
+            "stale fixture '{}':\n  {}",
+            spec.name,
+            problems.join("\n  ")
+        );
+    }
+    let (agent_set, agent_errors) =
+        dive_core::agent::doc::AgentSet::load(&super::agents::builtin_sources(), &[]);
+    if !agent_errors.is_empty() {
+        bail!(
+            "built-in agents failed to load: {}",
+            agent_errors.join("; ")
+        );
+    }
+    let agent_set = Arc::new(agent_set);
+    let catalog = ToolCatalog {
+        builtin_tools: defs
+            .iter()
+            .filter(|d| d.name.starts_with("builtin__"))
+            .map(|d| d.name.clone())
+            .collect(),
+        user_tools: defs
+            .iter()
+            .filter(|d| d.name.starts_with("user__"))
+            .map(|d| d.name.clone())
+            .collect(),
+        agents: agent_set.iter().map(|doc| doc.name.clone()).collect(),
+        plans: dive_core::pipeline::doc::builtin_plan_docs()
+            .into_iter()
+            .map(|doc| doc.identifier)
+            .collect(),
+        packs: pack_set.clone(),
+        ..Default::default()
+    };
+    let scripted: Arc<ScriptedTools> = Arc::new(ScriptedTools {
+        defs,
+        outcomes: Mutex::new(spec.tools),
+    });
+
+    let store: Arc<dyn Store> = Arc::new(MemoryStore::new());
+    let llm = dive_core::user_tools::load_builtin_tools().unwrap();
+    let pipeline = Arc::new(Pipeline {
+        registry: Arc::new(dive_core::CompositeRegistry::new(vec![
+            Arc::new(dive_core::user_tools::UserToolRegistry::builtins(
+                llm,
+                router.clone(),
+            )),
+            scripted.clone(),
+        ])),
+        router,
+        events: Arc::new(ChannelSink::plan_run(tx.clone())),
+        plans: Arc::new(dive_core::pipeline::doc::builtin_plan_docs()),
+        call_stack: Vec::new(),
+        store: Some(store.clone()),
+        gate: None,
+        interlocutor: None,
+        catalog: Some(Arc::new(catalog)),
+        user_context: String::new(),
+        // Fixed: the pipeline date must not vary between regenerations.
+        current_date: "2026-07-19".to_string(),
+        max_attempts: 2,
+        max_agent_iterations: 15,
+        usage: std::sync::Arc::new(dive_core::usage::UsageLedger::unpriced()),
+        agents: agent_set.clone(),
+        agent_depth: 0,
+        always_loaded: Default::default(),
+        search_pool: None,
+        drafted: Default::default(),
+        packs: Arc::new(pack_set),
+        origin: Default::default(),
+    });
+
+    let attachment = Arc::new(
+        dive_runtime::workbench::NetworkAttachment::new(dive_runtime::workbench::NetworkSetup {
+            pipeline: pipeline.clone(),
+            tx: tx.clone(),
+            plans_dir: None,
+            root: root.to_path_buf(),
+            doc: doc.clone(),
+        })
+        .unwrap(),
+    );
+    let debug = attachment.debug.clone();
+    let draft = attachment.draft.clone();
+    let workbench_tools = Arc::new(WorkbenchTools::new(
+        draft.clone(),
+        pipeline.clone(),
+        None,
+        debug.clone(),
+        tx.clone(),
+    ));
+    let asking = Arc::new(
+        pipeline
+            .as_ref()
+            .clone()
+            .with_interlocutor(Arc::new(super::runner::UiInterlocutor::new(tx.clone()))),
+    );
+    let toolbox: Arc<dyn ToolRegistry> = Arc::new(dive_core::ExcludingRegistry::new(
+        Arc::new(dive_core::toolbox::AgentToolbox::new(
+            asking.registry.clone(),
+            asking.clone(),
+            asking.plans.as_ref().clone(),
+        )),
+        vec!["plan_and_execute".to_string()],
+    ));
+    let registry: Arc<dyn ToolRegistry> =
+        Arc::new(CompositeRegistry::new(vec![toolbox, workbench_tools]));
+
+    let conversation = Conversation {
+        agents: agent_set.clone(),
+        catalog: registry,
+        pipeline: pipeline.clone(),
+        events: Arc::new(ChannelSink::agent(tx.clone())),
+        session: BTreeMap::from([("date", "2026-07-19".to_string()), ("user", String::new())]),
+        prompt_overrides: BTreeMap::new(),
+        context: Some(dive_runtime::attachment::context_hook(
+            agent_set.clone(),
+            vec![attachment.clone() as Arc<dyn dive_runtime::attachment::AttachmentHost>],
+        )),
+        default_max_iterations: 8,
+        progress_tools: progress_tools(),
+        stop_tools: super::artifact::STOP_TOOLS
+            .iter()
+            .map(|name| name.to_string())
+            .collect(),
+        standing_tools: vec!["workbench__*".to_string()],
+        handoff_guard: None,
+    };
+
+    let start_agent = spec.agent.clone().unwrap_or_else(|| {
+        super::agents::starting_agent(&super::agents::Start::Plan(None), doc.as_ref()).to_string()
+    });
+    let context = Arc::new(Workbench {
+        active: Mutex::new(start_agent.clone()),
+        conversation,
+        pipeline,
+        history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+        draft,
+        catalog: scripted,
+        store,
+        plans_dir: None,
+        debug,
+        tx: tx.clone(),
+        root: root.to_path_buf(),
+        thread: Mutex::new(None),
+        project: None,
+        attachment,
+    });
+
+    // Boot exactly like `run_plan_workbench`, then type the chat message
+    // through the reducer and submit it.
+    let mut app = App::new(doc);
+    app.agent = start_agent;
+    run_effect(app::Effect::LoadContext, &context);
+    if app.ws.doc.is_some() {
+        run_effect(app::Effect::Validate, &context);
+    }
+    if let Some(chat) = &spec.chat {
+        for ch in chat.chars() {
+            feed_key(&mut app, KeyCode::Char(ch), &context);
+        }
+        feed_key(&mut app, KeyCode::Enter, &context);
+    }
+
+    // Drain engine messages through the reducer until the capture point.
+    // Pauses before a `pause_at` target are answered with a real `c`
+    // keypress — the user's continue — so the run steps to the target.
+    let mut answers = spec.answers;
+    let mut context_loaded = false;
+    let mut validated = spec.plan.is_none();
+    let mut turn_done = spec.chat.is_none();
+    loop {
+        let event = tokio::time::timeout(Duration::from_secs(30), rx.recv())
+            .await
+            .with_context(|| format!("shot '{}' timed out awaiting its capture point", spec.name))?
+            .context("workbench channel closed before the capture point")?;
+        let (_, line) = event.log_line();
+        eprintln!("[shot {}] {line}", spec.name);
+        match &event {
+            WorkbenchEvent::ContextLoaded { .. } => context_loaded = true,
+            WorkbenchEvent::Validated(_) => validated = true,
+            WorkbenchEvent::TurnFinished(_) => turn_done = true,
+            _ => {}
+        }
+        for effect in app::update(&mut app, event) {
+            run_effect(effect, &context);
+        }
+        if let Mode::Answering(state) = &mut app.mode {
+            if let Some(answer) = answers.pop_front() {
+                for field in &mut state.form.fields {
+                    match answer.get(&field.key) {
+                        Some(Value::String(text)) => field.set_text(text),
+                        Some(value) => field.set_text(&value.to_string()),
+                        None => {}
+                    }
+                }
+                feed(
+                    &mut app,
+                    KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL),
+                    &context,
+                );
+                continue;
+            }
+        }
+        if let Some(target) = &spec.capture.pause_at {
+            match &app.mode {
+                Mode::Paused(prompt) if prompt.path == *target => break,
+                Mode::Answering(state) if state.prompt.path == *target => break,
+                Mode::Paused(_) => feed_key(&mut app, KeyCode::Char('c'), &context),
+                _ => {}
+            }
+        } else {
+            let done = match spec.capture.at {
+                Some(NamedCapture::Loaded) => context_loaded && validated && turn_done,
+                Some(NamedCapture::Finished) => app.ws.outcome.is_some() && turn_done,
+                None => bail!("shot '{}': capture needs one of pause_at or at", spec.name),
+            };
+            if done {
+                break;
+            }
+        }
+    }
+
+    // Post-capture keys: tab switches, selection moves — through the
+    // real reducer, so the shot shows exactly what a user would see.
+    for name in &spec.capture.keys {
+        feed_key(&mut app, key_code(name)?, &context);
+    }
+
+    // Pin the wall clocks the UI renders (the turn timer and the
+    // in-flight call timer).
+    if let Some(seconds) = spec.capture.turn_seconds {
+        let past = std::time::Instant::now().checked_sub(Duration::from_secs_f32(seconds));
+        if let (Some(past), Some(in_flight)) = (past, app.in_flight.as_mut()) {
+            in_flight.started = past;
+        }
+        if app.turn_started.is_some() {
+            app.turn_started = past;
+        }
+    }
+
+    let backend = TestBackend::new(spec.grid.cols, spec.grid.rows);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.draw(|frame| super::ui::draw(frame, &app))?;
+    // Pane crops read the geometry `draw` just recorded; crops render
+    // without window chrome.
+    let (title, clip) = match spec.capture.crop {
+        None => (Some(spec.title.as_str()), None),
+        Some(pane) => {
+            let regions = *app.regions.borrow();
+            let rect = match pane {
+                CropPane::Chat => regions.chat,
+                CropPane::Workspace => regions.workspace,
+                CropPane::Steps => regions.ws_list,
+                CropPane::Body => regions.ws_body,
+                CropPane::Status => ratatui::layout::Rect {
+                    x: 0,
+                    y: spec.grid.rows - 1,
+                    width: spec.grid.cols,
+                    height: 1,
+                },
+            };
+            if rect.width == 0 || rect.height == 0 {
+                bail!("shot '{}': crop pane has no rendered area", spec.name);
+            }
+            (None, Some(rect))
+        }
+    };
+    Ok(buffer_to_svg(terminal.backend().buffer(), title, clip))
+}
+
+/// Feed one key through the reducer and run any effects it returns.
+fn feed_key(app: &mut App, code: KeyCode, context: &Arc<Workbench>) {
+    feed(app, KeyEvent::new(code, KeyModifiers::NONE), context);
+}
+
+fn feed(app: &mut App, key: KeyEvent, context: &Arc<Workbench>) {
+    for effect in app::update(app, Msg::Term(Event::Key(key))) {
+        run_effect(effect, context);
+    }
+}
+
+/// A spec key name: a single character, or a named special key.
+fn key_code(name: &str) -> Result<KeyCode> {
+    let mut chars = name.chars();
+    if let (Some(ch), None) = (chars.next(), chars.next()) {
+        return Ok(KeyCode::Char(ch));
+    }
+    Ok(match name {
+        "tab" => KeyCode::Tab,
+        "enter" => KeyCode::Enter,
+        "esc" => KeyCode::Esc,
+        "up" => KeyCode::Up,
+        "down" => KeyCode::Down,
+        "pgup" => KeyCode::PageUp,
+        "pgdn" => KeyCode::PageDown,
+        other => bail!("unknown key name '{other}'"),
+    })
+}
+
+#[tokio::test]
+async fn generate_docs_screenshots() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root");
+    let shots_dir = root.join("docs/shots");
+    let mut specs: Vec<PathBuf> = std::fs::read_dir(&shots_dir)
+        .expect("docs/shots exists")
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "yaml"))
+        .collect();
+    specs.sort();
+    assert!(
+        !specs.is_empty(),
+        "no shot specs in {}",
+        shots_dir.display()
+    );
+    let update = std::env::var(UPDATE_ENV).is_ok_and(|value| value == "1");
+    let out_dir = root.join("docs/images/workbench");
+    let mut stale = Vec::new();
+    for path in specs {
+        let raw = std::fs::read_to_string(&path).expect("readable spec");
+        let spec: ShotSpec = serde_yaml::from_str(&raw)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let name = spec.name.clone();
+        let svg = run_shot(&root, spec)
+            .await
+            .unwrap_or_else(|error| panic!("shot '{name}': {error:#}"));
+        let out = out_dir.join(format!("{name}.svg"));
+        if update {
+            std::fs::create_dir_all(&out_dir).expect("screenshot directory");
+            std::fs::write(&out, svg).expect("writable screenshot");
+            eprintln!("wrote {}", out.display());
+        } else if std::fs::read_to_string(&out).ok().as_deref() != Some(svg.as_str()) {
+            stale.push(format!("docs/images/workbench/{name}.svg is out of date"));
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "{}\nregenerate them with `mise run shots`",
+        stale.join("\n")
+    );
+}
