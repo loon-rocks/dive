@@ -21,7 +21,7 @@ properties:
     description: What the tool does and returns. Agents and the plan drafter read it when choosing tools.
   kind:
     type: string
-    enum: [exec, prompt, reshape, decision]
+    enum: [exec, prompt, reshape, decision, image]
     description: What the tool runs. Each kind takes its own fields, listed below.
   input_schema:
     type: object
@@ -34,7 +34,7 @@ properties:
     description: Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.
 oneOf:
   - title: exec
-    description: Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.
+    description: "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files the command writes to the directory in `$DIVE_OUT` are stored and listed under `files` in the result, each with a `ref`."
     properties:
       kind:
         const: exec
@@ -170,6 +170,32 @@ oneOf:
             pr:
               type: object
               description: A pull request from gh
+  - title: image
+    description: "Generates images with an image model and stores them as files. The call's input takes `prompt`, `images` (refs to edit or reference), `aspect_ratio`, `size`, `count` and `path`; the result lists the images under `images`, each with a `ref`. Shipped as `builtin__generate_image`."
+    properties:
+      kind:
+        const: image
+      model:
+        type: string
+        default: image
+        description: An image model role. A chat or decision role fails the call.
+      caller_model:
+        type: boolean
+        default: false
+        description: Let the call's `model` input pick the role.
+    examples:
+      - version: 3
+        name: hero_art
+        description: Draws a hero image for a landing page from a short brief.
+        kind: image
+        model: image
+        input_schema:
+          type: object
+          required: [prompt]
+          properties:
+            prompt:
+              type: string
+              description: What to draw
   - title: decision
     description: Asks a decision model typed questions about the same state, each answered independently. The result maps each question name to its answer.
     properties:

@@ -37,14 +37,12 @@ pub enum LlmError {
         expected: dive_config::ModelKind,
         actual: dive_config::ModelKind,
     },
-    #[error("fallbacks for model role '{role}' mix chat and decision providers ('{provider}' is a {actual} provider); a role's fallbacks must all be the same kind as its primary")]
-    MixedFallbackKinds {
-        role: String,
-        provider: String,
-        actual: dive_config::ModelKind,
-    },
+    #[error("{0}")]
+    Config(String),
     #[error("no decision model is configured: add [models.decider] on a provider with type = \"systemone\", or name a decision role with `model:`")]
     NoDecider,
+    #[error("no image model is configured: add [models.image] on a provider with type = \"gemini\", or name an image role with `model:`")]
+    NoImageModel,
     #[error("state for model role '{role}' ({model}) is about {estimate} tokens, over its context_window of {limit}; trim it in an earlier step")]
     ContextWindowExceeded {
         role: String,

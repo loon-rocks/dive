@@ -41,6 +41,12 @@ pub fn extension_for(mime: &str) -> &'static str {
 }
 
 pub fn mime_for(extension: &str) -> &'static str {
+    let extension = extension.to_ascii_lowercase();
+    let extension = match extension.as_str() {
+        "jpeg" => "jpg",
+        "tif" => "tiff",
+        other => other,
+    };
     TYPES
         .iter()
         .find(|(known, _)| *known == extension)
@@ -143,6 +149,20 @@ pub trait BlobStore: Send + Sync {
     async fn locate(&self, blob: &BlobRef) -> Result<FileLocation, FileError>;
 
     async fn materialize(&self, blob: &BlobRef) -> Result<PathBuf, FileError>;
+}
+
+pub fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
+    if stored.is_empty() {
+        return result;
+    }
+    let listed = serde_json::to_value(stored).unwrap_or_else(|_| Value::Array(Vec::new()));
+    match result {
+        Value::Object(mut map) if !map.contains_key("files") => {
+            map.insert("files".to_string(), listed);
+            Value::Object(map)
+        }
+        other => serde_json::json!({ "result": other, "files": listed }),
+    }
 }
 
 pub fn refs_in(value: &Value) -> Vec<BlobRef> {

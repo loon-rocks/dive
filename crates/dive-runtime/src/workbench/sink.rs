@@ -273,6 +273,7 @@ mod tests {
             total: Usage {
                 input_tokens: 4_000,
                 output_tokens: 250,
+                output_image_tokens: 0,
                 ..Default::default()
             },
             cost_usd: Some(0.42),

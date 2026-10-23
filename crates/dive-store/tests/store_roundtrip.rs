@@ -241,6 +241,7 @@ async fn entries_keep_their_duration_and_model_usage() {
         model: "m".into(),
         input_tokens: 10,
         output_tokens: 2,
+        output_image_tokens: 0,
         cache_creation_input_tokens: 3,
         cache_read_input_tokens: 4,
     };
@@ -251,7 +252,7 @@ async fn entries_keep_their_duration_and_model_usage() {
         calls: vec![dive_core::trace::Call::Model {
             role: "judge".into(),
             site: "plan__digest/E1".into(),
-            decision: false,
+            model_type: dive_config::ModelKind::Chat,
             ms: 4,
             usage: usage.clone(),
         }],

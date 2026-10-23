@@ -71,6 +71,7 @@ fn tools(with_decider: bool) -> (ListTools, Arc<WeightDecider>) {
         requests: Mutex::new(Vec::new()),
     });
     let choice = |provider: &str, model: &str| ModelChoice {
+        kind: None,
         provider: provider.into(),
         model: model.into(),
         temperature: None,

@@ -67,8 +67,51 @@ fn telemetry_section_added(_doc: &mut DocumentMut) -> Result<Vec<String>, String
     Ok(Vec::new())
 }
 
-fn config_version_5_additions(_doc: &mut DocumentMut) -> Result<Vec<String>, String> {
-    Ok(Vec::new())
+fn config_version_5_additions(doc: &mut DocumentMut) -> Result<Vec<String>, String> {
+    let deciders: Vec<String> = doc
+        .get("providers")
+        .and_then(Item::as_table_like)
+        .map(|providers| {
+            providers
+                .iter()
+                .filter(|(_, provider)| {
+                    provider.get("type").and_then(Item::as_str) == Some("systemone")
+                })
+                .map(|(name, _)| name.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut notes = Vec::new();
+    if deciders.is_empty() {
+        return Ok(notes);
+    }
+    let Some(models) = doc.get_mut("models").and_then(Item::as_table_like_mut) else {
+        return Ok(notes);
+    };
+    for (name, entry) in models.iter_mut() {
+        if crate::Role::from_name(name.get()).is_some() {
+            continue;
+        }
+        let Some(role) = entry.as_table_like_mut() else {
+            continue;
+        };
+        let on_decider = role
+            .get("provider")
+            .and_then(Item::as_str)
+            .is_some_and(|provider| deciders.iter().any(|d| d == provider));
+        if !on_decider || role.contains_key("type") {
+            continue;
+        }
+        role.insert("type", toml_edit::value("decision"));
+        if let Some(inline) = entry.as_inline_table_mut() {
+            inline.fmt();
+        }
+        notes.push(format!(
+            "models.{} runs on a systemone provider, so it now says type = \"decision\": roles no longer take their type from the provider",
+            name.get()
+        ));
+    }
+    Ok(notes)
 }
 
 const MOVED_PACKS: &[&str] = &["github", "slack"];
@@ -779,6 +822,20 @@ input = 1.0
             err,
             "/x/config.toml: [tools].packs was replaced by [packs.<name>] entries; remove it, then install with `dive pack add github` and `dive pack add slack`"
         );
+    }
+
+    #[test]
+    fn version_4_custom_roles_on_a_systemone_provider_get_the_decision_type() {
+        let mut doc: DocumentMut = "version = 4\n\n[providers.ts]\ntype = \"systemone\"\n\n[providers.a]\ntype = \"anthropic\"\n\n[models]\ndecider = { provider = \"ts\", model = \"d\" }\ngate = { provider = \"ts\", model = \"g\" }\nwriter = { provider = \"a\", model = \"w\" }\n\n[models.triage]\nprovider = \"ts\"\nmodel = \"t\"\n"
+            .parse()
+            .unwrap();
+        let upgrade = upgrade(&mut doc, Path::new("c.toml")).unwrap();
+        assert_eq!(upgrade.notes.len(), 2, "{:?}", upgrade.notes);
+        assert!(upgrade.notes[0].starts_with("models.gate runs on a systemone provider"));
+        assert_eq!(doc["models"]["gate"]["type"].as_str(), Some("decision"));
+        assert_eq!(doc["models"]["triage"]["type"].as_str(), Some("decision"));
+        assert!(doc["models"]["decider"].get("type").is_none());
+        assert!(doc["models"]["writer"].get("type").is_none());
     }
 
     #[test]

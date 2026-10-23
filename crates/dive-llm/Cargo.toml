@@ -17,3 +17,4 @@ reqwest.workspace = true
 schemars.workspace = true
 tracing.workspace = true
 eventsource-stream = "0.2"
+base64 = "0.22"

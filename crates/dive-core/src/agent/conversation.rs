@@ -916,6 +916,7 @@ mod tests {
             ModelRoles::from([(
                 "default",
                 ModelChoice {
+                    kind: None,
                     provider: "mock".into(),
                     model: "m".into(),
                     temperature: None,
@@ -1183,6 +1184,7 @@ mod tests {
         answer.usage = Usage {
             input_tokens: 30,
             output_tokens: 4,
+            output_image_tokens: 0,
             ..Default::default()
         };
         let (conversation, _) = conversation(vec![

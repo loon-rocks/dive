@@ -84,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "scripted".to_string(),
                 model: "scripted".to_string(),
                 temperature: None,

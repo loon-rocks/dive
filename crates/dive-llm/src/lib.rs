@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod decision;
 mod error;
 mod failover;
+pub mod image;
 mod metering;
 mod provider;
 pub mod providers;
@@ -15,6 +16,7 @@ pub mod types;
 
 pub use decision::DecisionProvider;
 pub use error::LlmError;
-pub use metering::{MeteredProvider, ModelCall, UsageMeter};
+pub use image::{ImageData, ImageOptions, ImageProvider, ImageRequest, ImageResponse, Part};
+pub use metering::{MeteredImager, MeteredProvider, ModelCall, UsageMeter};
 pub use provider::ChatProvider;
 pub use roles::ModelRouter;

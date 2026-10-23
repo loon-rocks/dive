@@ -44,6 +44,46 @@ pub struct Config {
     pub packs: BTreeMap<String, crate::pack::PackEntry>,
 }
 
+impl Config {
+    pub fn check_model_types(&self) -> Result<(), String> {
+        self.models.validate()?;
+        let check = |name: &str, kind: ModelKind, provider: &str| -> Result<(), String> {
+            let Some(config) = self.providers.get(provider) else {
+                return Ok(());
+            };
+            if config.kind.serves(kind) {
+                return Ok(());
+            }
+            let serves = config.kind.kinds();
+            let fix = match (Role::from_name(name), serves) {
+                (None, [only]) => format!("; set type = \"{only}\""),
+                _ => format!("; pick a provider that serves {kind} models"),
+            };
+            Err(format!(
+                "models.{name} is {} role, but provider \"{provider}\" serves {} models{fix}",
+                kind.with_article(),
+                describe_kinds(serves)
+            ))
+        };
+        for role in Role::ALL {
+            if let (Some(choice), Some(kind)) = (
+                self.models.resolve_role(role),
+                self.models.kind_of(role.as_str()),
+            ) {
+                check(role.as_str(), kind, &choice.provider)?;
+            }
+        }
+        for (name, choice) in self.models.iter() {
+            let kind = self.models.kind_of(name).unwrap_or_default();
+            check(name, kind, &choice.provider)?;
+            for fallback in &choice.fallbacks {
+                check(name, kind, &fallback.provider)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// What one model costs, in USD per million tokens.
 ///
 /// Deliberately not shipped with built-in defaults: published prices change,
@@ -55,6 +95,8 @@ pub struct ModelPrice {
     /// Uncached input tokens.
     pub input: f64,
     pub output: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_image: Option<f64>,
     /// Tokens written to the prompt cache. Defaults to `input` x 1.25, the
     /// standard premium for a 5-minute TTL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,6 +128,7 @@ pub struct PriceTier {
 pub struct TokenCounts {
     pub input: u64,
     pub output: u64,
+    pub output_image: u64,
     pub cache_write: u64,
     pub cache_read: u64,
 }
@@ -100,6 +143,7 @@ impl TokenCounts {
 pub struct Rates {
     pub input: f64,
     pub output: f64,
+    pub output_image: f64,
     pub cache_write: f64,
     pub cache_read: f64,
 }
@@ -116,6 +160,7 @@ impl ModelPrice {
         let base = Rates {
             input: self.input,
             output: self.output,
+            output_image: self.output_image.unwrap_or(self.output),
             cache_write: self.cache_write_rate(),
             cache_read: self.cache_read_rate(),
         };
@@ -130,9 +175,11 @@ impl ModelPrice {
                 rate * input / base.input
             }
         };
+        let output = tier.output.unwrap_or(base.output);
         Rates {
             input,
-            output: tier.output.unwrap_or(base.output),
+            output,
+            output_image: self.output_image.unwrap_or(output),
             cache_write: tier.cache_write.unwrap_or_else(|| scaled(base.cache_write)),
             cache_read: tier.cache_read.unwrap_or_else(|| scaled(base.cache_read)),
         }
@@ -143,6 +190,7 @@ impl ModelPrice {
         let per_million = |count: u64, rate: f64| (count as f64) * rate / 1_000_000.0;
         per_million(tokens.input, rates.input)
             + per_million(tokens.output, rates.output)
+            + per_million(tokens.output_image, rates.output_image)
             + per_million(tokens.cache_write, rates.cache_write)
             + per_million(tokens.cache_read, rates.cache_read)
     }
@@ -433,13 +481,29 @@ pub enum ProviderKind {
     OpenaiCompat,
     Bedrock,
     Systemone,
+    Gemini,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelKind {
+    #[default]
     Chat,
     Decision,
+    Image,
 }
 
 impl ModelKind {
@@ -447,7 +511,20 @@ impl ModelKind {
         match self {
             ModelKind::Chat => "chat",
             ModelKind::Decision => "decision",
+            ModelKind::Image => "image",
         }
+    }
+
+    pub fn with_article(self) -> &'static str {
+        match self {
+            ModelKind::Chat => "a chat",
+            ModelKind::Decision => "a decision",
+            ModelKind::Image => "an image",
+        }
+    }
+
+    pub fn is_chat(&self) -> bool {
+        *self == ModelKind::Chat
     }
 }
 
@@ -458,18 +535,44 @@ impl std::fmt::Display for ModelKind {
 }
 
 impl ProviderKind {
-    pub fn model_kind(self) -> ModelKind {
+    pub fn as_str(self) -> &'static str {
         match self {
-            ProviderKind::Systemone => ModelKind::Decision,
-            _ => ModelKind::Chat,
+            ProviderKind::Anthropic => "anthropic",
+            ProviderKind::Openai => "openai",
+            ProviderKind::OpenaiCompat => "openai_compat",
+            ProviderKind::Bedrock => "bedrock",
+            ProviderKind::Systemone => "systemone",
+            ProviderKind::Gemini => "gemini",
         }
     }
+
+    pub fn kinds(self) -> &'static [ModelKind] {
+        match self {
+            ProviderKind::Systemone => &[ModelKind::Decision],
+            ProviderKind::Gemini => &[ModelKind::Image],
+            _ => &[ModelKind::Chat],
+        }
+    }
+
+    pub fn serves(self, kind: ModelKind) -> bool {
+        self.kinds().contains(&kind)
+    }
+}
+
+pub fn describe_kinds(kinds: &[ModelKind]) -> String {
+    kinds
+        .iter()
+        .map(|kind| kind.as_str())
+        .collect::<Vec<_>>()
+        .join(" and ")
 }
 
 /// A role's resolved model choice.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ModelChoice {
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ModelKind>,
     pub provider: String,
     pub model: String,
     pub temperature: Option<f32>,
@@ -514,10 +617,11 @@ pub enum Role {
     Repair,
     Judge,
     Decider,
+    Image,
 }
 
 impl Role {
-    pub const ALL: [Role; 8] = [
+    pub const ALL: [Role; 9] = [
         Role::Chat,
         Role::Drafter,
         Role::Planner,
@@ -526,6 +630,7 @@ impl Role {
         Role::Repair,
         Role::Judge,
         Role::Decider,
+        Role::Image,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -538,12 +643,14 @@ impl Role {
             Role::Repair => "repair",
             Role::Judge => "judge",
             Role::Decider => "decider",
+            Role::Image => "image",
         }
     }
 
     pub fn kind(self) -> ModelKind {
         match self {
             Role::Decider => ModelKind::Decision,
+            Role::Image => ModelKind::Image,
             _ => ModelKind::Chat,
         }
     }
@@ -598,6 +705,29 @@ impl ModelRoles {
 
     pub fn resolve_role(&self, role: Role) -> Option<&ModelChoice> {
         self.resolve(role.as_str())
+    }
+
+    pub fn kind_of(&self, name: &str) -> Option<ModelKind> {
+        let choice = self.resolve(name)?;
+        Some(match Role::from_name(name) {
+            Some(role) => role.kind(),
+            None => choice.kind.unwrap_or_default(),
+        })
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, choice) in self.iter() {
+            let (Some(role), Some(stated)) = (Role::from_name(name), choice.kind) else {
+                continue;
+            };
+            if stated != role.kind() {
+                return Err(format!(
+                    "models.{name} is a standard {} role, so it can't be type = \"{stated}\"; remove type, or move this model to a custom role",
+                    role.kind()
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -782,6 +912,7 @@ mod pricing_tests {
         ModelPrice {
             input: 0.10,
             output: 0.50,
+            output_image: None,
             cache_write: None,
             cache_read: Some(0.01),
             tiers: vec![PriceTier {
@@ -803,6 +934,7 @@ mod pricing_tests {
         TokenCounts {
             input,
             output,
+            output_image: 0,
             cache_write,
             cache_read,
         }
@@ -869,6 +1001,7 @@ mod pricing_tests {
         let price = ModelPrice {
             input: 5.0,
             output: 30.0,
+            output_image: None,
             cache_write: None,
             cache_read: None,
             tiers: vec![PriceTier {
@@ -881,5 +1014,17 @@ mod pricing_tests {
             source: None,
         };
         assert_eq!(rounded(price.cost(&tokens(280_000, 4_000, 0, 0))), 2.98);
+    }
+
+    #[test]
+    fn image_tokens_use_their_own_rate_or_fall_back_to_output() {
+        let mut price = haiku();
+        let counts = TokenCounts {
+            output_image: 1_000_000,
+            ..tokens(0, 0, 0, 0)
+        };
+        assert_eq!(rounded(price.cost(&counts)), 0.5);
+        price.output_image = Some(30.0);
+        assert_eq!(rounded(price.cost(&counts)), 30.0);
     }
 }

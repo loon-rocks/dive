@@ -1,0 +1,38 @@
+version: 2
+name: generate_image
+description: >
+  Generate an image from a text prompt, or edit and combine images by passing
+  their refs in `images` with a prompt saying what to change. Returns
+  {images: [{ref, mime, bytes, width, height}]}, each ref a file like
+  blob:sha256-….png: show one to the user as a markdown image with the ref as
+  its URL, or pass the ref to another tool. Describe the scene, style,
+  lighting and any text to draw in the prompt. Set `path` to also save the
+  image into the workspace, for example site/hero.png.
+kind: image
+caller_model: true
+input_schema:
+  type: object
+  required: [prompt]
+  properties:
+    prompt:
+      type: string
+      description: What to draw, or what to change in the given images.
+    images:
+      type: array
+      items: { type: string }
+      description: Refs of images to edit or use as references, such as blob:sha256-….png from an earlier tool result.
+    aspect_ratio:
+      type: string
+      description: Width to height, such as "1:1", "16:9" or "9:16". Omit for the model's default.
+    size:
+      type: string
+      description: Output resolution, such as "1K", "2K" or "4K" (uppercase K). Omit for the model's default.
+    count:
+      type: integer
+      minimum: 1
+      maximum: 4
+      default: 1
+      description: How many images to generate.
+    path:
+      type: string
+      description: A path inside the workspace to also save the image to, such as site/hero.png. With a count over 1, later images get -2, -3 before the extension.

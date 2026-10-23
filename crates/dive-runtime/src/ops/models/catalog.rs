@@ -112,6 +112,7 @@ impl Catalog {
         Some(ModelPrice {
             input: cost.input?,
             output: cost.output?,
+            output_image: None,
             cache_write: cost.cache_write,
             cache_read: cost.cache_read,
             tiers: cost
@@ -144,6 +145,7 @@ impl Catalog {
             ProviderKind::Anthropic => "anthropic",
             ProviderKind::Openai => "openai",
             ProviderKind::Bedrock => "amazon-bedrock",
+            ProviderKind::Gemini => "google",
             ProviderKind::OpenaiCompat | ProviderKind::Systemone => return None,
         };
         self.0.get(id)

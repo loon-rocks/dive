@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
-pub const STANDARD_ROLES: [&str; 8] = [
-    "default", "chat", "planner", "outliner", "solver", "repair", "judge", "decider",
+pub const STANDARD_ROLES: [&str; 9] = [
+    "default", "chat", "planner", "outliner", "solver", "repair", "judge", "decider", "image",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,6 +72,8 @@ pub struct PriceEntry {
     pub model: String,
     pub input: f64,
     pub output: f64,
+    #[serde(default)]
+    pub output_image: Option<f64>,
     pub cache_write: Option<f64>,
     pub cache_read: Option<f64>,
     #[serde(default)]
@@ -106,6 +108,8 @@ pub struct ProviderEdit {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoleEdit {
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ModelKind>,
     pub role: String,
     pub provider: String,
     pub model: String,
@@ -118,6 +122,8 @@ pub struct PriceEdit {
     pub model: String,
     pub input: f64,
     pub output: f64,
+    #[serde(default)]
+    pub output_image: Option<f64>,
     pub cache_write: Option<f64>,
     pub cache_read: Option<f64>,
     #[serde(default)]
@@ -294,11 +300,9 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
     let merged = read_layers(layers);
     let mut problems = merged.problems;
     let mut providers: Vec<ProviderEntry> = Vec::new();
-    let mut kinds = BTreeMap::new();
     for (name, (raw, origin)) in merged.providers {
         match raw.try_into::<ProviderConfig>() {
             Ok(provider) => {
-                kinds.insert(name.clone(), provider.kind.model_kind());
                 let (key_names, key) = key_state(provider.api_key.as_deref(), resolver);
                 providers.push(ProviderEntry {
                     name,
@@ -321,7 +325,11 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
         match raw.try_into::<ModelChoice>() {
             Ok(choice) => roles.push(RoleEntry {
                 standard: STANDARD_ROLES.contains(&role.as_str()),
-                kind: kinds.get(&choice.provider).copied(),
+                kind: Some(
+                    dive_config::Role::from_name(&role)
+                        .map(dive_config::Role::kind)
+                        .unwrap_or(choice.kind.unwrap_or_default()),
+                ),
                 provider: choice.provider,
                 model: choice.model,
                 temperature: choice.temperature,
@@ -375,6 +383,7 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
                     .collect(),
                 input: price.input,
                 output: price.output,
+                output_image: price.output_image,
                 cache_write: price.cache_write,
                 cache_read: price.cache_read,
                 tiers: price.tiers,
@@ -476,22 +485,9 @@ fn validate(layers: &Layers, candidate: &str) -> Result<()> {
     })?;
     let config = loaded.config;
     for (role, choice) in config.models.iter() {
-        let Some(provider) = config.providers.get(&choice.provider) else {
+        if !config.providers.contains_key(&choice.provider) {
             bail!(
                 "[models.{role}] uses provider '{}', which isn't configured",
-                choice.provider
-            );
-        };
-        let kind = provider.kind.model_kind();
-        if role == "decider" && kind != ModelKind::Decision {
-            bail!(
-                "decider needs a decision-model provider such as System One, not '{}'",
-                choice.provider
-            );
-        }
-        if role != "decider" && STANDARD_ROLES.contains(&role) && kind == ModelKind::Decision {
-            bail!(
-                "{role} needs a chat-model provider; '{}' serves decision models",
                 choice.provider
             );
         }
@@ -696,6 +692,15 @@ pub fn save_role_in(layers: &Layers, original: Option<&str>, change: &RoleEdit) 
             .and_then(|table| table.get("f").cloned())
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default();
+        let custom = !STANDARD_ROLES.contains(&change.role.as_str());
+        match change.kind {
+            Some(kind) if custom && kind != ModelKind::Chat => {
+                entry.insert("type", value(kind.as_str()));
+            }
+            _ => {
+                entry.remove("type");
+            }
+        }
         entry.insert("provider", value(change.provider.trim()));
         entry.insert("model", value(change.model.trim()));
         set_number(&mut entry, "temperature", change.temperature.map(f64::from));
@@ -748,6 +753,7 @@ pub fn save_price_in(layers: &Layers, original: Option<&str>, change: &PriceEdit
     for (what, number) in [
         ("input", Some(change.input)),
         ("output", Some(change.output)),
+        ("output image", change.output_image),
         ("cache write", change.cache_write),
         ("cache read", change.cache_read),
     ] {
@@ -763,6 +769,7 @@ pub fn save_price_in(layers: &Layers, original: Option<&str>, change: &PriceEdit
         let mut entry = take_entry(pricing, original, model)?;
         entry.insert("input", value(change.input));
         entry.insert("output", value(change.output));
+        set_number(&mut entry, "output_image", change.output_image);
         set_number(&mut entry, "cache_write", change.cache_write);
         set_number(&mut entry, "cache_read", change.cache_read);
         if let Some(tiers) = &change.tiers {
@@ -829,6 +836,7 @@ pub fn default_key_name(kind: ProviderKind) -> Option<&'static str> {
         ProviderKind::Anthropic => Some("ANTHROPIC_API_KEY"),
         ProviderKind::Openai => Some("OPENAI_API_KEY"),
         ProviderKind::Systemone => Some("SYSTEMONE_API_KEY"),
+        ProviderKind::Gemini => Some("GEMINI_API_KEY"),
         ProviderKind::OpenaiCompat | ProviderKind::Bedrock => None,
     }
 }

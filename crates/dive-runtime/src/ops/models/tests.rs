@@ -193,6 +193,7 @@ fn saving_a_role_rewrites_its_fallbacks_and_keeps_fields_the_form_does_not_show(
         &layers,
         Some("planner"),
         &RoleEdit {
+            kind: None,
             role: "planner".to_string(),
             provider: "anthropic".to_string(),
             model: "claude-opus-5-5".to_string(),
@@ -239,6 +240,7 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
         &layers,
         None,
         &RoleEdit {
+            kind: None,
             role: "solver".to_string(),
             provider: "nowhere".to_string(),
             model: "m".to_string(),
@@ -253,6 +255,7 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
         &layers,
         Some("decider"),
         &RoleEdit {
+            kind: None,
             role: "decider".to_string(),
             provider: "anthropic".to_string(),
             model: "claude-haiku-4-5".to_string(),
@@ -263,7 +266,9 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
     .unwrap_err()
     .to_string();
     assert!(
-        chat_for_decider.contains("decision-model provider"),
+        chat_for_decider.contains(
+            "models.decider is a decision role, but provider \"anthropic\" serves chat models"
+        ),
         "{chat_for_decider}"
     );
     assert_eq!(text(&layers), before);
@@ -282,6 +287,7 @@ fn prices_are_written_under_quoted_model_ids() {
         &layers,
         None,
         &PriceEdit {
+            output_image: None,
             model: "claude-sonnet-4.5".to_string(),
             input: 3.0,
             output: 15.0,
@@ -302,6 +308,7 @@ fn prices_are_written_under_quoted_model_ids() {
         &layers,
         None,
         &PriceEdit {
+            output_image: None,
             model: "m".to_string(),
             input: -1.0,
             output: 1.0,
@@ -348,6 +355,7 @@ fn saving_into_an_older_file_keeps_its_version() {
         &layers,
         None,
         &PriceEdit {
+            output_image: None,
             model: "m".to_string(),
             input: 1.0,
             output: 2.0,
@@ -458,6 +466,7 @@ fn price_tiers_are_written_kept_on_edit_and_removed_on_request() {
         cache_read: None,
     };
     let edit = |tiers: Option<Vec<dive_config::PriceTier>>| PriceEdit {
+        output_image: None,
         model: "claude-haiku-5-5".to_string(),
         input: 0.1,
         output: 0.5,
@@ -554,6 +563,7 @@ fn refreshing_updates_catalogue_prices_and_keeps_hand_edited_ones() {
         &layers,
         Some("claude-haiku-5-5"),
         &PriceEdit {
+            output_image: None,
             model: "claude-haiku-5-5".to_string(),
             input: 0.2,
             output: 0.5,

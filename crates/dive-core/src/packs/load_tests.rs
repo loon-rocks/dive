@@ -314,6 +314,7 @@ fn pipeline_over(
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "mock".into(),
                 model: "m".into(),
                 temperature: None,

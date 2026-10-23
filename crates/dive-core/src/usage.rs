@@ -93,6 +93,7 @@ impl CallSite {
 /// One metered call, with the attribution the meter could not see.
 #[derive(Debug, Clone)]
 struct CallRecord {
+    kind: dive_config::ModelKind,
     provider: String,
     model: String,
     site: CallSite,
@@ -156,7 +157,8 @@ impl UsageLedger {
         // Keyed by provider *and* model: failover can serve one role from a
         // second provider, and "which model actually answered" is the whole
         // point of metering each candidate separately.
-        let mut by_model: BTreeMap<(String, String), (Usage, usize)> = BTreeMap::new();
+        let mut by_model: BTreeMap<(String, String), (Usage, usize, dive_config::ModelKind)> =
+            BTreeMap::new();
 
         for call in &calls {
             total.add(&call.usage);
@@ -169,6 +171,7 @@ impl UsageLedger {
                 .or_default();
             entry.0.add(&call.usage);
             entry.1 += 1;
+            entry.2 = call.kind;
         }
 
         let mut steps: Vec<StepUsage> = by_step
@@ -184,17 +187,20 @@ impl UsageLedger {
 
         let mut models: Vec<ModelUsage> = by_model
             .into_iter()
-            .map(|((provider, model), (usage, calls_made))| ModelUsage {
-                cost_usd: self.cost_of(
-                    calls
-                        .iter()
-                        .filter(|c| c.provider == provider && c.model == model),
-                ),
-                calls: calls_made,
-                provider,
-                model,
-                usage,
-            })
+            .map(
+                |((provider, model), (usage, calls_made, kind))| ModelUsage {
+                    kind,
+                    cost_usd: self.cost_of(
+                        calls
+                            .iter()
+                            .filter(|c| c.provider == provider && c.model == model),
+                    ),
+                    calls: calls_made,
+                    provider,
+                    model,
+                    usage,
+                },
+            )
             .collect();
         models.sort_by(|a, b| rank_model(b).total_cmp(&rank_model(a)));
 
@@ -235,13 +241,13 @@ impl UsageLedger {
 /// ranks the expensive sites first.
 fn rank(step: &StepUsage) -> f64 {
     step.cost_usd
-        .unwrap_or(step.usage.total_input_tokens() as f64 + step.usage.output_tokens as f64)
+        .unwrap_or(step.usage.total_input_tokens() as f64 + step.usage.total_output_tokens() as f64)
 }
 
 fn rank_model(model: &ModelUsage) -> f64 {
-    model
-        .cost_usd
-        .unwrap_or(model.usage.total_input_tokens() as f64 + model.usage.output_tokens as f64)
+    model.cost_usd.unwrap_or(
+        model.usage.total_input_tokens() as f64 + model.usage.total_output_tokens() as f64,
+    )
 }
 
 impl UsageMeter for UsageLedger {
@@ -262,11 +268,12 @@ impl UsageMeter for UsageLedger {
         crate::trace::record(crate::trace::Call::Model {
             role: event.role.clone(),
             site: event.site.clone(),
-            decision: event.kind == dive_config::ModelKind::Decision,
+            model_type: event.kind,
             ms: u64::try_from(event.elapsed.as_millis()).unwrap_or(u64::MAX),
             usage: crate::store::EntryUsage::new(&event.model, &event.usage),
         });
         self.calls.lock().unwrap().push(CallRecord {
+            kind: call.kind,
             provider: call.provider,
             model: call.model,
             site,
@@ -324,7 +331,7 @@ impl UsageReport {
             self.calls,
             if self.calls == 1 { "" } else { "s" },
             compact(self.total.total_input_tokens()),
-            compact(self.total.output_tokens),
+            compact(self.total.total_output_tokens()),
         );
         if self.total.cache_read_input_tokens > 0 {
             line.push_str(&format!(
@@ -352,6 +359,8 @@ pub struct StepUsage {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelUsage {
+    #[serde(rename = "type")]
+    pub kind: dive_config::ModelKind,
     /// Config name of the provider that served these calls.
     pub provider: String,
     pub model: String,
@@ -389,6 +398,7 @@ mod tests {
         ModelPrice {
             input,
             output,
+            output_image: None,
             cache_write: None,
             cache_read: None,
             tiers: Vec::new(),
@@ -457,6 +467,7 @@ mod tests {
         Usage {
             input_tokens: input,
             output_tokens: output,
+            output_image_tokens: 0,
             ..Default::default()
         }
     }
@@ -469,6 +480,7 @@ mod tests {
             Usage {
                 input_tokens: 1_000_000,
                 output_tokens: 1_000_000,
+                output_image_tokens: 0,
                 cache_creation_input_tokens: 1_000_000,
                 cache_read_input_tokens: 1_000_000,
             },
@@ -628,6 +640,7 @@ mod tests {
             total: Usage {
                 input_tokens: 1_943_210,
                 output_tokens: 38_402,
+                output_image_tokens: 0,
                 cache_creation_input_tokens: 0,
                 cache_read_input_tokens: 0,
             },
@@ -644,6 +657,7 @@ mod tests {
             total: Usage {
                 input_tokens: 1_000,
                 output_tokens: 50,
+                output_image_tokens: 0,
                 cache_creation_input_tokens: 0,
                 cache_read_input_tokens: 40_000,
             },

@@ -9,6 +9,7 @@
 //! - `reshape` — project the input into a new JSON shape whose leaf
 //!   strings are `{{input.*}}` templates; pure, no side effects, no LLM.
 
+use crate::files::{BlobRef, BlobStore};
 use crate::secrets::SecretSource;
 use crate::template::{render_input, render_str, Roots};
 use crate::tools::{ToolDef, ToolError, ToolOutcome, ToolRegistry};
@@ -17,7 +18,7 @@ use async_trait::async_trait;
 use dive_config::{ModelKind, Role};
 use dive_llm::decision::{DecisionRequest, Question};
 use dive_llm::types::{ChatMessage, ChatRequest, ResponseSchema};
-use dive_llm::ModelRouter;
+use dive_llm::{ImageData, ImageRequest, ModelRouter, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -28,6 +29,7 @@ pub const USER_TOOL_PREFIX: &str = "user__";
 pub const BUILTIN_TOOL_PREFIX: &str = "builtin__";
 pub const PACK_DIR_ENV: &str = "DIVE_PACK_DIR";
 pub const LEGACY_PACK_DIR_ENV: &str = "GRAPH_PACK_DIR";
+pub const OUT_DIR_ENV: &str = "DIVE_OUT";
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 // Note: no deny_unknown_fields — serde can't combine it with #[serde(flatten)].
@@ -122,6 +124,12 @@ pub enum ToolKind {
         /// at render time (a bad path is a tool error, not a load error).
         #[serde(default)]
         caller_shape: bool,
+    },
+    Image {
+        #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
+        caller_model: bool,
     },
     Decision {
         #[serde(default)]
@@ -234,6 +242,7 @@ const BUILTIN_TOOLS: &[&str] = &[
     include_str!("builtins/infer.yaml"),
     include_str!("builtins/decide.yaml"),
     include_str!("builtins/reshape.yaml"),
+    include_str!("builtins/generate_image.yaml"),
 ];
 
 pub fn builtin_tool_sources() -> &'static [&'static str] {
@@ -376,6 +385,8 @@ pub(crate) const DECISION_KEYS: &[&str] = &[
     "caller_model",
 ];
 
+pub(crate) const IMAGE_KEYS: &[&str] = &["model", "caller_model"];
+
 pub fn unknown_tool_keys(value: &serde_yaml::Value) -> Vec<String> {
     let Some(mapping) = value.as_mapping() else {
         return Vec::new();
@@ -385,6 +396,7 @@ pub fn unknown_tool_keys(value: &serde_yaml::Value) -> Vec<String> {
         Some("prompt") => PROMPT_KEYS,
         Some("reshape") => RESHAPE_KEYS,
         Some("decision") => DECISION_KEYS,
+        Some("image") => IMAGE_KEYS,
         _ => &[],
     };
     let mut unknown: Vec<String> = mapping
@@ -508,6 +520,7 @@ pub fn validate_tool(doc: &UserToolDoc) -> Result<(), String> {
                 }
             }
         }
+        ToolKind::Image { .. } => {}
     }
     Ok(())
 }
@@ -542,6 +555,69 @@ fn check_shape_templates(
     }
 }
 
+struct ImageCall {
+    prompt: String,
+    images: Vec<String>,
+    aspect_ratio: Option<String>,
+    size: Option<String>,
+    count: usize,
+    path: Option<String>,
+}
+
+const MAX_IMAGE_COUNT: u64 = 4;
+
+impl ImageCall {
+    fn from_input(input: &Value) -> Result<Self, String> {
+        let text = |key: &str| input.get(key).and_then(Value::as_str).map(str::to_string);
+        let prompt = text("prompt")
+            .filter(|prompt| !prompt.trim().is_empty())
+            .ok_or("prompt is required: say what to draw, or what to change in the images")?;
+        let images = match input.get("images") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_string)
+                        .ok_or("images must be a list of file refs".to_string())
+                })
+                .collect::<Result<_, _>>()?,
+            Some(Value::String(one)) => vec![one.clone()],
+            Some(_) => return Err("images must be a list of file refs".to_string()),
+        };
+        let count = match input.get("count") {
+            None | Some(Value::Null) => 1,
+            Some(value) => match value.as_u64() {
+                Some(count @ 1..=MAX_IMAGE_COUNT) => count,
+                _ => return Err(format!("count must be from 1 to {MAX_IMAGE_COUNT}")),
+            },
+        };
+        Ok(Self {
+            prompt,
+            images,
+            aspect_ratio: text("aspect_ratio"),
+            size: text("size"),
+            count: count as usize,
+            path: text("path"),
+        })
+    }
+}
+
+fn numbered(path: &Path, index: usize) -> PathBuf {
+    if index == 0 {
+        return path.to_path_buf();
+    }
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let name = match path.extension() {
+        Some(extension) => format!("{stem}-{}.{}", index + 1, extension.to_string_lossy()),
+        None => format!("{stem}-{}", index + 1),
+    };
+    path.with_file_name(name)
+}
+
 // ── Registry ─────────────────────────────────────────────────────────────
 
 /// Registry over declarative tool documents. Serves user-authored tools
@@ -554,6 +630,8 @@ pub struct UserToolRegistry {
     prefix: String,
     secrets: Arc<dyn SecretSource>,
     pack_dir: Option<PathBuf>,
+    files: Option<Arc<dyn BlobStore>>,
+    workspace: Option<PathBuf>,
 }
 
 impl UserToolRegistry {
@@ -564,11 +642,23 @@ impl UserToolRegistry {
             prefix: USER_TOOL_PREFIX.to_string(),
             secrets: Arc::new(crate::secrets::system()),
             pack_dir: None,
+            files: None,
+            workspace: None,
         }
     }
 
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretSource>) -> Self {
         self.secrets = secrets;
+        self
+    }
+
+    pub fn with_files(mut self, files: Arc<dyn BlobStore>) -> Self {
+        self.files = Some(files);
+        self
+    }
+
+    pub fn with_workspace(mut self, root: &Path) -> Self {
+        self.workspace = Some(root.to_path_buf());
         self
     }
 
@@ -585,6 +675,8 @@ impl UserToolRegistry {
             prefix: BUILTIN_TOOL_PREFIX.to_string(),
             secrets: Arc::new(crate::secrets::system()),
             pack_dir: None,
+            files: None,
+            workspace: None,
         }
     }
 
@@ -595,6 +687,8 @@ impl UserToolRegistry {
             prefix: crate::packs::catalog_name(pack, crate::packs::ItemKind::Tool, ""),
             secrets: Arc::new(crate::secrets::system()),
             pack_dir: None,
+            files: None,
+            workspace: None,
         }
     }
 
@@ -663,6 +757,24 @@ impl UserToolRegistry {
             }),
             _ => None,
         };
+        if let ToolKind::Image {
+            model,
+            caller_model,
+        } = &doc.kind
+        {
+            let model = caller_model
+                .then(|| input.get("model").and_then(Value::as_str))
+                .flatten()
+                .or(model.as_deref())
+                .map(str::to_string);
+            return Ok(self
+                .run_image(&input, model.as_deref())
+                .await
+                .unwrap_or_else(|error| ToolOutcome {
+                    result: json!({"error": error}),
+                    is_error: true,
+                }));
+        }
         if let ToolKind::Decision {
             state,
             questions,
@@ -699,6 +811,18 @@ impl UserToolRegistry {
             };
             return self.run_decision(state, questions, model.as_deref()).await;
         }
+        let input = match &doc.kind {
+            ToolKind::Exec { .. } => match self.blob_paths(doc, input).await {
+                Ok(input) => input,
+                Err(error) => {
+                    return Ok(ToolOutcome {
+                        result: json!({"error": error}),
+                        is_error: true,
+                    })
+                }
+            },
+            _ => input,
+        };
         let mut roots = Map::new();
         roots.insert("input".to_string(), input);
         let roots = Roots::new(&roots);
@@ -741,6 +865,7 @@ impl UserToolRegistry {
                 self.run_prompt(doc, prompt, call, &roots).await
             }
             ToolKind::Decision { .. } => unreachable!("decision tools return above"),
+            ToolKind::Image { .. } => unreachable!("image tools return above"),
             ToolKind::Reshape { caller_shape, .. } => {
                 let shape = reshape_shape.expect("reshape shape resolved above");
                 if *caller_shape {
@@ -784,6 +909,68 @@ impl UserToolRegistry {
         }
     }
 
+    async fn blob_paths(&self, doc: &UserToolDoc, mut input: Value) -> Result<Value, String> {
+        let Some(properties) = doc
+            .input_schema
+            .as_ref()
+            .and_then(|schema| schema.get("properties"))
+            .and_then(Value::as_object)
+        else {
+            return Ok(input);
+        };
+        let is_blob = |schema: &Value| schema.get("format").and_then(Value::as_str) == Some("blob");
+        for (key, schema) in properties {
+            let list = schema.get("items").is_some_and(is_blob);
+            if !is_blob(schema) && !list {
+                continue;
+            }
+            let Some(value) = input.get_mut(key) else {
+                continue;
+            };
+            let files = self
+                .files
+                .as_ref()
+                .ok_or_else(|| format!("input.{key} is a file, and no file store is open"))?;
+            let slots: Vec<&mut Value> = match value {
+                Value::Array(items) if list => items.iter_mut().collect(),
+                Value::Null => Vec::new(),
+                other => vec![other],
+            };
+            for slot in slots {
+                let blob = slot.as_str().and_then(BlobRef::parse).ok_or_else(|| {
+                    format!("input.{key} must be a file ref like blob:sha256-….png")
+                })?;
+                let path = files.materialize(&blob).await.map_err(|e| e.to_string())?;
+                *slot = Value::String(path.display().to_string());
+            }
+        }
+        Ok(input)
+    }
+
+    async fn collect_out(&self, dir: &Path) -> Result<Vec<crate::files::StoredFile>, String> {
+        let Some(files) = &self.files else {
+            return Ok(Vec::new());
+        };
+        let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+            .map_err(|e| format!("reading {OUT_DIR_ENV}: {e}"))?
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| path.is_file())
+            .collect();
+        paths.sort();
+        let mut stored = Vec::new();
+        for path in paths {
+            let bytes =
+                std::fs::read(&path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+            let mime = crate::files::mime_for(
+                path.extension()
+                    .and_then(|extension| extension.to_str())
+                    .unwrap_or_default(),
+            );
+            stored.push(files.put(bytes, mime).await.map_err(|e| e.to_string())?);
+        }
+        Ok(stored)
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn run_exec(
         &self,
@@ -814,6 +1001,13 @@ impl UserToolRegistry {
         }
         if let Some(cwd) = cwd {
             cmd.current_dir(cwd);
+        }
+        let out_dir = match &self.files {
+            Some(_) => Some(tempfile::tempdir().map_err(|e| ToolError::Transport(e.to_string()))?),
+            None => None,
+        };
+        if let Some(dir) = &out_dir {
+            cmd.env(OUT_DIR_ENV, dir.path());
         }
         cmd.stdin(std::process::Stdio::null());
         cmd.kill_on_drop(true);
@@ -848,12 +1042,26 @@ impl UserToolRegistry {
                 is_error: true,
             });
         }
+        let stored = match &out_dir {
+            Some(dir) => match self.collect_out(dir.path()).await {
+                Ok(stored) => stored,
+                Err(error) => {
+                    return Ok(ToolOutcome {
+                        result: json!({"error": error}),
+                        is_error: true,
+                    })
+                }
+            },
+            None => Vec::new(),
+        };
+        let outcome = |result: Value| ToolOutcome {
+            result: crate::files::attach(result, stored.clone()),
+            is_error: false,
+        };
         match output {
+            ExecOutput::Json if stdout.is_empty() && !stored.is_empty() => Ok(outcome(json!({}))),
             ExecOutput::Json => match serde_json::from_str(&stdout) {
-                Ok(parsed) => Ok(ToolOutcome {
-                    result: parsed,
-                    is_error: false,
-                }),
+                Ok(parsed) => Ok(outcome(parsed)),
                 Err(e) => Ok(ToolOutcome {
                     result: json!({
                         "error": format!("stdout is not valid JSON: {e}"),
@@ -862,10 +1070,7 @@ impl UserToolRegistry {
                     is_error: true,
                 }),
             },
-            ExecOutput::Text => Ok(ToolOutcome {
-                result: json!({"text": stdout}),
-                is_error: false,
-            }),
+            ExecOutput::Text => Ok(outcome(json!({"text": stdout}))),
         }
     }
 
@@ -903,6 +1108,105 @@ impl UserToolRegistry {
                 json!({"type": "string", "enum": names, "description": description}),
             );
         }
+    }
+
+    async fn run_image(&self, input: &Value, model: Option<&str>) -> Result<ToolOutcome, String> {
+        let files = self
+            .files
+            .clone()
+            .ok_or("image generation needs a file store, and none is open")?;
+        let call = ImageCall::from_input(input)?;
+        let (imager, choice, role) = self
+            .router
+            .resolve_image(model)
+            .map_err(|e| e.to_string())?;
+        let mut parts = vec![Part::Text(call.prompt.clone())];
+        for text in &call.images {
+            let blob = BlobRef::parse(text).ok_or_else(|| {
+                format!("images: \"{text}\" isn't a file ref; pass a ref like blob:sha256-….png from a tool result")
+            })?;
+            let bytes = files.get(&blob).await.map_err(|e| e.to_string())?;
+            parts.push(Part::Image(ImageData {
+                mime: blob.mime().to_string(),
+                bytes,
+            }));
+        }
+        let request = ImageRequest {
+            model: choice.model.clone(),
+            parts,
+            aspect_ratio: call.aspect_ratio.clone(),
+            size: call.size.clone(),
+        };
+        imager
+            .options(&request.model)
+            .check(&request)
+            .map_err(|e| e.to_string())?;
+        let target = match &call.path {
+            Some(path) => Some(self.workspace_path(path)?),
+            None => None,
+        };
+        let responses = CallSite::as_role(
+            &role,
+            futures::future::try_join_all(
+                (0..call.count).map(|_| imager.generate(request.clone())),
+            ),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        let mut images = Vec::new();
+        for image in responses.iter().flat_map(|response| response.images()) {
+            let stored = files
+                .put(image.bytes.clone(), &image.mime)
+                .await
+                .map_err(|e| e.to_string())?;
+            let mut entry = serde_json::to_value(&stored).map_err(|e| e.to_string())?;
+            if let Some(target) = &target {
+                let path = numbered(target, images.len());
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("creating {}: {e}", parent.display()))?;
+                }
+                std::fs::write(&path, &image.bytes)
+                    .map_err(|e| format!("writing {}: {e}", path.display()))?;
+                let shown = self
+                    .workspace
+                    .as_ref()
+                    .and_then(|root| path.strip_prefix(root).ok())
+                    .unwrap_or(&path);
+                entry["path"] = json!(shown.display().to_string());
+            }
+            images.push(entry);
+        }
+        let mut result = json!({"images": images});
+        let said: Vec<String> = responses.iter().filter_map(|r| r.text()).collect();
+        if !said.is_empty() {
+            result["text"] = json!(said.join("\n"));
+        }
+        Ok(ToolOutcome {
+            result,
+            is_error: false,
+        })
+    }
+
+    fn workspace_path(&self, path: &str) -> Result<PathBuf, String> {
+        let root = self
+            .workspace
+            .as_ref()
+            .ok_or("path needs a workspace, and this run has none; leave path out")?;
+        let relative = Path::new(path);
+        let escapes = relative.is_absolute()
+            || relative.components().any(|part| {
+                !matches!(
+                    part,
+                    std::path::Component::Normal(_) | std::path::Component::CurDir
+                )
+            });
+        if escapes {
+            return Err(format!(
+                "path \"{path}\" must be relative and stay inside the workspace, such as site/hero.png"
+            ));
+        }
+        Ok(root.join(relative))
     }
 
     async fn run_decision(
@@ -1298,18 +1602,17 @@ pub fn with_env_values(
 impl ToolRegistry for UserToolRegistry {
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
         let has_decision_models = self.router.has_decision_models();
+        let has_image_models = self.router.has_image_models();
         Ok(self
             .tools
             .iter()
-            .filter(|doc| {
-                has_decision_models
-                    || !matches!(
-                        &doc.kind,
-                        ToolKind::Decision {
-                            caller_questions: true,
-                            ..
-                        }
-                    )
+            .filter(|doc| match &doc.kind {
+                ToolKind::Decision {
+                    caller_questions: true,
+                    ..
+                } => has_decision_models,
+                ToolKind::Image { .. } => has_image_models,
+                _ => true,
             })
             .map(|doc| {
                 let mut input_schema = doc
@@ -1323,6 +1626,9 @@ impl ToolRegistry for UserToolRegistry {
                     ToolKind::Decision {
                         caller_model: true, ..
                     } => self.advertise_named_models(&mut input_schema, ModelKind::Decision),
+                    ToolKind::Image {
+                        caller_model: true, ..
+                    } => self.advertise_named_models(&mut input_schema, ModelKind::Image),
                     _ => {}
                 }
                 ToolDef {
@@ -1335,7 +1641,7 @@ impl ToolRegistry for UserToolRegistry {
                         ToolKind::Prompt { .. }
                         | ToolKind::Reshape { .. }
                         | ToolKind::Decision { .. } => Some(true),
-                        ToolKind::Exec { .. } => None,
+                        ToolKind::Exec { .. } | ToolKind::Image { .. } => None,
                     }),
                 }
             })

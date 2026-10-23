@@ -84,10 +84,16 @@ pub struct EntryUsage {
     pub model: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub output_image_tokens: u64,
     #[serde(default)]
     pub cache_creation_input_tokens: u64,
     #[serde(default)]
     pub cache_read_input_tokens: u64,
+}
+
+fn is_zero(count: &u64) -> bool {
+    *count == 0
 }
 
 impl From<&EntryUsage> for dive_config::TokenCounts {
@@ -95,6 +101,7 @@ impl From<&EntryUsage> for dive_config::TokenCounts {
         Self {
             input: usage.input_tokens,
             output: usage.output_tokens,
+            output_image: usage.output_image_tokens,
             cache_write: usage.cache_creation_input_tokens,
             cache_read: usage.cache_read_input_tokens,
         }
@@ -107,6 +114,7 @@ impl EntryUsage {
             model: model.to_string(),
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
+            output_image_tokens: usage.output_image_tokens,
             cache_creation_input_tokens: usage.cache_creation_input_tokens,
             cache_read_input_tokens: usage.cache_read_input_tokens,
         }

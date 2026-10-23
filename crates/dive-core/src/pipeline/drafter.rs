@@ -257,6 +257,7 @@ fn run_preview(doc: &UserToolDoc, input: &Value) -> String {
         ToolKind::Prompt { .. } => "makes one model call with its prompt".to_string(),
         ToolKind::Reshape { .. } => "reshapes its input, with no side effects".to_string(),
         ToolKind::Decision { .. } => "asks the decision model its questions".to_string(),
+        ToolKind::Image { .. } => "generates an image with the image model".to_string(),
     };
     format!(
         "Test-run the drafted tool {USER_TOOL_PREFIX}{} once? It {what}\n\nwith input: {}",

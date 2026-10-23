@@ -58,6 +58,7 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | `openai` | The OpenAI API |
 | `openai_compat` | Any OpenAI-compatible endpoint, such as Ollama, vLLM or a gateway, at `base_url` |
 | `systemone` | A [decision model](#decision-models) |
+| `gemini` | The Gemini API, for [image models](#image-models) |
 
 `api_key = "${ANTHROPIC_API_KEY}"` reads the key from the environment or, when it isn't set there, from the OS credential store, so the file is safe to commit. `dive secret set ANTHROPIC_API_KEY` stores the key there; see [Secret references](/reference/configuration#secret-references).
 
@@ -75,12 +76,24 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | `repair` | One retry when a model's structured output doesn't parse. Output cut off at the model's output limit is never repaired: the call fails with an error naming the limit |
 | `judge` | `infer` conditions on `exit`, `route` and `filter` |
 | `decider` | `decide` conditions and tool search. Needs a decision model |
+| `image` | `builtin__generate_image`. Needs an image model |
 
-A role with no entry uses `default`, except `decider`. Put a cheaper model on the roles that run most often, such as `judge` and `repair`.
+A role with no entry uses `default`, except `decider` and `image`. Put a cheaper model on the roles that run most often, such as `judge` and `repair`.
 
 ## Custom roles
 
 Any other name under `[models]` is a custom role, such as `fast`. A custom role never uses `default`, so a name that isn't configured fails and lists the roles that are.
+
+Every role has a `type`: `chat`, `decision` or `image`. A custom role is a `chat` role unless it says otherwise, and its provider must serve that type:
+
+```toml .dive/config.toml
+[models.triage]
+type = "decision"
+provider = "typesafe"
+model = "jev-latest"
+```
+
+Standard roles have a fixed type: `decider` is `decision`, `image` is `image`, and the rest are `chat`. Dive never works out a role's type from its provider or model, so a config that puts a role on a provider of the wrong type fails to load and names the fix.
 
 A `description` on a role is what the plan drafter reads when it picks a model for a step, and it prefers the smallest one that fits. A role without one is still usable by name in files you write.
 
@@ -104,6 +117,22 @@ model = "jev-latest"
 
 Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies#decide), [decision tools](/tools/reference/tool-file/decision) such as `builtin__decide`, and tool search when Dive drafts a plan. Without one, tool search ranks tools by keyword. Dive never swaps a chat model for a decision model or the reverse, and refuses a config that maps one to the other's role.
 
+## Image models
+
+An image model draws or edits images for `builtin__generate_image`. Connect one with a `gemini` provider, which uses the Gemini API's Interactions endpoint, and map it to `image`:
+
+```toml .dive/config.toml
+[providers.gemini]
+type = "gemini"
+api_key = "${GEMINI_API_KEY}"
+
+[models.image]
+provider = "gemini"
+model = "gemini-nano-banana-2.1"
+```
+
+`builtin__generate_image` appears in the tool catalog once an image role is configured. Agents use it like any other tool by listing it, and plans call it as a step. It takes a `prompt`, optional `images` to edit, `aspect_ratio`, `size`, `count` and `path`, and returns each image as a file ref such as `blob:sha256-….png`. A custom role with `type = "image"` and a `description` can be picked with the call's `model` input. See [Work with images and files](/integrating/mcp/guides/images-and-files) for where the files are stored.
+
 ## What a run cost
 
 `dive ask`, `dive chat` and `dive plan run` print a usage line on stderr after each run:
@@ -112,7 +141,7 @@ Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies
 1 call · 53k in / 10 out · $0.20
 ```
 
-Dive ships no prices. Add `[pricing."<model>"]` with input and output prices in US dollars per million tokens, or the line shows tokens only. See [config.toml](/reference/configuration) for every key.
+Dive ships no prices. Add `[pricing."<model>"]` with input and output prices in US dollars per million tokens, or the line shows tokens only. Image models bill the tokens of the images they draw at `output_image`, which falls back to `output` when unset. See [config.toml](/reference/configuration) for every key.
 
 Some models charge more once a prompt passes a size. Claude Haiku 5.5, for example, costs five times as much per token for a prompt over 100,000 tokens. Add a tier for each threshold:
 

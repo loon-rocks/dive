@@ -1,0 +1,92 @@
+---
+title: "builtin__generate_image"
+sidebarTitle: "builtin__generate_image"
+description: "Generates images with the image model, or edits the images it's given, and returns each as a file reference."
+playground: "none"
+keywords: ["builtin__generate_image"]
+---
+
+Needs an [image model](/getting-started/models#image-models) on the `image` role, and appears in the tool catalog only once one is configured. Pass refs from earlier results in `images` to edit or combine them, with a prompt that says what to change. A value the model doesn't support, such as an `aspect_ratio` or `size` it can't produce, is a tool error that lists the values it does support, so an agent can correct the call and retry.
+
+With `path`, each image is also written into the workspace; when `count` is over 1, later images get `-2`, `-3` and so on before the extension. A path must be relative and stay inside the workspace.
+
+| Loaded | Kind | Effect |
+| --- | --- | --- |
+| Always | `image` | Not marked read-only |
+
+## Input
+
+<ParamField body="prompt" type="string" required>
+  What to draw, or what to change in the given images.
+</ParamField>
+
+<ParamField body="images" type="string[]">
+  Refs of images to edit or use as references, such as blob:sha256-….png from an earlier tool result.
+</ParamField>
+
+<ParamField body="aspect_ratio" type="string">
+  Width to height, such as "1:1", "16:9" or "9:16". Omit for the model's default.
+</ParamField>
+
+<ParamField body="size" type="string">
+  Output resolution, such as "1K", "2K" or "4K" (uppercase K). Omit for the model's default.
+</ParamField>
+
+<ParamField body="count" type="integer" default="1">
+  How many images to generate.
+</ParamField>
+
+<ParamField body="path" type="string">
+  A path inside the workspace to also save the image to, such as site/hero.png. With a count over 1, later images get -2, -3 before the extension.
+</ParamField>
+
+## Output
+
+The images the model drew, plus any text it wrote alongside them.
+
+<ResponseField name="images" type="object[]">
+  One entry per image, in the order they were generated.
+</ResponseField>
+
+<ResponseField name="images.[].ref" type="string">
+  The image's file reference, such as `blob:sha256-….png`. Put it in a reply as a markdown image's URL, or pass it to another tool.
+</ResponseField>
+
+<ResponseField name="images.[].mime" type="string">
+  The image's type, such as `image/png`.
+</ResponseField>
+
+<ResponseField name="images.[].bytes" type="integer">
+  The file's size.
+</ResponseField>
+
+<ResponseField name="images.[].width" type="integer">
+  Width in pixels.
+</ResponseField>
+
+<ResponseField name="images.[].height" type="integer">
+  Height in pixels.
+</ResponseField>
+
+<ResponseField name="images.[].path" type="string">
+  Where the image was saved in the workspace, when the call set `path`.
+</ResponseField>
+
+<ResponseField name="text" type="string">
+  Text the model returned with the images, when it wrote any.
+</ResponseField>
+
+<RequestExample>
+
+```yaml Plan step
+- id: E1
+  tool_name: builtin__generate_image
+  input:
+    prompt: "{{input.prompt}}"
+```
+
+```bash Inspect
+dive tool show builtin__generate_image
+```
+
+</RequestExample>

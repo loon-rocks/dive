@@ -151,6 +151,7 @@ fn pipeline() -> (Pipeline, Arc<Tools>, Arc<Recorder>) {
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "mock".into(),
                 model: "m".into(),
                 temperature: None,

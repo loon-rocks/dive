@@ -370,6 +370,7 @@ mod tests {
         let roles = ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "mock".to_string(),
                 model: "test".to_string(),
                 temperature: None,
@@ -502,6 +503,7 @@ mod tests {
             stop_reason: StopReason::MaxTokens,
             usage: Usage {
                 output_tokens: 16000,
+                output_image_tokens: 0,
                 ..Default::default()
             },
             ..response(content, vec![])

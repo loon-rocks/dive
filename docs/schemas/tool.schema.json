@@ -3,7 +3,7 @@
   "description": "One user tool, in `./.dive/tools/` or `~/.config/dive/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the built-in tool it names instead.",
   "oneOf": [
     {
-      "description": "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.",
+      "description": "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files the command writes to the directory in `$DIVE_OUT` are stored and listed under `files` in the result, each with a `ref`.",
       "examples": [
         {
           "args": [
@@ -227,6 +227,46 @@
       "title": "reshape"
     },
     {
+      "description": "Generates images with an image model and stores them as files. The call's input takes `prompt`, `images` (refs to edit or reference), `aspect_ratio`, `size`, `count` and `path`; the result lists the images under `images`, each with a `ref`. Shipped as `builtin__generate_image`.",
+      "examples": [
+        {
+          "description": "Draws a hero image for a landing page from a short brief.",
+          "input_schema": {
+            "properties": {
+              "prompt": {
+                "description": "What to draw",
+                "type": "string"
+              }
+            },
+            "required": [
+              "prompt"
+            ],
+            "type": "object"
+          },
+          "kind": "image",
+          "model": "image",
+          "name": "hero_art",
+          "version": 3
+        }
+      ],
+      "properties": {
+        "caller_model": {
+          "default": false,
+          "description": "Let the call's `model` input pick the role.",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "image"
+        },
+        "model": {
+          "default": "image",
+          "description": "An image model role. A chat or decision role fails the call.",
+          "type": "string"
+        }
+      },
+      "title": "image"
+    },
+    {
       "description": "Asks a decision model typed questions about the same state, each answered independently. The result maps each question name to its answer.",
       "examples": [
         {
@@ -311,7 +351,8 @@
         "exec",
         "prompt",
         "reshape",
-        "decision"
+        "decision",
+        "image"
       ],
       "type": "string"
     },

@@ -123,6 +123,8 @@ pub struct Usage {
     /// is the sum of all three.
     pub input_tokens: u64,
     pub output_tokens: u64,
+    #[serde(default)]
+    pub output_image_tokens: u64,
     /// Tokens written to the cache this call (billed at a premium — 1.25x
     /// input on Anthropic's 5-minute TTL).
     #[serde(default)]
@@ -137,6 +139,7 @@ impl Usage {
     pub fn add(&mut self, other: &Usage) {
         self.input_tokens += other.input_tokens;
         self.output_tokens += other.output_tokens;
+        self.output_image_tokens += other.output_image_tokens;
         self.cache_creation_input_tokens += other.cache_creation_input_tokens;
         self.cache_read_input_tokens += other.cache_read_input_tokens;
     }
@@ -145,6 +148,10 @@ impl Usage {
     pub fn total_input_tokens(&self) -> u64 {
         self.input_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens
     }
+
+    pub fn total_output_tokens(&self) -> u64 {
+        self.output_tokens + self.output_image_tokens
+    }
 }
 
 impl From<&Usage> for dive_config::TokenCounts {
@@ -152,6 +159,7 @@ impl From<&Usage> for dive_config::TokenCounts {
         Self {
             input: usage.input_tokens,
             output: usage.output_tokens,
+            output_image: usage.output_image_tokens,
             cache_write: usage.cache_creation_input_tokens,
             cache_read: usage.cache_read_input_tokens,
         }

@@ -2080,6 +2080,7 @@ steps:
         let roles = dive_config::ModelRoles::from([(
             "default",
             dive_config::ModelChoice {
+                kind: None,
                 provider: "mock".to_string(),
                 model: "test".to_string(),
                 temperature: None,
@@ -2323,6 +2324,7 @@ steps:
             dive_config::ModelRoles::from_iter([(
                 "default".to_string(),
                 dive_config::ModelChoice {
+                    kind: None,
                     provider: "mock".into(),
                     model: "m".into(),
                     temperature: None,
