@@ -73,3 +73,35 @@ async fn reports_server_info_and_tools_for_pack_requirements() {
 fn semver_like(version: &str) -> bool {
     version.split('.').count() >= 2
 }
+
+#[tokio::test]
+#[ignore = "requires npx and network"]
+async fn images_a_tool_returns_are_stored_and_listed_as_file_references() {
+    use graph_core::files::{BlobRef, BlobStore};
+    let files = std::sync::Arc::new(graph_store::ObjectFiles::memory().unwrap());
+    let manager = manager().with_files(files.clone());
+    let tools = manager.tools().await.unwrap();
+    let image_tool = tools
+        .iter()
+        .find(|t| t.name.contains("tiny-image") || t.name.contains("TinyImage"))
+        .unwrap_or_else(|| {
+            panic!(
+                "no tiny image tool in {:?}",
+                tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+            )
+        })
+        .name
+        .clone();
+    let outcome = manager.invoke(&image_tool, json!({})).await.unwrap();
+    assert!(!outcome.is_error, "{}", outcome.result);
+    let listed = outcome.result["files"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no files in {}", outcome.result));
+    assert_eq!(listed.len(), 1, "{}", outcome.result);
+    assert_eq!(listed[0]["mime"], json!("image/png"));
+    let blob = BlobRef::parse(listed[0]["ref"].as_str().unwrap()).unwrap();
+    let bytes = files.get(&blob).await.unwrap();
+    assert!(bytes.starts_with(b"\x89PNG"), "not a PNG");
+    assert!(listed[0]["width"].as_u64().is_some_and(|w| w > 0));
+    manager.shutdown().await;
+}

@@ -163,6 +163,7 @@
                   "integrating/mcp/guides/connect-mcp-server",
                   "integrating/mcp/guides/serve-over-mcp",
                   "integrating/mcp/guides/filter-and-override-tools",
+                  "integrating/mcp/guides/images-and-files",
                   "integrating/mcp/guides/test-an-mcp-server"
                 ]
               },
@@ -399,7 +400,7 @@
   },
   "variables": {
     "release_version": "v0.16.0",
-    "config_file_version": "6",
+    "config_file_version": "7",
     "plan_file_version": "2",
     "tool_file_version": "3",
     "agent_file_version": "3",
