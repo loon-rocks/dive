@@ -644,6 +644,16 @@ pub fn open_store(
     }
 }
 
+pub fn open_files(
+    config: &dive_config::Config,
+    options: &RuntimeOptions,
+) -> Result<Arc<dyn dive_core::files::BlobStore>> {
+    Ok(crate::files::open(
+        config,
+        storage_backend(config, options)?,
+    ))
+}
+
 fn storage_backend(
     config: &dive_config::Config,
     options: &RuntimeOptions,

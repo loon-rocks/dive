@@ -3,7 +3,7 @@
 
 use crate::cli::ThreadCommand;
 use crate::commands::outcome::{report, Outcome};
-use crate::host::open_store;
+use crate::host::{open_files, open_store};
 use anyhow::Result;
 use dive_core::{EntryBody, Store, ThreadEntry};
 use dive_llm::types::ChatMessage;
@@ -21,7 +21,10 @@ pub async fn run(command: ThreadCommand) -> Result<()> {
             report(list(&store, all, project.as_deref()).await?, json)
         }
         ThreadCommand::Show { id, state, json } => report(show(&store, &id, state).await?, json),
-        ThreadCommand::Rm { id, json } => report(rm(&store, &id).await?, json),
+        ThreadCommand::Rm { id, json } => {
+            let files = open_files(&config)?;
+            report(rm(&store, &files, &id).await?, json)
+        }
     }
 }
 
@@ -86,10 +89,19 @@ async fn show(store: &Arc<dyn Store>, id: &str, state: bool) -> Result<Outcome> 
     Ok(Outcome::raw(text, body))
 }
 
-async fn rm(store: &Arc<dyn Store>, id: &str) -> Result<Outcome> {
-    let deleted = ops::delete(store.as_ref(), id).await?;
+async fn rm(
+    store: &Arc<dyn Store>,
+    files: &Arc<dyn dive_core::files::BlobStore>,
+    id: &str,
+) -> Result<Outcome> {
+    let deleted = ops::delete(store.as_ref(), files.as_ref(), id).await?;
+    let removed = match deleted.files_removed {
+        0 => String::new(),
+        1 => " and 1 file only it used".to_string(),
+        n => format!(" and {n} files only it used"),
+    };
     Ok(Outcome::raw(
-        format!("deleted {}\n", deleted.deleted),
+        format!("deleted {}{removed}\n", deleted.deleted),
         serde_json::to_value(&deleted)?,
     ))
 }

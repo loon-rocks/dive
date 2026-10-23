@@ -72,4 +72,4 @@ Keep the directory on a local filesystem. File locks aren't reliable on network 
 
 - To back up your state, copy the directory.
 - To discard learned shapes, delete `shapes/`. Dive records them again as tools run.
-- To delete a thread, use [`dive thread rm`](/reference/cli/thread/rm).
+- To delete a thread, use [`dive thread rm`](/reference/cli/thread/rm). It also removes the files in `blobs/` that no other thread refers to.

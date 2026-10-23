@@ -75,6 +75,8 @@ dive thread rm 169a26420daf
 deleted 169a26420daf
 ```
 
+Deleting a thread also removes the stored files, such as generated images, that no other thread refers to, and the output says how many. Files in S3 storage are kept, since other machines may share the bucket.
+
 ## Related guides
 
 <CardGroup cols={2}>

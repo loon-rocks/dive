@@ -48,6 +48,8 @@ When the tool's result isn't an object, or already has its own `files` key, Dive
 
 A reference names the file by its SHA-256 hash, so the same image stored twice is kept once. It stays the same wherever the file is kept, and threads and plan results that mention it keep working if you move file storage to another backend and copy the files across.
 
+Deleting a thread removes the files no other thread refers to, except in S3 storage, where other machines may share the bucket. Files kept in S3 or in memory are copied to a local cache when a tool needs a path. The cache holds up to 512 MB and drops the least recently used files past that.
+
 ## Show a file in a reply
 
 Every conversation agent is told about `files` and refs in its system prompt, after its own `system_prompt`. To show the user a file, an agent writes it into its reply as a markdown image with the ref as the URL:

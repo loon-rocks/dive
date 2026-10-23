@@ -623,7 +623,9 @@ pub enum ThreadCommand {
         json: bool,
     },
     /// Delete a thread
-    #[command(after_long_help = "Examples:\n  dive thread rm 4f1c9a2b7d3e")]
+    #[command(
+        after_long_help = "Also removes the stored files, such as generated images, that no other thread refers to. Files in S3 storage are kept, since other machines may share the bucket.\n\nExamples:\n  dive thread rm 4f1c9a2b7d3e"
+    )]
     Rm {
         #[arg(help = "The thread id, as `dive thread list` prints it")]
         id: String,

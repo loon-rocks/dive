@@ -15,12 +15,15 @@ use std::time::Duration;
 
 const SIGNED_URL_LIFETIME: Duration = Duration::from_secs(3600);
 
+const CACHE_LIMIT: u64 = 512 * 1024 * 1024;
+
 pub struct ObjectFiles {
     store: Arc<dyn ObjectStore>,
     prefix: String,
     local_root: Option<PathBuf>,
     signer: Option<Arc<AmazonS3>>,
     cache: PathBuf,
+    cache_limit: u64,
     _scratch: Option<tempfile::TempDir>,
 }
 
@@ -50,6 +53,7 @@ impl ObjectFiles {
             local_root: Some(root.to_path_buf()),
             signer: None,
             cache: root.to_path_buf(),
+            cache_limit: CACHE_LIMIT,
             _scratch: None,
         })
     }
@@ -62,6 +66,7 @@ impl ObjectFiles {
             local_root: None,
             signer: None,
             cache: scratch.path().to_path_buf(),
+            cache_limit: CACHE_LIMIT,
             _scratch: Some(scratch),
         })
     }
@@ -96,6 +101,7 @@ impl ObjectFiles {
             local_root: None,
             signer: Some(s3),
             cache: cache.to_path_buf(),
+            cache_limit: CACHE_LIMIT,
             _scratch: None,
         })
     }
@@ -129,6 +135,11 @@ impl ObjectFiles {
         }
     }
 
+    pub fn with_cache_limit(mut self, bytes: u64) -> Self {
+        self.cache_limit = bytes;
+        self
+    }
+
     fn key(&self, blob: &BlobRef) -> ObjectPath {
         if self.prefix.is_empty() {
             ObjectPath::from(blob.file_name())
@@ -142,6 +153,37 @@ impl ObjectFiles {
             .as_ref()
             .map(|root| root.join(blob.file_name()))
     }
+}
+
+fn touch(path: &Path) {
+    if let Ok(file) = std::fs::File::options().append(true).open(path) {
+        let _ = file.set_modified(std::time::SystemTime::now());
+    }
+}
+
+fn trim_cache(dir: &Path, limit: u64, keep: &Path) -> std::io::Result<()> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let meta = entry.metadata()?;
+        if meta.is_file() {
+            files.push((meta.modified()?, meta.len(), entry.path()));
+        }
+    }
+    let mut total: u64 = files.iter().map(|(_, len, _)| len).sum();
+    files.sort_by_key(|(modified, _, _)| *modified);
+    for (_, len, path) in files {
+        if total <= limit {
+            break;
+        }
+        if path != keep && std::fs::remove_file(&path).is_ok() {
+            total -= len;
+        }
+    }
+    Ok(())
 }
 
 fn dimensions(mime: &str, bytes: &[u8]) -> (Option<u32>, Option<u32>) {
@@ -199,9 +241,13 @@ impl BlobStore for ObjectFiles {
 
     async fn delete(&self, blob: &BlobRef) -> Result<(), FileError> {
         match self.store.delete(&self.key(blob)).await {
-            Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
-            Err(e) => Err(failed(&format!("deleting {blob}"), e)),
+            Ok(()) | Err(object_store::Error::NotFound { .. }) => {}
+            Err(e) => return Err(failed(&format!("deleting {blob}"), e)),
         }
+        if self.local_root.is_none() {
+            let _ = std::fs::remove_file(self.cache.join(blob.file_name()));
+        }
+        Ok(())
     }
 
     async fn locate(&self, blob: &BlobRef) -> Result<FileLocation, FileError> {
@@ -218,6 +264,10 @@ impl BlobStore for ObjectFiles {
         Ok(FileLocation::Path(self.materialize(blob).await?))
     }
 
+    fn shared(&self) -> bool {
+        self.signer.is_some()
+    }
+
     async fn materialize(&self, blob: &BlobRef) -> Result<PathBuf, FileError> {
         if let Some(path) = self.local_path(blob) {
             return if path.is_file() {
@@ -228,16 +278,21 @@ impl BlobStore for ObjectFiles {
         }
         let path = self.cache.join(blob.file_name());
         if path.is_file() {
+            touch(&path);
             return Ok(path);
         }
         let bytes = self.get(blob).await?;
         let cache = self.cache.clone();
         let target = path.clone();
+        let limit = self.cache_limit;
         tokio::task::spawn_blocking(move || -> std::io::Result<()> {
             std::fs::create_dir_all(&cache)?;
             let mut tmp = tempfile::NamedTempFile::new_in(&cache)?;
             tmp.write_all(&bytes)?;
             tmp.persist(&target).map_err(|e| e.error)?;
+            if let Err(e) = trim_cache(&cache, limit, &target) {
+                tracing::warn!(error = %e, "couldn't trim the file cache");
+            }
             Ok(())
         })
         .await
@@ -281,6 +336,36 @@ mod tests {
         files.delete(&stored.blob).await.unwrap();
         assert!(files.get(&stored.blob).await.is_err());
         files.delete(&stored.blob).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_download_cache_drops_the_least_recently_used_files_past_its_limit() {
+        let files = ObjectFiles::memory().unwrap().with_cache_limit(10);
+        let first = files
+            .put(b"aaaaaa".to_vec(), "image/png")
+            .await
+            .unwrap()
+            .blob;
+        let second = files
+            .put(b"bbbbbb".to_vec(), "image/png")
+            .await
+            .unwrap()
+            .blob;
+        let first_path = files.materialize(&first).await.unwrap();
+        std::fs::File::options()
+            .append(true)
+            .open(&first_path)
+            .unwrap()
+            .set_modified(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap();
+        let second_path = files.materialize(&second).await.unwrap();
+        assert!(!first_path.exists());
+        assert!(second_path.exists());
+
+        assert_eq!(files.materialize(&first).await.unwrap(), first_path);
+        assert!(first_path.exists());
+        files.delete(&first).await.unwrap();
+        assert!(!first_path.exists());
     }
 
     #[tokio::test]
