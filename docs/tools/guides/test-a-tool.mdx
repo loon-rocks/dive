@@ -1,14 +1,14 @@
 ---
 title: "Test a tool"
 description: "Call a tool with input and read its result or error."
-keywords: ["graph tool test", "testing", "debug"]
+keywords: ["dive tool test", "testing", "debug"]
 ---
 
 `commits_by_author` counts the commits each author made since a git ref.
 
 <RequestExample>
 
-```yaml .graph/tools/commits_by_author.yaml
+```yaml .dive/tools/commits_by_author.yaml
 version: 2
 name: commits_by_author
 description: How many commits each author made since a git ref.
@@ -40,14 +40,14 @@ input_schema:
 
 ## Call the tool
 
-Pass the tool's name, as `graph tool list` prints it, and set its input with `--input`:
+Pass the tool's name, as `dive tool list` prints it, and set its input with `--input`:
 
 ```bash
-graph tool test user__commits_by_author \
+dive tool test user__commits_by_author \
   --input base=v0.14.0
 ```
 
-graph calls the tool and prints its result:
+Dive calls the tool and prints its result:
 
 ```json
 [
@@ -63,7 +63,7 @@ graph calls the tool and prints its result:
 Give it a ref that doesn't exist, and add `--json` to see whether the call failed:
 
 ```bash
-graph tool test user__commits_by_author \
+dive tool test user__commits_by_author \
   --input base=v9.9.9 --json
 ```
 
@@ -89,7 +89,7 @@ The command still exits with code 0, so check `isError` in scripts.
   <Card title="Create a tool in the workbench" icon="wand-magic-sparkles" href="/tools/guides/create-in-workbench">
     Draft, test-run and save a tool in the workbench.
   </Card>
-  <Card title="Improve what graph knows about a tool" icon="shapes" href="/tools/guides/tool-shapes">
+  <Card title="Improve what Dive knows about a tool" icon="shapes" href="/tools/guides/tool-shapes">
     Show drafters what a tool returns.
   </Card>
   <Card title="Test an MCP server" icon="plug" href="/integrating/mcp/guides/test-an-mcp-server">

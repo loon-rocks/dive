@@ -8,7 +8,7 @@ keywords: ["composition", "plan__", "nested plans", "reuse"]
 
 <RequestExample>
 
-```yaml .graph/plans/release_summary.yaml
+```yaml .dive/plans/release_summary.yaml
 version: 2
 identifier: release_summary
 name: Release summary
@@ -28,7 +28,7 @@ finish:
       commits: '{{changes.commits}}'
 ```
 
-```yaml .graph/plans/changes_since.yaml
+```yaml .dive/plans/changes_since.yaml
 version: 2
 identifier: changes_since
 name: Changes since
@@ -62,7 +62,7 @@ The `changes` step calls `changes_since` as `plan__changes_since`. Its `input` m
 ## Validate it
 
 ```bash
-graph plan validate release_summary
+dive plan validate release_summary
 ```
 
 ```text
@@ -72,7 +72,7 @@ ok: 'release_summary' — 2 steps
 ## Run it
 
 ```bash
-graph plan run release_summary
+dive plan run release_summary
 ```
 
 The called plan's steps show indented under its step:

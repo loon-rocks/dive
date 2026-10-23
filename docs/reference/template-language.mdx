@@ -4,7 +4,7 @@ description: "The template syntax that moves data between steps, and where agent
 keywords: ["templates", "template language", "typed splice", "sections"]
 ---
 
-A template is a string with `{{...}}` tags that graph fills from data before a step, tool or agent runs. Templates only move data. They never call a model, and they have no logic beyond iterating over lists.
+A template is a string with `{{...}}` tags that Dive fills from data before a step, tool or agent runs. Templates only move data. They never call a model, and they have no logic beyond iterating over lists.
 
 ## Where templates are used
 
@@ -75,7 +75,7 @@ A variable that doesn't resolve stops the step with one of three errors:
 | `BadPath` | The data exists but has no such key or can't be indexed. The message lists the keys that do exist. | `{{fetch.values.0.idd}}` |
 | `EmptyData` | The path is valid but the data ran out: an empty list, an index past the end, or `null`. | `{{fetch.values.0.id}}` when `values` is `[]` |
 
-`graph plan validate` catches references to steps that don't exist or haven't run yet before the plan runs. To learn how a plan responds to each error, see [Handle failures](/plans/guides/handle-failures).
+`dive plan validate` catches references to steps that don't exist or haven't run yet before the plan runs. To learn how a plan responds to each error, see [Handle failures](/plans/guides/handle-failures).
 
 ## Not supported
 

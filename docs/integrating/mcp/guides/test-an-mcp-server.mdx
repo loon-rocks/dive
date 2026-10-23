@@ -1,36 +1,36 @@
 ---
 title: "Test an MCP server"
-description: "Check that graph can reach an MCP server, list its tools, and call one directly."
-keywords: ["mcp", "graph mcp test", "graph tool test", "troubleshooting"]
+description: "Check that Dive can reach an MCP server, list its tools, and call one directly."
+keywords: ["mcp", "dive mcp test", "dive tool test", "troubleshooting"]
 ---
 
-Work from the connection up: confirm graph reaches the server, then that it loads the tools you expect, then that a tool returns what you expect.
+Work from the connection up: confirm Dive reaches the server, then that it loads the tools you expect, then that a tool returns what you expect.
 
 ## Check the connection
 
-`graph mcp list` shows each configured server and how graph reaches it:
+`dive mcp list` shows each configured server and how Dive reaches it:
 
 ```text
 everything	stdio: npx -y @modelcontextprotocol/server-everything
 tracker	http: https://mcp.example.com/mcp
 ```
 
-`graph mcp test` connects to one server and lists its tools:
+`dive mcp test` connects to one server and lists its tools:
 
 ```bash
-graph mcp test everything
+dive mcp test everything
 ```
 
 ```text
 ok: 'everything' initialized in 1.37s — 13 tools (1 declare output schemas)
 ```
 
-## List the tools graph loads
+## List the tools Dive loads
 
-`graph mcp tools` shows each tool graph loads from a server, after `include_tools` and `exclude_tools`, with its description:
+`dive mcp tools` shows each tool Dive loads from a server, after `include_tools` and `exclude_tools`, with its description:
 
 ```bash
-graph mcp tools everything
+dive mcp tools everything
 ```
 
 ```text
@@ -45,10 +45,10 @@ To change that list, see [Filter and override a server's tools](/integrating/mcp
 
 ## Call a tool directly
 
-`graph tool test` calls a tool by its full name and prints the result. Pass input as JSON, as `@file`, on stdin, or with `--input key=value`:
+`dive tool test` calls a tool by its full name and prints the result. Pass input as JSON, as `@file`, on stdin, or with `--input key=value`:
 
 ```bash
-graph tool test everything__get-sum '{"a": 2, "b": 3}'
+dive tool test everything__get-sum '{"a": 2, "b": 3}'
 ```
 
 ```json
@@ -57,7 +57,7 @@ graph tool test everything__get-sum '{"a": 2, "b": 3}'
 }
 ```
 
-When the server rejects the call, graph prints `tool returned an error:` and the server's message:
+When the server rejects the call, Dive prints `tool returned an error:` and the server's message:
 
 ```text
 tool returned an error:
@@ -70,10 +70,10 @@ A tool that returns an error still exits 0. Use `--json` and check `isError` in 
 
 ## When it fails
 
-- **A missing environment variable.** graph names the variable and the setting that uses it, and connects to your other servers as usual:
+- **A missing environment variable.** Dive names the variable and the setting that uses it, and connects to your other servers as usual:
 
   ```text
-  mcp server 'tracker' cannot connect: environment variable TRACKER_TOKEN (mcp.tracker.headers.Authorization) is not set; set it, or store it with `graph secret set TRACKER_TOKEN`
+  mcp server 'tracker' cannot connect: environment variable TRACKER_TOKEN (mcp.tracker.headers.Authorization) is not set; set it, or store it with `dive secret set TRACKER_TOKEN`
   ```
 
-- **Anything else.** Run with `-v`, or set `GRAPH_LOG=debug`, to see graph's log of the connection on stderr.
+- **Anything else.** Run with `-v`, or set `DIVE_LOG=debug`, to see Dive's log of the connection on stderr.

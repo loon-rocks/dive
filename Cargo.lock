@@ -917,6 +917,189 @@ dependencies = [
 ]
 
 [[package]]
+name = "dive-cli"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "crossterm",
+ "dive-config",
+ "dive-core",
+ "dive-llm",
+ "dive-mcp",
+ "dive-runtime",
+ "dive-store",
+ "futures",
+ "jsonschema",
+ "ratatui",
+ "reedline",
+ "rmcp",
+ "rpassword",
+ "schemars 1.2.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "toml_edit 0.22.27",
+ "tracing",
+ "tracing-subscriber",
+ "tui-textarea",
+]
+
+[[package]]
+name = "dive-config"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+ "toml_edit 0.22.27",
+ "uuid",
+]
+
+[[package]]
+name = "dive-core"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dive-config",
+ "dive-llm",
+ "futures",
+ "jsonschema",
+ "keyring",
+ "keyring-core",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "dive-llm"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "dive-config",
+ "eventsource-stream",
+ "futures",
+ "reqwest 0.12.28",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "dive-mcp"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "dive-config",
+ "dive-core",
+ "dive-store",
+ "http",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "dive-runtime"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "dive-config",
+ "dive-core",
+ "dive-llm",
+ "dive-mcp",
+ "dive-store",
+ "futures",
+ "gix",
+ "globset",
+ "ignore",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "regex",
+ "reqwest 0.13.4",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "toml_edit 0.22.27",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "dive-store"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dive-config",
+ "dive-core",
+ "dive-llm",
+ "fs4",
+ "imagesize",
+ "object_store",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2201,189 +2384,6 @@ dependencies = [
  "log",
  "regex-automata",
  "regex-syntax",
-]
-
-[[package]]
-name = "graph-cli"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "crossterm",
- "futures",
- "graph-config",
- "graph-core",
- "graph-llm",
- "graph-mcp",
- "graph-runtime",
- "graph-store",
- "jsonschema",
- "ratatui",
- "reedline",
- "rmcp",
- "rpassword",
- "schemars 1.2.2",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tokio-util",
- "toml",
- "toml_edit 0.22.27",
- "tracing",
- "tracing-subscriber",
- "tui-textarea",
-]
-
-[[package]]
-name = "graph-config"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "dirs",
- "schemars 0.8.22",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "thiserror 2.0.18",
- "toml",
- "toml_edit 0.22.27",
- "uuid",
-]
-
-[[package]]
-name = "graph-core"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "futures",
- "graph-config",
- "graph-llm",
- "jsonschema",
- "keyring",
- "keyring-core",
- "schemars 0.8.22",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "graph-llm"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "eventsource-stream",
- "futures",
- "graph-config",
- "reqwest 0.12.28",
- "schemars 0.8.22",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "graph-mcp"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "graph-config",
- "graph-core",
- "graph-store",
- "http",
- "rmcp",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "toml",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "graph-runtime"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "futures",
- "gix",
- "globset",
- "graph-config",
- "graph-core",
- "graph-llm",
- "graph-mcp",
- "graph-store",
- "ignore",
- "opentelemetry",
- "opentelemetry-appender-tracing",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "regex",
- "reqwest 0.13.4",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "toml",
- "toml_edit 0.22.27",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "graph-store"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "fs4",
- "graph-config",
- "graph-core",
- "graph-llm",
- "imagesize",
- "object_store",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]

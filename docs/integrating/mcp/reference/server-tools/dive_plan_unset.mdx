@@ -1,0 +1,24 @@
+---
+title: "dive_plan_unset"
+sidebarTitle: "dive_plan_unset"
+description: "Clears one optional plan attribute."
+playground: "none"
+keywords: ["dive_plan_unset"]
+---
+
+- `name`, `description` and `identifier` are required and can't be cleared.
+- Mirrors `dive plan unset`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="attribute" type="enum<string>" required>
+  Available options: `exemplars`, `requires_servers`, `input_schema`, `solver`, `output`
+</ParamField>
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>

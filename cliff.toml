@@ -5,7 +5,7 @@
 header = """
 # Changelog
 
-All notable changes to graph. Generated from conventional commits by git-cliff.
+All notable changes to Dive. Generated from conventional commits by git-cliff.
 """
 body = """
 {%- set file_kinds = ["config", "plan", "tool", "agent", "store", "pack", "lock"] -%}
@@ -25,7 +25,7 @@ body = """
 {%- endfor -%}
 {%- endif -%}
 {%- if version %}
-## Graph {{ version }}{% if timestamp %} — {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
+## Dive {{ version }}{% if timestamp %} — {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
 {%- else %}
 ## Unreleased
 {%- endif -%}
@@ -75,7 +75,7 @@ body = """
 {%- endfor %}
 {%- else %}
 
-- Introduced{% if version %} with graph {{ version }}{% endif %}.
+- Introduced{% if version %} with Dive {{ version }}{% endif %}.
 {%- endif -%}
 {%- endif -%}
 {%- endfor %}
@@ -118,8 +118,8 @@ commit_parsers = [
   { message = "^feat: dispatch scouts only at scoutworthy groups", skip = true },
   { message = "^feat: orient the scouts with CLAUDE.md at head", skip = true },
   { message = "^fix: settle review threads on reverted PRs", skip = true },
-  { message = "^refactor: split graph_review_9000 into a local review core", skip = true },
-  { message = "^feat: track graph_review_9000 findings as living review threads", skip = true },
+  { message = "^refactor: split dive_review_9000 into a local review core", skip = true },
+  { message = "^feat: track dive_review_9000 findings as living review threads", skip = true },
 
   { message = "^feat", group = "Added" },
   { message = "^fix", group = "Fixed" },
@@ -130,13 +130,13 @@ commit_parsers = [
   { message = "^chore\\(release\\)", skip = true },
   { message = "^chore|^ci|^style", skip = true },
 ]
-# Backstop for the audience rule: the changelog is for graph's users, and
-# `.graph/`/`.github/` hold this repo's own dogfooding plans and workflows,
+# Backstop for the audience rule: the changelog is for Dive's users, and
+# `.dive/`/`.github/` hold this repo's own dogfooding plans and workflows,
 # which ship to nobody. A commit is dropped only when EVERY file it touches
 # is excluded, so mixed commits still land — which is why the primary
 # defense is typing internal-only work `ci:` (see CLAUDE.md). The
-# plan changes in .graph/ often touch docs/ or CLAUDE.md
+# plan changes in .dive/ often touch docs/ or CLAUDE.md
 # too, so this alone cannot catch them.
-exclude_paths = [".graph/**", ".github/**"]
+exclude_paths = [".dive/**", ".github/**"]
 tag_pattern = "v[0-9].*"
 sort_commits = "oldest"

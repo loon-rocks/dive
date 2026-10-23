@@ -1,5 +1,5 @@
 name: workbench-layout
-title: graph workbench — unreleased_changes
+title: dive workbench — unreleased_changes
 plan: docs/shots/plans/unreleased_changes_notes.yaml
 grid: { cols: 120, rows: 36 }
 

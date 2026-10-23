@@ -1,0 +1,9 @@
+<ParamField header="DIVE_EVENTS" type="enum<string>">
+  How Dive reports progress and failures on stderr. Unset, stderr is for people.
+
+  | Value | Effect |
+  | --- | --- |
+  | `jsonl` | stderr becomes a stream of JSON events, one per line. `ask` steps can't prompt anyone, so they use their `whenUnanswered` setting. |
+  | `github` | A failing `dive plan run` also prints a `::error::` annotation to stdout, which GitHub Actions shows on the run. |
+
+</ParamField>

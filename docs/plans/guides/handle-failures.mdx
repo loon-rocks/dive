@@ -8,7 +8,7 @@ keywords: ["errors", "failures", "empty data", "bad path", "exit"]
 
 <RequestExample>
 
-```yaml .graph/plans/changes_since.yaml
+```yaml .dive/plans/changes_since.yaml
 version: 2
 identifier: changes_since
 name: Changes since
@@ -42,7 +42,7 @@ Every failure below exits with code 1 and names the cause on stderr.
 Pass a tag that doesn't exist:
 
 ```bash
-graph plan run changes_since \
+dive plan run changes_since \
   --input base=v9.9.9
 ```
 
@@ -70,7 +70,7 @@ A bad path is a mistake in the plan. The error lists the keys that do exist, so 
 Pass the current commit, so there's nothing to list:
 
 ```bash
-graph plan run changes_since \
+dive plan run changes_since \
   --input base=HEAD
 ```
 
@@ -84,7 +84,7 @@ Error: failed to render plan output: empty data at 'commits.commits.0.subject': 
 
 Add an [`exit`](/plans/reference/steps/exit) step after `commits`. When the count is 0, it ends the plan as a success and returns the same keys as `finish.output`:
 
-```yaml .graph/plans/changes_since.yaml
+```yaml .dive/plans/changes_since.yaml
 - id: nothing_new
   tool_name: exit
   input:

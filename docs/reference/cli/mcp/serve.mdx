@@ -1,15 +1,15 @@
 ---
-title: "graph mcp serve"
+title: "dive mcp serve"
 sidebarTitle: "serve"
-description: "Serve graph's plans and authoring commands to an agent over MCP (stdio)"
+description: "Serve Dive's plans and authoring commands to an agent over MCP (stdio)"
 playground: "none"
-keywords: ["graph mcp serve"]
+keywords: ["dive mcp serve"]
 ---
 
 ## Options
 
 <ParamField query="--dir" type="string">
-  Project directory to serve from — the one holding `.graph/`. MCP clients launch servers with an arbitrary working directory, so without this the plan catalog resolves against wherever the client happened to be
+  Project directory to serve from — the one holding `.dive/`. MCP clients launch servers with an arbitrary working directory, so without this the plan catalog resolves against wherever the client happened to be
 
   Format: `PATH`.
 </ParamField>
@@ -23,11 +23,11 @@ keywords: ["graph mcp serve"]
 <RequestExample>
 
 ```bash Usage
-graph mcp serve [OPTIONS]
+dive mcp serve [OPTIONS]
 ```
 
 ```bash Example
-graph mcp serve --dir ~/code/my-project
+dive mcp serve --dir ~/code/my-project
 ```
 
 </RequestExample>

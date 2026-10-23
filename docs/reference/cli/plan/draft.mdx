@@ -1,16 +1,16 @@
 ---
-title: "graph plan draft"
+title: "dive plan draft"
 sidebarTitle: "draft"
 description: "Draft a plan from a goal using the planner model (costs inference)"
 playground: "none"
-keywords: ["graph plan draft"]
+keywords: ["dive plan draft"]
 ---
 
 Runs the built-in `compose_plan` plan over your tool catalog: it finds the tools the goal needs, writes the whole plan in one call, and fixes steps that fail validation. When it had to guess a value that decides what the plan returns, it asks you in the terminal first.
 
 Problems it couldn't fix are listed under `problems`. When no tool in the catalog can do part of the goal, nothing is written and the result lists what is `missing`.
 
-Drafting replaces every step. To correct a plan whose steps you want to keep, use `graph plan set` and the `graph plan step` commands.
+Drafting replaces every step. To correct a plan whose steps you want to keep, use `dive plan set` and the `dive plan step` commands.
 
 ## Arguments
 
@@ -49,19 +49,19 @@ Drafting replaces every step. To correct a plan whose steps you want to keep, us
 <RequestExample>
 
 ```bash Usage
-graph plan draft [OPTIONS] <GOAL>
+dive plan draft [OPTIONS] <GOAL>
 ```
 
 ```bash Example 1
-graph plan draft "Summarize the commits merged since the last release"
+dive plan draft "Summarize the commits merged since the last release"
 ```
 
 ```bash Example 2
-graph plan draft "Summarize the commits merged since the last release" --from weekly_changes
+dive plan draft "Summarize the commits merged since the last release" --from weekly_changes
 ```
 
 ```bash Example 3
-graph plan draft "List open pull requests with failing checks" --stdout
+dive plan draft "List open pull requests with failing checks" --stdout
 ```
 
 </RequestExample>

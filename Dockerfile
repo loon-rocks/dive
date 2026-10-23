@@ -1,10 +1,10 @@
-# CI-oriented runtime image: graph plus the tools its tool packs shell out to
+# CI-oriented runtime image: dive plus the tools its tool packs shell out to
 # (git, jq, gh for github; curl, jq for slack). Used as the `container:` for
 # GitHub Actions jobs — see
-# .github/workflows/graph-checks.yaml — and works standalone:
-#   docker run --rm ghcr.io/tylerdavis/graph:latest --help
+# .github/workflows/dive-checks.yaml — and works standalone:
+#   docker run --rm ghcr.io/loon-rocks/dive:latest --help
 #
-# The graph binary is downloaded from the GitHub release by the publishing
+# The dive binary is downloaded from the GitHub release by the publishing
 # job in .github/workflows/release.yaml and COPY'd in, keeping this file
 # auth-free. Debian (glibc) base on purpose: GitHub Actions injects its own
 # Node runtime into job containers, which breaks on musl.
@@ -12,8 +12,8 @@ FROM debian:trixie-slim
 
 # Links the ghcr package to this repository (automatic for GITHUB_TOKEN
 # pushes; the label makes it hold for any push path).
-LABEL org.opencontainers.image.source="https://github.com/tylerdavis/graph" \
-      org.opencontainers.image.description="graph CLI with git, jq, gh, and curl — ready for CI plan runs" \
+LABEL org.opencontainers.image.source="https://github.com/loon-rocks/dive" \
+      org.opencontainers.image.description="Dive CLI with git, jq, gh, and curl — ready for CI plan runs" \
       org.opencontainers.image.licenses="MIT"
 
 # gh comes from the official releases, not Debian's archive — trixie ships
@@ -32,8 +32,8 @@ RUN apt-get update \
     # without this every git invocation dies on the dubious-ownership check.
     && git config --system --add safe.directory '*'
 
-COPY graph /usr/local/bin/graph
+COPY dive /usr/local/bin/dive
 
 # Standalone UX: `docker run … ask "hi"` just works. Actions job containers
 # override the entrypoint (tail -f /dev/null), so CI is unaffected.
-ENTRYPOINT ["graph"]
+ENTRYPOINT ["dive"]

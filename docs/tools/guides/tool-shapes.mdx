@@ -1,14 +1,14 @@
 ---
-title: "Improve what graph knows about a tool"
+title: "Improve what Dive knows about a tool"
 description: "Record what a tool returns by running it, then declare its output schema in the tool file."
-keywords: ["shape cache", "output schema", "graph shape", "drafting"]
+keywords: ["shape cache", "output schema", "dive shape", "drafting"]
 ---
 
 Drafters write templates like `{{releases.0.tagName}}` from what a tool returns. `recent_releases` doesn't say yet.
 
 <RequestExample>
 
-```yaml .graph/tools/recent_releases.yaml
+```yaml .dive/tools/recent_releases.yaml
 version: 2
 name: recent_releases
 description: The latest releases of a GitHub repository, newest first.
@@ -39,10 +39,10 @@ input_schema:
 
 ## Record a shape by running the tool
 
-graph records the shape of each successful result. Before the first call, there's nothing for `recent_releases`:
+Dive records the shape of each successful result. Before the first call, there's nothing for `recent_releases`:
 
 ```bash
-graph shape show user__recent_releases
+dive shape show user__recent_releases
 ```
 
 ```text
@@ -52,14 +52,14 @@ Error: no cached shape for tool user__recent_releases
 Call it once:
 
 ```bash
-graph tool test user__recent_releases \
-  --input repo=tylerdavis/graph
+dive tool test user__recent_releases \
+  --input repo=loon-rocks/dive
 ```
 
 The shape is now cached, with a schema inferred from the result and an example:
 
 ```bash
-graph shape show user__recent_releases
+dive shape show user__recent_releases
 ```
 
 ```json
@@ -94,7 +94,7 @@ graph shape show user__recent_releases
 
 A recorded shape only exists after a run, and it can't say what a field means. Add `output_schema` to the tool file:
 
-```yaml .graph/tools/recent_releases.yaml
+```yaml .dive/tools/recent_releases.yaml
 output_schema:
   type: array
   items:
@@ -108,10 +108,10 @@ output_schema:
         description: When it was published, ISO 8601
 ```
 
-`graph tool show` now lists it, and drafters use it in place of the recorded shape:
+`dive tool show` now lists it, and drafters use it in place of the recorded shape:
 
 ```bash
-graph tool show user__recent_releases
+dive tool show user__recent_releases
 ```
 
 ```text
@@ -139,7 +139,7 @@ output schema:
   },
   "type": "array"
 }
-source: ./.graph/tools/recent_releases.yaml
+source: ./.dive/tools/recent_releases.yaml
 ```
 
 ## Related guides

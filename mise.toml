@@ -1,4 +1,4 @@
-# System dependencies and task runner for graph-cli.
+# System dependencies and task runner for dive-cli.
 # https://mise.jdx.dev
 #
 # openssl itself is not managed here — any source works (nix, homebrew, ...)
@@ -22,7 +22,7 @@ run = "cargo build"
 [tasks.test]
 description = "Run all workspace tests"
 run = "cargo test"
-env = { GRAPH_SECRET_STORE = "none" }
+env = { DIVE_SECRET_STORE = "none" }
 
 [tasks.lint]
 description = "Check formatting and run clippy"
@@ -44,22 +44,22 @@ description = "Remove worktrees under .claude/worktrees whose pull request merge
 run = "scripts/clean-worktrees.sh"
 
 [tasks.run]
-description = "Run the graph binary (pass args after --)"
-run = "cargo run -p graph-cli --"
+description = "Run the dive binary (pass args after --)"
+run = "cargo run -p dive-cli --"
 
 [tasks.release]
 description = "Build the release binary"
 run = "cargo build --release"
 
 [tasks.install]
-description = "Built and install a release binary on the system (re-signed with $GRAPH_DEV_SIGN_IDENTITY on macOS when it is set)"
+description = "Built and install a release binary on the system (re-signed with $DIVE_DEV_SIGN_IDENTITY on macOS when it is set)"
 run = [
-    "cargo install --path crates/graph-cli",
+    "cargo install --path crates/dive-cli",
     '''
-if [ -n "${GRAPH_DEV_SIGN_IDENTITY:-}" ] && [ "$(uname -s)" = "Darwin" ]; then
-  installed="${CARGO_INSTALL_ROOT:-${CARGO_HOME:-$HOME/.cargo}}/bin/graph"
-  codesign --force --sign "$GRAPH_DEV_SIGN_IDENTITY" "$installed"
-  echo "signed $installed with $GRAPH_DEV_SIGN_IDENTITY"
+if [ -n "${DIVE_DEV_SIGN_IDENTITY:-${GRAPH_DEV_SIGN_IDENTITY:-}}" ] && [ "$(uname -s)" = "Darwin" ]; then
+  installed="${CARGO_INSTALL_ROOT:-${CARGO_HOME:-$HOME/.cargo}}/bin/dive"
+  codesign --force --sign "${DIVE_DEV_SIGN_IDENTITY:-$GRAPH_DEV_SIGN_IDENTITY}" "$installed"
+  echo "signed $installed"
 fi
 ''',
 ]
@@ -91,8 +91,8 @@ run = "cd docs && mint dev"
 
 [tasks.shots]
 description = "Regenerate the workbench docs screenshots from docs/shots/ scenarios"
-run = "GRAPH_UPDATE_SHOTS=1 cargo test -p graph-cli shots -- --nocapture"
+run = "DIVE_UPDATE_SHOTS=1 cargo test -p dive-cli shots -- --nocapture"
 
 [tasks."docs:generate"]
 description = "Regenerate the reference pages generated from code: the CLI, packs, control steps, built-in agents and built-in plans"
-run = "GRAPH_UPDATE_DOCS=1 cargo test -p graph-cli docs_gen"
+run = "DIVE_UPDATE_DOCS=1 cargo test -p dive-cli docs_gen"

@@ -4,15 +4,15 @@
 # Claude Code session state (worktrees, settings) — local tooling, not code.
 /.claude/*
 !/.claude/skills/
-# .graph/ carries repo config, plans, and tools for CI; everything else
+# .dive/ carries repo config, plans, and tools for CI; everything else
 # under it (embedded DB state, scratch) stays ignored.
-/.graph/*
-!/.graph/config.toml
-!/.graph/plans/
-!/.graph/tools/
-!/.graph/evals/
-!/.graph/packs/
-!/.graph/packs.lock
+/.dive/*
+!/.dive/config.toml
+!/.dive/plans/
+!/.dive/tools/
+!/.dive/evals/
+!/.dive/packs/
+!/.dive/packs.lock
 *.db
 mise.local.toml
 __pycache__/

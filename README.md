@@ -1,8 +1,8 @@
-# graph
+# Dive
 
 A plan engine for repeatable, AI-augmented workflows.
 
-`graph` runs multi-step plans where the steps are deterministic and
+`dive` runs multi-step plans where the steps are deterministic and
 inference happens only where you put it. Author a plan once, review it,
 and run it forever — in your terminal or in CI.
 
@@ -23,7 +23,7 @@ and run it forever — in your terminal or in CI.
   concurrent runs, and trivially backed up.
 - **Bring your own models** — Anthropic, OpenAI, OpenAI-compatible (local),
   and AWS Bedrock, assignable per role (chat, planner, solver, judge, …).
-- **Chat workbench** — `graph ask` and `graph chat` run a tool-calling agent
+- **Chat workbench** — `dive ask` and `dive chat` run a tool-calling agent
   loop for probing tools and prototyping workflows before freezing them into
   plans.
 
@@ -31,12 +31,12 @@ and run it forever — in your terminal or in CI.
 
 | Crate | Contents |
 |---|---|
-| `graph-cli` | binary: command tree, REPL, output UX |
-| `graph-core` | agent loop, plan pipeline, template renderer, prompts |
-| `graph-llm` | provider abstraction (tool use, structured output, streaming) |
-| `graph-mcp` | MCP client manager and tool adaptation |
-| `graph-store` | file-based and in-memory storage backends |
-| `graph-config` | layered TOML config + YAML plan/tool documents |
+| `dive-cli` | binary: command tree, REPL, output UX |
+| `dive-core` | agent loop, plan pipeline, template renderer, prompts |
+| `dive-llm` | provider abstraction (tool use, structured output, streaming) |
+| `dive-mcp` | MCP client manager and tool adaptation |
+| `dive-store` | file-based and in-memory storage backends |
+| `dive-config` | layered TOML config + YAML plan/tool documents |
 
 ## Building (macOS)
 
@@ -68,7 +68,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Special thanks
 
-To the people whose ideas and code shaped graph's design:
+To the people whose ideas and code shaped Dive's design:
 [@salscode](https://github.com/salscode),
 [@mrhamric](https://github.com/mrhamric),
 [@gjdame](https://github.com/gjdame),

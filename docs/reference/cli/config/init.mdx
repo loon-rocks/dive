@@ -1,17 +1,17 @@
 ---
-title: "graph config init"
+title: "dive config init"
 sidebarTitle: "init"
 description: "Write a starter config file"
 playground: "none"
-keywords: ["graph config init"]
+keywords: ["dive config init"]
 ---
 
-Writes a commented starter config to `./.graph/config.toml`, or to `~/.config/graph/config.toml` with `--global`. Refuses to overwrite an existing file unless `--force` is set.
+Writes a commented starter config to `./.dive/config.toml`, or to `~/.config/dive/config.toml` with `--global`. Refuses to overwrite an existing file unless `--force` is set.
 
 ## Options
 
 <ParamField query="--global" type="boolean">
-  Write to the global location (~/.config/graph/) instead of the project (./.graph/)
+  Write to the global location (~/.config/dive/) instead of the project (./.dive/)
 </ParamField>
 
 <ParamField query="--force" type="boolean">
@@ -27,15 +27,15 @@ Writes a commented starter config to `./.graph/config.toml`, or to `~/.config/gr
 <RequestExample>
 
 ```bash Usage
-graph config init [OPTIONS]
+dive config init [OPTIONS]
 ```
 
 ```bash Example 1
-graph config init
+dive config init
 ```
 
 ```bash Example 2
-graph config init --global
+dive config init --global
 ```
 
 </RequestExample>

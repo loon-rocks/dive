@@ -2,7 +2,7 @@
 """Render a trace timeline from the workbench log.
 
 The workbench writes a timestamped tracing stream to
-`<data_dir>/workbench.log` (default ~/.local/share/graph/workbench.log).
+`<data_dir>/workbench.log` (default ~/.local/share/dive/workbench.log).
 This parses it into nested spans — session > turn > tool call, plus the
 two sibling phases of a plan draft: a single outline call that sketches
 stages, then a separate step-by-step drafting loop that turns each stage into
@@ -13,7 +13,7 @@ Usage:
     workbench_trace.py [--sessions N] [--log PATH] [--no-color] [--width N]
 
     --sessions N   Show the last N sessions (default 3).
-    --log PATH     Log file (default ~/.local/share/graph/workbench.log).
+    --log PATH     Log file (default ~/.local/share/dive/workbench.log).
     --width N      Truncate tool inputs/results to N chars (default 70; 0 = off).
     --no-color     Disable ANSI color.
 """
@@ -26,7 +26,7 @@ from datetime import datetime
 TS = re.compile(r"^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s+(\w+)\s+workbench:\s+(.*)$")
 
 # One matcher per event kind we care about. Each returns a dict of fields.
-SESSION = re.compile(r"── session started \(graph ([\d.]+)\) ──")
+SESSION = re.compile(r"── session started \((?:dive|graph) ([\d.]+)\) ──")
 CONTEXT = re.compile(r"context loaded: (\d+) tools, (\d+) shapes")
 TURN_START = re.compile(r"agent turn started \((\d+) chars\)")
 TURN_TOOK = re.compile(r"agent turn took ([\d.]+)s \((\d+) messages")
@@ -104,7 +104,7 @@ def render(session, width, color):
         return ts.strftime("%H:%M:%S")
 
     ver = SESSION.search(session[0]["body"]).group(1)
-    out.append(c("bold", f"┏━ session {clk(start)}  ·  graph {ver}"))
+    out.append(c("bold", f"┏━ session {clk(start)}  ·  Dive {ver}"))
 
     pending_invoke = None  # (tool, input, ts) awaiting its finished line
     in_turn = False
@@ -256,7 +256,7 @@ def render(session, width, color):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sessions", type=int, default=3)
-    ap.add_argument("--log", default=os.path.expanduser("~/.local/share/graph/workbench.log"))
+    ap.add_argument("--log", default=os.path.expanduser("~/.local/share/dive/workbench.log"))
     ap.add_argument("--width", type=int, default=70)
     ap.add_argument("--no-color", action="store_true")
     args = ap.parse_args()

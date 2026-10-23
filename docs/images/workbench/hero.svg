@@ -5,7 +5,7 @@
 <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
 <circle cx="42" cy="18" r="6" fill="#febc2e"/>
 <circle cx="62" cy="18" r="6" fill="#28c840"/>
-<text x="522" y="23" fill="#8b90a0" text-anchor="middle">graph workbench — weekly_status</text>
+<text x="522" y="23" fill="#8b90a0" text-anchor="middle">dive workbench — weekly_status</text>
 <rect x="438.0" y="234.0" width="8.4" height="18" fill="#c6cad3"/>
 <rect x="446.4" y="234.0" width="16.8" height="18" fill="#98c379"/>
 <rect x="463.2" y="234.0" width="16.8" height="18" fill="#c6cad3"/>

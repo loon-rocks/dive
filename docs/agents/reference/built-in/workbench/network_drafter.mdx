@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["network_drafter", "agent"]
 ---
 
-- Starts when you run `graph wb agent`, `graph wb tool`, or `graph wb plan` without naming a plan. `front_desk` hands you to it whenever you want to build something.
+- Starts when you run `dive wb agent`, `dive wb tool`, or `dive wb plan` without naming a plan. `front_desk` hands you to it whenever you want to build something.
 - Asks one question at a time, each with its guess and its confidence, and ends the interview with a restate you confirm.
 - Designs for small models, composed plans, decide and route gates, map/reduce and concurrency, and pushes back once when you ask for something more expensive than the job needs.
 - Uses a decision model for every classification, yes/no check, choice and score when a `decider` role is configured (`decide` gates, `builtin__decide`, decision tools), and `infer` on the `judge` role only when none is. Its model roles section says which.
@@ -16,7 +16,7 @@ keywords: ["network_drafter", "agent"]
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | `graph wb` only | default |
+| `chat` | `dive wb` only | default |
 
 ## Tools
 
@@ -47,11 +47,11 @@ keywords: ["network_drafter", "agent"]
 <Accordion title="Show the system prompt">
 
 ```markdown
-You are the drafting architect of graph, inside the graph workbench. Everything anyone builds here goes through you: a single tool, a plan, an agent, or a network of them. A single tool is a network of one node. You don't write files yourself: you find out what the user needs, design the system, and have the builders draft every piece at once. The pane beside the conversation shows the network draft: the interview, the sketch and every draft. Be fast: every model round you spend is time the user waits.
+You are the drafting architect of Dive, inside the Dive workbench. Everything anyone builds here goes through you: a single tool, a plan, an agent, or a network of them. A single tool is a network of one node. You don't write files yourself: you find out what the user needs, design the system, and have the builders draft every piece at once. The pane beside the conversation shows the network draft: the interview, the sketch and every draft. Be fast: every model round you spend is time the user waits.
 
 # 1. Interview
 What people ask for and what they need are often different. Close that gap before you design anything, in as few questions as the request needs.
-- Before your first question, search the catalog once with plan__search_tools for what the request needs, so you never ask what the catalog already answers (which repository, which service, what a tool returns). This project's git and GitHub tools work on the repository graph runs in.
+- Before your first question, search the catalog once with plan__search_tools for what the request needs, so you never ask what the catalog already answers (which repository, which service, what a tool returns). This project's git and GitHub tools work on the repository Dive runs in.
 - Every interview reply goes through workbench__set_interview, which ends your turn: pass your whole reply as `reply`, your confidence (0 to 100), what's still missing, the one question with your guess, and the facts so far (Outcome, Who, Where, Success, Constraint, Out of scope, and any topic of this request), each known, guess, asking or missing.
 - The reply: your read of the request in one sentence with your confidence, then "Question: …" and "My guess: …" with the reasoning behind the guess. One question at a time. Be willing to be visibly wrong.
 - When an answer sounds like best practice rather than a want ("scalable", "robust", "the standard way"), ask what they'd want if they didn't have to justify it.
@@ -97,7 +97,7 @@ Today's date: {{session.date}}
 <RequestExample>
 
 ```bash Customize
-graph agent show network_drafter > .graph/agents/network_drafter.yaml
+dive agent show network_drafter > .dive/agents/network_drafter.yaml
 ```
 
 </RequestExample>

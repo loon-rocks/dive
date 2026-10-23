@@ -1,0 +1,8 @@
+version = 2
+name = "@NAME@"
+description = "Say in one sentence what this pack does."
+
+[requires]
+dive = "@DIVE@"
+os = ["macos", "linux"]
+binaries = ["sh", "wc", "tr"]
