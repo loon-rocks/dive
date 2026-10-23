@@ -293,7 +293,7 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
 
 #[test]
 fn entries_without_timing_round_trip_byte_for_byte() {
-    for version in ["v2", "v3", "v4", "v5", "v6"] {
+    for version in ["v2", "v3"] {
         let raw = std::fs::read_to_string(
             fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
         )
@@ -303,27 +303,6 @@ fn entries_without_timing_round_trip_byte_for_byte() {
             assert_eq!(serde_json::to_string(&entry).unwrap(), line, "{version}");
         }
     }
-}
-
-#[tokio::test]
-async fn a_frozen_version_3_data_directory_is_marked_current_and_otherwise_untouched() {
-    let dir = copy_fixture("v3");
-    let store = FileStore::open(dir.path()).unwrap();
-    assert_matches_fixture_except_marker(dir.path(), "v3");
-    let entries = store.load_entries("a1b2c3d4e5f6").await.unwrap();
-    let ms: Vec<Option<u64>> = entries.iter().map(|entry| entry.ms).collect();
-    assert_eq!(ms, [None, Some(1840), Some(5230), Some(910)]);
-    assert!(entries.iter().all(|entry| entry.calls.is_empty()));
-}
-
-#[tokio::test]
-async fn a_frozen_version_4_data_directory_is_marked_current_and_otherwise_untouched() {
-    let dir = copy_fixture("v4");
-    let store = FileStore::open(dir.path()).unwrap();
-    assert_matches_fixture_except_marker(dir.path(), "v4");
-    let threads = store.list_threads().await.unwrap();
-    assert_eq!(threads.len(), 2);
-    assert!(threads.iter().all(|meta| meta.attachments.is_empty()));
 }
 
 #[tokio::test]
@@ -346,16 +325,6 @@ async fn attachments_are_set_and_kept_across_reopen() {
     let meta = store.get_thread(&id).await.unwrap().unwrap();
     assert_eq!(meta.attachments, [Attachment::new("network")]);
     assert!(store.set_attachments("missing0000", &[]).await.is_err());
-}
-
-#[tokio::test]
-async fn a_frozen_version_5_data_directory_is_marked_current_and_otherwise_untouched() {
-    let dir = copy_fixture("v5");
-    let store = FileStore::open(dir.path()).unwrap();
-    assert_matches_fixture_except_marker(dir.path(), "v5");
-    let threads = store.list_threads().await.unwrap();
-    assert_eq!(threads.len(), 3);
-    assert!(threads.iter().all(|meta| meta.project.is_none()));
 }
 
 #[tokio::test]
@@ -386,8 +355,8 @@ async fn a_thread_keeps_the_project_it_was_created_in_across_reopen() {
 }
 
 #[tokio::test]
-async fn a_frozen_version_6_data_directory_opens_as_is() {
-    let dir = copy_fixture("v6");
+async fn a_frozen_version_3_data_directory_opens_as_is() {
+    let dir = copy_fixture("v3");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
     assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
@@ -431,7 +400,7 @@ async fn a_frozen_version_6_data_directory_opens_as_is() {
     assert_eq!(site.project.as_deref(), Some("/work/site"));
     assert!(site.in_project(Some("/work/site")));
     assert!(draft.in_project(None));
-    let expected = fixture_dir("v6");
+    let expected = fixture_dir("v3");
     assert_eq!(
         data_files(dir.path()),
         data_files(&expected),

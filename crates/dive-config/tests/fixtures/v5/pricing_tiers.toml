@@ -1,4 +1,4 @@
-version = 6
+version = 5
 
 [pricing."claude-haiku-5-5"]
 input = 0.10

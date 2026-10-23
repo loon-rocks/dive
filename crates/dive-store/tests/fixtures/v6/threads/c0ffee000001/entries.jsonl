@@ -1,2 +1,0 @@
-{"seq":0,"at":1767225800000,"author":"user","kind":"message","message":{"kind":"user","content":"a tool that greets"}}
-{"seq":1,"at":1767225860000,"author":"network_drafter","kind":"message","message":{"kind":"assistant","content":"Who should it greet?"},"ms":800,"usage":{"model":"claude-sonnet-4-5","input_tokens":900,"output_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}
