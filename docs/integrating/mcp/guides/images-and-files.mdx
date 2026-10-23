@@ -48,6 +48,18 @@ When the tool's result isn't an object, or already has its own `files` key, Dive
 
 A reference names the file by its SHA-256 hash, so the same image stored twice is kept once. It stays the same wherever the file is kept, and threads and plan results that mention it keep working if you move file storage to another backend and copy the files across.
 
+## Show a file in a reply
+
+Every conversation agent is told about `files` and refs in its system prompt, after its own `system_prompt`. To show the user a file, an agent writes it into its reply as a markdown image with the ref as the URL:
+
+```markdown
+The pricing page highlights the Team plan:
+
+![The Acme pricing page](blob:sha256-5d41402abc4b2a76b9719d911017c592a7c1d1d4b2fb7b1f9d1c1e1e2c1a3f4e.png)
+```
+
+The desktop app draws the image in the message. In a terminal the markdown shows as written. The agent chooses which files to show, so a screenshot it only used to read the page stays in the tool's result.
+
 ## Pass a file to another tool
 
 Any argument whose whole value is a reference is replaced before Dive calls the tool. A reference inside longer text is left as it is. Each server's `files` setting decides what the tool receives:
