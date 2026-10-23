@@ -603,17 +603,19 @@ impl ImageCall {
     }
 }
 
-fn numbered(path: &Path, index: usize) -> PathBuf {
-    if index == 0 {
-        return path.to_path_buf();
-    }
+pub(crate) fn saved_path(path: &Path, index: usize, mime: &str) -> PathBuf {
     let stem = path
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let name = match path.extension() {
-        Some(extension) => format!("{stem}-{}.{}", index + 1, extension.to_string_lossy()),
-        None => format!("{stem}-{}", index + 1),
+    let extension = path
+        .extension()
+        .map(|extension| extension.to_string_lossy().into_owned())
+        .filter(|extension| crate::files::mime_for(extension) == mime)
+        .unwrap_or_else(|| crate::files::extension_for(mime).to_string());
+    let name = match index {
+        0 => format!("{stem}.{extension}"),
+        n => format!("{stem}-{}.{extension}", n + 1),
     };
     path.with_file_name(name)
 }
@@ -1161,7 +1163,7 @@ impl UserToolRegistry {
                 .map_err(|e| e.to_string())?;
             let mut entry = serde_json::to_value(&stored).map_err(|e| e.to_string())?;
             if let Some(target) = &target {
-                let path = numbered(target, images.len());
+                let path = saved_path(target, images.len(), &image.mime);
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)
                         .map_err(|e| format!("creating {}: {e}", parent.display()))?;

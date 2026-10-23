@@ -35,4 +35,4 @@ input_schema:
       description: How many images to generate.
     path:
       type: string
-      description: A path inside the workspace to also save the image to, such as site/hero.png. With a count over 1, later images get -2, -3 before the extension.
+      description: A path inside the workspace to also save the image to, such as site/hero.png. The extension follows the images type, so a JPEG lands at site/hero.jpg. With a count over 1, later images get -2, -3 before the extension.

@@ -2400,3 +2400,20 @@ input_schema:
         "input.image must be a file ref like blob:sha256-….png"
     );
 }
+
+#[test]
+fn a_saved_image_takes_the_extension_of_its_type() {
+    let cases = [
+        ("site/hero.png", 0, "image/jpeg", "site/hero.jpg"),
+        ("site/hero.jpeg", 1, "image/jpeg", "site/hero-2.jpeg"),
+        ("site/hero.png", 2, "image/png", "site/hero-3.png"),
+        ("site/hero", 0, "image/webp", "site/hero.webp"),
+    ];
+    for (path, index, mime, expected) in cases {
+        assert_eq!(
+            saved_path(std::path::Path::new(path), index, mime),
+            std::path::PathBuf::from(expected),
+            "{path} as {mime}"
+        );
+    }
+}
