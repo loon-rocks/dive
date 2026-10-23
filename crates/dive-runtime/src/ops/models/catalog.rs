@@ -36,6 +36,22 @@ struct CatalogProvider {
 struct CatalogModel {
     #[serde(default)]
     cost: Option<CatalogCost>,
+    #[serde(default)]
+    modalities: Option<CatalogModalities>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct CatalogModalities {
+    #[serde(default)]
+    output: Vec<String>,
+}
+
+impl CatalogModel {
+    fn draws_images(&self) -> bool {
+        self.modalities
+            .as_ref()
+            .is_some_and(|modalities| modalities.output.iter().any(|kind| kind == "image"))
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -108,11 +124,23 @@ impl Catalog {
         model: &str,
     ) -> Option<ModelPrice> {
         let provider = self.provider_for(kind, base_url)?;
-        let cost = provider.models.get(model)?.cost.as_ref()?;
+        let found = provider.models.get(model).or_else(|| {
+            (kind == ProviderKind::Gemini && base_url.is_none())
+                .then(|| self.0.get("google-vertex")?.models.get(model))
+                .flatten()
+        })?;
+        let cost = found.cost.as_ref()?;
+        let (output, output_image) = match (kind, found.draws_images()) {
+            (ProviderKind::Gemini, true) => {
+                let image = cost.output?;
+                (self.gemini_text_output(model).unwrap_or(image), Some(image))
+            }
+            _ => (cost.output?, None),
+        };
         Some(ModelPrice {
             input: cost.input?,
-            output: cost.output?,
-            output_image: None,
+            output,
+            output_image,
             cache_write: cost.cache_write,
             cache_read: cost.cache_read,
             tiers: cost
@@ -129,6 +157,16 @@ impl Catalog {
                 .collect(),
             source: Some(CATALOG_SOURCE.to_string()),
         })
+    }
+
+    fn gemini_text_output(&self, model: &str) -> Option<f64> {
+        self.0
+            .get("openrouter")?
+            .models
+            .get(&format!("google/{model}"))?
+            .cost
+            .as_ref()?
+            .output
     }
 
     fn provider_for(&self, kind: ProviderKind, base_url: Option<&str>) -> Option<&CatalogProvider> {
@@ -244,6 +282,7 @@ pub fn fill_prices_in(
 fn same_price(entry: &PriceEntry, price: &ModelPrice) -> bool {
     entry.input == price.input
         && entry.output == price.output
+        && entry.output_image == price.output_image
         && entry.cache_write == price.cache_write
         && entry.cache_read == price.cache_read
         && entry.tiers == price.tiers
@@ -253,6 +292,7 @@ fn price_table(price: &ModelPrice) -> Table {
     let mut table = Table::new();
     table.insert("input", value(price.input));
     table.insert("output", value(price.output));
+    set_number(&mut table, "output_image", price.output_image);
     set_number(&mut table, "cache_write", price.cache_write);
     set_number(&mut table, "cache_read", price.cache_read);
     set_tiers(&mut table, &price.tiers);

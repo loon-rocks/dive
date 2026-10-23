@@ -610,6 +610,36 @@ fn compatible_providers_match_the_catalogue_by_host_and_others_stay_unpriced() {
 }
 
 #[test]
+fn gemini_image_models_take_the_image_rate_from_google_and_the_text_rate_from_openrouter() {
+    let catalog = Catalog::parse(
+        r#"{
+  "google": {"models": {
+    "gemini-3-pro-image": {"cost": {"input": 2, "output": 120}, "modalities": {"output": ["text", "image"]}},
+    "gemini-flash": {"cost": {"input": 0.3, "output": 2.5}, "modalities": {"output": ["text"]}}
+  }},
+  "google-vertex": {"models": {
+    "gemini-nano-banana-2.1": {"cost": {"input": 1.5, "output": 30}, "modalities": {"output": ["text", "image"]}}
+  }},
+  "openrouter": {"models": {
+    "google/gemini-nano-banana-2.1": {"cost": {"input": 1.5, "output": 7.5}}
+  }}
+}"#,
+    )
+    .unwrap();
+    let rates = |model: &str| {
+        catalog
+            .price(ProviderKind::Gemini, None, model)
+            .map(|price| (price.input, price.output, price.output_image))
+    };
+    assert_eq!(
+        rates("gemini-nano-banana-2.1"),
+        Some((1.5, 7.5, Some(30.0)))
+    );
+    assert_eq!(rates("gemini-3-pro-image"), Some((2.0, 120.0, Some(120.0))));
+    assert_eq!(rates("gemini-flash"), Some((0.3, 2.5, None)));
+}
+
+#[test]
 fn a_saved_role_keeps_its_type() {
     let project = "version = 5\n\n[providers.anthropic]\ntype = \"anthropic\"\n\n[providers.typesafe]\ntype = \"systemone\"\n\n[models.triage]\nprovider = \"anthropic\"\nmodel = \"claude-haiku-4-5\"\n";
     let (_dir, layers) = layers("version = 5\n", Some(project));
