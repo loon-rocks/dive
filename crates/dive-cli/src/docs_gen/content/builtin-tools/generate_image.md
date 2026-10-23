@@ -35,4 +35,4 @@ output:
 
 Needs an [image model](/getting-started/models#image-models) on the `image` role, and appears in the tool catalog only once one is configured. Pass refs from earlier results in `images` to edit or combine them, with a prompt that says what to change. A value the model doesn't support, such as an `aspect_ratio` or `size` it can't produce, is a tool error that lists the values it does support, so an agent can correct the call and retry.
 
-With `path`, each image is also written into the workspace; when `count` is over 1, later images get `-2`, `-3` and so on before the extension. A path must be relative and stay inside the workspace.
+With `path`, each image is also written into the workspace, with the extension of the type the model returned (a JPEG asked for at `site/hero.png` lands at `site/hero.jpg`, and the result's `path` says where); when `count` is over 1, later images get `-2`, `-3` and so on before the extension. A path must be relative and stay inside the workspace.
