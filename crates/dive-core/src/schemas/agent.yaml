@@ -57,7 +57,7 @@ properties:
     type: string
     description: The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else. `{{session.date}}` is today's date with no time of day, so the prompt stays the same all day and a resumed thread keeps its prompt cache.
 examples:
-  - version: 3
+  - version: 2
     name: release_notes
     description: Answers questions about what shipped, from the repo's commit history.
     model: chat

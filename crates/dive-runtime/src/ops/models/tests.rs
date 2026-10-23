@@ -508,7 +508,7 @@ const CATALOG: &str = r#"{
   "ollama-cloud": {"api": "https://ollama.example.com/v1", "models": {"llama3": {"cost": {"input": 0, "output": 0}}}}
 }"#;
 
-const WITH_HAIKU: &str = r#"version = 6
+const WITH_HAIKU: &str = r#"version = 5
 
 [models.fast]
 provider = "anthropic"

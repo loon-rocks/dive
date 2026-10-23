@@ -12,7 +12,7 @@ pub const TOOL_FORMAT: u32 = 3;
 
 pub const TOOL_FORMAT_OLDEST: u32 = 1;
 
-pub const AGENT_FORMAT: u32 = 3;
+pub const AGENT_FORMAT: u32 = 2;
 
 pub const AGENT_FORMAT_OLDEST: u32 = 1;
 
@@ -96,13 +96,9 @@ fn env_descriptions_added(_value: &mut Value) -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 
-const AGENT_MIGRATIONS: &[Migration] = &[attachments_added, evidence_attachment_added];
+const AGENT_MIGRATIONS: &[Migration] = &[attachments_added];
 
 fn attachments_added(_value: &mut Value) -> Result<Vec<String>, String> {
-    Ok(Vec::new())
-}
-
-fn evidence_attachment_added(_value: &mut Value) -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 

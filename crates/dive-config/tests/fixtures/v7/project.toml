@@ -1,8 +1,0 @@
-version = 7
-
-[project]
-id = "6f1c2a0e-8d4b-4f5e-9a3c-2b7d1e0f4a59"
-
-[providers.anthropic]
-type = "anthropic"
-api_key = "${ANTHROPIC_API_KEY:-unset}"
