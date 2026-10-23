@@ -47,8 +47,8 @@ properties:
       properties:
         type:
           type: string
-          enum: [anthropic, openai, openai_compat, systemone]
-          description: The provider. `systemone` serves decision models.
+          enum: [anthropic, openai, openai_compat, systemone, gemini]
+          description: The provider. `systemone` serves decision models, `gemini` serves image models (the Gemini API), and the rest serve chat models.
         api_key:
           type: string
           description: API key, usually a `${NAME}` reference to a variable or stored secret.
@@ -63,11 +63,15 @@ properties:
           description: Credentials profile, where the provider uses one.
   models:
     type: object
-    description: Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.
+    description: Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge`, `decider` and `image`; any other name is a custom role.
     additionalProperties:
       type: object
       required: [provider, model]
       properties:
+        type:
+          type: string
+          enum: [chat, decision, image]
+          description: "What the role's model does. Custom roles default to `chat`; standard roles have a fixed type (`decider` is `decision`, `image` is `image`, the rest are `chat`). The role's provider must serve this type."
         provider:
           type: string
           description: A name from `[providers]`.
@@ -336,6 +340,9 @@ properties:
         output:
           type: number
           description: Output tokens.
+        output_image:
+          type: number
+          description: Output image tokens. Defaults to the `output` rate.
         cache_write:
           type: number
           description: Cache-write tokens.

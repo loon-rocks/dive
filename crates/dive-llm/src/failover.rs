@@ -145,6 +145,48 @@ impl DecisionProvider for FailoverDecider {
     }
 }
 
+pub(crate) struct ImageCandidate {
+    pub provider: Arc<dyn crate::ImageProvider>,
+    pub provider_name: String,
+    pub model: String,
+}
+
+pub(crate) struct FailoverImager {
+    pub primary: Arc<dyn crate::ImageProvider>,
+    pub fallbacks: Vec<ImageCandidate>,
+}
+
+#[async_trait]
+impl crate::ImageProvider for FailoverImager {
+    fn options(&self, model: &str) -> crate::ImageOptions {
+        self.primary.options(model)
+    }
+
+    async fn generate(&self, req: crate::ImageRequest) -> Result<crate::ImageResponse, LlmError> {
+        let mut last = match self.primary.generate(req.clone()).await {
+            Ok(response) => return Ok(response),
+            Err(error) if is_transient(&error) => error,
+            Err(error) => return Err(error),
+        };
+        for candidate in &self.fallbacks {
+            let mut attempt = req.clone();
+            attempt.model = candidate.model.clone();
+            tracing::warn!(
+                provider = candidate.provider_name.as_str(),
+                model = %attempt.model,
+                error = %last,
+                "provider outage; failing over"
+            );
+            match candidate.provider.generate(attempt).await {
+                Ok(response) => return Ok(response),
+                Err(error) if is_transient(&error) => last = error,
+                Err(error) => return Err(error),
+            }
+        }
+        Err(last)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

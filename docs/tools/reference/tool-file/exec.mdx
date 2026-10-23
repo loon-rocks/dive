@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["exec", "tool file", "YAML"]
 ---
 
-Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design.
+Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files the command writes to the directory in `$DIVE_OUT` are stored and listed under `files` in the result, each with a `ref`.
 
 These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: exec`.
 

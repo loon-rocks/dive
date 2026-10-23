@@ -80,6 +80,7 @@ pub fn model_roles(pipeline: &Pipeline) -> String {
         };
         let kind = match pipeline.router.kind_of_role(name) {
             Some(dive_config::ModelKind::Decision) => " (decision model: decide gates only)",
+            Some(dive_config::ModelKind::Image) => " (image model: builtin__generate_image only)",
             _ => "",
         };
         let description = choice
@@ -253,6 +254,7 @@ steps:
 
     fn choice(provider: &str) -> dive_config::ModelChoice {
         dive_config::ModelChoice {
+            kind: None,
             provider: provider.to_string(),
             model: format!("{provider}-model"),
             temperature: None,
@@ -267,7 +269,13 @@ steps:
             std::collections::HashMap::new(),
             roles
                 .iter()
-                .map(|(role, provider)| (role.to_string(), choice(provider)))
+                .map(|(role, provider)| {
+                    let mut choice = choice(provider);
+                    if *provider == "ts" {
+                        choice.kind = Some(dive_config::ModelKind::Decision);
+                    }
+                    (role.to_string(), choice)
+                })
                 .collect(),
         )
         .with_deciders(std::collections::HashMap::from([(

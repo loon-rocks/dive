@@ -104,6 +104,7 @@ fn runtime(root: &std::path::Path) -> Runtime {
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "scripted".to_string(),
                 model: "scripted".to_string(),
                 temperature: None,

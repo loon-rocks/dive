@@ -69,6 +69,7 @@ mod tests {
             ("prompt", crate::user_tools::PROMPT_KEYS),
             ("reshape", crate::user_tools::RESHAPE_KEYS),
             ("decision", crate::user_tools::DECISION_KEYS),
+            ("image", crate::user_tools::IMAGE_KEYS),
         ];
         let branches = schema.get("oneOf").and_then(Value::as_sequence).unwrap();
         assert_eq!(branches.len(), kinds.len());

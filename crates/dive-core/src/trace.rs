@@ -17,8 +17,14 @@ pub enum Call {
     Model {
         role: String,
         site: String,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        decision: bool,
+        #[serde(
+            rename = "type",
+            alias = "decision",
+            default,
+            skip_serializing_if = "dive_config::ModelKind::is_chat",
+            deserialize_with = "model_type"
+        )]
+        model_type: dive_config::ModelKind,
         ms: u64,
         usage: EntryUsage,
     },
@@ -30,6 +36,22 @@ pub enum Call {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         calls: Vec<Call>,
     },
+}
+
+fn model_type<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<dive_config::ModelKind, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Flag(bool),
+        Kind(dive_config::ModelKind),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Flag(true) => dive_config::ModelKind::Decision,
+        Stored::Flag(false) => dive_config::ModelKind::Chat,
+        Stored::Kind(kind) => kind,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,12 +155,13 @@ mod tests {
         Call::Model {
             role: role.to_string(),
             site: role.to_string(),
-            decision: false,
+            model_type: dive_config::ModelKind::Chat,
             ms: 5,
             usage: EntryUsage {
                 model: "m".to_string(),
                 input_tokens: 10,
                 output_tokens: 2,
+                output_image_tokens: 0,
                 cache_creation_input_tokens: 0,
                 cache_read_input_tokens: 0,
             },
@@ -196,7 +219,26 @@ mod tests {
         };
         let text = serde_json::to_string(&call).unwrap();
         assert!(!text.contains("is_error"), "{text}");
-        assert!(!text.contains("decision"), "{text}");
+        assert!(!text.contains("type"), "{text}");
+        assert_eq!(serde_json::from_str::<Call>(&text).unwrap(), call);
+    }
+
+    #[test]
+    fn a_model_call_records_its_type_and_reads_the_old_decision_flag() {
+        let Call::Model { model_type, .. } = serde_json::from_value(serde_json::json!({
+            "kind": "model", "role": "decider", "site": "decider", "decision": true, "ms": 1,
+            "usage": {"model": "m", "input_tokens": 1, "output_tokens": 1}
+        }))
+        .unwrap() else {
+            panic!("expected a model call");
+        };
+        assert_eq!(model_type, dive_config::ModelKind::Decision);
+        let mut call = model("image");
+        if let Call::Model { model_type, .. } = &mut call {
+            *model_type = dive_config::ModelKind::Image;
+        }
+        let text = serde_json::to_string(&call).unwrap();
+        assert!(text.contains(r#""type":"image""#), "{text}");
         assert_eq!(serde_json::from_str::<Call>(&text).unwrap(), call);
     }
 }

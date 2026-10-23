@@ -412,6 +412,7 @@ fn parse_usage(usage: &Value) -> Usage {
     Usage {
         input_tokens: prompt - cached,
         output_tokens: usage["completion_tokens"].as_u64().unwrap_or(0),
+        output_image_tokens: 0,
         cache_creation_input_tokens: 0,
         cache_read_input_tokens: cached,
     }

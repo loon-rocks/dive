@@ -856,6 +856,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                output_image_tokens: 0,
                 cache_read_input_tokens: 3,
                 ..Default::default()
             },

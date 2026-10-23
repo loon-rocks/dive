@@ -40,6 +40,7 @@ pub struct Runtime {
     pub packs: Arc<crate::packs::InstalledPacks>,
     options: RuntimeOptions,
     project: Option<String>,
+    root: Option<std::path::PathBuf>,
 }
 
 impl Runtime {
@@ -50,7 +51,17 @@ impl Runtime {
     pub fn open(workspace: &Workspace, options: RuntimeOptions) -> Result<Self> {
         let loaded = load_config(workspace)?;
         let packs = load_packs(&loaded)?;
-        Ok(Self::with_packs(loaded.config, packs, options)?.in_project(workspace.project()))
+        let root = (!workspace.is_global()).then(|| {
+            std::path::absolute(workspace.root()).unwrap_or_else(|_| workspace.root().to_path_buf())
+        });
+        Ok(Self::with_packs(loaded.config, packs, options)?
+            .in_project(workspace.project())
+            .in_root(root))
+    }
+
+    pub fn in_root(mut self, root: Option<std::path::PathBuf>) -> Self {
+        self.root = root;
+        self
     }
 
     pub fn in_project(mut self, project: Option<String>) -> Self {
@@ -139,6 +150,7 @@ impl Runtime {
             packs: Arc::new(packs),
             options,
             project: None,
+            root: None,
         })
     }
 
@@ -173,23 +185,39 @@ impl Runtime {
             )) as Arc<dyn ToolRegistry>,
             self.registry.clone() as Arc<dyn ToolRegistry>,
             Arc::new(
-                UserToolRegistry::builtins(docs.builtins, self.router.clone())
-                    .with_secrets(self.secrets()),
+                self.with_files(
+                    UserToolRegistry::builtins(docs.builtins, self.router.clone())
+                        .with_secrets(self.secrets()),
+                ),
             ),
-            Arc::new(
+            Arc::new(self.with_files(
                 UserToolRegistry::new(docs.user, self.router.clone()).with_secrets(self.secrets()),
-            ),
+            )),
             Arc::new(dive_core::list_tools::ListTools::new(self.router.clone())),
         ];
         for (source, tools) in docs.packs {
             sources.push(Arc::new(
-                UserToolRegistry::pack(&source.name, tools, self.router.clone())
-                    .with_secrets(self.secrets())
-                    .with_pack_dir(&source.dir),
+                self.with_files(
+                    UserToolRegistry::pack(&source.name, tools, self.router.clone())
+                        .with_secrets(self.secrets())
+                        .with_pack_dir(&source.dir),
+                ),
             ));
         }
         let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
         Ok(Arc::new(RecordingRegistry::new(base, store.clone())))
+    }
+
+    fn with_files(&self, registry: UserToolRegistry) -> UserToolRegistry {
+        let registry = registry.with_files(self.files.clone());
+        let root = self
+            .root
+            .clone()
+            .or_else(|| self.project.as_ref().map(std::path::PathBuf::from));
+        match root {
+            Some(root) => registry.with_workspace(&root),
+            None => registry,
+        }
     }
 
     pub fn secrets(&self) -> Arc<dyn dive_core::secrets::SecretSource> {

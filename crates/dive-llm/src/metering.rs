@@ -190,6 +190,76 @@ impl DecisionProvider for MeteredDecider {
     }
 }
 
+pub fn image_request_content(req: &crate::ImageRequest) -> Value {
+    json!({
+        "prompt": req.parts.iter().filter_map(|part| match part {
+            crate::Part::Text(text) => Some(text.as_str()),
+            crate::Part::Image(_) => None,
+        }).collect::<Vec<_>>().join("\n"),
+        "images": req.images(),
+        "aspect_ratio": req.aspect_ratio,
+        "size": req.size,
+    })
+}
+
+pub fn image_response_content(response: &crate::ImageResponse) -> Value {
+    json!({
+        "text": response.text(),
+        "images": response
+            .images()
+            .map(|image| json!({"mime": image.mime, "bytes": image.bytes.len()}))
+            .collect::<Vec<_>>(),
+    })
+}
+
+pub struct MeteredImager {
+    inner: Arc<dyn crate::ImageProvider>,
+    provider: String,
+    meter: Arc<dyn UsageMeter>,
+}
+
+impl MeteredImager {
+    pub fn new(
+        inner: Arc<dyn crate::ImageProvider>,
+        provider: String,
+        meter: Arc<dyn UsageMeter>,
+    ) -> Self {
+        Self {
+            inner,
+            provider,
+            meter,
+        }
+    }
+}
+
+#[async_trait]
+impl crate::ImageProvider for MeteredImager {
+    fn options(&self, model: &str) -> crate::ImageOptions {
+        self.inner.options(model)
+    }
+
+    async fn generate(&self, req: crate::ImageRequest) -> Result<crate::ImageResponse, LlmError> {
+        let started = Instant::now();
+        let model = req.model.clone();
+        let input = self
+            .meter
+            .captures_content()
+            .then(|| image_request_content(&req));
+        let response = self.inner.generate(req).await?;
+        let output = input.is_some().then(|| image_response_content(&response));
+        self.meter.record(ModelCall {
+            kind: ModelKind::Image,
+            provider: self.provider.clone(),
+            model,
+            usage: response.usage,
+            elapsed: started.elapsed(),
+            input,
+            output,
+        });
+        Ok(response)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,6 +310,7 @@ mod tests {
         Usage {
             input_tokens: input,
             output_tokens: output,
+            output_image_tokens: 0,
             ..Default::default()
         }
     }

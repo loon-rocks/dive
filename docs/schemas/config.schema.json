@@ -177,6 +177,15 @@
           "temperature": {
             "description": "Sampling temperature.",
             "type": "number"
+          },
+          "type": {
+            "description": "What the role's model does. Custom roles default to `chat`; standard roles have a fixed type (`decider` is `decision`, `image` is `image`, the rest are `chat`). The role's provider must serve this type.",
+            "enum": [
+              "chat",
+              "decision",
+              "image"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -185,7 +194,7 @@
         ],
         "type": "object"
       },
-      "description": "Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.",
+      "description": "Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge`, `decider` and `image`; any other name is a custom role.",
       "type": "object"
     },
     "packs": {
@@ -260,6 +269,10 @@
           },
           "output": {
             "description": "Output tokens.",
+            "type": "number"
+          },
+          "output_image": {
+            "description": "Output image tokens. Defaults to the `output` rate.",
             "type": "number"
           },
           "source": {
@@ -354,12 +367,13 @@
             "type": "string"
           },
           "type": {
-            "description": "The provider. `systemone` serves decision models.",
+            "description": "The provider. `systemone` serves decision models, `gemini` serves image models (the Gemini API), and the rest serve chat models.",
             "enum": [
               "anthropic",
               "openai",
               "openai_compat",
-              "systemone"
+              "systemone",
+              "gemini"
             ],
             "type": "string"
           }

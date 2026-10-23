@@ -113,6 +113,7 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
     for (name, server) in &config.mcp {
         server.validate(name).map_err(anyhow::Error::msg)?;
     }
+    config.check_model_types().map_err(anyhow::Error::msg)?;
     for (layer, source) in pack_layers.iter().zip(&sources) {
         if let Some(name) = layer
             .packs
@@ -589,6 +590,7 @@ description = "fast and cheap"
     #[test]
     fn the_outliner_role_falls_back_to_planner_before_default() {
         let choice = |model: &str| ModelChoice {
+            kind: None,
             provider: "p".into(),
             model: model.into(),
             temperature: None,
@@ -619,6 +621,98 @@ description = "fast and cheap"
         );
     }
 
+    fn load_error(body: &str) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(dir.path(), "config.toml", body);
+        format!("{:#}", load_from(&[path]).unwrap_err())
+    }
+
+    #[test]
+    fn a_role_takes_its_type_from_its_type_key_never_its_provider() {
+        let err = load_error(
+            r#"
+[providers.g]
+type = "gemini"
+
+[models.art]
+provider = "g"
+model = "gemini-3-pro-image"
+"#,
+        );
+        assert!(
+            err.contains(r#"models.art is a chat role, but provider "g" serves image models; set type = "image""#),
+            "{err}"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(
+            dir.path(),
+            "config.toml",
+            r#"
+[providers.g]
+type = "gemini"
+
+[models.art]
+type = "image"
+provider = "g"
+model = "gemini-3-pro-image"
+
+[models.image]
+provider = "g"
+model = "gemini-nano-banana-2.1"
+"#,
+        );
+        let loaded = load_from(&[path]).unwrap();
+        let models = &loaded.config.models;
+        assert_eq!(models.kind_of("art"), Some(ModelKind::Image));
+        assert_eq!(models.kind_of("image"), Some(ModelKind::Image));
+        assert!(models.resolve_role(Role::Image).is_some());
+    }
+
+    #[test]
+    fn a_standard_role_keeps_its_fixed_type() {
+        let err = load_error(
+            r#"
+[providers.p]
+type = "anthropic"
+
+[models.judge]
+type = "image"
+provider = "p"
+model = "m"
+"#,
+        );
+        assert!(
+            err.contains(r#"models.judge is a standard chat role, so it can't be type = "image""#),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn the_image_role_never_falls_back_to_default_and_fallbacks_share_its_type() {
+        let err = load_error(
+            r#"
+[providers.p]
+type = "anthropic"
+
+[providers.g]
+type = "gemini"
+
+[models.default]
+provider = "p"
+model = "m"
+
+[models.image]
+provider = "g"
+model = "i"
+fallbacks = [{ provider = "p", model = "m" }]
+"#,
+        );
+        assert!(
+            err.contains(r#"models.image is an image role, but provider "p" serves chat models"#),
+            "{err}"
+        );
+    }
+
     #[test]
     fn the_decider_role_never_falls_back_to_default() {
         let dir = tempfile::tempdir().unwrap();
@@ -643,8 +737,8 @@ model = "m"
         assert!(!models.known_names().contains(&"decider"));
         assert_eq!(models.resolve_role(Role::Judge).unwrap().model, "m");
         assert_eq!(
-            loaded.config.providers["ts"].kind.model_kind(),
-            ModelKind::Decision
+            loaded.config.providers["ts"].kind.kinds(),
+            [ModelKind::Decision]
         );
         assert_eq!(Role::Decider.kind(), ModelKind::Decision);
     }

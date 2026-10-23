@@ -50,6 +50,7 @@ async fn main() -> anyhow::Result<()> {
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "canned".to_string(),
                 model: "canned".to_string(),
                 temperature: None,

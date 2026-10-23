@@ -4,6 +4,7 @@
     "tools/reference/builtin/infer",
     "tools/reference/builtin/decide",
     "tools/reference/builtin/reshape",
+    "tools/reference/builtin/generate_image",
     "tools/reference/builtin/flatten",
     "tools/reference/builtin/dedupe",
     "tools/reference/builtin/sort",

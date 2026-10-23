@@ -28,7 +28,7 @@ Unknown keys are a load error. For completion in your editor, start the file wit
 <ParamField body="kind" type="enum<string>" required>
   What the tool runs. Each kind takes its own fields, listed below.
 
-  Available options: `exec`, `prompt`, `reshape`, `decision`
+  Available options: `exec`, `prompt`, `reshape`, `decision`, `image`
 </ParamField>
 
 <ParamField body="input_schema" type="object">
@@ -50,6 +50,7 @@ Each `kind` adds its own fields.
 - [`exec`](/tools/reference/tool-file/exec): Runs a command.
 - [`prompt`](/tools/reference/tool-file/prompt): One model call.
 - [`reshape`](/tools/reference/tool-file/reshape): Builds a value in a new JSON shape from the input, with no process and no model call.
+- [`image`](/tools/reference/tool-file/image): Generates images with an image model and stores them as files.
 - [`decision`](/tools/reference/tool-file/decision): Asks a decision model typed questions about the same state, each answered independently.
 
 <RequestExample>

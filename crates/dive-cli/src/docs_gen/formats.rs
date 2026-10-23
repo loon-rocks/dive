@@ -83,7 +83,7 @@ pub fn sections() -> Vec<Section> {
         .map(|path| path.trim_end_matches(".mdx").to_string())
         .filter(|path| path != TOOL_FILE)
         .collect();
-    let ordered: Vec<serde_json::Value> = ["exec", "prompt", "reshape", "decision"]
+    let ordered: Vec<serde_json::Value> = ["exec", "prompt", "reshape", "decision", "image"]
         .iter()
         .map(|kind| format!("{TOOL_FILE}/{kind}"))
         .filter(|path| kinds.contains(path))
@@ -91,7 +91,7 @@ pub fn sections() -> Vec<Section> {
             kinds
                 .iter()
                 .filter(|path| {
-                    !["exec", "prompt", "reshape", "decision"]
+                    !["exec", "prompt", "reshape", "decision", "image"]
                         .iter()
                         .any(|kind| path.ends_with(&format!("/{kind}")))
                 })

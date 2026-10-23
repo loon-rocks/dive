@@ -326,6 +326,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
     let roles = ModelRoles::from([(
         "default",
         ModelChoice {
+            kind: None,
             provider: "scripted".to_string(),
             model: "scripted".to_string(),
             temperature: None,

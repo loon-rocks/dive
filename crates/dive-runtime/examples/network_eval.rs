@@ -149,6 +149,7 @@ async fn run_goal(root: PathBuf, goal: Goal, max_turns: usize) -> anyhow::Result
             map.insert(
                 role.to_string(),
                 dive_config::ModelChoice {
+                    kind: None,
                     provider: provider.to_string(),
                     model: model.to_string(),
                     temperature: None,

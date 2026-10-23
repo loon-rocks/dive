@@ -75,6 +75,26 @@ Use `url` for a server running on another machine, which can't read your local p
 
 If Dive can't read a referenced file, the tool isn't called and the agent gets an error naming the reference.
 
+## Files in your own tools
+
+An [exec tool](/tools/reference/tool-file/exec) takes files the same way. Give an input property `format: blob`, or an array whose `items` have it, and a reference passed there reaches the command as a local path:
+
+```yaml tools/thumbnail.yaml
+version: 3
+name: thumbnail
+description: Shrinks an image to 256 pixels wide and returns the copy.
+kind: exec
+command: sh
+args: ["-c", "sips -Z 256 \"$0\" --out \"$DIVE_OUT/thumb.png\" >/dev/null && echo '{}'", "{{input.image}}"]
+input_schema:
+  type: object
+  required: [image]
+  properties:
+    image: { type: string, format: blob }
+```
+
+Files the command writes to the directory in `$DIVE_OUT` are stored when it exits successfully and listed under `files` in its result, each with a `ref`, just like a server's. `builtin__generate_image` returns the images it draws as references too, under `images`; see [Image models](/getting-started/models#image-models).
+
 ## Where files are kept
 
 Without a `[storage.files]` table, files follow `[storage].backend`: under `<data_dir>/blobs` for `file`, and in memory for `memory`, which keeps nothing between runs.

@@ -215,6 +215,7 @@ mod tests {
         Usage {
             input_tokens: input,
             output_tokens: output,
+            output_image_tokens: 0,
             ..Default::default()
         }
     }

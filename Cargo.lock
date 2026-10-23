@@ -1003,6 +1003,7 @@ version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "dive-config",
  "eventsource-stream",
  "futures",

@@ -1,5 +1,11 @@
 <ParamField body="models" type="object">
-  Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge` and `decider`; any other name is a custom role.
+  Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge`, `decider` and `image`; any other name is a custom role.
+</ParamField>
+
+<ParamField body="models.<name>.type" type="enum<string>">
+  What the role's model does. Custom roles default to `chat`; standard roles have a fixed type (`decider` is `decision`, `image` is `image`, the rest are `chat`). The role's provider must serve this type.
+
+  Available options: `chat`, `decision`, `image`
 </ParamField>
 
 <ParamField body="models.<name>.provider" type="string" required>

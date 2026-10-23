@@ -226,3 +226,25 @@ fn an_unset_secret_in_file_storage_is_recorded_instead_of_failing_the_load() {
     assert_eq!(files.missing_env[0].field, "secret_access_key");
     assert_eq!(files.missing_env[0].var, "DIVE_TEST_NEVER_SET_FILES_SECRET");
 }
+
+#[test]
+fn image_roles_take_their_type_and_price_image_tokens() {
+    let path = fixture_dir(CONFIG_FORMAT).join("images.toml");
+    let config = load_from(&[path]).unwrap().config;
+    assert_eq!(
+        config.providers["gemini"].kind,
+        dive_config::ProviderKind::Gemini
+    );
+    assert_eq!(
+        config.models.kind_of("image"),
+        Some(dive_config::ModelKind::Image)
+    );
+    assert_eq!(
+        config.models.kind_of("hero_art"),
+        Some(dive_config::ModelKind::Image)
+    );
+    assert_eq!(
+        config.pricing["gemini-nano-banana-2.1"].output_image,
+        Some(30.0)
+    );
+}

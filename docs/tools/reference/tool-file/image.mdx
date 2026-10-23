@@ -1,0 +1,41 @@
+---
+title: "image tools"
+sidebarTitle: "kind: image"
+description: "Generates images with an image model and stores them as files."
+playground: "none"
+keywords: ["image", "tool file", "YAML"]
+---
+
+Generates images with an image model and stores them as files. The call's input takes `prompt`, `images` (refs to edit or reference), `aspect_ratio`, `size`, `count` and `path`; the result lists the images under `images`, each with a `ref`. Shipped as `builtin__generate_image`.
+
+These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: image`.
+
+## Fields
+
+<ParamField body="model" type="string" default="image">
+  An image model role. A chat or decision role fails the call.
+</ParamField>
+
+<ParamField body="caller_model" type="boolean" default="false">
+  Let the call's `model` input pick the role.
+</ParamField>
+
+<RequestExample>
+
+```yaml Example
+version: 3
+name: hero_art
+description: Draws a hero image for a landing page from a short brief.
+kind: image
+model: image
+input_schema:
+  type: object
+  required:
+  - prompt
+  properties:
+    prompt:
+      type: string
+      description: What to draw
+```
+
+</RequestExample>

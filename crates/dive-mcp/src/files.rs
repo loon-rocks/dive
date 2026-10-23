@@ -85,17 +85,7 @@ pub(crate) async fn store(files: &dyn BlobStore, found: Vec<Binary>) -> Vec<Stor
 }
 
 pub(crate) fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
-    if stored.is_empty() {
-        return result;
-    }
-    let listed = serde_json::to_value(stored).unwrap_or_else(|_| json!([]));
-    match result {
-        Value::Object(mut map) if !map.contains_key("files") => {
-            map.insert("files".to_string(), listed);
-            Value::Object(map)
-        }
-        other => json!({ "result": other, "files": listed }),
-    }
+    dive_core::files::attach(result, stored)
 }
 
 pub(crate) async fn pass(

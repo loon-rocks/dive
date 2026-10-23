@@ -6,6 +6,7 @@ use std::time::Duration;
 pub const ANTHROPIC_URL: &str = "https://api.anthropic.com";
 pub const OPENAI_URL: &str = "https://api.openai.com/v1";
 pub const SYSTEMONE_URL: &str = "https://api.typesafe.ai";
+pub const GEMINI_URL: &str = crate::providers::gemini_base_url();
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -16,6 +17,7 @@ pub fn lists_models(kind: ProviderKind) -> bool {
             | ProviderKind::Openai
             | ProviderKind::OpenaiCompat
             | ProviderKind::Systemone
+            | ProviderKind::Gemini
     )
 }
 
@@ -31,6 +33,7 @@ pub fn models_url(kind: ProviderKind, base_url: Option<&str>) -> Option<String> 
         ProviderKind::Openai => Some(format!("{}/models", base(OPENAI_URL))),
         ProviderKind::OpenaiCompat => base_url.map(|_| format!("{}/models", base(""))),
         ProviderKind::Systemone => Some(format!("{}/v1/models", base(SYSTEMONE_URL))),
+        ProviderKind::Gemini => Some(format!("{}/v1beta/models?pageSize=1000", base(GEMINI_URL))),
         ProviderKind::Bedrock => None,
     }
 }
@@ -50,7 +53,7 @@ pub fn model_ids(body: &str) -> Result<Vec<String>, LlmError> {
     Ok(items
         .iter()
         .filter_map(|item| item.get(field).and_then(Value::as_str))
-        .map(str::to_string)
+        .map(|id| id.strip_prefix("models/").unwrap_or(id).to_string())
         .collect())
 }
 
@@ -75,6 +78,9 @@ pub async fn list_models(
             request = request
                 .header("x-api-key", api_key.unwrap_or_default())
                 .header("anthropic-version", ANTHROPIC_VERSION);
+        }
+        ProviderKind::Gemini => {
+            request = request.header("x-goog-api-key", api_key.unwrap_or_default());
         }
         _ => {
             if let Some(key) = api_key.filter(|key| !key.is_empty()) {

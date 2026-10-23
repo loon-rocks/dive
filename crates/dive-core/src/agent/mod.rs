@@ -376,6 +376,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                output_image_tokens: 0,
                 ..Default::default()
             },
         }
@@ -399,6 +400,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                output_image_tokens: 0,
                 ..Default::default()
             },
         }
@@ -426,6 +428,7 @@ mod tests {
         first.usage = Usage {
             input_tokens: 100,
             output_tokens: 7,
+            output_image_tokens: 0,
             cache_creation_input_tokens: 3,
             cache_read_input_tokens: 40,
         };
@@ -451,6 +454,7 @@ mod tests {
                 model: "test-model".into(),
                 input_tokens: 100,
                 output_tokens: 7,
+                output_image_tokens: 0,
                 cache_creation_input_tokens: 3,
                 cache_read_input_tokens: 40,
             })
@@ -471,6 +475,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 8192,
+                output_image_tokens: 0,
                 ..Default::default()
             },
         };

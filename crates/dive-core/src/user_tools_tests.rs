@@ -48,6 +48,7 @@ fn router() -> Arc<ModelRouter> {
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "mock".into(),
                 model: "m".into(),
                 temperature: None,
@@ -489,7 +490,7 @@ fn infer_decide_and_reshape_are_the_built_in_tools() {
         .into_iter()
         .map(|doc| doc.name)
         .collect();
-    assert_eq!(names, ["infer", "decide", "reshape"]);
+    assert_eq!(names, ["infer", "decide", "reshape", "generate_image"]);
 }
 
 #[tokio::test]
@@ -540,7 +541,8 @@ fn a_builtin_override_dir_replaces_infer_decide_and_reshape() {
         [
             ("infer", "my infer"),
             ("decide", "my decide"),
-            ("reshape", "my reshape")
+            ("reshape", "my reshape"),
+            ("generate_image", descriptions[3].1),
         ]
     );
 }
@@ -572,7 +574,7 @@ async fn builtin_infer_returns_text_or_caller_structured_output() {
     let docs = load_builtin_tools().unwrap();
     assert_eq!(
         docs.iter().map(|doc| doc.name.as_str()).collect::<Vec<_>>(),
-        ["infer", "decide", "reshape"]
+        ["infer", "decide", "reshape", "generate_image"]
     );
     let registry = UserToolRegistry::builtins(docs, router());
 
@@ -826,6 +828,7 @@ async fn caller_schema_without_type_gets_object_defaulted() {
         ModelRoles::from([(
             "default",
             ModelChoice {
+                kind: None,
                 provider: "mock".into(),
                 model: "m".into(),
                 temperature: None,
@@ -1057,6 +1060,7 @@ fn schema_router(chat_value: Value, repair_value: Value) -> Arc<ModelRouter> {
     providers.insert("chat".into(), Arc::new(Fixed(chat_value)));
     providers.insert("fixer".into(), Arc::new(Fixed(repair_value)));
     let choice = |provider: &str| ModelChoice {
+        kind: None,
         provider: provider.into(),
         model: "m".into(),
         temperature: None,
@@ -1196,6 +1200,7 @@ fn named_model_router() -> Arc<ModelRouter> {
     let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
     providers.insert("mock".into(), Arc::new(Echo));
     let choice = |model: &str, description: Option<&str>| ModelChoice {
+        kind: None,
         provider: "mock".into(),
         model: model.into(),
         temperature: None,
@@ -1634,6 +1639,7 @@ fn decision_router(with_decider: bool) -> (Arc<ModelRouter>, Arc<EchoDecider>) {
         roles: std::sync::Mutex::new(Vec::new()),
     });
     let choice = |provider: &str, model: &str, description: Option<&str>| ModelChoice {
+        kind: None,
         provider: provider.into(),
         model: model.into(),
         temperature: None,
@@ -2040,6 +2046,7 @@ impl ChatProvider for Truncating {
             stop_reason: StopReason::MaxTokens,
             usage: Usage {
                 output_tokens: 16000,
+                output_image_tokens: 0,
                 ..Default::default()
             },
         })
@@ -2060,6 +2067,7 @@ fn truncating_router() -> (Arc<ModelRouter>, Arc<Truncating>, Arc<Truncating>) {
     providers.insert("chat".into(), chat.clone());
     providers.insert("fixer".into(), fixer.clone());
     let choice = |provider: &str| ModelChoice {
+        kind: None,
         provider: provider.into(),
         model: "m".into(),
         temperature: None,
@@ -2115,4 +2123,280 @@ async fn a_plain_text_infer_that_hits_max_tokens_returns_its_text() {
         .unwrap();
     assert_eq!(outcome.result["text"], "a long partial answer");
     assert_eq!(fixer.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[derive(Default)]
+struct MemoryFiles {
+    blobs: std::sync::Mutex<HashMap<String, Vec<u8>>>,
+    dir: std::sync::OnceLock<tempfile::TempDir>,
+}
+
+#[async_trait]
+impl crate::files::BlobStore for MemoryFiles {
+    async fn put(
+        &self,
+        bytes: Vec<u8>,
+        mime: &str,
+    ) -> Result<crate::files::StoredFile, crate::files::FileError> {
+        let hash = format!(
+            "{:064x}",
+            bytes.iter().map(|b| *b as u64).sum::<u64>() + bytes.len() as u64
+        );
+        let blob = crate::files::BlobRef::new(hash, mime);
+        let size = bytes.len() as u64;
+        self.blobs.lock().unwrap().insert(blob.to_string(), bytes);
+        Ok(crate::files::StoredFile {
+            blob,
+            mime: mime.to_string(),
+            bytes: size,
+            width: None,
+            height: None,
+        })
+    }
+
+    async fn get(&self, blob: &crate::files::BlobRef) -> Result<Vec<u8>, crate::files::FileError> {
+        self.blobs
+            .lock()
+            .unwrap()
+            .get(&blob.to_string())
+            .cloned()
+            .ok_or_else(|| crate::files::FileError(format!("no file {blob}")))
+    }
+
+    async fn delete(&self, _blob: &crate::files::BlobRef) -> Result<(), crate::files::FileError> {
+        Ok(())
+    }
+
+    async fn locate(
+        &self,
+        blob: &crate::files::BlobRef,
+    ) -> Result<crate::files::FileLocation, crate::files::FileError> {
+        self.materialize(blob)
+            .await
+            .map(crate::files::FileLocation::Path)
+    }
+
+    async fn materialize(
+        &self,
+        blob: &crate::files::BlobRef,
+    ) -> Result<std::path::PathBuf, crate::files::FileError> {
+        let dir = self.dir.get_or_init(|| tempfile::tempdir().unwrap());
+        let path = dir.path().join(blob.file_name());
+        std::fs::write(&path, self.get(blob).await?).unwrap();
+        Ok(path)
+    }
+}
+
+struct Painter {
+    seen: std::sync::Mutex<Vec<dive_llm::ImageRequest>>,
+}
+
+#[async_trait]
+impl dive_llm::ImageProvider for Painter {
+    fn options(&self, _model: &str) -> dive_llm::ImageOptions {
+        dive_llm::ImageOptions {
+            aspect_ratios: vec!["1:1", "16:9"],
+            sizes: vec!["1K"],
+            max_images: 2,
+        }
+    }
+
+    async fn generate(
+        &self,
+        req: dive_llm::ImageRequest,
+    ) -> Result<dive_llm::ImageResponse, LlmError> {
+        let mut seen = self.seen.lock().unwrap();
+        seen.push(req.clone());
+        Ok(dive_llm::ImageResponse {
+            parts: vec![
+                dive_llm::Part::Text("done".into()),
+                dive_llm::Part::Image(dive_llm::ImageData {
+                    mime: "image/png".into(),
+                    bytes: format!("png {}", seen.len()).into_bytes(),
+                }),
+            ],
+            usage: Usage::default(),
+        })
+    }
+}
+
+fn image_registry() -> (
+    UserToolRegistry,
+    Arc<Painter>,
+    Arc<MemoryFiles>,
+    tempfile::TempDir,
+) {
+    let painter = Arc::new(Painter {
+        seen: std::sync::Mutex::new(Vec::new()),
+    });
+    let router = ModelRouter::with_providers(
+        HashMap::new(),
+        ModelRoles::from([(
+            "image",
+            ModelChoice {
+                kind: None,
+                provider: "gemini".into(),
+                model: "nano".into(),
+                temperature: None,
+                description: None,
+                fallbacks: Vec::new(),
+                context_window: None,
+            },
+        )]),
+    )
+    .with_images(HashMap::from([(
+        "gemini".to_string(),
+        painter.clone() as Arc<dyn dive_llm::ImageProvider>,
+    )]));
+    let files = Arc::new(MemoryFiles::default());
+    let workspace = tempfile::tempdir().unwrap();
+    let registry = UserToolRegistry::builtins(load_builtin_tools().unwrap(), Arc::new(router))
+        .with_files(files.clone())
+        .with_workspace(workspace.path());
+    (registry, painter, files, workspace)
+}
+
+#[tokio::test]
+async fn generate_image_stores_each_image_and_saves_it_into_the_workspace() {
+    let (registry, painter, files, workspace) = image_registry();
+    let reference = crate::files::BlobStore::put(files.as_ref(), b"cat".to_vec(), "image/jpeg")
+        .await
+        .unwrap();
+    let outcome = registry
+        .invoke(
+            "builtin__generate_image",
+            json!({
+                "prompt": "the cat, in a hat",
+                "images": [reference.blob.to_string()],
+                "aspect_ratio": "16:9",
+                "count": 2,
+                "path": "site/hero.png"
+            }),
+        )
+        .await
+        .unwrap();
+    assert!(!outcome.is_error, "{}", outcome.result);
+
+    let seen = painter.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    assert_eq!(seen[0].model, "nano");
+    assert_eq!(seen[0].aspect_ratio.as_deref(), Some("16:9"));
+    assert_eq!(
+        seen[0].parts,
+        vec![
+            dive_llm::Part::Text("the cat, in a hat".into()),
+            dive_llm::Part::Image(dive_llm::ImageData {
+                mime: "image/jpeg".into(),
+                bytes: b"cat".to_vec()
+            })
+        ]
+    );
+
+    let images = outcome.result["images"].as_array().unwrap();
+    assert_eq!(images.len(), 2);
+    assert_eq!(images[0]["path"], "site/hero.png");
+    assert_eq!(images[1]["path"], "site/hero-2.png");
+    assert_eq!(outcome.result["text"], "done\ndone");
+    let first = crate::files::BlobRef::parse(images[0]["ref"].as_str().unwrap()).unwrap();
+    let stored = crate::files::BlobStore::get(files.as_ref(), &first)
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read(workspace.path().join("site/hero.png")).unwrap(),
+        stored
+    );
+    assert!(workspace.path().join("site/hero-2.png").is_file());
+}
+
+#[tokio::test]
+async fn generate_image_returns_tool_errors_the_model_can_fix() {
+    let (registry, painter, _, _) = image_registry();
+    let call = |input: Value| registry.invoke("builtin__generate_image", input);
+
+    let outcome = call(json!({"prompt": "x", "size": "4K"})).await.unwrap();
+    assert!(outcome.is_error);
+    assert_eq!(
+        outcome.result["error"],
+        "size \"4K\" isn't supported: nano supports \"1K\""
+    );
+    let outcome = call(json!({"prompt": "x", "images": ["cat.png"]}))
+        .await
+        .unwrap();
+    assert!(outcome.result["error"]
+        .as_str()
+        .unwrap()
+        .contains("isn't a file ref"));
+    let outcome = call(json!({"prompt": "x", "path": "../escape.png"}))
+        .await
+        .unwrap();
+    assert!(outcome.result["error"]
+        .as_str()
+        .unwrap()
+        .contains("stay inside the workspace"));
+    let outcome = call(json!({"prompt": "x", "model": "chat"})).await.unwrap();
+    assert!(outcome.is_error);
+    assert!(painter.seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn generate_image_is_only_offered_when_an_image_role_resolves() {
+    async fn offered(registry: &UserToolRegistry) -> bool {
+        registry
+            .tools()
+            .await
+            .unwrap()
+            .into_iter()
+            .any(|tool| tool.name == "builtin__generate_image")
+    }
+    let (registry, _, _, _) = image_registry();
+    assert!(offered(&registry).await);
+    let without = UserToolRegistry::builtins(load_builtin_tools().unwrap(), router());
+    assert!(!offered(&without).await);
+}
+
+#[tokio::test]
+async fn exec_tools_take_blob_inputs_as_paths_and_store_files_written_to_dive_out() {
+    let tool = doc(r#"
+name: thumb
+description: copy an image
+kind: exec
+command: sh
+args: ["-c", "cp \"$0\" \"$DIVE_OUT/copy.png\" && printf '{\"ok\": true}'", "{{input.image}}"]
+input_schema:
+  type: object
+  required: [image]
+  properties:
+    image: { type: string, format: blob }
+"#);
+    let files = Arc::new(MemoryFiles::default());
+    let original = crate::files::BlobStore::put(files.as_ref(), b"pixels".to_vec(), "image/png")
+        .await
+        .unwrap();
+    let registry = registry(vec![tool]).with_files(files.clone());
+    let outcome = registry
+        .invoke("user__thumb", json!({"image": original.blob.to_string()}))
+        .await
+        .unwrap();
+    assert!(!outcome.is_error, "{}", outcome.result);
+    assert_eq!(outcome.result["ok"], true);
+    let listed = outcome.result["files"].as_array().unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0]["mime"], "image/png");
+    let copy = crate::files::BlobRef::parse(listed[0]["ref"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        crate::files::BlobStore::get(files.as_ref(), &copy)
+            .await
+            .unwrap(),
+        b"pixels".to_vec()
+    );
+
+    let outcome = registry
+        .invoke("user__thumb", json!({"image": "not-a-ref"}))
+        .await
+        .unwrap();
+    assert!(outcome.is_error);
+    assert_eq!(
+        outcome.result["error"],
+        "input.image must be a file ref like blob:sha256-….png"
+    );
 }

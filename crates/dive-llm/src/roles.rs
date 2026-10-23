@@ -1,10 +1,15 @@
 //! Role → provider/model resolution from configuration.
 
 use crate::decision::{check_context_window, DecisionProvider, DecisionRequest, DecisionResponse};
-use crate::failover::{Candidate, DecisionCandidate, FailoverDecider, FailoverProvider};
-use crate::metering::{MeteredDecider, MeteredProvider};
-use crate::providers::{AnthropicProvider, OpenAiCompatProvider, SystemOneProvider};
+use crate::failover::{
+    Candidate, DecisionCandidate, FailoverDecider, FailoverImager, FailoverProvider, ImageCandidate,
+};
+use crate::metering::{MeteredDecider, MeteredImager, MeteredProvider};
+use crate::providers::{
+    AnthropicProvider, GeminiProvider, OpenAiCompatProvider, SystemOneProvider,
+};
 use crate::types::{ChatRequest, ChatResponse, EventStream, StopReason};
+use crate::ImageProvider;
 use crate::{ChatProvider, LlmError, UsageMeter};
 use dive_config::{Config, ModelChoice, ModelKind, ProviderKind, Role};
 use std::collections::HashMap;
@@ -13,7 +18,8 @@ use std::sync::Arc;
 pub struct ModelRouter {
     providers: HashMap<String, Arc<dyn ChatProvider>>,
     deciders: HashMap<String, Arc<dyn DecisionProvider>>,
-    kinds: HashMap<String, ModelKind>,
+    images: HashMap<String, Arc<dyn ImageProvider>>,
+    kinds: HashMap<String, &'static [ModelKind]>,
     /// Providers that are configured but cannot be built as configured —
     /// an unset `${VAR}` behind a secret, an unsupported kind — keyed to
     /// the reason. Kept out of `providers` so resolving one errors with
@@ -34,11 +40,12 @@ impl ModelRouter {
     ) -> Self {
         let kinds = providers
             .keys()
-            .map(|name| (name.clone(), ModelKind::Chat))
+            .map(|name| (name.clone(), &[ModelKind::Chat][..]))
             .collect();
         Self {
             providers,
             deciders: HashMap::new(),
+            images: HashMap::new(),
             kinds,
             unavailable: HashMap::new(),
             roles,
@@ -48,9 +55,17 @@ impl ModelRouter {
 
     pub fn with_deciders(mut self, deciders: HashMap<String, Arc<dyn DecisionProvider>>) -> Self {
         for name in deciders.keys() {
-            self.kinds.insert(name.clone(), ModelKind::Decision);
+            self.kinds.insert(name.clone(), &[ModelKind::Decision]);
         }
         self.deciders.extend(deciders);
+        self
+    }
+
+    pub fn with_images(mut self, images: HashMap<String, Arc<dyn ImageProvider>>) -> Self {
+        for name in images.keys() {
+            self.kinds.insert(name.clone(), &[ModelKind::Image]);
+        }
+        self.images.extend(images);
         self
     }
 
@@ -66,12 +81,14 @@ impl ModelRouter {
 
     pub fn from_config(config: &Config) -> Result<Self, LlmError> {
         let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
+        config.check_model_types().map_err(LlmError::Config)?;
         let mut deciders: HashMap<String, Arc<dyn DecisionProvider>> = HashMap::new();
+        let mut images: HashMap<String, Arc<dyn ImageProvider>> = HashMap::new();
         let mut unavailable: HashMap<String, String> = HashMap::new();
-        let kinds: HashMap<String, ModelKind> = config
+        let kinds: HashMap<String, &'static [ModelKind]> = config
             .providers
             .iter()
-            .map(|(name, provider)| (name.clone(), provider.kind.model_kind()))
+            .map(|(name, provider)| (name.clone(), provider.kind.kinds()))
             .collect();
         for (name, provider) in &config.providers {
             if !provider.missing_env.is_empty() {
@@ -117,6 +134,16 @@ impl ModelRouter {
                     );
                     continue;
                 }
+                ProviderKind::Gemini => {
+                    images.insert(
+                        name.clone(),
+                        Arc::new(GeminiProvider::new(
+                            provider.api_key.clone().unwrap_or_default(),
+                            provider.base_url.clone(),
+                        )),
+                    );
+                    continue;
+                }
                 ProviderKind::Bedrock => {
                     unavailable.insert(
                         name.clone(),
@@ -130,6 +157,7 @@ impl ModelRouter {
         let router = Self {
             providers,
             deciders,
+            images,
             kinds,
             unavailable,
             roles: config.models.clone(),
@@ -144,74 +172,53 @@ impl ModelRouter {
             for fallback in &choice.fallbacks {
                 if !router.providers.contains_key(&fallback.provider)
                     && !router.deciders.contains_key(&fallback.provider)
+                    && !router.images.contains_key(&fallback.provider)
                     && !router.unavailable.contains_key(&fallback.provider)
                 {
                     return Err(LlmError::UnknownProvider(fallback.provider.clone()));
                 }
             }
         }
-        router.check_kinds()?;
         Ok(router)
     }
 
-    fn kind_of(&self, provider: &str) -> Option<ModelKind> {
-        self.kinds.get(provider).copied()
-    }
-
-    fn check_kinds(&self) -> Result<(), LlmError> {
-        for role in Role::ALL {
-            let Some(choice) = self.roles.resolve_role(role) else {
-                continue;
-            };
-            if let Some(actual) = self.kind_of(&choice.provider) {
-                if actual != role.kind() {
-                    return Err(LlmError::WrongModelKind {
-                        role: role.to_string(),
-                        expected: role.kind(),
-                        actual,
-                    });
-                }
-            }
-        }
-        for (name, choice) in self.roles.iter() {
-            let Some(primary) = self.kind_of(&choice.provider) else {
-                continue;
-            };
-            for fallback in &choice.fallbacks {
-                if let Some(actual) = self.kind_of(&fallback.provider) {
-                    if actual != primary {
-                        return Err(LlmError::MixedFallbackKinds {
-                            role: name.to_string(),
-                            provider: fallback.provider.clone(),
-                            actual,
-                        });
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn ensure_chat(&self, role: &str, choice: &ModelChoice) -> Result<(), LlmError> {
-        match self.kind_of(&choice.provider) {
-            Some(ModelKind::Decision) => Err(LlmError::WrongModelKind {
+    fn ensure_kind(&self, role: &str, expected: ModelKind) -> Result<(), LlmError> {
+        match self.roles.kind_of(role) {
+            Some(actual) if actual != expected => Err(LlmError::WrongModelKind {
                 role: role.to_string(),
-                expected: ModelKind::Chat,
-                actual: ModelKind::Decision,
+                expected,
+                actual,
             }),
             _ => Ok(()),
         }
     }
 
+    fn ensure_chat(&self, role: &str, _choice: &ModelChoice) -> Result<(), LlmError> {
+        self.ensure_kind(role, ModelKind::Chat)
+    }
+
     pub fn has_decision_models(&self) -> bool {
+        self.has_models_of(ModelKind::Decision)
+    }
+
+    pub fn has_image_models(&self) -> bool {
+        self.has_models_of(ModelKind::Image)
+    }
+
+    fn has_models_of(&self, kind: ModelKind) -> bool {
+        self.roles
+            .names()
+            .any(|name| self.roles.kind_of(name) == Some(kind))
+    }
+
+    pub fn roles_of(&self, kind: ModelKind) -> impl Iterator<Item = (&str, &ModelChoice)> {
         self.roles
             .iter()
-            .any(|(_, choice)| self.kind_of(&choice.provider) == Some(ModelKind::Decision))
+            .filter(move |(name, _)| self.roles.kind_of(name) == Some(kind))
     }
 
     pub fn kind_of_role(&self, name: &str) -> Option<ModelKind> {
-        let choice = self.roles.resolve(name)?;
-        self.kind_of(&choice.provider)
+        self.roles.kind_of(name)
     }
 
     fn decider(&self, name: &str) -> Result<&Arc<dyn DecisionProvider>, LlmError> {
@@ -250,13 +257,7 @@ impl ModelRouter {
                 })
             }
         };
-        if self.kind_of(&choice.provider) == Some(ModelKind::Chat) {
-            return Err(LlmError::WrongModelKind {
-                role: role.to_string(),
-                expected: ModelKind::Decision,
-                actual: ModelKind::Chat,
-            });
-        }
+        self.ensure_kind(role, ModelKind::Decision)?;
         let primary = self.metered_decider(
             Arc::clone(self.decider(&choice.provider)?),
             &choice.provider,
@@ -296,6 +297,57 @@ impl ModelRouter {
         req.model = choice.model.clone();
         check_context_window(&role, &choice.model, choice.context_window, &req)?;
         decider.decide(req).await
+    }
+
+    fn imager(&self, name: &str) -> Result<Arc<dyn ImageProvider>, LlmError> {
+        let imager = self
+            .images
+            .get(name)
+            .cloned()
+            .ok_or_else(|| self.missing(name))?;
+        Ok(match &self.meter {
+            Some(meter) => Arc::new(MeteredImager::new(
+                imager,
+                name.to_string(),
+                Arc::clone(meter),
+            )),
+            None => imager,
+        })
+    }
+
+    pub fn resolve_image(
+        &self,
+        name: Option<&str>,
+    ) -> Result<(Arc<dyn ImageProvider>, &ModelChoice, String), LlmError> {
+        let role = name.unwrap_or(Role::Image.as_str());
+        let choice = match self.roles.resolve(role) {
+            Some(choice) => choice,
+            None if role == Role::Image.as_str() => return Err(LlmError::NoImageModel),
+            None => {
+                return Err(LlmError::UnknownModelName {
+                    name: role.to_string(),
+                    available: self.roles.known_names().join(", "),
+                })
+            }
+        };
+        self.ensure_kind(role, ModelKind::Image)?;
+        let primary = self.imager(&choice.provider)?;
+        if choice.fallbacks.is_empty() {
+            return Ok((primary, choice, role.to_string()));
+        }
+        let fallbacks = choice
+            .fallbacks
+            .iter()
+            .map(|fallback| {
+                Ok(ImageCandidate {
+                    provider: self.imager(&fallback.provider)?,
+                    provider_name: fallback.provider.clone(),
+                    model: fallback.model.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>, LlmError>>()?;
+        let failover: Arc<dyn ImageProvider> = Arc::new(FailoverImager { primary, fallbacks });
+        Ok((failover, choice, role.to_string()))
     }
 
     /// The provider under this name, or why there isn't one: unavailable
@@ -483,6 +535,7 @@ mod tests {
                 usage: Usage {
                     input_tokens: 11,
                     output_tokens: 3,
+                    output_image_tokens: 0,
                     ..Default::default()
                 },
             })
@@ -496,6 +549,7 @@ mod tests {
 
     fn choice(provider: &str, model: &str, fallbacks: Vec<FallbackChoice>) -> ModelChoice {
         ModelChoice {
+            kind: None,
             provider: provider.into(),
             model: model.into(),
             temperature: None,
@@ -763,11 +817,10 @@ mod tests {
             ("default", choice("anthropic", "m", vec![])),
             ("judge", choice("typesafe", "jev-latest", vec![])),
         ]));
-        assert!(
-            matches!(&error, LlmError::WrongModelKind { role, expected: ModelKind::Chat, actual: ModelKind::Decision } if role == "judge"),
-            "{error}"
+        assert_eq!(
+            error.to_string(),
+            "models.judge is a chat role, but provider \"typesafe\" serves decision models; pick a provider that serves chat models"
         );
-        assert!(error.to_string().contains("'judge'"), "{error}");
     }
 
     #[test]
@@ -777,7 +830,7 @@ mod tests {
             choice("typesafe", "jev-latest", vec![]),
         )]));
         assert!(
-            matches!(&error, LlmError::WrongModelKind { role, .. } if role == "chat"),
+            error.to_string().starts_with("models.chat is a chat role"),
             "{error}"
         );
     }
@@ -789,7 +842,9 @@ mod tests {
             ("decider", choice("anthropic", "m", vec![])),
         ]));
         assert!(
-            matches!(&error, LlmError::WrongModelKind { role, expected: ModelKind::Decision, actual: ModelKind::Chat } if role == "decider"),
+            error.to_string().starts_with(
+                "models.decider is a decision role, but provider \"anthropic\" serves chat models"
+            ),
             "{error}"
         );
     }
@@ -807,7 +862,9 @@ mod tests {
             ("decider", choice("typesafe", "jev-latest", vec![fallback])),
         ]));
         assert!(
-            matches!(&error, LlmError::MixedFallbackKinds { role, provider, .. } if role == "decider" && provider == "anthropic"),
+            error
+                .to_string()
+                .starts_with("models.decider is a decision role, but provider \"anthropic\""),
             "{error}"
         );
     }
@@ -987,16 +1044,19 @@ mod tests {
             ("default", choice("anthropic", "m", vec![])),
             (
                 "triage",
-                choice(
-                    "typesafe",
-                    "jev-latest",
-                    vec![FallbackChoice {
-                        provider: "local".into(),
-                        model: "openjev-latest".into(),
-                        temperature: None,
-                        context_window: None,
-                    }],
-                ),
+                ModelChoice {
+                    kind: Some(ModelKind::Decision),
+                    ..choice(
+                        "typesafe",
+                        "jev-latest",
+                        vec![FallbackChoice {
+                            provider: "local".into(),
+                            model: "openjev-latest".into(),
+                            temperature: None,
+                            context_window: None,
+                        }],
+                    )
+                },
             ),
         ]);
         let router = ModelRouter::with_providers(providers, roles).with_deciders(HashMap::from([
@@ -1013,6 +1073,140 @@ mod tests {
             .unwrap();
         assert_eq!(response.model, "local:openjev-latest");
         assert_eq!(primary.seen.lock().unwrap().len(), 1);
+    }
+
+    struct ScriptedImager {
+        healthy: bool,
+        seen: std::sync::Mutex<Vec<crate::ImageRequest>>,
+    }
+
+    impl ScriptedImager {
+        fn new(healthy: bool) -> Arc<Self> {
+            Arc::new(Self {
+                healthy,
+                seen: std::sync::Mutex::new(Vec::new()),
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ImageProvider for ScriptedImager {
+        fn options(&self, _model: &str) -> crate::ImageOptions {
+            crate::ImageOptions::default()
+        }
+
+        async fn generate(
+            &self,
+            req: crate::ImageRequest,
+        ) -> Result<crate::ImageResponse, LlmError> {
+            self.seen.lock().unwrap().push(req.clone());
+            if !self.healthy {
+                return Err(LlmError::Api {
+                    status: 503,
+                    body: "down".into(),
+                    retry_after: None,
+                });
+            }
+            Ok(crate::ImageResponse {
+                parts: vec![crate::Part::Image(crate::ImageData {
+                    mime: "image/png".into(),
+                    bytes: req.model.into_bytes(),
+                })],
+                usage: Usage {
+                    input_tokens: 10,
+                    output_image_tokens: 1290,
+                    ..Usage::default()
+                },
+            })
+        }
+    }
+
+    fn image_router(
+        roles: dive_config::ModelRoles,
+        imagers: Vec<(&str, Arc<ScriptedImager>)>,
+    ) -> ModelRouter {
+        ModelRouter::with_providers(HashMap::new(), roles).with_images(
+            imagers
+                .into_iter()
+                .map(|(name, imager)| (name.to_string(), imager as Arc<dyn ImageProvider>))
+                .collect(),
+        )
+    }
+
+    #[tokio::test]
+    async fn the_image_role_resolves_meters_an_image_call_and_fails_over() {
+        let down = ScriptedImager::new(false);
+        let up = ScriptedImager::new(true);
+        let meter = Arc::new(Recorded::default());
+        let router = image_router(
+            dive_config::ModelRoles::from([(
+                "image",
+                choice(
+                    "gemini",
+                    "nano",
+                    vec![FallbackChoice {
+                        provider: "backup".into(),
+                        model: "pro".into(),
+                        temperature: None,
+                        context_window: None,
+                    }],
+                ),
+            )]),
+            vec![("gemini", down.clone()), ("backup", up.clone())],
+        )
+        .with_meter(meter.clone());
+        assert!(router.has_image_models());
+
+        let (imager, choice, role) = router.resolve_image(None).unwrap();
+        assert_eq!((choice.model.as_str(), role.as_str()), ("nano", "image"));
+        let response = imager
+            .generate(crate::ImageRequest {
+                model: choice.model.clone(),
+                ..crate::ImageRequest::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(response.images().next().unwrap().bytes, b"pro".to_vec());
+        assert_eq!(down.seen.lock().unwrap().len(), 1);
+
+        let calls = meter.0.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].kind, ModelKind::Image);
+        assert_eq!(calls[0].provider, "backup");
+        assert_eq!(calls[0].model, "pro");
+        assert_eq!(calls[0].usage.output_image_tokens, 1290);
+    }
+
+    #[test]
+    fn image_roles_refuse_chat_calls_and_a_missing_image_role_says_how_to_add_one() {
+        let art = ModelChoice {
+            kind: Some(ModelKind::Image),
+            ..choice("gemini", "pro", vec![])
+        };
+        let router = image_router(
+            dive_config::ModelRoles::from([("art", art)]),
+            vec![("gemini", ScriptedImager::new(true))],
+        );
+        assert!(router.resolve_image(Some("art")).is_ok());
+        assert!(matches!(
+            router.resolve_named("art"),
+            Err(LlmError::WrongModelKind {
+                expected: ModelKind::Chat,
+                actual: ModelKind::Image,
+                ..
+            })
+        ));
+        assert!(matches!(
+            router.resolve_image(None),
+            Err(LlmError::NoImageModel)
+        ));
+        assert_eq!(
+            router
+                .roles_of(ModelKind::Image)
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>(),
+            vec!["art"]
+        );
     }
 
     #[tokio::test]
@@ -1119,6 +1313,7 @@ mod tests {
                 stop_reason: StopReason::MaxTokens,
                 usage: Usage {
                     output_tokens: 16000,
+                    output_image_tokens: 0,
                     ..Default::default()
                 },
             })

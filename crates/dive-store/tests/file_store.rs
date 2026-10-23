@@ -369,6 +369,7 @@ async fn a_frozen_version_3_data_directory_opens_as_is() {
             model: "claude-sonnet-4-5".to_string(),
             input_tokens: 1200,
             output_tokens: 48,
+            output_image_tokens: 0,
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: 3100,
         })

@@ -134,6 +134,7 @@ fn pipeline_with_named(
     entries.insert(
         "default".to_string(),
         ModelChoice {
+            kind: None,
             provider: "mock".to_string(),
             model: "test".to_string(),
             temperature: None,
@@ -705,6 +706,7 @@ fn named_model(model: &str) -> std::collections::BTreeMap<String, ModelChoice> {
     named.insert(
         "fast".to_string(),
         ModelChoice {
+            kind: None,
             provider: "mock".to_string(),
             model: model.to_string(),
             temperature: None,
@@ -4943,6 +4945,7 @@ fn pipeline_with_decider(
     });
     let mut entries = std::collections::BTreeMap::new();
     let choice = |provider: &str, model: &str| ModelChoice {
+        kind: None,
         provider: provider.to_string(),
         model: model.to_string(),
         temperature: None,
@@ -4952,7 +4955,13 @@ fn pipeline_with_decider(
     };
     entries.insert("default".to_string(), choice("mock", "test"));
     entries.insert("decider".to_string(), choice("typesafe", "jev-latest"));
-    entries.insert("other".to_string(), choice("typesafe", "jev-preview"));
+    entries.insert(
+        "other".to_string(),
+        ModelChoice {
+            kind: Some(dive_config::ModelKind::Decision),
+            ..choice("typesafe", "jev-preview")
+        },
+    );
     let providers: std::collections::HashMap<String, Arc<dyn ChatProvider>> =
         std::collections::HashMap::from([(
             "mock".to_string(),
@@ -5672,6 +5681,7 @@ fn searching(scorer: Option<Scorer>) -> (Pipeline, Option<Arc<ScoringDecider>>) 
         requests: Mutex::new(Vec::new()),
     });
     let choice = |provider: &str, model: &str| ModelChoice {
+        kind: None,
         provider: provider.to_string(),
         model: model.to_string(),
         temperature: None,
