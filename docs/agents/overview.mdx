@@ -9,7 +9,7 @@ An agent is a model with instructions and a list of [tools](/tools/overview) it 
 
 <RequestExample>
 
-```yaml .graph/agents/release_notes.yaml
+```yaml .dive/agents/release_notes.yaml
 version: 1
 name: release_notes
 description: Writes release notes from the changes since the latest release.
@@ -27,7 +27,7 @@ system_prompt: |
 
 <ResponseExample>
 
-```yaml .graph/plans/unreleased_changes.yaml
+```yaml .dive/plans/unreleased_changes.yaml
 version: 2
 identifier: unreleased_changes
 name: Unreleased changes
@@ -70,7 +70,7 @@ finish:
 
 ## Agent files
 
-An agent is a YAML file in `./.graph/agents/` or `~/.config/graph/agents/`. It names a model role, the tools it may call, and its system prompt. The tools are loaded as the agent needs them: it searches its own list and loads what fits, so a long list costs nothing until it's used. It can also list other agents to call as subagents or hand the conversation to. See [Agent file](/agents/reference/agent-file) for every field.
+An agent is a YAML file in `./.dive/agents/` or `~/.config/dive/agents/`. It names a model role, the tools it may call, and its system prompt. The tools are loaded as the agent needs them: it searches its own list and loads what fits, so a long list costs nothing until it's used. It can also list other agents to call as subagents or hand the conversation to. See [Agent file](/agents/reference/agent-file) for every field.
 
 ## Agent networks
 
@@ -113,7 +113,7 @@ An agent lists the agents it can hand the conversation to under `handoffs`, and 
 
 | Where | How |
 | --- | --- |
-| Your terminal | `graph ask` for one turn, `graph chat` for a conversation |
+| Your terminal | `dive ask` for one turn, `dive chat` for a conversation |
 | The workbench | Built-in agents draft and edit plans, tools and agents with you |
 | A plan step | A step calls a named agent as `agent__<name>` |
 
@@ -121,7 +121,7 @@ A plan can also run an inline [`agent` step](/plans/reference/steps/agent), with
 
 ## Built-in agents
 
-graph ships `chat`, the default for `graph ask` and `graph chat`, plus the drafters and workbench agents listed in [Built-in agents](/agents/reference/built-in-agents). An agent file with the same name replaces a built-in, and `graph agent rm <name>` deletes it again. A project file replaces one in your home directory, so committing `./.graph/agents/` gives your whole team the same agents.
+Dive ships `chat`, the default for `dive ask` and `dive chat`, plus the drafters and workbench agents listed in [Built-in agents](/agents/reference/built-in-agents). An agent file with the same name replaces a built-in, and `dive agent rm <name>` deletes it again. A project file replaces one in your home directory, so committing `./.dive/agents/` gives your whole team the same agents.
 
 ## Guides
 

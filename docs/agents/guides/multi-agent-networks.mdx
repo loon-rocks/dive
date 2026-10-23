@@ -13,7 +13,7 @@ Agents connect in two ways:
 
 List the agents `triage` can hand the conversation to under `handoffs`. Each one becomes a `transfer_to_<name>` tool:
 
-```yaml .graph/agents/triage.yaml
+```yaml .dive/agents/triage.yaml
 version: 1
 name: triage
 description: Routes questions about this repository to the right specialist.
@@ -33,7 +33,7 @@ The specialist takes over the conversation, and later messages go to it.
 
 List the agents `release_notes` can call under `subagents`. Each one becomes an `agent__<name>` tool that takes a `prompt` and returns the subagent's answer:
 
-```yaml .graph/agents/release_notes.yaml
+```yaml .dive/agents/release_notes.yaml
 version: 1
 name: release_notes
 description: Writes release notes from the changes since the latest release.
@@ -49,7 +49,7 @@ system_prompt: |
   call out what it finds.
 ```
 
-```yaml .graph/agents/reviewer.yaml
+```yaml .dive/agents/reviewer.yaml
 version: 1
 name: reviewer
 description: Reviews the code changed between two git refs and reports risky changes.
@@ -66,7 +66,7 @@ The subagent starts with a fresh context, so its tool calls stay out of the call
 ## Run the network
 
 ```bash
-graph ask --agent triage \
+dive ask --agent triage \
   "Draft release notes for what is unreleased."
 ```
 

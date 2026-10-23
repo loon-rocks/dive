@@ -5,7 +5,7 @@
 <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
 <circle cx="42" cy="18" r="6" fill="#febc2e"/>
 <circle cx="62" cy="18" r="6" fill="#28c840"/>
-<text x="522" y="23" fill="#8b90a0" text-anchor="middle">graph workbench — drafting a tool</text>
+<text x="522" y="23" fill="#8b90a0" text-anchor="middle">dive workbench — drafting a tool</text>
 <rect x="18.0" y="684.0" width="50.4" height="18" fill="#56b6c2"/>
 <text x="18.0" y="67.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">┌</text>
 <text x="34.8" y="67.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">chat</text>
@@ -89,9 +89,9 @@
 <text x="454.8" y="193.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">Where:</text>
 <text x="513.6" y="193.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">The</text>
 <text x="547.2" y="193.5" textLength="84.0" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">repository</text>
-<text x="639.6" y="193.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">graph</text>
-<text x="690.0" y="193.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">runs</text>
-<text x="732.0" y="193.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">in</text>
+<text x="639.6" y="193.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">Dive</text>
+<text x="681.6" y="193.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">runs</text>
+<text x="723.6" y="193.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">in</text>
 <text x="1009.2" y="193.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="18.0" y="211.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="34.8" y="211.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">My</text>
@@ -172,9 +172,9 @@
 <text x="177.6" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">use</text>
 <text x="211.2" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
 <text x="244.8" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">one</text>
-<text x="278.4" y="319.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">graph</text>
-<text x="328.8" y="319.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">runs</text>
-<text x="370.8" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">in?</text>
+<text x="278.4" y="319.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">Dive</text>
+<text x="320.4" y="319.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">runs</text>
+<text x="362.4" y="319.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">in?</text>
 <text x="412.8" y="319.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="319.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="1009.2" y="319.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
@@ -183,12 +183,12 @@
 <text x="60.0" y="337.5" textLength="50.4" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">guess:</text>
 <text x="118.8" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">the</text>
 <text x="152.4" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">one</text>
-<text x="186.0" y="337.5" textLength="42.0" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">graph</text>
-<text x="236.4" y="337.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">runs</text>
-<text x="278.4" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">in.</text>
-<text x="312.0" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">The</text>
-<text x="345.6" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">gh</text>
-<text x="370.8" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">CLI</text>
+<text x="186.0" y="337.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">Dive</text>
+<text x="228.0" y="337.5" textLength="33.6" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">runs</text>
+<text x="270.0" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">in.</text>
+<text x="303.6" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">The</text>
+<text x="337.2" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">gh</text>
+<text x="362.4" y="337.5" textLength="25.2" lengthAdjust="spacingAndGlyphs" fill="#c6cad3">CLI</text>
 <text x="412.8" y="337.5" textLength="8.4" lengthAdjust="spacingAndGlyphs" fill="#56b6c2">│</text>
 <text x="421.2" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>
 <text x="1009.2" y="337.5" textLength="16.8" lengthAdjust="spacingAndGlyphs" fill="#c6cad3" opacity="0.55">││</text>

@@ -1,0 +1,20 @@
+---
+title: "dive_plan_show"
+sidebarTitle: "dive_plan_show"
+description: "Returns one plan's full definition."
+playground: "none"
+keywords: ["dive_plan_show"]
+---
+
+- Includes its steps, input schema and finish mode.
+- Mirrors `dive plan show`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>

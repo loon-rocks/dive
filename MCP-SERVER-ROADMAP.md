@@ -1,7 +1,7 @@
-# graph as an MCP server — roadmap
+# Dive as an MCP server — roadmap
 
-Goal: expose graph's plan pipeline over MCP (stdio first) so that any agent can
-author graph plans and call them as tools. The CLI commands added for the plan
+Goal: expose Dive's plan pipeline over MCP (stdio first) so that any agent can
+author Dive plans and call them as tools. The CLI commands added for the plan
 workbench already cover most of the surface; this document tracks what stands
 between those commands and a server.
 
@@ -30,16 +30,16 @@ the refactor is provably behavior-preserving.
 | **`commands/plan_cmd.rs`** | **0** | owns exit codes 3 and 4 |
 | `tools_cmd`, `threads_cmd`, `shapes_cmd`, `mcp_cmd`, `ask`, `chat_cmd`, `runtime`, `cli`, `main` | 0 | — |
 
-No `crates/graph-cli/tests/` directory existed; no process-level test anywhere;
+No `crates/dive-cli/tests/` directory existed; no process-level test anywhere;
 nothing asserted the streams contract. The only end-to-end coverage is
-dogfooding in `.github/workflows/graph-checks.yaml` (two plans, needs
+dogfooding in `.github/workflows/dive-checks.yaml` (two plans, needs
 `ANTHROPIC_API_KEY`, smoke-tests success rather than asserting shape).
 
 ### Tasks
 
 - ☑ Hermetic scratch harness (`tests/support/mod.rs`): temp dir as cwd **and**
-  as `HOME`, so the `~/.config/graph` layer cannot leak the developer's real
-  plans, MCP servers, or credentials into a test. `GRAPH_STORAGE=memory`.
+  as `HOME`, so the `~/.config/dive` layer cannot leak the developer's real
+  plans, MCP servers, or credentials into a test. `DIVE_STORAGE=memory`.
 - ☑ Zero-inference fixtures: plans built on the `data` pack's
   `builtin__reshape` run with no provider configured and no network.
 - ☑ Streams contract: stdout carries only the deliverable; without `--json` a
@@ -49,20 +49,20 @@ dogfooding in `.github/workflows/graph-checks.yaml` (two plans, needs
 - ☑ `plan validate` envelope: `problems` fatal, `notes` not.
 - ☑ Authoring envelopes: `new`, `set`, `step add`, rejected edit, `renamedFrom`.
 - ☑ `tools list/show --json`; unknown tool is an ordinary error, not an envelope.
-- ☑ `GRAPH_EVENTS=github` — `::error::` on stdout only on failure, suppressed
+- ☑ `DIVE_EVENTS=github` — `::error::` on stdout only on failure, suppressed
   by `--json`.
-- ☑ `GRAPH_EVENTS=jsonl` — stderr becomes one JSON object per line.
+- ☑ `DIVE_EVENTS=jsonl` — stderr becomes one JSON object per line.
 - ☑ `Cli::command().debug_assert()`.
 - ☑ Wired into CI: `ci.yaml` already runs `cargo test --workspace`, and the
   suite needs no secrets and no network.
 
-Landed as `crates/graph-cli/tests/{cli_contract.rs,support/mod.rs}` — 19 tests,
-under a second, on the first `crates/graph-cli/tests/` directory in the repo.
+Landed as `crates/dive-cli/tests/{cli_contract.rs,support/mod.rs}` — 19 tests,
+under a second, on the first `crates/dive-cli/tests/` directory in the repo.
 
 The hermeticity guard is load-bearing and self-proving:
 `plan_list_reports_broken_and_valid_plans_separately` asserts the catalog holds
 exactly one plan. It only passes because `HOME` points at the temp dir; without
-that, the developer's real `~/.config/graph/plans` (sprint_analysis,
+that, the developer's real `~/.config/dive/plans` (sprint_analysis,
 project_status, urgent_issues) would leak in and the count would be wrong.
 
 ### Drift found while writing these
@@ -117,7 +117,7 @@ that collapse would be built on, so they outlive the feedback flag.
 One creation verb, drafting opt-in, identifier always explicit:
 
 ```bash
-graph plan new <identifier> [--goal "<what it should do>"]
+dive plan new <identifier> [--goal "<what it should do>"]
 ```
 
 - no `--goal` → today's scaffold, zero inference, no credentials
@@ -129,7 +129,7 @@ graph plan new <identifier> [--goal "<what it should do>"]
 
 Naming undecided (`new --goal` vs `create --goal` with `new` as alias). Blast
 radius: `docs/plans/reference/plan-file.mdx`, `docs/reference/cli/`,
-`skills/graph-plan-authoring/SKILL.md`.
+`skills/dive-plan-authoring/SKILL.md`.
 
 ## Phase 1 — Commands return values, not prints ☑
 
@@ -153,13 +153,13 @@ terminal and are not served over MCP.
 
 ## Phase 2 — The server ☑
 
-- ☑ `graph mcp serve`, rmcp `server` + `transport-io`.
+- ☑ `dive mcp serve`, rmcp `server` + `transport-io`.
 - ☑ **Not** a separate crate, contrary to the original plan. What is being
-  served is `graph-cli`'s own command layer (`Runtime`, `commands::*`), none
+  served is `dive-cli`'s own command layer (`Runtime`, `commands::*`), none
   of which is extractable without turning the binary into a library first. A
   second crate would have meant a second implementation to keep in sync —
   the exact failure Phase 1 existed to remove. It lives in
-  `graph-cli/src/mcp_server/`.
+  `dive-cli/src/mcp_server/`.
 - ☑ Rooting via `--dir`. Load-bearing: MCP clients launch servers with an
   arbitrary cwd, so without it the catalog comes up empty.
 - ☑ Concurrency: plan writes take a mutex, since MCP request handling is
@@ -172,16 +172,16 @@ terminal and are not served over MCP.
 
 ## Phase 3 — Tool surface ☑
 
-- ☑ Authoring tools: `graph_plan_{list,show,validate,new,draft,set,unset}`,
-  `graph_plan_step_{add,update,rename,rm}`, `graph_tools_{list,show,test}`.
-  The `graph_` prefix keeps a plan named `tools_list` from colliding with
+- ☑ Authoring tools: `dive_plan_{list,show,validate,new,draft,set,unset}`,
+  `dive_plan_step_{add,update,rename,rm}`, `dive_tools_{list,show,test}`.
+  The `dive_` prefix keeps a plan named `tools_list` from colliding with
   the verb.
 - ☑ Execution tools: each catalog plan as `plan_<identifier>`, carrying its
   own `input_schema`, with description + exemplars as the routing signal.
 - ☑ `tools/list_changed` after every successful edit, and the list is read
   fresh per `tools/list` — so a plan authored in a session is callable in
   that session. Covered end to end by a test.
-- ☑ Documented the recursion hazard (do not point `[mcp]` at `graph mcp
+- ☑ Documented the recursion hazard (do not point `[mcp]` at `dive mcp
   serve`). Not enforced in code: the cycle detector works within a process.
 
 ## Phase 4 — Protocol semantics ☑
@@ -199,7 +199,7 @@ terminal and are not served over MCP.
 
 ## Out of scope
 
-The workbench TUI (`graph wb plan`) and the `chat` REPL. Interactive surfaces
+The workbench TUI (`dive wb plan`) and the `chat` REPL. Interactive surfaces
 do not project onto MCP.
 
 ## Still open
@@ -209,5 +209,5 @@ do not project onto MCP.
 - `Runtime` built once per session instead of per call.
 - Per-plan tools: whole catalog, or opt-in via a config allowlist? Serving
   everything is right for a small catalog and probably wrong for a large one.
-- `ask`/`chat` over MCP: decided against. An agent calling graph does not
+- `ask`/`chat` over MCP: decided against. An agent calling Dive does not
   need another agent, it needs the plans.

@@ -1,9 +1,9 @@
 ---
-title: "graph plan step rename"
+title: "dive plan step rename"
 sidebarTitle: "rename"
 description: "Rename a step, rewriting every downstream {{id.*}} reference"
 playground: "none"
-keywords: ["graph plan step rename"]
+keywords: ["dive plan step rename"]
 ---
 
 Renames a step and rewrites every reference to it in later steps, the `output` map and the `solver` templates.
@@ -37,11 +37,11 @@ Renames a step and rewrites every reference to it in later steps, the `output` m
 <RequestExample>
 
 ```bash Usage
-graph plan step rename [OPTIONS] <NAME|PATH> <ID> <NEW_ID>
+dive plan step rename [OPTIONS] <NAME|PATH> <ID> <NEW_ID>
 ```
 
 ```bash Example
-graph plan step rename weekly_changes E1 commits
+dive plan step rename weekly_changes E1 commits
 ```
 
 </RequestExample>

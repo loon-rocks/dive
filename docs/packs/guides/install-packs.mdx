@@ -1,38 +1,38 @@
 ---
 title: "Install and update packs"
 description: "Add a pack to a project, keep it on the newest release and remove it."
-keywords: ["graph pack add", "graph pack update", "graph pack list", "graph pack remove"]
+keywords: ["dive pack add", "dive pack update", "dive pack list", "dive pack remove"]
 ---
 
 ## Add a pack
 
-Run `graph pack add` from the project's root:
+Run `dive pack add` from the project's root:
 
 ```bash
-graph pack add github
+dive pack add github
 ```
 
 ```text
-✓ ./.graph/packs/github
+✓ ./.dive/packs/github
   note: installed github v1.0.0 from github/ in github.com/tylerdavis/graph-packs (project layer, ref v1)
 ```
 
-Commit `.graph/packs/github/`, `.graph/packs.lock` and `.graph/config.toml`. The pack's tools are now in the catalog:
+Commit `.dive/packs/github/`, `.dive/packs.lock` and `.dive/config.toml`. The pack's tools are now in the catalog:
 
 ```bash
-graph tool show github__tool__git_log
+dive tool show github__tool__git_log
 ```
 
 To install from your own repository, pass its URL and the pack's directory:
 
 ```bash
-graph pack add github.com/acme/graph-packs --path deploys
+dive pack add github.com/acme/graph-packs --path deploys
 ```
 
 ## See what's installed
 
 ```bash
-graph pack list
+dive pack list
 ```
 
 ```text
@@ -44,7 +44,7 @@ Each row shows the layer, the installed release, the newest release the `ref` al
 ## Update
 
 ```bash
-graph pack update
+dive pack update
 ```
 
 ```text
@@ -57,18 +57,18 @@ Every pack moves to the newest release its `ref` allows. Name packs to update on
 ## Move to a new major release
 
 ```bash
-graph pack update --major github
+dive pack update --major github
 ```
 
-For each newer major, graph runs the pack's migration over your plans, agents and tools as a dry run, shows the changes and asks before applying them. It then moves the pack's `ref` to the new major. Pass `--yes` to accept every migration without asking, such as in CI.
+For each newer major, Dive runs the pack's migration over your plans, agents and tools as a dry run, shows the changes and asks before applying them. It then moves the pack's `ref` to the new major. Pass `--yes` to accept every migration without asking, such as in CI.
 
 ## Remove a pack
 
 ```bash
-graph pack remove github
+dive pack remove github
 ```
 
-graph deletes the copy, its config entry and its `packs.lock` entry, and lists any of your files that still call the pack's items.
+Dive deletes the copy, its config entry and its `packs.lock` entry, and lists any of your files that still call the pack's items.
 
 ## Related guides
 

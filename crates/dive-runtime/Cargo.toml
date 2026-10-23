@@ -1,0 +1,63 @@
+[package]
+name = "dive-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dive-core.workspace = true
+dive-llm.workspace = true
+dive-mcp.workspace = true
+dive-store.workspace = true
+dive-config.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+toml_edit.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+semver.workspace = true
+sha2 = "0.10"
+tempfile = "3"
+toml.workspace = true
+regex = "1"
+clap = { workspace = true, optional = true }
+tokio.workspace = true
+tokio-util = "0.7"
+async-trait.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+ignore = "0.4"
+globset = "0.4"
+tracing-subscriber.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+opentelemetry = "0.33"
+opentelemetry_sdk = { version = "0.33", default-features = false, features = [
+    "trace",
+    "logs",
+    "internal-logs",
+    "rt-tokio",
+    "experimental_trace_batch_span_processor_with_async_runtime",
+    "experimental_logs_batch_log_processor_with_async_runtime",
+] }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = [
+    "trace",
+    "logs",
+    "internal-logs",
+    "http-proto",
+    "http-json",
+    "reqwest-client",
+    "reqwest-rustls",
+] }
+opentelemetry-appender-tracing = "0.33"
+gix = { version = "0.89", default-features = false, features = ["sha1", "blocking-http-transport-reqwest-rust-tls", "status"] }
+
+[features]
+clap = ["dep:clap"]
+fixtures = ["gix/revision"]
+
+[dev-dependencies]
+opentelemetry_sdk = { version = "0.33", features = ["testing"] }
+futures.workspace = true
+gix = { version = "0.89", default-features = false, features = ["revision"] }

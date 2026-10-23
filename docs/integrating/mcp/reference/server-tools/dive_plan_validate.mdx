@@ -1,0 +1,24 @@
+---
+title: "dive_plan_validate"
+sidebarTitle: "dive_plan_validate"
+description: "Checks a plan's structure, template references and tool names against this machine."
+playground: "none"
+keywords: ["dive_plan_validate"]
+---
+
+## Result
+
+- `problems`: errors that make `ok` false
+- `notes`: issues that keep the plan from running here but don't make it invalid
+
+Mirrors `dive plan validate`.
+
+| Available to | Effect |
+| --- | --- |
+| MCP clients of `dive mcp serve` | Not marked read-only |
+
+## Input
+
+<ParamField body="target" type="string" required>
+  A plan identifier (as in `plan list`) or a path to a plan YAML file.
+</ParamField>

@@ -1,28 +1,28 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/graph-cli",
-    "crates/graph-core",
-    "crates/graph-llm",
-    "crates/graph-mcp",
-    "crates/graph-store",
-    "crates/graph-config",
-    "crates/graph-runtime",
+    "crates/dive-cli",
+    "crates/dive-core",
+    "crates/dive-llm",
+    "crates/dive-mcp",
+    "crates/dive-store",
+    "crates/dive-config",
+    "crates/dive-runtime",
 ]
 
 [workspace.package]
 version = "0.16.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/tylerdavis/graph"
+repository = "https://github.com/loon-rocks/dive"
 
 [workspace.dependencies]
-graph-core = { path = "crates/graph-core" }
-graph-llm = { path = "crates/graph-llm" }
-graph-mcp = { path = "crates/graph-mcp" }
-graph-store = { path = "crates/graph-store" }
-graph-config = { path = "crates/graph-config" }
-graph-runtime = { path = "crates/graph-runtime" }
+dive-core = { path = "crates/dive-core" }
+dive-llm = { path = "crates/dive-llm" }
+dive-mcp = { path = "crates/dive-mcp" }
+dive-store = { path = "crates/dive-store" }
+dive-config = { path = "crates/dive-config" }
+dive-runtime = { path = "crates/dive-runtime" }
 
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

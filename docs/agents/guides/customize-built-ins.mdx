@@ -6,9 +6,9 @@ keywords: ["customize", "override", "built-in agents", "subagents", "chat"]
 
 ## Connect a web server
 
-Add the [fetch](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) MCP server to `.graph/config.toml`. Its `fetch` tool joins your catalog as `web__fetch`:
+Add the [fetch](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) MCP server to `.dive/config.toml`. Its `fetch` tool joins your catalog as `web__fetch`:
 
-```toml .graph/config.toml
+```toml .dive/config.toml
 [mcp.web]
 description = "Fetches web pages as markdown"
 command = "uvx"
@@ -17,7 +17,7 @@ args = ["mcp-server-fetch"]
 
 ## Create the researcher
 
-```yaml .graph/agents/researcher.yaml
+```yaml .dive/agents/researcher.yaml
 version: 1
 name: researcher
 description: Researches a question on the internet and answers with sources.
@@ -34,15 +34,15 @@ system_prompt: |
 A file named `chat` in your project replaces the built-in:
 
 ```bash
-graph agent show chat \
-  > .graph/agents/chat.yaml
+dive agent show chat \
+  > .dive/agents/chat.yaml
 ```
 
 ## Add the subagent
 
 Add `researcher` to `subagents`, and tell `chat` when to use it in `system_prompt`:
 
-```yaml .graph/agents/chat.yaml
+```yaml .dive/agents/chat.yaml
 subagents:
 - chat
 - researcher
@@ -57,7 +57,7 @@ system_prompt: |
 ## Try it
 
 ```bash
-graph ask "What is the latest stable version of Rust?"
+dive ask "What is the latest stable version of Rust?"
 ```
 
 `chat` hands the question to `researcher`, which fetches the pages:
@@ -83,7 +83,7 @@ Sources: releases.rs, and the official announcement at blog.rust-lang.org/2026/1
 Delete your copy to bring the shipped `chat` back:
 
 ```bash
-graph agent rm chat
+dive agent rm chat
 ```
 
 ## Related guides
@@ -96,7 +96,7 @@ graph agent rm chat
     Add other servers' tools to your catalog.
   </Card>
   <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
-    Use `chat` with `graph ask` and `graph chat`.
+    Use `chat` with `dive ask` and `dive chat`.
   </Card>
   <Card title="Create an agent in the workbench" icon="wand-magic-sparkles" href="/agents/guides/create-in-workbench">
     Draft the researcher in the workbench instead.

@@ -1,9 +1,9 @@
 ---
-title: "graph pack run"
+title: "dive pack run"
 sidebarTitle: "run"
 description: "Run one of a pack's items, private and migration ones included, under its manifest name"
 playground: "none"
-keywords: ["graph pack run"]
+keywords: ["dive pack run"]
 ---
 
 Runs a tool, plan or agent of the pack at --path, the way the pack's own plans call it, so items outside the public interface and migration items run too. This is the only direct way to run them. The result is printed to stdout as JSON.
@@ -45,15 +45,15 @@ Runs a tool, plan or agent of the pack at --path, the way the pack's own plans c
 <RequestExample>
 
 ```bash Usage
-graph pack run [OPTIONS] <ITEM> [JSON|@FILE|-]
+dive pack run [OPTIONS] <ITEM> [JSON|@FILE|-]
 ```
 
 ```bash Example 1
-graph pack run tool__word_count --input file=README.md
+dive pack run tool__word_count --input file=README.md
 ```
 
 ```bash Example 2
-graph pack run plan__migrate_v2 '{"root": ".graph", "apply": false}' --path files
+dive pack run plan__migrate_v2 '{"root": ".dive", "apply": false}' --path files
 ```
 
 </RequestExample>

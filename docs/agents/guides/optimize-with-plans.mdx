@@ -11,7 +11,7 @@ Every tool call an agent makes costs a model round. When it makes the same calls
 Run the agent and read the tool calls on stderr. This `release_notes` agent looks up the latest release, then reads the commits since it:
 
 ```bash
-graph ask --agent release_notes \
+dive ask --agent release_notes \
   "Draft release notes for what is unreleased."
 ```
 
@@ -27,7 +27,7 @@ It makes the same two calls every time, so they can move into a plan.
 
 ## Put the calls in a plan
 
-Save the sequence as `./.graph/plans/unreleased_changes.yaml`. The `output` finish returns the results as JSON without a model call:
+Save the sequence as `./.dive/plans/unreleased_changes.yaml`. The `output` finish returns the results as JSON without a model call:
 
 ```yaml
 version: 2
@@ -82,6 +82,6 @@ Run the same question again. The agent calls the plan once, and the plan makes t
     Help the agent pick the plan over other tools.
   </Card>
   <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
-    Run the agent with `graph ask` and `graph chat`.
+    Run the agent with `dive ask` and `dive chat`.
   </Card>
 </CardGroup>

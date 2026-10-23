@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "graph",
+  "name": "Dive",
   "colors": {
     "primary": "#16A34A",
     "light": "#22C55E",
@@ -210,7 +210,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/tylerdavis/graph"
+      "github": "https://github.com/loon-rocks/dive"
     }
   },
   "redirects": [
@@ -405,7 +405,7 @@
     "tool_file_version": "3",
     "agent_file_version": "3",
     "data_directory_version": "6",
-    "pack_file_version": "1",
+    "pack_file_version": "2",
     "pack_lock_version": "1"
   }
 }

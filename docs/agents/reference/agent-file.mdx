@@ -1,20 +1,20 @@
 ---
 title: "Agent file"
-description: "One named agent, in `./.graph/agents/` or `~/.config/graph/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs."
+description: "One named agent, in `./.dive/agents/` or `~/.config/dive/agents/`. A file with a built-in agent's name replaces that agent everywhere it runs."
 playground: "none"
 keywords: ["Agent file", "schema", "YAML"]
 ---
 
 | File type | Location |
 | --- | --- |
-| YAML | `./.graph/agents/<name>.yaml` (project)<br />`~/.config/graph/agents/<name>.yaml` (global) |
+| YAML | `./.dive/agents/<name>.yaml` (project)<br />`~/.config/dive/agents/<name>.yaml` (global) |
 
-Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/tylerdavis/graph/main/docs/schemas/agent.schema.json`.
+Unknown keys are a load error. For completion in your editor, start the file with `# yaml-language-server: $schema=https://raw.githubusercontent.com/loon-rocks/dive/main/docs/schemas/agent.schema.json`.
 
 ## Fields
 
 <ParamField body="version" type="integer">
-  The file version the document is written in. Omitted means 1; files graph writes always carry it.
+  The file version the document is written in. Omitted means 1; files Dive writes always carry it.
 </ParamField>
 
 <ParamField body="name" type="string" required>

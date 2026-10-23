@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "One plan, in `./.graph/plans/` or `~/.config/graph/plans/`, run with `graph plan run` and called by agents and other plans as `plan__<identifier>`.",
+  "description": "One plan, in `./.dive/plans/` or `~/.config/dive/plans/`, run with `dive plan run` and called by agents and other plans as `plan__<identifier>`.",
   "examples": [
     {
       "description": "Summarizes the commits merged since a git ref.",
@@ -184,7 +184,7 @@
       "type": "array"
     },
     "version": {
-      "description": "The file version the document is written in. Omitted means 1; `graph plan migrate` brings a file to the current version.",
+      "description": "The file version the document is written in. Omitted means 1; `dive plan migrate` brings a file to the current version.",
       "type": "integer"
     }
   },
@@ -199,7 +199,7 @@
   "type": "object",
   "x-format": "YAML",
   "x-locations": [
-    "`./.graph/plans/<identifier>.yaml` (project)",
-    "`~/.config/graph/plans/<identifier>.yaml` (global)"
+    "`./.dive/plans/<identifier>.yaml` (project)",
+    "`~/.config/dive/plans/<identifier>.yaml` (global)"
   ]
 }

@@ -28,14 +28,14 @@ Agents connect in two ways:
 
 `triage` lists … under `handoffs`:
 
-```yaml .graph/agents/triage.yaml
+```yaml .dive/agents/triage.yaml
 …
 ```
 
 ## <Run it>
 
 ```bash
-graph ask --agent triage \
+dive ask --agent triage \
   "Draft release notes for what is unreleased."
 ```
 
@@ -95,11 +95,11 @@ follow the steps, and write it as a short bullet list, not a paragraph.
 ## Build the example for real
 
 - Before writing, build the example's files in a scratch project (a scratchpad dir
-  with its own `.graph/`) or, when it needs this repo's git history, temporarily in
-  the worktree's `.graph/` — and delete those files afterwards.
-- Validate every file you show (`graph plan validate`, `graph agent validate`)
-  and run the example (`graph ask … </dev/null`, `graph plan run`) with the debug
-  build. Pass `</dev/null` to `graph ask`, or it waits on stdin.
+  with its own `.dive/`) or, when it needs this repo's git history, temporarily in
+  the worktree's `.dive/` — and delete those files afterwards.
+- Validate every file you show (`dive plan validate`, `dive agent validate`)
+  and run the example (`dive ask … </dev/null`, `dive plan run`) with the debug
+  build. Pass `</dev/null` to `dive ask`, or it waits on stdin.
 - Output blocks are copied from those runs. Trim long lines with `…`, never invent
   lines or numbers.
 - If a run shows the guide's promise doesn't hold (cost went up, a tool doesn't
@@ -108,19 +108,19 @@ follow the steps, and write it as a short bullet list, not a paragraph.
 ## Writing details
 
 - Current behavior only. Verify every claim against the code (agent prompts in
-  `crates/graph-cli/src/workbench/agents/`, tool implementations, clap help) before
+  `crates/dive-cli/src/workbench/agents/`, tool implementations, clap help) before
   writing it; when the product can't do something the guide implies, flag it to
   the user instead of writing around it.
 - No process content: no draft banners, TODO lists, review notes or source lists on
   the page.
-- Use full command names (`graph workbench`, not `graph wb`).
+- Use full command names (`dive workbench`, not `dive wb`).
 - Every code block has a language (`bash`, `yaml`, `toml`, `json`, `text`,
   `handlebars`); file contents carry their path as the block title
-  (```` ```yaml .graph/agents/triage.yaml ````). Excerpts of a longer file use `…`.
+  (```` ```yaml .dive/agents/triage.yaml ````). Excerpts of a longer file use `…`.
 - Wrap long commands with `\` so they fit a phone screen:
 
   ```bash
-  graph ask --agent release_notes \
+  dive ask --agent release_notes \
     "What shipped since v0.15.0?"
   ```
 

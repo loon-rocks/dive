@@ -1,14 +1,14 @@
 ---
 title: "Environment variables"
 playground: "none"
-keywords: ["environment variables", "env", "GRAPH_LOG", "OTEL"]
+keywords: ["environment variables", "env", "DIVE_LOG", "OTEL"]
 ---
 
-import EnvGraphEvents from "/snippets/generated/environment/graph-events.mdx";
-import EnvGraphLog from "/snippets/generated/environment/graph-log.mdx";
-import EnvGraphSecretStore from "/snippets/generated/environment/graph-secret-store.mdx";
-import EnvGraphStorage from "/snippets/generated/environment/graph-storage.mdx";
-import EnvGraphWorkbenchLog from "/snippets/generated/environment/graph-workbench-log.mdx";
+import EnvDiveEvents from "/snippets/generated/environment/dive-events.mdx";
+import EnvDiveLog from "/snippets/generated/environment/dive-log.mdx";
+import EnvDiveSecretStore from "/snippets/generated/environment/dive-secret-store.mdx";
+import EnvDiveStorage from "/snippets/generated/environment/dive-storage.mdx";
+import EnvDiveWorkbenchLog from "/snippets/generated/environment/dive-workbench-log.mdx";
 import EnvOtelExporterOtlpEndpoint from "/snippets/generated/environment/otel-exporter-otlp-endpoint.mdx";
 import EnvOtelExporterOtlpProtocol from "/snippets/generated/environment/otel-exporter-otlp-protocol.mdx";
 import EnvOtelExporterOtlpTimeout from "/snippets/generated/environment/otel-exporter-otlp-timeout.mdx";
@@ -17,23 +17,23 @@ import EnvOtelServiceName from "/snippets/generated/environment/otel-service-nam
 
 ## Output and logging
 
-<EnvGraphEvents />
+<EnvDiveEvents />
 
-<EnvGraphLog />
+<EnvDiveLog />
 
 ## Secrets
 
 `${NAME}` references in config.toml and in tool `env` values read the environment variable `NAME` first, then the OS credential store: this project's entry, then the one every project shares. See [Secret references](/reference/configuration#secret-references).
 
-<EnvGraphSecretStore />
+<EnvDiveSecretStore />
 
 ## Storage
 
-<EnvGraphStorage />
+<EnvDiveStorage />
 
 ## Workbench
 
-<EnvGraphWorkbenchLog />
+<EnvDiveWorkbenchLog />
 
 ## Telemetry
 

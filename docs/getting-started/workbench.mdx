@@ -1,26 +1,26 @@
 ---
 title: "The workbench"
-description: "Find your way around graph's terminal UI for building and testing agents, plans and tools."
-keywords: ["workbench", "graph workbench", "graph wb", "front desk", "keys"]
+description: "Find your way around Dive's terminal UI for building and testing agents, plans and tools."
+keywords: ["workbench", "dive workbench", "dive wb", "front desk", "keys"]
 ---
 
-The workbench is a full-screen terminal UI where you build agents, plans and tools by talking to graph's built-in agents, then run and debug them in the same window.
+The workbench is a full-screen terminal UI where you build agents, plans and tools by talking to Dive's built-in agents, then run and debug them in the same window.
 
 ## Open it
 
 ```bash
-graph workbench
+dive workbench
 ```
 
 It opens at the front desk, which asks what you want to build. To go straight to a mode, name it, and optionally the file to open:
 
 ```bash
-graph workbench plan unreleased_changes
-graph workbench agent release_notes
-graph workbench tool merged_prs
+dive workbench plan unreleased_changes
+dive workbench agent release_notes
+dive workbench tool merged_prs
 ```
 
-`graph wb` is short for `graph workbench`. The workbench needs an interactive terminal. In scripts and CI, use [`graph plan run`](/plans/guides/run-a-plan).
+`dive wb` is short for `dive workbench`. The workbench needs an interactive terminal. In scripts and CI, use [`dive plan run`](/plans/guides/run-a-plan).
 
 ## Layout
 
@@ -44,7 +44,7 @@ To switch by hand, type `/agent <name>` in the chat. See [Built-in agents](/agen
 
 ## Saving
 
-<kbd>Ctrl</kbd>+<kbd>S</kbd> saves what's in the workspace: a drafted network all at once, tools to `./.graph/tools/`, plans to `./.graph/plans/` and agents to `./.graph/agents/`, or the plan you're editing. A file you opened is saved in place.
+<kbd>Ctrl</kbd>+<kbd>S</kbd> saves what's in the workspace: a drafted network all at once, tools to `./.dive/tools/`, plans to `./.dive/plans/` and agents to `./.dive/agents/`, or the plan you're editing. A file you opened is saved in place.
 
 ## Keys
 
@@ -89,7 +89,7 @@ While a debug run is paused:
 
 ## Logs
 
-The workbench writes its log to `workbench.log` in the [data directory](/reference/data-directory), not to the terminal. Set `GRAPH_WORKBENCH_LOG` or `[workbench] log_path` to change the path, and `GRAPH_LOG` to change what it records.
+The workbench writes its log to `workbench.log` in the [data directory](/reference/data-directory), not to the terminal. Set `DIVE_WORKBENCH_LOG` or `[workbench] log_path` to change the path, and `DIVE_LOG` to change what it records.
 
 ## Guides
 

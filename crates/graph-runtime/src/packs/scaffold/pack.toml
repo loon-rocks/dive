@@ -1,8 +1,0 @@
-version = 1
-name = "@NAME@"
-description = "Say in one sentence what this pack does."
-
-[requires]
-graph = "@GRAPH@"
-os = ["macos", "linux"]
-binaries = ["sh", "wc", "tr"]

@@ -1,12 +1,12 @@
 ---
-title: "graph plan rm"
+title: "dive plan rm"
 sidebarTitle: "rm"
 description: "Delete a plan file"
 playground: "none"
-keywords: ["graph plan rm"]
+keywords: ["dive plan rm"]
 ---
 
-Deletes the file holding the plan, without asking. A plan file that replaces a built-in plan reverts it to the shipped version, and one that shadows a copy in a later plans directory hands over to that copy. Plans and agents that still call it are listed; nothing else is changed. Built-in and pack plans can't be removed one at a time — remove a pack with `graph pack remove`.
+Deletes the file holding the plan, without asking. A plan file that replaces a built-in plan reverts it to the shipped version, and one that shadows a copy in a later plans directory hands over to that copy. Plans and agents that still call it are listed; nothing else is changed. Built-in and pack plans can't be removed one at a time — remove a pack with `dive pack remove`.
 
 ## Arguments
 
@@ -29,15 +29,15 @@ Deletes the file holding the plan, without asking. A plan file that replaces a b
 <RequestExample>
 
 ```bash Usage
-graph plan rm [OPTIONS] <NAME>
+dive plan rm [OPTIONS] <NAME>
 ```
 
 ```bash Example 1
-graph plan rm weekly_changes
+dive plan rm weekly_changes
 ```
 
 ```bash Example 2
-graph plan rm compose_plan --json
+dive plan rm compose_plan --json
 ```
 
 </RequestExample>

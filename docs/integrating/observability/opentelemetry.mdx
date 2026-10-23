@@ -16,7 +16,7 @@ import EnvOtelServiceName from "/snippets/generated/environment/otel-service-nam
 ```toml OpenTelemetry
 [telemetry]
 endpoint = "http://localhost:4318"
-service_name = "graph"
+service_name = "dive"
 
 [telemetry.resource]
 "deployment.environment" = "dev"
@@ -66,7 +66,7 @@ Authorization = "Basic ${LANGFUSE_AUTH}"
 "x-langfuse-ingestion-version" = "4"
 ```
 
-- `endpoint` is the base URL. graph adds `/v1/traces` itself. For the US region, use `https://us.cloud.langfuse.com/api/public/otel`.
+- `endpoint` is the base URL. Dive adds `/v1/traces` itself. For the US region, use `https://us.cloud.langfuse.com/api/public/otel`.
 - Set `LANGFUSE_AUTH` in your environment to the base64 encoding of `<public key>:<secret key>`. Header values can reference environment variables, so the keys stay out of the file.
 - `x-langfuse-ingestion-version = "4"` makes traces show up in Langfuse right away instead of after a delay.
 
@@ -80,4 +80,4 @@ Langfuse groups the traces of one thread, or one workbench session, into a sessi
 
 ## Check it worked
 
-- Run `graph plan run` or `graph ask` and find the trace in the backend
+- Run `dive plan run` or `dive ask` and find the trace in the backend

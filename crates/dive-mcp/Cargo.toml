@@ -1,0 +1,29 @@
+[package]
+name = "dive-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dive-core.workspace = true
+dive-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+http = "1"
+base64 = "0.22"
+url = "2"
+rmcp = { version = "2.2", default-features = false, features = [
+    "client",
+    "transport-child-process",
+    "transport-streamable-http-client-reqwest",
+    "reqwest",
+] }
+
+[dev-dependencies]
+toml.workspace = true
+dive-store.workspace = true

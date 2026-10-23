@@ -1,0 +1,19 @@
+[package]
+name = "dive-llm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dive-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+schemars.workspace = true
+tracing.workspace = true
+eventsource-stream = "0.2"

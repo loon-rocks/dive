@@ -1,22 +1,22 @@
 ---
-title: "graph pack"
-sidebarTitle: "graph pack"
+title: "dive pack"
+sidebarTitle: "dive pack"
 description: "Install, list, update and remove packs of tools, plans and agents from git"
 playground: "none"
-keywords: ["graph pack"]
+keywords: ["dive pack"]
 ---
 
 ## Available commands
 
-- [`graph pack add`](/reference/cli/pack/add): Install a pack from git as a plain copy in the project, global or given graph directory
-- [`graph pack list`](/reference/cli/pack/list): List installed packs with their tags, newer releases, local edits, shadowing and moved release tags
-- [`graph pack update`](/reference/cli/pack/update): Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each
-- [`graph pack remove`](/reference/cli/pack/remove): Delete a pack's copy, config entry and lock entry, and list files that still call it
-- [`graph pack new`](/reference/cli/pack/new): Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md
-- [`graph pack check`](/reference/cli/pack/check): Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements
-- [`graph pack run`](/reference/cli/pack/run): Run one of a pack's items, private and migration ones included, under its manifest name
-- [`graph pack test`](/reference/cli/pack/test): Run check, then every migration over its sample files in tests/migrations/v&lt;N&gt;/ and validate the result
-- [`graph pack release`](/reference/cli/pack/release): Compare the public interface with the previous release tag and create the next annotated tag, without pushing
+- [`dive pack add`](/reference/cli/pack/add): Install a pack from git as a plain copy in the project, global or given Dive directory
+- [`dive pack list`](/reference/cli/pack/list): List installed packs with their tags, newer releases, local edits, shadowing and moved release tags
+- [`dive pack update`](/reference/cli/pack/update): Move packs to the newest release their ref allows, or with --major across majors, migrating your files at each
+- [`dive pack remove`](/reference/cli/pack/remove): Delete a pack's copy, config entry and lock entry, and list files that still call it
+- [`dive pack new`](/reference/cli/pack/new): Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md
+- [`dive pack check`](/reference/cli/pack/check): Load a pack the way an install would and report every problem: manifest, files, references, names, migrations and requirements
+- [`dive pack run`](/reference/cli/pack/run): Run one of a pack's items, private and migration ones included, under its manifest name
+- [`dive pack test`](/reference/cli/pack/test): Run check, then every migration over its sample files in tests/migrations/v&lt;N&gt;/ and validate the result
+- [`dive pack release`](/reference/cli/pack/release): Compare the public interface with the previous release tag and create the next annotated tag, without pushing
 
 ## Global options
 

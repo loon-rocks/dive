@@ -1,0 +1,32 @@
+//! Layered TOML configuration for the Dive CLI.
+//!
+//! Precedence (later wins): ~/.config/dive/config.toml < ./.dive/config.toml
+//! < DIVE_* environment variables < CLI flags.
+
+mod format;
+pub mod legacy;
+mod load;
+mod model;
+pub mod pack;
+#[cfg(test)]
+mod schema_tests;
+pub mod secrets;
+
+pub use format::{
+    inspect, migrate_file, migration_count, window_problem, LayerInfo, Migrated, Unsupported,
+    Upgrade, CONFIG_FORMAT, CONFIG_FORMAT_OLDEST, FORMATS_DOC, FORMAT_KEY,
+};
+pub use load::{
+    ensure_project_id, expand_tilde, global_config_path, load, load_from, project_config_path,
+    project_id, LoadedConfig,
+};
+pub use model::{
+    describe_missing_env, Config, FallbackChoice, FilesBackend, FilesConfig, FilesMode,
+    McpServerConfig, MissingEnv, ModelChoice, ModelKind, ModelPrice, ModelRoles, PlanPaths,
+    PriceTier, ProjectConfig, PromptConfig, ProviderConfig, ProviderKind, Rates, Role, Settings,
+    StorageBackend, StorageConfig, TelemetryConfig, TelemetryProtocol, TokenCounts, ToolOverride,
+    ToolPaths, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
+};
+
+pub const SCHEMA: &str = include_str!("schema.yaml");
+pub const PACK_SCHEMA: &str = include_str!("pack_schema.yaml");

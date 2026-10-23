@@ -1,17 +1,17 @@
 ---
-title: "Introducing Graph"
+title: "Introducing Dive"
 description: "A runtime and development environment for building scalable AI-augmented workflows"
 icon: "hand-wave"
 sidebarTitle: "Introduction"
 ---
 
-The goal of graph is to provide an AI native workflow engine that not only allows for precise integration of LLM inference into your workflows, but to provide a powerful generative development experience.  You should be able to go from idea to a new LLM-powered review check in Github in minutes instead of hours.
+The goal of Dive is to provide an AI native workflow engine that not only allows for precise integration of LLM inference into your workflows, but to provide a powerful generative development experience.  You should be able to go from idea to a new LLM-powered review check in Github in minutes instead of hours.
 
-<Frame caption="Debugging a plan in the Graph workbench">
+<Frame caption="Debugging a plan in the Dive workbench">
   ![The workbench after a completed weekly_status run: the chat agent on the left, the fully-executed step tree with exit-gate, map, and solver rows on the right, and the map's dataflow template in the detail pane.](/images/workbench/hero.svg)
 </Frame>
 
-## Why graph
+## Why Dive
 
 - **Deterministic by default.** Steps are plain tool calls able to reference past step output. The LLM enters only where you put it: a [prompt tool](/tools/reference/tool-file/prompt) as a step (classify, extract, summarize mid-plan) and a [finish](/plans/reference/plan-file#param-finish) that is a written report, structured JSON, or nothing at all.
 - **Any tool you can imagine.** Native MCP support and an intuitive tool framework brings every integration you could possibly need to your fingertips.
@@ -21,7 +21,7 @@ The goal of graph is to provide an AI native workflow engine that not only allow
 
 ## Prototype in your favorite harness, test and verify in the workbench
 
-Graph's [built-in MCP server](/integrating/mcp/guides/serve-over-mcp) brings the entire development tool set and execution runtime to your coding harness of choice.  Coupled with Graph's pre-built skills, your agent will have the tools it needs to quickly iterate on every workflow task you throw at it.  Once you're happy, open the plan in the [graph workbench](/getting-started/workbench) and run a full end-to-end test to make sure everything is running correctly.
+Dive's [built-in MCP server](/integrating/mcp/guides/serve-over-mcp) brings the entire development tool set and execution runtime to your coding harness of choice.  Coupled with Dive's pre-built skills, your agent will have the tools it needs to quickly iterate on every workflow task you throw at it.  Once you're happy, open the plan in the [dive workbench](/getting-started/workbench) and run a full end-to-end test to make sure everything is running correctly.
 
 ## Where to go next
 

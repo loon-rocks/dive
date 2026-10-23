@@ -27,7 +27,7 @@ fi
 # and the changelog files the commit under that kind's own section. Every
 # such bump is breaking for older binaries, so the `!` marker is mandatory —
 # a reserved scope without it is either a misfiled crate change (pick another
-# scope: graph-config, plans, tools, agents, storage) or a bump missing its marker.
+# scope: dive-config, plans, tools, agents, storage) or a bump missing its marker.
 if [[ $subject =~ ^($types)\((config|plan|tool|agent|store|pack|lock)\):\ .+ ]]; then
   scope=${BASH_REMATCH[2]}
   cat >&2 <<EOF
@@ -40,10 +40,10 @@ and require \`!\`, e.g.
 
     feat($scope)!: <what changed in the file's schema>
 
-    BREAKING CHANGE: $scope version <N> (graph $scope migrate)
+    BREAKING CHANGE: $scope version <N> (dive $scope migrate)
 
 For an ordinary change to the crate that reads those files, use a different
-scope (graph-config, plans, tools, packs, storage) or none. See RELEASING.md >
+scope (dive-config, plans, tools, packs, storage) or none. See RELEASING.md >
 "Version bumps".
 EOF
   exit 1

@@ -1,9 +1,9 @@
 ---
-title: "graph config migrate"
+title: "dive config migrate"
 sidebarTitle: "migrate"
 description: "Rewrite a config file to the current config format, comments intact"
 playground: "none"
-keywords: ["graph config migrate"]
+keywords: ["dive config migrate"]
 ---
 
 Rewrites the config file to the current config file version, keeping comments and layout. A file already at the current version is left untouched.
@@ -11,7 +11,7 @@ Rewrites the config file to the current config file version, keeping comments an
 ## Options
 
 <ParamField query="--global" type="boolean">
-  Migrate the global file (~/.config/graph/) instead of the project one (./.graph/)
+  Migrate the global file (~/.config/dive/) instead of the project one (./.dive/)
 </ParamField>
 
 <ParamField query="--json" type="boolean">
@@ -27,15 +27,15 @@ Rewrites the config file to the current config file version, keeping comments an
 <RequestExample>
 
 ```bash Usage
-graph config migrate [OPTIONS]
+dive config migrate [OPTIONS]
 ```
 
 ```bash Example 1
-graph config migrate
+dive config migrate
 ```
 
 ```bash Example 2
-graph config migrate --global
+dive config migrate --global
 ```
 
 </RequestExample>

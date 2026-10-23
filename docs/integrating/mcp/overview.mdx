@@ -1,10 +1,10 @@
 ---
 title: "MCP"
-description: "graph is both an MCP client, using other servers' tools, and an MCP server, giving other clients your plans."
+description: "Dive is both an MCP client, using other servers' tools, and an MCP server, giving other clients your plans."
 keywords: ["mcp", "model context protocol", "client", "server"]
 ---
 
-graph works with the [Model Context Protocol](https://modelcontextprotocol.io) in both directions. As a client, it adds other servers' tools to your catalog. As a server, it gives MCP clients such as Claude and Cursor your plans as tools.
+Dive works with the [Model Context Protocol](https://modelcontextprotocol.io) in both directions. As a client, it adds other servers' tools to your catalog. As a server, it gives MCP clients such as Claude and Cursor your plans as tools.
 
 <RequestExample>
 
@@ -21,8 +21,8 @@ args = ["-y", "@modelcontextprotocol/server-everything"]
 ```json Server: client config
 {
   "mcpServers": {
-    "graph": {
-      "command": "graph",
+    "dive": {
+      "command": "dive",
       "args": ["mcp", "serve", "--dir", "/path/to/project"]
     }
   }
@@ -31,15 +31,15 @@ args = ["-y", "@modelcontextprotocol/server-everything"]
 
 </RequestExample>
 
-## graph as an MCP client
+## Dive as an MCP client
 
 Each [`[mcp.<name>]`](/reference/configuration#param-mcp) table in config.toml connects one server, over stdio with `command` or streamable HTTP with `url`. The server's tools join the catalog as `<name>__<tool>`, and agents and plan steps call them like any other tool.
 
-You choose which of a server's tools graph loads, and can correct a tool's description or output shape when the server's own is wrong or missing.
+You choose which of a server's tools Dive loads, and can correct a tool's description or output shape when the server's own is wrong or missing.
 
-## graph as an MCP server
+## Dive as an MCP server
 
-`graph mcp serve` runs graph as an MCP server over stdio. A connected client gets one tool per plan in your catalog, named `plan_<identifier>`, plus [tools for writing and testing plans](/integrating/mcp/reference/server-tools). An `ask` step in a plan reaches the client's user as an elicitation request.
+`dive mcp serve` runs Dive as an MCP server over stdio. A connected client gets one tool per plan in your catalog, named `plan_<identifier>`, plus [tools for writing and testing plans](/integrating/mcp/reference/server-tools). An `ask` step in a plan reaches the client's user as an elicitation request.
 
 ## Guides
 

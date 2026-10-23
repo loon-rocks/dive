@@ -1,9 +1,9 @@
 ---
-title: "graph plan step update"
+title: "dive plan step update"
 sidebarTitle: "update"
 description: "Set one attribute of a step"
 playground: "none"
-keywords: ["graph plan step update"]
+keywords: ["dive plan step update"]
 ---
 
 Sets one attribute of a step. `tool` takes a tool name or a control step (`exit`, `agent`, `ask`, `route`, `filter`, `map`, `reduce`), `input` takes the step's whole input object, and `reasoning` takes a string.
@@ -43,15 +43,15 @@ Sets one attribute of a step. `tool` takes a tool name or a control step (`exit`
 <RequestExample>
 
 ```bash Usage
-graph plan step update [OPTIONS] <NAME|PATH> <ID> <ATTRIBUTE> <VALUE>
+dive plan step update [OPTIONS] <NAME|PATH> <ID> <ATTRIBUTE> <VALUE>
 ```
 
 ```bash Example 1
-graph plan step update weekly_changes E1 reasoning "Commit subjects are enough for a summary"
+dive plan step update weekly_changes E1 reasoning "Commit subjects are enough for a summary"
 ```
 
 ```bash Example 2
-graph plan step update weekly_changes E1 input @e1.json
+dive plan step update weekly_changes E1 input @e1.json
 ```
 
 </RequestExample>

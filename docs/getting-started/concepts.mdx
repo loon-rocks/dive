@@ -16,15 +16,15 @@ A network can start as one agent and one tool, and grow from there.
 
 ## Agents
 
-An agent is a model with a system prompt and a list of tools it may call. It decides what to call one round at a time, and each round is a model call. It can also call other agents as subagents, or hand the conversation to them. Agents run in `graph ask`, `graph chat` and the workbench, and plans call them as steps. See [Agents](/agents/overview).
+An agent is a model with a system prompt and a list of tools it may call. It decides what to call one round at a time, and each round is a model call. It can also call other agents as subagents, or hand the conversation to them. Agents run in `dive ask`, `dive chat` and the workbench, and plans call them as steps. See [Agents](/agents/overview).
 
 ## Plans
 
-A plan is a list of steps that run in order, the same way every time. A step's input reads the plan's inputs and earlier steps' results through templates, such as `{{release.tag}}`. A plan makes a model call only in a step that asks for one. Plans run with `graph plan run`, and agents and other plans call them as tools. See [Plans](/plans/overview).
+A plan is a list of steps that run in order, the same way every time. A step's input reads the plan's inputs and earlier steps' results through templates, such as `{{release.tag}}`. A plan makes a model call only in a step that asks for one. Plans run with `dive plan run`, and agents and other plans call them as tools. See [Plans](/plans/overview).
 
 ## Tools
 
-A tool is anything an agent or a plan step can call: a command wrapped in a tool file, a tool from an MCP server, a tool built into graph, or another plan or agent. See [Tools](/tools/overview).
+A tool is anything an agent or a plan step can call: a command wrapped in a tool file, a tool from an MCP server, a tool built into Dive, or another plan or agent. See [Tools](/tools/overview).
 
 ## The catalog
 
@@ -34,7 +34,7 @@ Every tool sits in one catalog, and its name says where it comes from:
 | --- | --- | --- |
 | `<server>__<tool>` | An MCP server | `web__fetch` |
 | `user__<name>` | Your tool files | `user__merged_prs` |
-| `builtin__<name>` | graph itself | `builtin__infer` |
+| `builtin__<name>` | dive itself | `builtin__infer` |
 | `<pack>__<kind>__<name>` | An installed [pack](/packs/overview) | `github__tool__git_log` |
 | `plan__<identifier>` | A plan | `plan__unreleased_changes` |
 | `agent__<name>` | An agent | `agent__reviewer` |
@@ -49,21 +49,21 @@ Agents, plan steps and tools name a role, such as `chat` or `judge`, not a model
 
 ## Threads
 
-`graph ask` and `graph chat` save each conversation as a thread, with every message, tool call and handoff. Pass `--thread <id>` to continue one. See [Manage threads](/agents/guides/threads).
+`dive ask` and `dive chat` save each conversation as a thread, with every message, tool call and handoff. Pass `--thread <id>` to continue one. See [Manage threads](/agents/guides/threads).
 
 ## Where files live
 
 | File | Project | Home |
 | --- | --- | --- |
-| Config | `./.graph/config.toml` | `~/.config/graph/config.toml` |
-| Agents | `./.graph/agents/` | `~/.config/graph/agents/` |
-| Plans | `./.graph/plans/` | `~/.config/graph/plans/` |
-| Tools | `./.graph/tools/` | `~/.config/graph/tools/` |
+| Config | `./.dive/config.toml` | `~/.config/dive/config.toml` |
+| Agents | `./.dive/agents/` | `~/.config/dive/agents/` |
+| Plans | `./.dive/plans/` | `~/.config/dive/plans/` |
+| Tools | `./.dive/tools/` | `~/.config/dive/tools/` |
 
 - **Config** merges both files, and the project file wins where they differ.
 - **Agents and plans** with the same name in both places: the project one replaces the home one, and either replaces a built-in.
 - **Tools** need a unique name across both directories.
 
-Threads and other state live in the [data directory](/reference/data-directory), `~/.local/share/graph/` by default.
+Threads and other state live in the [data directory](/reference/data-directory), `~/.local/share/dive/` by default.
 
-Commit `./.graph/` to give your whole team the same network.
+Commit `./.dive/` to give your whole team the same network.

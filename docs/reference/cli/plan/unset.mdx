@@ -1,12 +1,12 @@
 ---
-title: "graph plan unset"
+title: "dive plan unset"
 sidebarTitle: "unset"
 description: "Clear one optional plan attribute"
 playground: "none"
-keywords: ["graph plan unset"]
+keywords: ["dive plan unset"]
 ---
 
-Clears one optional attribute. Clearing both `solver` and `output` leaves a silent plan. `identifier`, `name` and `description` are required and can only be changed with `graph plan set`.
+Clears one optional attribute. Clearing both `solver` and `output` leaves a silent plan. `identifier`, `name` and `description` are required and can only be changed with `dive plan set`.
 
 ## Arguments
 
@@ -35,11 +35,11 @@ Clears one optional attribute. Clearing both `solver` and `output` leaves a sile
 <RequestExample>
 
 ```bash Usage
-graph plan unset [OPTIONS] <NAME|PATH> <ATTRIBUTE>
+dive plan unset [OPTIONS] <NAME|PATH> <ATTRIBUTE>
 ```
 
 ```bash Example
-graph plan unset weekly_changes exemplars
+dive plan unset weekly_changes exemplars
 ```
 
 </RequestExample>
