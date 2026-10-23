@@ -7,3 +7,37 @@
 
   Available options: `file`, `memory`
 </ParamField>
+
+<ParamField body="storage.files" type="object">
+  Where files that tools return, such as screenshots, are kept. Omitted, files follow `backend`: under `<data_dir>/blobs`, or in memory.
+</ParamField>
+
+<ParamField body="storage.files.backend" type="enum<string>" required>
+  `file` keeps files under `<data_dir>/blobs`, `memory` keeps nothing between runs, and `s3` uses an S3 or S3-compatible bucket.
+
+  Available options: `file`, `memory`, `s3`
+</ParamField>
+
+<ParamField body="storage.files.endpoint" type="string">
+  The S3 endpoint URL, for S3-compatible servers such as Garage or MinIO. Omitted means AWS.
+</ParamField>
+
+<ParamField body="storage.files.bucket" type="string">
+  The bucket to keep files in. Required for `s3`.
+</ParamField>
+
+<ParamField body="storage.files.region" type="string">
+  The bucket's region. S3-compatible servers often use their own name, such as `garage`.
+</ParamField>
+
+<ParamField body="storage.files.prefix" type="string">
+  A key prefix inside the bucket, so several stores can share one.
+</ParamField>
+
+<ParamField body="storage.files.access_key_id" type="string">
+  The access key ID. Expands `${NAME}` references.
+</ParamField>
+
+<ParamField body="storage.files.secret_access_key" type="string">
+  The secret access key. Expands `${NAME}` references.
+</ParamField>

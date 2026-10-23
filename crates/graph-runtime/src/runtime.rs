@@ -27,6 +27,7 @@ pub struct PipelineHooks {
 pub struct Runtime {
     pub config: graph_config::Config,
     pub registry: Arc<McpManager>,
+    files: Arc<dyn graph_core::files::BlobStore>,
     router: Arc<ModelRouter>,
     /// Tally for every model call this runtime's router serves — plan steps,
     /// agent rounds, prompt tools, and the chat loop alike. Drain it with
@@ -94,7 +95,9 @@ impl Runtime {
                 .with_content_capture(options.capture_content),
         );
         let router = router.with_meter(usage.clone());
-        let registry = Arc::new(McpManager::new(loaded.config.mcp.clone()));
+        let files = crate::files::open(&loaded.config, storage_backend(&loaded.config, &options)?);
+        let registry =
+            Arc::new(McpManager::new(loaded.config.mcp.clone()).with_files(files.clone()));
         let drafted = Arc::new(
             graph_core::pipeline::Drafted::new(
                 loaded
@@ -128,6 +131,7 @@ impl Runtime {
         Ok(Self {
             config: loaded.config,
             registry,
+            files,
             router: Arc::new(router),
             usage,
             plans_warned: std::sync::atomic::AtomicBool::new(false),
@@ -143,6 +147,10 @@ impl Runtime {
     /// cleanup never runs once the tokio runtime starts shutting down).
     pub async fn shutdown(&self) {
         self.registry.shutdown().await;
+    }
+
+    pub fn files(&self) -> Arc<dyn graph_core::files::BlobStore> {
+        self.files.clone()
     }
 
     /// Open the configured runtime-state store.
@@ -600,13 +608,7 @@ pub fn open_store(
     config: &graph_config::Config,
     options: &RuntimeOptions,
 ) -> Result<Arc<dyn Store>> {
-    let backend = match options.storage_backend.as_deref() {
-        Some("memory") => graph_config::StorageBackend::Memory,
-        Some("file") => graph_config::StorageBackend::File,
-        Some(other) => anyhow::bail!("GRAPH_STORAGE must be 'file' or 'memory', got '{other}'"),
-        None => config.storage.backend,
-    };
-    match backend {
+    match storage_backend(config, options)? {
         graph_config::StorageBackend::Memory => Ok(Arc::new(MemoryStore::new())),
         graph_config::StorageBackend::File => {
             let root = graph_config::expand_tilde(&config.settings.data_dir);
@@ -615,6 +617,18 @@ pub fn open_store(
             ))
         }
     }
+}
+
+fn storage_backend(
+    config: &graph_config::Config,
+    options: &RuntimeOptions,
+) -> Result<graph_config::StorageBackend> {
+    Ok(match options.storage_backend.as_deref() {
+        Some("memory") => graph_config::StorageBackend::Memory,
+        Some("file") => graph_config::StorageBackend::File,
+        Some(other) => anyhow::bail!("GRAPH_STORAGE must be 'file' or 'memory', got '{other}'"),
+        None => config.storage.backend,
+    })
 }
 
 /// Resolve which existing thread to continue, if any.

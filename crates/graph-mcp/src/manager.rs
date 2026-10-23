@@ -1,13 +1,18 @@
 //! MCP server lifecycle: lazy connection, tool discovery, invocation.
 
 use graph_config::McpServerConfig;
+use graph_core::files::BlobStore;
 use graph_core::{ServerIdentity, ToolDef, ToolError, ToolOutcome, ToolRegistry, ToolServer};
-use rmcp::model::{CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation};
+use rmcp::model::{
+    CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation,
+    ReadResourceRequestParams,
+};
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Separator between server name and tool name in the planner-visible name.
@@ -23,6 +28,7 @@ struct ServerHandle {
     name: String,
     config: McpServerConfig,
     connection: Mutex<Option<Connection>>,
+    files: Option<Arc<dyn BlobStore>>,
 }
 
 struct Connection {
@@ -42,11 +48,19 @@ impl McpManager {
                         name: name.clone(),
                         config,
                         connection: Mutex::new(None),
+                        files: None,
                     };
                     (name, handle)
                 })
                 .collect(),
         }
+    }
+
+    pub fn with_files(mut self, files: Arc<dyn BlobStore>) -> Self {
+        for handle in self.servers.values_mut() {
+            handle.files = Some(files.clone());
+        }
+        self
     }
 
     pub fn server_names(&self) -> Vec<&str> {
@@ -159,6 +173,19 @@ impl ServerHandle {
                 *guard = Some(self.establish().await?);
             }
         }
+        let input = match &self.files {
+            Some(files) => match crate::files::pass(input, files.as_ref(), self.config.files).await
+            {
+                Ok(input) => input,
+                Err(error) => {
+                    return Ok(ToolOutcome {
+                        result: json!({ "error": error }),
+                        is_error: true,
+                    })
+                }
+            },
+            None => input,
+        };
         let guard = self.connection.lock().await;
         let connection = guard.as_ref().unwrap();
         let arguments = match input {
@@ -180,15 +207,42 @@ impl ServerHandle {
             .await
             .map_err(|e| ToolError::Transport(e.to_string()))?;
 
+        let extracted = extract_result(
+            result.structured_content.clone(),
+            result
+                .content
+                .iter()
+                .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+                .collect(),
+        );
+        let extracted = match &self.files {
+            Some(files) => {
+                let (mut found, links) = crate::files::binaries(&result.content);
+                for link in links {
+                    match connection
+                        .client
+                        .read_resource(ReadResourceRequestParams::new(link.uri.clone()))
+                        .await
+                    {
+                        Ok(read) => found.extend(
+                            read.contents
+                                .iter()
+                                .filter_map(crate::files::resource_binary),
+                        ),
+                        Err(e) => tracing::warn!(
+                            server = self.name,
+                            uri = link.uri,
+                            error = %e,
+                            "skipping a linked file the server couldn't read"
+                        ),
+                    }
+                }
+                crate::files::attach(extracted, crate::files::store(files.as_ref(), found).await)
+            }
+            None => extracted,
+        };
         Ok(ToolOutcome {
-            result: extract_result(
-                result.structured_content.clone(),
-                result
-                    .content
-                    .iter()
-                    .filter_map(|c| c.as_text().map(|t| t.text.clone()))
-                    .collect(),
-            ),
+            result: extracted,
             is_error: result.is_error.unwrap_or(false),
         })
     }
@@ -383,6 +437,7 @@ mod tests {
             include_tools: None,
             exclude_tools: vec![],
             tool_overrides: Default::default(),
+            files: Default::default(),
             missing_env: vec![graph_config::MissingEnv {
                 field: "env.GITHUB_PERSONAL_ACCESS_TOKEN".into(),
                 var: "GITHUB_TOKEN".into(),
@@ -429,12 +484,14 @@ mod tests {
             include_tools: Some(vec!["a".into(), "b".into()]),
             exclude_tools: vec!["b".into()],
             tool_overrides: Default::default(),
+            files: Default::default(),
             missing_env: Vec::new(),
         };
         let handle = ServerHandle {
             name: "test".into(),
             config,
             connection: Mutex::new(None),
+            files: None,
         };
         assert!(handle.exposes("a"));
         assert!(!handle.exposes("b"), "exclude wins over include");

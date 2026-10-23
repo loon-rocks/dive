@@ -70,6 +70,17 @@
             },
             "type": "array"
           },
+          "files": {
+            "default": "path",
+            "description": "How a file reference (`blob:sha256-…`) in a tool call's arguments reaches the server: `path` as a local file path, `url` as a link the server can fetch, `base64` as the file's contents, `off` as the reference text unchanged.",
+            "enum": [
+              "path",
+              "url",
+              "base64",
+              "off"
+            ],
+            "type": "string"
+          },
           "headers": {
             "additionalProperties": {
               "type": "string"
@@ -398,6 +409,48 @@
             "memory"
           ],
           "type": "string"
+        },
+        "files": {
+          "description": "Where files that tools return, such as screenshots, are kept. Omitted, files follow `backend`: under `<data_dir>/blobs`, or in memory.",
+          "properties": {
+            "access_key_id": {
+              "description": "The access key ID. Expands `${NAME}` references.",
+              "type": "string"
+            },
+            "backend": {
+              "description": "`file` keeps files under `<data_dir>/blobs`, `memory` keeps nothing between runs, and `s3` uses an S3 or S3-compatible bucket.",
+              "enum": [
+                "file",
+                "memory",
+                "s3"
+              ],
+              "type": "string"
+            },
+            "bucket": {
+              "description": "The bucket to keep files in. Required for `s3`.",
+              "type": "string"
+            },
+            "endpoint": {
+              "description": "The S3 endpoint URL, for S3-compatible servers such as Garage or MinIO. Omitted means AWS.",
+              "type": "string"
+            },
+            "prefix": {
+              "description": "A key prefix inside the bucket, so several stores can share one.",
+              "type": "string"
+            },
+            "region": {
+              "description": "The bucket's region. S3-compatible servers often use their own name, such as `garage`.",
+              "type": "string"
+            },
+            "secret_access_key": {
+              "description": "The secret access key. Expands `${NAME}` references.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "backend"
+          ],
+          "type": "object"
         }
       },
       "type": "object"

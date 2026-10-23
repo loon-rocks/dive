@@ -341,6 +341,16 @@ fn distribute_missing_env(config: &mut Config, missing: Vec<(String, String)>) -
                 .mcp
                 .get_mut(name)
                 .map(|server| (&mut server.missing_env, field)),
+            (Some("storage"), Some("files"), Some(field)) => {
+                if let Some(files) = config.storage.files.as_mut() {
+                    files.missing_env.push(crate::model::MissingEnv {
+                        field: field.to_string(),
+                        var,
+                    });
+                    continue;
+                }
+                None
+            }
             (Some("telemetry"), Some(head), rest) => {
                 let field = match rest {
                     Some(rest) => format!("{head}.{rest}"),

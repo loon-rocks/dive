@@ -297,6 +297,48 @@ impl TelemetryConfig {
 #[serde(deny_unknown_fields, default)]
 pub struct StorageConfig {
     pub backend: StorageBackend,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<FilesConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FilesConfig {
+    pub backend: FilesBackend,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bucket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_key_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_access_key: Option<String>,
+    #[serde(skip)]
+    pub missing_env: Vec<MissingEnv>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FilesBackend {
+    File,
+    Memory,
+    S3,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum FilesMode {
+    #[default]
+    Path,
+    Url,
+    Base64,
+    Off,
 }
 
 #[derive(
@@ -630,11 +672,17 @@ pub struct McpServerConfig {
     /// Output schema/example overrides keyed by tool name.
     #[serde(default)]
     pub tool_overrides: BTreeMap<String, ToolOverride>,
+    #[serde(default, skip_serializing_if = "is_default_files_mode")]
+    pub files: FilesMode,
     /// Unset `${VAR}` references in this entry, recorded at load. A server
     /// with any refuses to connect and says so — a missing token must not
     /// silently become an empty header or child environment variable.
     #[serde(skip)]
     pub missing_env: Vec<MissingEnv>,
+}
+
+fn is_default_files_mode(mode: &FilesMode) -> bool {
+    *mode == FilesMode::default()
 }
 
 impl McpServerConfig {
