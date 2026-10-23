@@ -109,9 +109,14 @@ impl SecretStore for CredentialStore {
     }
 
     fn set_in(&self, name: &str, project: Option<&str>, value: &str) -> Result<(), StoreError> {
-        self.entry(name, project)?
-            .set_password(value)
-            .map_err(describe)
+        let entry = self.entry(name, project)?;
+        match entry.set_password(value) {
+            Ok(()) => Ok(()),
+            Err(error) => match entry.delete_credential() {
+                Ok(()) => entry.set_password(value).map_err(describe),
+                Err(_) => Err(describe(error)),
+            },
+        }
     }
 
     fn remove_in(&self, name: &str, project: Option<&str>) -> Result<bool, StoreError> {

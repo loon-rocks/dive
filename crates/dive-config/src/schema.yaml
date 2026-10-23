@@ -4,7 +4,7 @@ x-format: TOML
 x-sections:
   - heading: Secret references
     body: |-
-      A string value can include `${NAME}` references, such as `api_key = "${ANTHROPIC_API_KEY}"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, Dive reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`, and see every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.
+      A string value can include `${NAME}` references, such as `api_key = "${ANTHROPIC_API_KEY}"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, Dive reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`. On macOS the Keychain lets only the program that stored a value read it, so `dive secret set` replaces a value another program stored, such as Loon Dive or a different `dive` build, and that program then can't read it until it stores the value again. See every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.
 
       A name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.
 
