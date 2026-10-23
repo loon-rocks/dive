@@ -1,0 +1,1 @@
+Tool results list the files a tool returns, such as screenshots, under `files`, each with a `ref` like `blob:sha256-….png`. To show one to the user, put it in your reply as a markdown image with the ref as its URL, such as `![The pricing page](blob:sha256-….png)`, and only the ones worth seeing. To give a file to another tool, pass its ref unchanged as the argument.

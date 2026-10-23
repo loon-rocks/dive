@@ -248,7 +248,7 @@ impl Conversation {
     }
 
     fn system_prompt(&self, doc: &AgentDoc) -> Result<String, ConversationError> {
-        let prompt = match self.prompt_overrides.get(&doc.name) {
+        let mut prompt = match self.prompt_overrides.get(&doc.name) {
             Some(prompt) => prompt.clone(),
             None => render_system_prompt(doc, &global_fragments(), &self.session).map_err(
                 |message| ConversationError::Setup {
@@ -257,6 +257,8 @@ impl Conversation {
                 },
             )?,
         };
+        prompt.push_str("\n\n");
+        prompt.push_str(crate::prompts::FILES_RULE);
         Ok(prompt)
     }
 
@@ -1321,7 +1323,10 @@ mod tests {
         assert_eq!(kinds(&turn.entries), expected);
 
         let requests = provider.requests.lock().unwrap();
-        assert_eq!(requests[0].system, "You are front.");
+        assert_eq!(
+            requests[0].system,
+            format!("You are front.\n\n{}", crate::prompts::FILES_RULE)
+        );
         let front_tools: Vec<&str> = requests[0].tools.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(
             front_tools,
@@ -1332,7 +1337,10 @@ mod tests {
                 "transfer_to_drafter"
             ]
         );
-        assert_eq!(requests[1].system, "You are back.");
+        assert_eq!(
+            requests[1].system,
+            format!("You are back.\n\n{}", crate::prompts::FILES_RULE)
+        );
         assert_eq!(requests[1].messages.len(), 1, "back sees one merged note");
         let note = user_text(&requests[1]);
         assert!(note.contains("report please"), "{note}");
@@ -1557,7 +1565,10 @@ mod tests {
         assert_eq!(count, 2);
 
         let requests = provider.requests.lock().unwrap();
-        assert_eq!(requests[1].system, "You help.");
+        assert_eq!(
+            requests[1].system,
+            format!("You help.\n\n{}", crate::prompts::FILES_RULE)
+        );
         assert_eq!(user_text(&requests[1]), "look it up");
 
         assert_eq!(
@@ -1565,6 +1576,14 @@ mod tests {
             4,
             "the caller sees its own call and result, never the subagent's messages"
         );
+    }
+
+    #[test]
+    fn every_conversation_agent_is_told_how_to_show_and_pass_files() {
+        let rule = crate::prompts::FILES_RULE;
+        assert!(rule.contains("files"));
+        assert!(rule.contains("![The pricing page](blob:sha256-"));
+        assert!(rule.contains("pass its ref unchanged"));
     }
 
     #[tokio::test]
