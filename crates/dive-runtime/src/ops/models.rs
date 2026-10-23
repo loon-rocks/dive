@@ -693,6 +693,30 @@ pub fn save_role_in(layers: &Layers, original: Option<&str>, change: &RoleEdit) 
             .and_then(|value| value.try_into().ok())
             .unwrap_or_default();
         let custom = !STANDARD_ROLES.contains(&change.role.as_str());
+        if let Some(original) = original.filter(|_| entry.contains_key("provider")) {
+            let before = dive_config::Role::from_name(original)
+                .map(dive_config::Role::kind)
+                .or_else(|| {
+                    entry.get("type").and_then(Item::as_str).and_then(|text| {
+                        [ModelKind::Chat, ModelKind::Decision, ModelKind::Image]
+                            .into_iter()
+                            .find(|kind| kind.as_str() == text)
+                    })
+                })
+                .unwrap_or_default();
+            let after = dive_config::Role::from_name(&change.role)
+                .map(dive_config::Role::kind)
+                .or(change.kind)
+                .unwrap_or_default();
+            if before != after {
+                bail!(
+                    "{original} is {} role, and a saved role's type can't change: the agents, plans and tools that use it expect {} model. Add a new role for {} model instead.",
+                    before.with_article(),
+                    before.with_article(),
+                    after.with_article()
+                );
+            }
+        }
         match change.kind {
             Some(kind) if custom && kind != ModelKind::Chat => {
                 entry.insert("type", value(kind.as_str()));

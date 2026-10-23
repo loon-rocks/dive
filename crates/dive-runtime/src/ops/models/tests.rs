@@ -608,3 +608,50 @@ fn compatible_providers_match_the_catalogue_by_host_and_others_stay_unpriced() {
         .price(ProviderKind::Systemone, None, "jev-1")
         .is_none());
 }
+
+#[test]
+fn a_saved_role_keeps_its_type() {
+    let project = "version = 5\n\n[providers.anthropic]\ntype = \"anthropic\"\n\n[providers.typesafe]\ntype = \"systemone\"\n\n[models.triage]\nprovider = \"anthropic\"\nmodel = \"claude-haiku-4-5\"\n";
+    let (_dir, layers) = layers("version = 5\n", Some(project));
+    let before = text(&layers);
+    let edit = |kind: Option<ModelKind>, provider: &str, model: &str| RoleEdit {
+        kind,
+        role: "triage".to_string(),
+        provider: provider.to_string(),
+        model: model.to_string(),
+        temperature: None,
+        fallbacks: Vec::new(),
+    };
+    let refused = save_role_in(
+        &layers,
+        Some("triage"),
+        &edit(Some(ModelKind::Decision), "typesafe", "jev-latest"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        refused.starts_with("triage is a chat role, and a saved role's type can't change"),
+        "{refused}"
+    );
+    assert_eq!(text(&layers), before);
+    save_role_in(
+        &layers,
+        Some("triage"),
+        &edit(Some(ModelKind::Chat), "anthropic", "claude-sonnet-5-5"),
+    )
+    .unwrap();
+    save_role_in(
+        &layers,
+        None,
+        &RoleEdit {
+            role: "gate".to_string(),
+            ..edit(Some(ModelKind::Decision), "typesafe", "jev-latest")
+        },
+    )
+    .unwrap();
+    assert!(
+        text(&layers).contains("[models.gate]\ntype = \"decision\""),
+        "{}",
+        text(&layers)
+    );
+}
