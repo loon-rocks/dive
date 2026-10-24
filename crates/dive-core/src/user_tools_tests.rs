@@ -1297,10 +1297,14 @@ async fn caller_model_tools_advertise_named_models_in_the_catalog() {
     let defs = registry.tools().await.unwrap();
     let infer = defs.iter().find(|d| d.name == "builtin__infer").unwrap();
     let model = &infer.input_schema["properties"]["model"];
-    assert_eq!(model["enum"], json!(["nano"]));
+    assert_eq!(model["enum"], json!(["default", "nano"]));
     let description = model["description"].as_str().unwrap();
     assert!(
         description.contains("nano — fast and cheap"),
+        "{description}"
+    );
+    assert!(
+        description.contains("default — General-purpose model"),
         "{description}"
     );
     assert!(!description.contains("deep"), "{description}");
@@ -1687,7 +1691,7 @@ impl ChatProvider for UnusedChat {
 }
 
 #[tokio::test]
-async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_decision_roles() {
+async fn builtin_decide_is_listed_only_with_a_decision_model_and_offers_no_choice_of_one() {
     let docs = load_builtin_tools().unwrap();
     let (router, _) = decision_router(false);
     let names: Vec<String> = UserToolRegistry::builtins(docs.clone(), router)
@@ -1706,14 +1710,11 @@ async fn builtin_decide_is_listed_only_with_a_decision_model_and_advertises_deci
         .unwrap();
     let decide = defs.iter().find(|d| d.name == "builtin__decide").unwrap();
     assert_eq!(decide.read_only, Some(true));
-    assert_eq!(
-        decide.input_schema["properties"]["model"]["enum"],
-        json!(["decider"])
-    );
+    assert!(decide.input_schema["properties"].get("model").is_none());
     let infer = defs.iter().find(|d| d.name == "builtin__infer").unwrap();
     assert_eq!(
         infer.input_schema["properties"]["model"]["enum"],
-        json!(["nano"])
+        json!(["default", "nano"])
     );
 }
 

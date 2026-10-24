@@ -39,8 +39,9 @@ model = "claude-sonnet-5"
 # model = "claude-haiku-4-5"
 # temperature = 0.4
 
-# A custom role with a description is advertised to the planner as a
-# routing choice — write the description for that audience.
+# Drafters see every role; a description tells them what it is good for.
+# Standard roles have built-in ones. A custom role needs one to be offered
+# through a tool's model input.
 # [models.nano]
 # provider = "anthropic"
 # model = "claude-haiku-4-5"

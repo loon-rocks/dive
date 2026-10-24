@@ -1078,18 +1078,18 @@ impl UserToolRegistry {
 
     #[allow(clippy::too_many_arguments)]
     /// Add a `model` property to a caller-model prompt tool's catalog
-    /// schema, enumerating the configured roles that carry a `description`
-    /// — the planner's routing signal for picking the smallest adequate
-    /// model. No described roles → no property: a knob with nothing to
-    /// select would only invite invented names.
+    /// schema, enumerating the configured roles that carry a description
+    /// of their own or a built-in one — the planner's routing signal for
+    /// picking the smallest adequate model. Fewer than two → no property:
+    /// a knob with nothing to choose between would only invite invented
+    /// names.
     fn advertise_named_models(&self, schema: &mut Value, kind: ModelKind) {
         let described: Vec<(&str, &str)> = self
             .router
             .described_models()
             .filter(|(name, _)| self.router.kind_of_role(name) == Some(kind))
-            .filter_map(|(name, choice)| Some((name, choice.description.as_deref()?)))
             .collect();
-        if described.is_empty() {
+        if described.len() < 2 {
             return;
         }
         let names: Vec<&str> = described.iter().map(|(name, _)| *name).collect();

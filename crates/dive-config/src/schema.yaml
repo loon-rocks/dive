@@ -83,7 +83,7 @@ properties:
           description: Sampling temperature.
         description:
           type: string
-          description: What the role is for. Roles with a description are offered to drafters and steps by name.
+          description: What the role's model is good for, shown to drafters beside the role's name. Standard roles have a built-in one that this replaces; a custom role needs one to be offered through a prompt tool's or `builtin__generate_image`'s `model` input.
         context_window:
           type: integer
           description: The model's context window in tokens.
