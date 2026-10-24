@@ -293,7 +293,7 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
 
 #[test]
 fn entries_without_timing_round_trip_byte_for_byte() {
-    for version in ["v2", "v3"] {
+    for version in ["v2", "v3", "v4"] {
         let raw = std::fs::read_to_string(
             fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
         )
@@ -354,9 +354,16 @@ async fn a_thread_keeps_the_project_it_was_created_in_across_reopen() {
     assert!(!raw.contains("project"));
 }
 
-#[tokio::test]
-async fn a_frozen_version_3_data_directory_opens_as_is() {
+#[test]
+fn a_version_3_data_directory_moves_its_files_into_the_frozen_version_4_layout() {
     let dir = copy_fixture("v3");
+    FileStore::open(dir.path()).unwrap();
+    assert_matches_fixture_except_marker(dir.path(), "v4");
+}
+
+#[tokio::test]
+async fn a_frozen_version_4_data_directory_opens_as_is() {
+    let dir = copy_fixture("v4");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
     assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
@@ -401,7 +408,7 @@ async fn a_frozen_version_3_data_directory_opens_as_is() {
     assert_eq!(site.project.as_deref(), Some("/work/site"));
     assert!(site.in_project(Some("/work/site")));
     assert!(draft.in_project(None));
-    let expected = fixture_dir("v3");
+    let expected = fixture_dir("v4");
     assert_eq!(
         data_files(dir.path()),
         data_files(&expected),
