@@ -171,7 +171,7 @@ impl Layers {
         }
     }
 
-    fn read_paths(&self) -> Vec<(PathBuf, Origin)> {
+    pub(crate) fn read_paths(&self) -> Vec<(PathBuf, Origin)> {
         if self.global_workspace {
             vec![(self.file.clone(), Origin::Workspace)]
         } else {
@@ -213,7 +213,7 @@ struct Merged {
     problems: Vec<String>,
 }
 
-fn merge_value(base: &mut toml::Value, overlay: toml::Value) {
+pub(crate) fn merge_value(base: &mut toml::Value, overlay: toml::Value) {
     match (base, overlay) {
         (toml::Value::Table(base), toml::Value::Table(overlay)) => {
             for (key, value) in overlay {
@@ -273,7 +273,10 @@ fn read_layers(layers: &Layers) -> Merged {
     merged
 }
 
-fn key_state(api_key: Option<&str>, resolver: &dyn SecretSource) -> (Vec<String>, KeyState) {
+pub(crate) fn key_state(
+    api_key: Option<&str>,
+    resolver: &dyn SecretSource,
+) -> (Vec<String>, KeyState) {
     let Some(api_key) = api_key.filter(|key| !key.is_empty()) else {
         return (Vec::new(), KeyState::None);
     };
@@ -418,7 +421,7 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
     }
 }
 
-fn blocked(file: &Path) -> Option<String> {
+pub(crate) fn blocked(file: &Path) -> Option<String> {
     if !file.exists() {
         return None;
     }
@@ -456,7 +459,7 @@ fn check_name(what: &str, name: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate(layers: &Layers, candidate: &str) -> Result<()> {
+pub(crate) fn validate(layers: &Layers, candidate: &str) -> Result<()> {
     let dir = layers
         .file
         .parent()
@@ -498,7 +501,10 @@ fn validate(layers: &Layers, candidate: &str) -> Result<()> {
     Ok(())
 }
 
-fn edit(layers: &Layers, change: impl FnOnce(&mut DocumentMut) -> Result<()>) -> Result<()> {
+pub(crate) fn edit(
+    layers: &Layers,
+    change: impl FnOnce(&mut DocumentMut) -> Result<()>,
+) -> Result<()> {
     if let Some(reason) = blocked(&layers.file) {
         bail!(reason);
     }
@@ -524,7 +530,7 @@ fn edit(layers: &Layers, change: impl FnOnce(&mut DocumentMut) -> Result<()>) ->
     Ok(())
 }
 
-fn section<'a>(doc: &'a mut DocumentMut, name: &str) -> Result<&'a mut Table> {
+pub(crate) fn section<'a>(doc: &'a mut DocumentMut, name: &str) -> Result<&'a mut Table> {
     let item = doc.entry(name).or_insert_with(|| {
         let mut table = Table::new();
         table.set_implicit(true);
@@ -548,7 +554,7 @@ fn take_entry(table: &mut Table, original: Option<&str>, name: &str) -> Result<T
     Ok(existing.unwrap_or_default())
 }
 
-fn set_optional(table: &mut Table, key: &str, text: Option<&str>) {
+pub(crate) fn set_optional(table: &mut Table, key: &str, text: Option<&str>) {
     match text.map(str::trim).filter(|text| !text.is_empty()) {
         Some(text) => {
             table.insert(key, value(text));
@@ -880,7 +886,7 @@ pub fn default_key_name(kind: ProviderKind) -> Option<&'static str> {
     }
 }
 
-fn expand_key(
+pub(crate) fn expand_key(
     api_key: Option<&str>,
     resolver: &dyn SecretSource,
 ) -> Result<Option<String>, String> {
