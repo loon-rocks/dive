@@ -1,0 +1,31 @@
+### Secrets live in your OS credential store
+
+`${NAME}` references in config and tool `env` entries now read from the OS credential store when the environment doesn't set them, and `dive graph secret set`, `rm`, `list` and `show` manage those secrets, including per-project secrets and listing across projects.
+
+### Packs and tools without git
+
+`dive graph pack add`, `update`, `list`, `check` and `release` now work without git installed, and exec tools from an installed pack run with `GRAPH_PACK_DIR` set so packs can ship their own scripts and binaries.
+
+### A drafting architect for the workbench
+
+The workbench can now interview you, sketch a network, and have builder agents draft it in parallel through a new `network_drafter` architect, with drafts kept as threads you can reopen with `dive graph chat --thread`. `network_editor` takes over editing, proposing the change you ask for, offering a rework alongside a patch, and checking callers before changing an item's output.
+
+### Lower token costs and faster chat
+
+Agents now defer tools and load only the ones they need through `plan__search_tools`, cutting chat prompt tokens per turn by about 70%, and list-handling tools (flatten, dedupe, sort, take, and a new `builtin__rank`) run in code instead of costing model calls.
+
+### Images, roles and pricing
+
+Tools can return images and audio that are kept as files and passed between tools by reference; a new image role on the Gemini provider draws and edits images through `builtin__generate_image`; and model roles now carry a type and a description, with prices fillable from the models.dev catalogue using prompt-length tiers.
+
+### Housekeeping and fixes
+
+Deleting a thread or old S3 cache files frees storage, `dive graph plan rm` / `tool rm` / `agent rm` can remove files and revert overrides, and several bugs are fixed: structured output on Anthropic models that refuse forced tool choice, secrets in a global config workspace, pack config loading when a pack isn't installed, prompt caching across resumed conversations, and image file extensions matching what the model actually returned.
+
+### Dive is the new name for graph
+
+The CLI binary is now `dive` and the project lives at `loon-rocks/dive`; existing `graph` directories, `GRAPH_*` environment variables, stored secrets and `pack` `requires.graph` entries keep working until v1.
+
+### Config, tool, agent, plan, store and pack formats all advanced
+
+This release bumps `config` to v7 (projects, tiered prices, file references), `tool` to v3 (markdown env descriptions, secret-aware tests), `agent` to v3 (declared attachments, edit-session evidence), `plan` to v2, `store` to v6 (call durations, nested tool/model calls, attachments, project tracking), and `pack` to v2 (the graph→Dive rename) — existing files in these formats need migrating.

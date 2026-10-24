@@ -1,0 +1,37 @@
+````markdown
+Dive v0.17.0 bumps several file-format versions. Any existing config, plan, tool, agent, store or pack files in this repo need to be rewritten to the new formats before they'll work with this release's CLI.
+
+Bumped versions this release:
+- Config: v5 → v6 → v7 (three breaking bumps: per-project secrets id, tiered/catalogue-refreshable prices, file-reference attachments for images/audio)
+- Tool: → v3 (env entries take a markdown description; workbench tests wait on missing secrets)
+- Agent: → v3 (agent files declare thread attachments they read via `attachments`; edit-session evidence)
+- Plan: → v2
+- Store: → v6 (call durations, nested tool/model call recording, attachments, project tracking)
+- Pack: → v2 (graph→Dive rename; old `requires.graph` and GRAPH_* names still honored until v1)
+
+Do the following:
+
+1. Find affected files. Grep the repo for Dive artifacts:
+   - Config files: look for `dive.yaml`, `.graph/config.yaml`, or files containing a top-level `version:` key alongside `providers:`/`roles:`/`prices:` keys.
+   - Plan files: grep for `kind: plan` or files under a `plans/` directory with a `version:` field.
+   - Tool files: grep for `kind: tool` or files under a `tools/` directory, especially any with an `env:` section.
+   - Agent files: grep for `kind: agent` or files under an `agents/` directory.
+   - Store/thread data: typically managed by Dive itself, not hand-edited — do not hand-edit, just let migration commands handle it.
+   - CI workflows: grep all `.github/workflows/*.yml` (and any other CI config) for `ghcr.io/loon-rocks/dive:v` to find pinned image tags.
+
+2. Run `dive config check` first to see the current config's reported issues.
+
+3. Migrate each file kind with Dive's own migrate commands (do not hand-edit the schema changes — the migrate commands apply them):
+   - Config: `dive config migrate` (run once per config; also run `dive config migrate --global` if a global config exists).
+   - Plan: `dive plan migrate <name>` for every plan file found in step 1.
+   - Tool: `dive tool migrate <path>` for every user tool file found in step 1.
+   - Agent files are not called out with a dedicated migrate command here — do not invent one; if `dive config check` or validation flags an agent file, report it rather than guessing a rewrite.
+
+4. After migrating, verify every plan with `dive plan validate` and fix anything it flags.
+
+5. If any CI workflow pins a `ghcr.io/loon-rocks/dive:vX.Y.Z` image tag, update that pin to `v0.17.0` in the same change as the migrated files — an older pinned image will refuse the newer file formats by name.
+
+6. For the exact schema/key-level changes behind each bump, consult this release's CHANGELOG.md entries for "Config v5/v6/v7", "Tool v3", "Agent v3", "Plan v2", and "Store v6" (next to the "Dive v0.17.0" entry) — their Breaking lines name the changes; trust the migrate commands to apply them rather than hand-editing YAML.
+
+Be conservative: only touch files that are actually in older formats, don't invent fields or paths not evidenced by the commands' own output, and report exactly which files you migrated, which CI workflow pins you updated, and anything you found but deliberately left alone (e.g. an ambiguous agent file).
+````

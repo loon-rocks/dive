@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "dive-cli"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -955,7 +955,7 @@ dependencies = [
 
 [[package]]
 name = "dive-config"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "dive-core"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -999,7 +999,7 @@ dependencies = [
 
 [[package]]
 name = "dive-llm"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1018,7 +1018,7 @@ dependencies = [
 
 [[package]]
 name = "dive-mcp"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1039,7 +1039,7 @@ dependencies = [
 
 [[package]]
 name = "dive-runtime"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "dive-store"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "async-trait",

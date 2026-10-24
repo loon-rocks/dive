@@ -1,6 +1,116 @@
 # Changelog
 
-All notable changes to graph. Generated from conventional commits by git-cliff.
+All notable changes to Dive. Generated from conventional commits by git-cliff.
+
+## Dive v0.17.0 — 2026-10-24
+
+### Added
+
+- ${NAME} references in config and tool env read the OS credential store when the environment does not set them (#184)
+- graph secret set, rm, list and show manage the secrets ${NAME} references read from the OS credential store (#188)
+- graph pack add, update, list, check and release work without git installed (#192)
+- graph-runtime reads, edits and tests providers, model roles and prices for the desktop app (#195)
+- the workbench drafts through a network_drafter architect that interviews you, sketches a network and has builder agents draft it (#197)
+- graph secret list includes every name stored for this project or every project, and says when the credential store refuses a read (#198)
+- the drafting architect builds every node in parallel on a drafter role, tests in the same turn, and keeps drafts as threads (#200)
+- the drafting architect keeps networks small and builders get the schemas of the catalog tools a sketch names (#201)
+- plain chats and drafts open as one session that hosts the thread's attachments, and graph chat --thread reopens a draft with its network
+- threads belong to the project they were started in, and graph thread list lists the current project's unless given --all
+- exec tools from an installed pack run with GRAPH_PACK_DIR set to the pack's directory, so a pack can ship scripts and binaries
+- the drafting agents and plan_editor list the web pack's search and fetch tools, and run without them when the pack isn't installed
+- the edit-session lead agent is network_editor (#213)
+- the designing agents share one set of design principles that puts decision models first, and network_editor fixes the design behind a failure, offering a rework beside the patch (#214)
+- list tools flatten, dedupe, sort and take lists in code, and builtin__rank ranks a whole list against a question in one decision-model call (#217)
+- graph plan rm, graph tool rm and graph agent rm delete a plan, tool or agent file, reverting a built-in override and naming everything that still uses it (#221)
+- every agent defers the tools its list matches and loads them through plan__search_tools, scoped to its own list, cutting chat prompt tokens per turn by 70% (#222)
+- conversation agents know a tool's files arrive as refs, show them in replies as markdown images, and pass them on to other tools (#229)
+- roles carry a type, and an image role on the new gemini provider draws and edits images through builtin__generate_image, metered and priced like any other model (#230)
+- deleting a thread removes the stored files no other thread refers to, and the S3 download cache keeps to 512 MB by dropping the least recently used files (#235)
+- saving a role writes its description, and an empty one removes it (#236)
+- standard roles have built-in descriptions, and a tool's model input offers the configured roles that are described once there are two to choose between (#237)
+
+### Changed
+
+- graph's engine wiring and pack management move into a graph-runtime library crate (#177)
+- graph chat and graph ask run on a chat session in graph-runtime that the desktop app shares
+- embedders can cancel graph runs, which finish the tool call in flight and then stop
+- graph thread's list, show and rm return typed results from graph-runtime (#181)
+- graph plan's list, show, validate and migrate return typed results from graph-runtime (#182)
+- graph config's show, path, check, migrate and init return typed results from graph-runtime (#183)
+- graph tool, graph agent and graph mcp return typed results from graph-runtime (#185)
+- the workbench engine reports to the TUI through a WorkbenchEvent channel instead of the reducer's own messages (#186)
+- the OTLP telemetry exporter moves into graph-runtime, so the desktop app exports the same traces as graph (#187)
+- graph pack add, update, remove and list return typed results from graph-runtime (#189)
+- the workbench engine moves into graph-runtime behind a Workbench session the desktop app can drive (#191)
+- workbench events report each agent model call and how long each agent tool call took (#204)
+
+### Documentation
+
+- examples and CLI help name the current release instead of v0.15.0
+- the infer, decide and reshape reference pages describe what each tool returns (#174)
+
+### Fixed
+
+- graph-runtime saves model config into older config files by migrating them, and reports keys written into the file (#196)
+- structured output works on Anthropic models that refuse a forced tool choice (#199)
+- a workspace opened on the global config directory reads, saves and stores secrets in that directory instead of a nested .graph layer (#202)
+- a configured pack that isn't installed loads with a warning naming graph pack add, instead of refusing the config (#203)
+- prompt and decision tools meter their model calls under the model role they ran on instead of the tool's name (#206)
+- a reopened draft keeps its passing test, because subagent runs are recorded and replayed at the call that started them instead of after the turn (#211)
+- network_editor proposes the change you ask for when an edit starts without a failed call, instead of looking for something to fix (#215)
+- workbench__describe_tool describes graph's native builtin__ tools, and edit sessions open the workbench's own agents (#216)
+- saved edits stop reopening as unsaved, builders finish on the node they were started for, a draft that doesn't parse is refused, and network_editor checks callers before changing an item's output (#218)
+- a structured result cut off at the model's output limit fails the step with an error naming the limit, instead of being repaired into an empty value (#219)
+- a resumed conversation keeps its prompt cache across turns, because agent prompts carry today's date instead of the minute the thread was reopened (#220)
+- systemone providers list their models from Typesafe's /v1/models, so pickers and connection tests work for them
+- builtin__generate_image saves each image with the extension of the type the model returned, so a JPEG asked for at hero.png lands at hero.jpg (#231)
+- saving a role refuses to change a saved role's type, since the agents, plans and tools that use it expect that type of model (#232)
+- storing a secret replaces a Keychain value another program stored, instead of failing because the item already exists (#233)
+- fetching prices fills a Gemini image model's image rate and its text rate, and finds Nano Banana models the catalogue lists only under Vertex (#234)
+
+## Config v5 — 2026-10-24
+
+### Breaking
+
+- secrets can be stored for one project with graph secret set --project, keyed by a generated [project] id (config version 5) (#194)
+- prices take prompt-length tiers priced per call, and can be filled and refreshed from the models.dev catalogue (#223)
+- images and audio that MCP tools return are kept as files and passed to other tools by reference, stored on disk, in memory or in S3 (#225)
+
+## Plan v2 — 2026-10-24
+
+- Introduced with Dive v0.17.0.
+
+## Tool v3 — 2026-10-24
+
+### Breaking
+
+- tool env entries take a markdown description, and workbench tests wait on missing secrets instead of running — tool version 3
+
+## Agent v2 — 2026-10-24
+
+### Breaking
+
+- agent files declare the thread attachments they read with attachments — agent version 2
+- edit sessions open existing agents, plans and tools in a chat thread with the call that went wrong as evidence (#212) — agent version 3
+
+## Store v3 — 2026-10-24
+
+### Breaking
+
+- thread entries record each tool call's duration and each model call's tokens and model (#193) — store version 3
+- tool results in threads record every model and tool call made inside them at any depth, and OTel traces give parallel and subagent tool calls their own spans (#205) — store version 4
+- threads record their attachments, such as the network draft a thread builds — store version 5
+- threads record the project they were started in — store version 6
+
+## Pack v2 — 2026-10-24
+
+### Breaking
+
+- graph is now Dive — the binary is dive and the repo is loon-rocks/dive, while graph's directories, GRAPH_* variables, stored secrets and pack requires.graph keep working until v1 (#226)
+
+## Lock v1 — 2026-10-24
+
+- Introduced with Dive v0.17.0.
 
 ## Dive v0.16.0 — 2026-10-14
 
@@ -80,7 +190,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 ## Agent v1 — 2026-10-14
 
-- Introduced with graph v0.16.0.
+- Introduced with Dive v0.16.0.
 
 ## Store v2 — 2026-10-14
 
@@ -96,7 +206,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 ## Lock v1 — 2026-10-14
 
-- Introduced with graph v0.16.0.
+- Introduced with Dive v0.16.0.
 
 ## Dive v0.15.0 — 2026-09-24
 
@@ -130,19 +240,19 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 
 ## Config v1 — 2026-09-02
 
-- Introduced with graph v0.13.0.
+- Introduced with Dive v0.13.0.
 
 ## Plan v1 — 2026-09-02
 
-- Introduced with graph v0.13.0.
+- Introduced with Dive v0.13.0.
 
 ## Tool v1 — 2026-09-02
 
-- Introduced with graph v0.13.0.
+- Introduced with Dive v0.13.0.
 
 ## Store v1 — 2026-09-02
 
-- Introduced with graph v0.13.0.
+- Introduced with Dive v0.13.0.
 
 ## Dive v0.12.0 — 2026-08-12
 
@@ -151,10 +261,14 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 - show each step's output contract in the workbench detail pane
 - token usage and cost tracking, prompt caching, and a turn-key agent step (#115)
 
+### Changed
+
+- split graph_review_9000 into a local review core and a GitHub wrapper (#109)
+
 ### Documentation
 
 - restore themed prose in the v0.11.0 changelog summary
-- add use-dive, the general entry-point skill (#107)
+- add use-graph, the general entry-point skill (#107)
 
 ### Fixed
 
@@ -165,6 +279,7 @@ All notable changes to graph. Generated from conventional commits by git-cliff.
 ### Added
 
 - add gh_pr_review_threads and gh_pr_thread_sync to the github pack
+- track graph_review_9000 findings as living review threads
 
 ### Documentation
 

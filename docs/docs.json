@@ -399,7 +399,7 @@
     "links": []
   },
   "variables": {
-    "release_version": "v0.16.0",
+    "release_version": "v0.17.0",
     "config_file_version": "5",
     "plan_file_version": "2",
     "tool_file_version": "3",

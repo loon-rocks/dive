@@ -29,8 +29,6 @@ concurrency:
 env:
   DIVE_STORAGE: memory            # ephemeral: leave no state behind in CI
   DIVE_EVENTS: github             # failing plans annotate the run
-  GRAPH_STORAGE: memory           # the pre-rename image reads GRAPH_*
-  GRAPH_EVENTS: github
   GH_TOKEN: ${{ github.token }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   PR: ${{ github.event.pull_request.number }}
@@ -46,7 +44,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/tylerdavis/graph:v0.16.0
+      image: ghcr.io/loon-rocks/dive:v0.17.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -55,10 +53,6 @@ jobs:
         with:
           fetch-depth: 0            # the plan diffs $BASE...$HEAD locally
 
-      - name: Bridge the pre-rename image
-        run: |
-          ln -sf "$(command -v graph)" /usr/local/bin/dive
-          ln -sfn .dive .graph
 
       - name: Docs drift gate
         run: dive plan run docs_drift --input base="$BASE" --input head="$HEAD"
@@ -73,7 +67,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/tylerdavis/graph:v0.16.0
+      image: ghcr.io/loon-rocks/dive:v0.17.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -82,10 +76,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bridge the pre-rename image
-        run: |
-          ln -sf "$(command -v graph)" /usr/local/bin/dive
-          ln -sfn .dive .graph
 
       - name: Format drift gate
         run: dive plan run format_drift --input base="$BASE" --input head="$HEAD"
@@ -96,17 +86,13 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/tylerdavis/graph:v0.16.0
+      image: ghcr.io/loon-rocks/dive:v0.17.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bridge the pre-rename image
-        run: |
-          ln -sf "$(command -v graph)" /usr/local/bin/dive
-          ln -sfn .dive .graph
 
       - name: Config and plans load in the pinned image
         run: |
@@ -134,7 +120,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/tylerdavis/graph:v0.16.0
+      image: ghcr.io/loon-rocks/dive:v0.17.0
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -143,10 +129,6 @@ jobs:
         with:
           fetch-depth: 0            # the plan reads files at $HEAD via git_file
 
-      - name: Bridge the pre-rename image
-        run: |
-          ln -sf "$(command -v graph)" /usr/local/bin/dive
-          ln -sfn .dive .graph
 
       - uses: actions/create-github-app-token@v2
         id: bot
