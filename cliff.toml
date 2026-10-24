@@ -137,6 +137,6 @@ commit_parsers = [
 # defense is typing internal-only work `ci:` (see CLAUDE.md). The
 # plan changes in .dive/ often touch docs/ or CLAUDE.md
 # too, so this alone cannot catch them.
-exclude_paths = [".dive/**", ".github/**"]
+exclude_paths = [".dive/**", ".graph/**", ".github/**"]
 tag_pattern = "v[0-9].*"
 sort_commits = "oldest"
