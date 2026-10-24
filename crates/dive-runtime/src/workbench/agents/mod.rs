@@ -83,9 +83,8 @@ pub fn model_roles(pipeline: &Pipeline) -> String {
             Some(dive_config::ModelKind::Image) => " (image model: builtin__generate_image only)",
             _ => "",
         };
-        let description = choice
-            .description
-            .as_deref()
+        let description = roles
+            .description_of(name)
             .map(|description| format!(": {description}"))
             .unwrap_or_default();
         section.push_str(&format!("- {name} → {}{kind}{description}\n", choice.model));

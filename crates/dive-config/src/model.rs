@@ -663,6 +663,27 @@ impl Role {
         Role::ALL.into_iter().find(|role| role.as_str() == name)
     }
 
+    pub fn description(self) -> &'static str {
+        match self {
+            Role::Chat => "Conversational agents that call tools over several turns. The usual choice for an agent.",
+            Role::Drafter => "Drafts the tools, plans and agents the workbench's architect sketches. Used by Dive itself.",
+            Role::Planner => "Drafts whole plans from a goal: long structured output that needs strong reasoning. Used by Dive itself.",
+            Role::Outliner => "Lists a goal's inputs and steps before the planner drafts. Used by Dive itself.",
+            Role::Solver => "Writes a finished answer from many gathered results: summaries and reports over long context.",
+            Role::Repair => "Retries once when a model's structured output doesn't parse. Used by Dive itself; usually small and cheap.",
+            Role::Judge => "Short checks: yes or no conditions, classification, picking one of a few options, scoring. Usually small and cheap, so it suits infer steps that run once per item.",
+            Role::Decider => "Decision model for decide gates, builtin__decide and decision tools. Answers come back with a probability.",
+            Role::Image => "The default image model, for drawing and editing images with builtin__generate_image.",
+        }
+    }
+
+    pub fn offered(self) -> bool {
+        !matches!(
+            self,
+            Role::Drafter | Role::Planner | Role::Outliner | Role::Repair
+        )
+    }
+
     pub fn fallback(self) -> Option<Role> {
         match self {
             Role::Outliner => Some(Role::Planner),
@@ -679,6 +700,16 @@ impl std::fmt::Display for Role {
 }
 
 pub const DEFAULT_ROLE: &str = "default";
+
+pub const DEFAULT_DESCRIPTION: &str =
+    "General-purpose model, and the one every chat role without its own entry uses. Pick it when no other role fits better.";
+
+pub fn builtin_description(name: &str) -> Option<&'static str> {
+    if name == DEFAULT_ROLE {
+        return Some(DEFAULT_DESCRIPTION);
+    }
+    Role::from_name(name).map(Role::description)
+}
 
 impl ModelRoles {
     pub fn new(roles: BTreeMap<String, ModelChoice>) -> Self {
@@ -752,9 +783,22 @@ impl ModelRoles {
         self.0.iter().map(|(name, choice)| (name.as_str(), choice))
     }
 
-    pub fn described(&self) -> impl Iterator<Item = (&str, &ModelChoice)> {
-        self.iter()
-            .filter(|(_, choice)| choice.description.is_some())
+    pub fn description_of(&self, name: &str) -> Option<&str> {
+        self.resolve(name)?;
+        self.0
+            .get(name)
+            .and_then(|choice| choice.description.as_deref())
+            .or_else(|| builtin_description(name))
+    }
+
+    pub fn described(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.known_names().into_iter().filter_map(|name| {
+            let choice = self.0.get(name)?;
+            let offered = choice.description.is_some()
+                || name == DEFAULT_ROLE
+                || Role::from_name(name).is_some_and(Role::offered);
+            offered.then(|| self.description_of(name).map(|text| (name, text)))?
+        })
     }
 
     pub fn all_choices(&self) -> impl Iterator<Item = &ModelChoice> {

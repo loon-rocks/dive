@@ -578,8 +578,19 @@ description = "fast and cheap"
         assert_eq!(no_default.known_names(), vec!["nano"]);
         assert_eq!(
             models.described().map(|(name, _)| name).collect::<Vec<_>>(),
-            vec!["nano"]
+            vec!["default", "judge", "nano"]
         );
+        assert_eq!(models.description_of("nano"), Some("fast and cheap"));
+        assert_eq!(
+            models.description_of("judge"),
+            Some(Role::Judge.description())
+        );
+        assert_eq!(
+            models.description_of("planner"),
+            Some(Role::Planner.description())
+        );
+        assert_eq!(models.description_of("decider"), None);
+        assert_eq!(no_default.described().count(), 1);
         assert_eq!(
             models.names().collect::<Vec<_>>(),
             vec!["default", "judge", "nano"]

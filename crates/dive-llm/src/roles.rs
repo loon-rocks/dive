@@ -450,7 +450,7 @@ impl ModelRouter {
         &self.roles
     }
 
-    pub fn described_models(&self) -> impl Iterator<Item = (&str, &ModelChoice)> {
+    pub fn described_models(&self) -> impl Iterator<Item = (&str, &str)> {
         self.roles.described()
     }
 
