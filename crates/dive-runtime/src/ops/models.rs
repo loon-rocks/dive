@@ -114,6 +114,8 @@ pub struct RoleEdit {
     pub provider: String,
     pub model: String,
     pub temperature: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub fallbacks: Vec<Fallback>,
 }
 
@@ -728,6 +730,19 @@ pub fn save_role_in(layers: &Layers, original: Option<&str>, change: &RoleEdit) 
         entry.insert("provider", value(change.provider.trim()));
         entry.insert("model", value(change.model.trim()));
         set_number(&mut entry, "temperature", change.temperature.map(f64::from));
+        match change
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+        {
+            Some(text) => {
+                entry.insert("description", value(text));
+            }
+            None => {
+                entry.remove("description");
+            }
+        }
         if change.fallbacks.is_empty() {
             entry.remove("fallbacks");
         } else {
