@@ -198,6 +198,7 @@ fn saving_a_role_rewrites_its_fallbacks_and_keeps_fields_the_form_does_not_show(
             provider: "anthropic".to_string(),
             model: "claude-opus-5-5".to_string(),
             temperature: None,
+            description: Some("drafts plans".to_string()),
             fallbacks: vec![
                 Fallback {
                     provider: "local".to_string(),
@@ -245,6 +246,7 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
             provider: "nowhere".to_string(),
             model: "m".to_string(),
             temperature: None,
+            description: None,
             fallbacks: Vec::new(),
         },
     )
@@ -260,6 +262,7 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
             provider: "anthropic".to_string(),
             model: "claude-haiku-4-5".to_string(),
             temperature: None,
+            description: None,
             fallbacks: Vec::new(),
         },
     )
@@ -650,6 +653,7 @@ fn a_saved_role_keeps_its_type() {
         provider: provider.to_string(),
         model: model.to_string(),
         temperature: None,
+        description: None,
         fallbacks: Vec::new(),
     };
     let refused = save_role_in(
@@ -684,4 +688,34 @@ fn a_saved_role_keeps_its_type() {
         "{}",
         text(&layers)
     );
+}
+
+#[test]
+fn a_role_description_is_written_trimmed_and_removed_when_cleared() {
+    let (_dir, layers) = layers(GLOBAL, Some(PROJECT));
+    let edit = |description: Option<&str>| RoleEdit {
+        kind: None,
+        role: "planner".to_string(),
+        provider: "anthropic".to_string(),
+        model: "claude-opus-5-5".to_string(),
+        temperature: None,
+        description: description.map(str::to_string),
+        fallbacks: Vec::new(),
+    };
+    save_role_in(
+        &layers,
+        Some("planner"),
+        &edit(Some("  long, careful plans \n")),
+    )
+    .unwrap();
+    assert!(
+        text(&layers).contains("description = \"long, careful plans\""),
+        "{}",
+        text(&layers)
+    );
+    let view = view_layers(&layers, &resolver());
+    let planner = view.roles.iter().find(|r| r.role == "planner").unwrap();
+    assert_eq!(planner.description.as_deref(), Some("long, careful plans"));
+    save_role_in(&layers, Some("planner"), &edit(Some("  "))).unwrap();
+    assert!(!text(&layers).contains("description"), "{}", text(&layers));
 }
