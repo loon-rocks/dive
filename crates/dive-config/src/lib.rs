@@ -17,8 +17,8 @@ pub use format::{
     Upgrade, CONFIG_FORMAT, CONFIG_FORMAT_OLDEST, FORMATS_DOC, FORMAT_KEY,
 };
 pub use load::{
-    ensure_project_id, expand_tilde, global_config_path, load, load_from, project_config_path,
-    project_id, LoadedConfig,
+    ensure_project_id, expand_tilde, global_config_path, is_global_dir, load, load_from,
+    project_config_path, project_id, without_project_paths, LoadedConfig,
 };
 pub use model::{
     builtin_description, describe_kinds, describe_missing_env, Config, FallbackChoice,

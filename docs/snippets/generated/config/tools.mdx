@@ -4,7 +4,7 @@
 
 <ParamField body="tools.paths" type="string[]" default="- ./.dive/tools
 - ~/.config/dive/tools">
-  Tool directories, searched in order.
+  Tool directories, searched in order. New tools are saved to the first one. In the global workspace (`~/.config/dive`), relative entries such as `./.dive/tools` are skipped.
 </ParamField>
 
 <ParamField body="tools.always_loaded" type="string[]" default="- builtin__infer
