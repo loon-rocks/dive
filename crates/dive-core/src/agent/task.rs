@@ -71,9 +71,7 @@ pub async fn run_task_agent(
     events: &dyn EventSink,
     tools: &dyn TaskTools,
 ) -> Result<TaskOutcome, TaskError> {
-    let mut messages: Vec<ChatMessage> = vec![ChatMessage::User {
-        content: spec.prompt.clone(),
-    }];
+    let mut messages: Vec<ChatMessage> = vec![ChatMessage::user(spec.prompt.clone())];
     let mut tools_called: Vec<ToolCallEntry> = Vec::new();
     let mut round: u32 = 0;
 
@@ -105,9 +103,7 @@ pub async fn run_task_agent(
                 Some(_) => FINAL_ROUND_NOTICE,
                 None => FINAL_ROUND_NOTICE_TEXT,
             };
-            messages.push(ChatMessage::User {
-                content: notice.to_string(),
-            });
+            messages.push(ChatMessage::user(notice.to_string()));
         }
 
         let request = ChatRequest {
@@ -170,9 +166,7 @@ pub async fn run_task_agent(
                     }
                     None => "Provide your answer, or call tools to gather what you still need.",
                 };
-                messages.push(ChatMessage::User {
-                    content: nudge.to_string(),
-                });
+                messages.push(ChatMessage::user(nudge.to_string()));
                 continue;
             }
 
@@ -197,12 +191,10 @@ pub async fn run_task_agent(
             {
                 Ok(output) => return finish(output, round, &tools_called, true, &messages),
                 Err(problem) => {
-                    messages.push(ChatMessage::User {
-                        content: format!(
-                            "Your output did not match the required schema: {problem}\n\n\
+                    messages.push(ChatMessage::user(format!(
+                        "Your output did not match the required schema: {problem}\n\n\
                              Reply with corrected JSON only."
-                        ),
-                    });
+                    )));
                     continue;
                 }
             }
@@ -491,7 +483,7 @@ mod tests {
         let last = requests.last().unwrap();
         assert!(last.tools.is_empty());
         assert!(last.response_schema.is_none());
-        let ChatMessage::User { content } = last.messages.last().unwrap() else {
+        let ChatMessage::User { content, .. } = last.messages.last().unwrap() else {
             panic!("the final notice is the last turn");
         };
         assert_eq!(content, FINAL_ROUND_NOTICE_TEXT);

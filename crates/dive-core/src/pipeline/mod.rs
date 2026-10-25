@@ -851,9 +851,7 @@ impl Pipeline {
             .scope(self.router.get_structured(
                 Role::Planner,
                 system,
-                vec![ChatMessage::User {
-                    content: state.query.clone(),
-                }],
+                vec![ChatMessage::user(state.query.clone())],
                 "plan",
             ))
             .await?;
@@ -1317,7 +1315,7 @@ impl Pipeline {
                         Role::Solver,
                         ChatRequest {
                             system,
-                            messages: vec![ChatMessage::User { content: message }],
+                            messages: vec![ChatMessage::user(message)],
                             ..Default::default()
                         },
                     )
@@ -1373,7 +1371,7 @@ impl Pipeline {
                 Role::Solver,
                 ChatRequest {
                     system: prompts::ERROR_SUMMARY_PROMPT.to_string(),
-                    messages: vec![ChatMessage::User { content: message }],
+                    messages: vec![ChatMessage::user(message)],
                     ..Default::default()
                 },
             ))

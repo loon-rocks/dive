@@ -11,6 +11,8 @@ use serde_json::Value;
 pub enum ChatMessage {
     User {
         content: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
     Assistant {
         content: Option<String>,
@@ -36,6 +38,43 @@ pub enum ChatMessage {
         #[serde(default)]
         is_error: bool,
     },
+}
+
+impl ChatMessage {
+    pub fn user(content: impl Into<String>) -> Self {
+        ChatMessage::User {
+            content: content.into(),
+            images: Vec::new(),
+        }
+    }
+}
+
+pub fn user_text(content: &str, images: &[String]) -> String {
+    if images.is_empty() {
+        return content.to_string();
+    }
+    let listed = images.join(", ");
+    if content.is_empty() {
+        format!("Attached images: {listed}")
+    } else {
+        format!("{content}\n\nAttached images: {listed}")
+    }
+}
+
+pub fn images_in<'a>(
+    text: &str,
+    images: &'a std::collections::BTreeMap<String, crate::image::ImageData>,
+) -> Vec<&'a crate::image::ImageData> {
+    images
+        .iter()
+        .filter(|(reference, _)| text.contains(reference.as_str()))
+        .map(|(_, image)| image)
+        .collect()
+}
+
+pub fn base64(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
 /// A tool made visible to the model via its native tool-use API.
@@ -98,6 +137,7 @@ pub struct ChatRequest {
     /// API (Anthropic); providers that cache automatically ignore it.
     pub cache: CacheHint,
     pub tool_references: std::collections::BTreeMap<String, Vec<String>>,
+    pub images: std::collections::BTreeMap<String, crate::image::ImageData>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

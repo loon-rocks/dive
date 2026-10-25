@@ -50,6 +50,15 @@ A reference names the file by its SHA-256 hash, so the same image stored twice i
 
 Deleting a thread removes the files no other thread refers to, except in S3 storage, where other machines may share the bucket. Files kept in S3 or in memory are copied to a local cache when a tool needs a path. The cache holds up to 512 MB and drops the least recently used files past that.
 
+## What the model sees
+
+The chat model sees images, not just their references. Two kinds of image are sent to it as images on every turn, alongside its text:
+
+- **Attached images:** images attached to a message you send. The model also gets their references, so it can pass them to `builtin__generate_image` to edit them.
+- **Tool images:** images in a tool's result, wherever a reference to one appears.
+
+Only PNG, JPEG, GIF and WebP files are sent this way. Every image stays in the conversation and is sent again on each turn. A model that doesn't accept images fails the turn with the provider's error.
+
 ## Show a file in a reply
 
 Every conversation agent is told about `files` and refs in its system prompt, after its own `system_prompt`. To show the user a file, an agent writes it into its reply as a markdown image with the ref as the URL:

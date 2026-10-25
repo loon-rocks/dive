@@ -47,6 +47,7 @@ pub struct Conversation {
     pub stop_tools: Vec<String>,
     pub standing_tools: Vec<String>,
     pub handoff_guard: Option<HandoffGuard>,
+    pub files: Option<Arc<dyn crate::files::BlobStore>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,15 +104,18 @@ impl Conversation {
         active: &str,
         user: Option<&str>,
     ) -> Result<ConversationTurn, ConversationError> {
+        self.run_turn_with(history, active, user.map(ChatMessage::user))
+            .await
+    }
+
+    pub async fn run_turn_with(
+        &self,
+        history: &[NewEntry],
+        active: &str,
+        user: Option<ChatMessage>,
+    ) -> Result<ConversationTurn, ConversationError> {
         let mut entries: Vec<NewEntry> = user
-            .map(|user| {
-                NewEntry::message(
-                    USER_AUTHOR,
-                    ChatMessage::User {
-                        content: user.to_string(),
-                    },
-                )
-            })
+            .map(|user| NewEntry::message(USER_AUTHOR, user))
             .into_iter()
             .collect();
         let mut active = active.to_string();
@@ -227,13 +231,13 @@ impl Conversation {
             .filter(|entry| entry.author == author)
             .filter_map(|entry| match &entry.body {
                 EntryBody::Message {
-                    message: ChatMessage::User { content },
+                    message: ChatMessage::User { content, .. },
                 } => Some(content.clone()),
                 _ => None,
             })
             .last();
         (last.as_deref() != Some(content.as_str()))
-            .then(|| NewEntry::message(&author, ChatMessage::User { content }))
+            .then(|| NewEntry::message(&author, ChatMessage::user(content)))
     }
 
     fn system_prompt_with_context(&self, doc: &AgentDoc) -> Result<String, ConversationError> {
@@ -291,6 +295,7 @@ impl Conversation {
             max_iterations: doc.max_iterations.unwrap_or(self.default_max_iterations),
             progress_tools: self.progress_tools.clone(),
             call_site: CallSite::role(doc.model.clone()).at(format!("agent:{}", doc.name)),
+            files: self.files.clone(),
         })
     }
 
@@ -442,25 +447,35 @@ fn place_runs(entries: &mut Vec<NewEntry>, start: usize, runs: Vec<NewEntry>) {
 pub fn view<'a>(agent: &str, entries: impl Iterator<Item = &'a NewEntry>) -> Vec<ChatMessage> {
     let mut messages = Vec::new();
     let mut note: Vec<String> = Vec::new();
-    let flush = |messages: &mut Vec<ChatMessage>, note: &mut Vec<String>| {
-        if !note.is_empty() {
-            messages.push(ChatMessage::User {
-                content: note.join("\n\n"),
-            });
-            note.clear();
-        }
-    };
+    let mut images: Vec<String> = Vec::new();
+    let flush =
+        |messages: &mut Vec<ChatMessage>, note: &mut Vec<String>, images: &mut Vec<String>| {
+            if !note.is_empty() || !images.is_empty() {
+                messages.push(ChatMessage::User {
+                    content: note.join("\n\n"),
+                    images: std::mem::take(images),
+                });
+                note.clear();
+            }
+        };
     for entry in entries {
         match &entry.body {
             EntryBody::Message { message } if entry.author == agent => {
-                flush(&mut messages, &mut note);
+                flush(&mut messages, &mut note, &mut images);
                 messages.push(message.clone());
             }
             EntryBody::Message {
-                message: ChatMessage::User { content },
-            } if entry.author == USER_AUTHOR => note.push(content.clone()),
+                message:
+                    ChatMessage::User {
+                        content,
+                        images: attached,
+                    },
+            } if entry.author == USER_AUTHOR => {
+                note.push(content.clone());
+                images.extend(attached.iter().cloned());
+            }
             EntryBody::Message {
-                message: ChatMessage::User { content },
+                message: ChatMessage::User { content, .. },
             } if entry
                 .author
                 .strip_prefix(CONTEXT_AUTHOR_PREFIX)
@@ -483,7 +498,7 @@ pub fn view<'a>(agent: &str, entries: impl Iterator<Item = &'a NewEntry>) -> Vec
             _ => {}
         }
     }
-    flush(&mut messages, &mut note);
+    flush(&mut messages, &mut note, &mut images);
     messages
 }
 
@@ -963,6 +978,7 @@ mod tests {
             stop_tools: Vec::new(),
             standing_tools: Vec::new(),
             handoff_guard: None,
+            files: None,
         };
         (conversation, provider)
     }
@@ -1171,7 +1187,7 @@ mod tests {
             .messages
             .iter()
             .filter_map(|message| match message {
-                ChatMessage::User { content } => Some(content.as_str()),
+                ChatMessage::User { content, .. } => Some(content.as_str()),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -1720,14 +1736,25 @@ mod tests {
     }
 
     #[test]
+    fn the_view_keeps_the_images_a_user_attached() {
+        let entries = [NewEntry::message(
+            USER_AUTHOR,
+            ChatMessage::User {
+                content: "fix this".into(),
+                images: vec!["blob:sha256-a.png".into()],
+            },
+        )];
+        let messages = view("front", entries.iter());
+        assert!(matches!(
+            &messages[..],
+            [ChatMessage::User { content, images }] if content == "fix this" && images == &["blob:sha256-a.png".to_string()]
+        ));
+    }
+
+    #[test]
     fn a_view_keeps_other_agents_text_but_not_their_tool_traffic() {
         let entries = [
-            NewEntry::message(
-                USER_AUTHOR,
-                ChatMessage::User {
-                    content: "hi".into(),
-                },
-            ),
+            NewEntry::message(USER_AUTHOR, ChatMessage::user("hi")),
             NewEntry::message(
                 "front",
                 ChatMessage::Assistant {

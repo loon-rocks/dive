@@ -773,9 +773,7 @@ mod tests {
                 &id,
                 &[NewEntry::message(
                     "user",
-                    ChatMessage::User {
-                        content: "again".to_string(),
-                    },
+                    ChatMessage::user("again".to_string()),
                 )],
             )
             .await
@@ -852,9 +850,7 @@ mod tests {
                 &id,
                 &[NewEntry::message(
                     "user",
-                    ChatMessage::User {
-                        content: "again".to_string(),
-                    },
+                    ChatMessage::user("again".to_string()),
                 )],
             )
             .await
@@ -906,12 +902,7 @@ mod tests {
             .append_entries(
                 &meta.id,
                 &[
-                    NewEntry::message(
-                        "user",
-                        ChatMessage::User {
-                            content: "go".to_string(),
-                        },
-                    ),
+                    NewEntry::message("user", ChatMessage::user("go".to_string())),
                     NewEntry::new(
                         "orchestrator",
                         EntryBody::Handoff {
@@ -976,9 +967,7 @@ mod tests {
                             &id,
                             &[NewEntry::message(
                                 "user",
-                                ChatMessage::User {
-                                    content: format!("m{i}"),
-                                },
+                                ChatMessage::user(format!("m{i}")),
                             )],
                         )
                         .await

@@ -10,12 +10,14 @@ pub use events::{EventSink, NullSink, RunStart, TeeSink};
 
 use crate::store::{EntryUsage, Stamp};
 use crate::tools::{ToolOutcome, ToolRegistry};
+use dive_llm::image::ImageData;
 use dive_llm::types::{
     ChatMessage, ChatRequest, ChatResponse, StopReason, StreamEvent, ToolCall, ToolSpec, Usage,
 };
 use dive_llm::ChatProvider;
 use futures::StreamExt;
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -37,6 +39,30 @@ pub struct Agent {
     pub stop_tools: Vec<String>,
     pub standing_tools: Vec<String>,
     pub call_site: crate::usage::CallSite,
+    pub files: Option<Arc<dyn crate::files::BlobStore>>,
+}
+
+const MODEL_IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+fn model_images(messages: &[ChatMessage]) -> Vec<crate::files::BlobRef> {
+    let mut found: Vec<crate::files::BlobRef> = Vec::new();
+    for message in messages {
+        let refs = match message {
+            ChatMessage::User { images, .. } => images
+                .iter()
+                .filter_map(|reference| crate::files::BlobRef::parse(reference))
+                .collect(),
+            ChatMessage::ToolResult { content, .. } => crate::files::refs_in(content),
+            ChatMessage::Assistant { .. } => Vec::new(),
+        };
+        for blob in refs {
+            let mime = crate::files::mime_for(blob.extension());
+            if MODEL_IMAGE_TYPES.contains(&mime) && !found.contains(&blob) {
+                found.push(blob);
+            }
+        }
+    }
+    found
 }
 
 /// Failures of the agent loop (`ask`/`chat`/workbench turns). The plan
@@ -91,6 +117,7 @@ impl Agent {
         // monotonic count for the event sink's UI.
         let mut stall = 0u32;
         let mut iteration = 0u32;
+        let mut images = BTreeMap::new();
 
         loop {
             if stall >= self.max_iterations {
@@ -106,7 +133,7 @@ impl Agent {
             let response = self
                 .call_site
                 .clone()
-                .scope(self.stream_once(messages, &tools))
+                .scope(self.stream_once(messages, &tools, &mut images))
                 .await?;
             usage.add(&response.usage);
             stamps.push(Stamp {
@@ -190,12 +217,40 @@ impl Agent {
         }
     }
 
+    async fn load_images(
+        &self,
+        messages: &[ChatMessage],
+        images: &mut BTreeMap<String, ImageData>,
+    ) {
+        let Some(files) = &self.files else {
+            return;
+        };
+        for blob in model_images(messages) {
+            let reference = blob.to_string();
+            if images.contains_key(&reference) {
+                continue;
+            }
+            match files.get(&blob).await {
+                Ok(bytes) => {
+                    let mime = crate::files::mime_for(blob.extension()).to_string();
+                    images.insert(reference, ImageData { mime, bytes });
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, file = %reference, "couldn't load an image for the model")
+                }
+            }
+        }
+    }
+
     async fn stream_once(
         &self,
         messages: &[ChatMessage],
         tools: &[ToolSpec],
+        images: &mut BTreeMap<String, ImageData>,
     ) -> Result<ChatResponse, AgentError> {
+        self.load_images(messages, images).await;
         let request = ChatRequest {
+            images: images.clone(),
             model: self.model.clone(),
             system: self.system_prompt.clone(),
             messages: messages.to_vec(),
@@ -337,6 +392,85 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_model_is_sent_attached_images_and_images_tools_return() {
+        let hash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        let messages = vec![
+            ChatMessage::User {
+                content: "look".into(),
+                images: vec![format!("blob:sha256-{hash}.png")],
+            },
+            ChatMessage::ToolResult {
+                tool_call_id: "a".into(),
+                content: json!({"files": [{"ref": format!("blob:sha256-{hash}.jpg")}, {"ref": format!("blob:sha256-{hash}.wav")}], "again": format!("blob:sha256-{hash}.png")}),
+                is_error: false,
+            },
+        ];
+        let found: Vec<String> = model_images(&messages)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(
+            found,
+            [
+                format!("blob:sha256-{hash}.png"),
+                format!("blob:sha256-{hash}.jpg")
+            ]
+        );
+    }
+
+    struct OneFile(Vec<u8>);
+
+    #[async_trait]
+    impl crate::files::BlobStore for OneFile {
+        async fn put(
+            &self,
+            _: Vec<u8>,
+            _: &str,
+        ) -> Result<crate::files::StoredFile, crate::files::FileError> {
+            Err(crate::files::FileError("read only".into()))
+        }
+        async fn get(&self, _: &crate::files::BlobRef) -> Result<Vec<u8>, crate::files::FileError> {
+            Ok(self.0.clone())
+        }
+        async fn delete(&self, _: &crate::files::BlobRef) -> Result<(), crate::files::FileError> {
+            Ok(())
+        }
+        async fn locate(
+            &self,
+            _: &crate::files::BlobRef,
+        ) -> Result<crate::files::FileLocation, crate::files::FileError> {
+            Err(crate::files::FileError("nowhere".into()))
+        }
+        async fn materialize(
+            &self,
+            _: &crate::files::BlobRef,
+        ) -> Result<std::path::PathBuf, crate::files::FileError> {
+            Err(crate::files::FileError("nowhere".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn a_turn_loads_attached_image_bytes_into_the_request() {
+        let reference =
+            "blob:sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.png";
+        let provider = Arc::new(ScriptedProvider::new(vec![text_response("a cat")]));
+        let (mut agent, _) = agent(Vec::new(), false);
+        agent.provider = provider.clone();
+        agent.files = Some(Arc::new(OneFile(b"pixels".to_vec())));
+        let mut messages = vec![ChatMessage::User {
+            content: "what is this?".into(),
+            images: vec![reference.to_string()],
+        }];
+        agent.run_turn(&mut messages).await.unwrap();
+        let seen = provider.seen_requests.lock().unwrap();
+        let image = &seen[0].images[reference];
+        assert_eq!(
+            (image.mime.as_str(), image.bytes.as_slice()),
+            ("image/png", b"pixels".as_slice())
+        );
+    }
+
     fn agent(responses: Vec<ChatResponse>, error_mode: bool) -> (Agent, Arc<EchoRegistry>) {
         agent_with_progress(responses, error_mode, Vec::new())
     }
@@ -362,6 +496,7 @@ mod tests {
             stop_tools: Vec::new(),
             standing_tools: Vec::new(),
             call_site: crate::usage::CallSite::role("chat"),
+            files: None,
         };
         (agent, registry)
     }
@@ -409,9 +544,7 @@ mod tests {
     #[tokio::test]
     async fn answers_directly_without_tools() {
         let (agent, registry) = agent(vec![text_response("hi there")], false);
-        let mut messages = vec![ChatMessage::User {
-            content: "hello".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("hello")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.text, "hi there");
         assert_eq!(outcome.tool_calls_made, 0);
@@ -433,9 +566,7 @@ mod tests {
             cache_read_input_tokens: 40,
         };
         let (agent, _) = agent(vec![first, text_response("done")], false);
-        let mut messages = vec![ChatMessage::User {
-            content: "hello".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("hello")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         let appended = &messages[1..];
         assert_eq!(outcome.stamps.len(), appended.len());
@@ -480,9 +611,7 @@ mod tests {
             },
         };
         let (subject, _registry) = agent(vec![empty], false);
-        let mut messages = vec![ChatMessage::User {
-            content: "hello".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("hello")];
         let err = subject.run_turn(&mut messages).await.unwrap_err();
         assert!(matches!(err, AgentError::MaxTokensNoOutput));
         assert!(err.to_string().contains("max_tokens"), "{err}");
@@ -491,9 +620,7 @@ mod tests {
         let mut truncated = text_response("partial answ");
         truncated.stop_reason = StopReason::MaxTokens;
         let (subject, _registry) = agent(vec![truncated], false);
-        let mut messages = vec![ChatMessage::User {
-            content: "hello".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("hello")];
         let outcome = subject.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.text, "partial answ");
     }
@@ -507,9 +634,7 @@ mod tests {
             ],
             false,
         );
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.text, "done");
         assert_eq!(outcome.tool_calls_made, 1);
@@ -545,9 +670,7 @@ mod tests {
             ],
             false,
         );
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         agent.run_turn(&mut messages).await.unwrap();
         let ids: Vec<_> = messages
             .iter()
@@ -568,9 +691,7 @@ mod tests {
             ],
             true,
         );
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.text, "recovered");
         assert!(matches!(
@@ -585,9 +706,7 @@ mod tests {
             .map(|_| tool_response(vec![("test__echo", json!({}))]))
             .collect();
         let (agent, _) = agent(responses, false);
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let err = agent.run_turn(&mut messages).await.unwrap_err();
         assert!(matches!(err, AgentError::MaxIterations(3)));
     }
@@ -609,9 +728,7 @@ mod tests {
         }
         responses.push(text_response("shipped"));
         let (agent, _) = agent_with_progress(responses, false, vec!["test__edit".to_string()]);
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.text, "shipped");
         assert_eq!(outcome.tool_calls_made, 7);
@@ -628,9 +745,7 @@ mod tests {
         ];
         let (mut agent, _) = agent(responses, false);
         agent.stop_tools = vec!["test__handoff".to_string()];
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.stopped_by.as_deref(), Some("test__handoff"));
         let results = messages
@@ -652,9 +767,7 @@ mod tests {
         ];
         let (mut agent, _) = agent(responses, true);
         agent.stop_tools = vec!["test__handoff".to_string()];
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let outcome = agent.run_turn(&mut messages).await.unwrap();
         assert_eq!(outcome.stopped_by, None);
         assert_eq!(outcome.text, "answered instead");
@@ -668,9 +781,7 @@ mod tests {
             .map(|_| tool_response(vec![("test__edit", json!({}))]))
             .collect();
         let (agent, _) = agent_with_progress(responses, true, vec!["test__edit".to_string()]);
-        let mut messages = vec![ChatMessage::User {
-            content: "go".into(),
-        }];
+        let mut messages = vec![ChatMessage::user("go")];
         let err = agent.run_turn(&mut messages).await.unwrap_err();
         assert!(matches!(err, AgentError::MaxIterations(3)));
     }
