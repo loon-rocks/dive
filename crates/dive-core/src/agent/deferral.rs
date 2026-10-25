@@ -18,6 +18,14 @@ pub fn deferrable<'a>(defs: &'a [ToolDef], standing: &'a [String]) -> Vec<&'a To
         .collect()
 }
 
+pub fn named(patterns: &[String]) -> Vec<String> {
+    patterns
+        .iter()
+        .filter(|pattern| !pattern.contains(['*', '?', '[']))
+        .cloned()
+        .collect()
+}
+
 pub fn lists_search(patterns: &[String]) -> bool {
     patterns.iter().any(|pattern| pattern == SEARCH_TOOL)
 }

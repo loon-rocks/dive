@@ -561,6 +561,7 @@ impl Runtime {
             progress_tools: Vec::new(),
             stop_tools: Vec::new(),
             standing_tools: Vec::new(),
+            named_standing_tools: Vec::new(),
             handoff_guard: None,
             files: Some(self.files()),
         }
