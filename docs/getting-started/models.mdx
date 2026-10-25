@@ -69,17 +69,17 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | Role | Used for |
 | --- | --- |
 | `chat` | Agents. Every built-in agent uses it, except the drafting architects and the workbench's builders |
-| `architect` | The drafting architects, `network_drafter` and `network_editor`: the interview, the design, and running the builders. Falls back to `chat` |
-| `drafter` | The workbench's builders, which draft each tool, plan and agent the drafting architect sketches. Falls back to `chat` |
+| `architect` | The drafting architects, `network_drafter` and `network_editor`: the interview, the design, and running the builders |
+| `drafter` | The workbench's builders, which draft each tool, plan and agent the drafting architect sketches |
 | `planner` | Drafting plans |
-| `outliner` | Listing a goal's inputs and steps before the planner drafts. Falls back to `planner` |
+| `outliner` | Listing a goal's inputs and steps before the planner drafts |
 | `solver` | Writing the answer for a plan that finishes with `solver` |
 | `repair` | One retry when a model's structured output doesn't parse. Output cut off at the model's output limit is never repaired: the call fails with an error naming the limit |
 | `judge` | `infer` conditions on `exit`, `route` and `filter` |
 | `decider` | `decide` conditions and tool search. Needs a decision model |
 | `image` | `builtin__generate_image`. Needs an image model |
 
-A role with no entry uses `default`, except `decider` and `image`. Put a cheaper model on the roles that run most often, such as `judge` and `repair`.
+A role with no entry uses `default`, except `decider` and `image`. No role falls back to another role first, so `architect` and `drafter` use `default` rather than `chat` until you set them. Put a cheaper model on the roles that run most often, such as `judge` and `repair`.
 
 ## Custom roles
 

@@ -12,8 +12,18 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
-pub const STANDARD_ROLES: [&str; 9] = [
-    "default", "chat", "planner", "outliner", "solver", "repair", "judge", "decider", "image",
+pub const STANDARD_ROLES: [&str; 11] = [
+    "default",
+    "chat",
+    "architect",
+    "drafter",
+    "planner",
+    "outliner",
+    "solver",
+    "repair",
+    "judge",
+    "decider",
+    "image",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
