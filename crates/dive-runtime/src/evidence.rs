@@ -1,12 +1,15 @@
 use crate::attachment::{AttachmentHost, EVIDENCE_ATTACHMENT};
+use crate::runtime::Runtime;
 use crate::workbench::ArtifactKind;
 use anyhow::Result;
 use async_trait::async_trait;
-use dive_core::{Attachment, NewEntry, ToolRegistry};
+use dive_core::{Attachment, EntryBody, NewEntry, Store, ToolRegistry};
+use dive_llm::types::ChatMessage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::any::Any;
-use std::sync::Arc;
+use std::collections::BTreeSet;
+use std::sync::{Arc, Mutex};
 
 const SHOWN_CHARS: usize = 6000;
 
@@ -79,17 +82,158 @@ fn shown(value: &Value) -> String {
     )
 }
 
+#[derive(Debug, Default)]
+pub struct Editable {
+    pub agents: BTreeSet<String>,
+    pub plans: BTreeSet<String>,
+    pub tools: BTreeSet<String>,
+}
+
+impl Editable {
+    pub fn of(runtime: &Runtime) -> Self {
+        let mut tools = BTreeSet::new();
+        if let Ok(docs) = runtime.tool_docs() {
+            tools.extend(docs.user.iter().map(|doc| format!("user__{}", doc.name)));
+            for (source, pack_docs) in &docs.packs {
+                tools.extend(
+                    pack_docs
+                        .iter()
+                        .map(|doc| format!("{}__tool__{}", source.name, doc.name)),
+                );
+            }
+            tools.extend(
+                docs.builtins
+                    .iter()
+                    .map(|doc| format!("builtin__{}", doc.name)),
+            );
+        }
+        Self {
+            agents: runtime.agent_set().iter().map(|doc| doc.name).collect(),
+            plans: crate::ops::plan::list(runtime)
+                .plans
+                .iter()
+                .map(|plan| plan.identifier.clone())
+                .collect(),
+            tools,
+        }
+    }
+
+    pub fn item(&self, call: &str) -> Option<Item> {
+        if let Some(name) = call.strip_prefix("agent__") {
+            return self.agents.contains(name).then(|| Item {
+                kind: ArtifactKind::Agent,
+                name: name.to_string(),
+            });
+        }
+        if let Some(name) = call.strip_prefix("plan__") {
+            return self.plans.contains(name).then(|| Item {
+                kind: ArtifactKind::Plan,
+                name: name.to_string(),
+            });
+        }
+        self.tools.contains(call).then(|| Item {
+            kind: ArtifactKind::Tool,
+            name: call.strip_prefix("user__").unwrap_or(call).to_string(),
+        })
+    }
+}
+
+fn parsed(content: &Value) -> Value {
+    match content {
+        Value::String(text) => match serde_json::from_str::<Value>(text) {
+            Ok(value @ (Value::Object(_) | Value::Array(_))) => value,
+            _ => content.clone(),
+        },
+        other => other.clone(),
+    }
+}
+
+fn error_text(content: &Value) -> String {
+    match content {
+        Value::String(text) => text.clone(),
+        Value::Object(map) => map
+            .get("error")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| content.to_string()),
+        other => other.to_string(),
+    }
+}
+
+pub async fn from_call(
+    editable: &Editable,
+    store: &dyn Store,
+    thread: &str,
+    call: &str,
+) -> Result<Evidence, String> {
+    let entries = store
+        .load_entries(thread)
+        .await
+        .map_err(|error| format!("couldn't read thread {thread}: {error}"))?;
+    let mut asked = None;
+    let mut answered = None;
+    for entry in &entries {
+        let EntryBody::Message { message } = &entry.body else {
+            continue;
+        };
+        match message {
+            ChatMessage::Assistant { tool_calls, .. } => {
+                if let Some(found) = tool_calls.iter().find(|tool| tool.id == call) {
+                    asked = Some((found.clone(), entry.author.clone()));
+                }
+            }
+            ChatMessage::ToolResult {
+                tool_call_id,
+                content,
+                is_error,
+            } if tool_call_id == call => answered = Some((content.clone(), *is_error)),
+            _ => {}
+        }
+    }
+    let (asked, author) = asked.ok_or_else(|| format!("thread {thread} has no call {call}"))?;
+    let (content, is_error) = answered.ok_or_else(|| {
+        format!(
+            "{} hasn't returned yet, so there's nothing to look at",
+            asked.name
+        )
+    })?;
+    let item = editable
+        .item(&asked.name)
+        .or_else(|| editable.item(&format!("agent__{author}")))
+        .ok_or_else(|| format!("{} isn't an agent, plan or tool Dive can edit", asked.name))?;
+    Ok(Evidence {
+        thread: thread.to_string(),
+        call: Some(call.to_string()),
+        item,
+        input: asked.arguments,
+        output: (!is_error).then(|| parsed(&content)),
+        error: is_error.then(|| error_text(&content)),
+    })
+}
+
 pub struct EvidenceAttachment {
-    evidence: Evidence,
+    evidence: Mutex<Option<Evidence>>,
 }
 
 impl EvidenceAttachment {
     pub fn new(evidence: Evidence) -> Self {
-        Self { evidence }
+        Self {
+            evidence: Mutex::new(Some(evidence)),
+        }
     }
 
-    pub fn evidence(&self) -> &Evidence {
-        &self.evidence
+    pub fn empty() -> Self {
+        Self {
+            evidence: Mutex::new(None),
+        }
+    }
+
+    pub fn evidence(&self) -> Option<Evidence> {
+        self.evidence.lock().unwrap().clone()
+    }
+
+    pub fn load(&self, evidence: Evidence) {
+        *self.evidence.lock().unwrap() = Some(evidence);
     }
 }
 
@@ -104,10 +248,14 @@ impl AttachmentHost for EvidenceAttachment {
     }
 
     fn sections(&self, kind: &str) -> Vec<String> {
-        match kind {
-            EVIDENCE_ATTACHMENT => vec![self.evidence.section()],
+        match (kind, self.evidence()) {
+            (EVIDENCE_ATTACHMENT, Some(evidence)) => vec![evidence.section()],
             _ => Vec::new(),
         }
+    }
+
+    fn loaded(&self) -> bool {
+        self.evidence.lock().unwrap().is_some()
     }
 
     fn tools(&self, catalog: Arc<dyn ToolRegistry>) -> Arc<dyn ToolRegistry> {
@@ -117,11 +265,13 @@ impl AttachmentHost for EvidenceAttachment {
     fn restore(&self, _history: &[NewEntry]) {}
 
     fn view(&self) -> Value {
-        serde_json::to_value(&self.evidence).unwrap_or_default()
+        serde_json::to_value(self.evidence()).unwrap_or_default()
     }
 
     fn record(&self) -> Attachment {
-        self.evidence.record()
+        self.evidence()
+            .map(|evidence| evidence.record())
+            .unwrap_or_else(|| Attachment::new(EVIDENCE_ATTACHMENT))
     }
 
     async fn act(&self, action: &str, _input: Value) -> Result<Value, String> {
@@ -163,6 +313,10 @@ mod tests {
             json!({"kind": "plan", "name": "release_digest"})
         );
         assert_eq!(Evidence::recall(&record), Some(evidence()));
+        let empty = EvidenceAttachment::empty();
+        assert!(!empty.loaded() && empty.sections(EVIDENCE_ATTACHMENT).is_empty());
+        empty.load(evidence());
+        assert!(empty.loaded());
         let view = EvidenceAttachment::new(evidence()).view();
         assert_eq!(view["thread"], json!("a1b2c3d4e5f6"));
         assert_eq!(view["error"], json!("step E2: no tool named git_log"));

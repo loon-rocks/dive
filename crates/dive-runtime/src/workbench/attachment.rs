@@ -17,6 +17,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::any::Any;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -95,6 +96,7 @@ pub struct NetworkAttachment {
     tools: Arc<dyn ToolRegistry>,
     lifecycle: Arc<Mutex<Lifecycle>>,
     opened: Mutex<Vec<(ArtifactKind, String)>>,
+    loaded: Arc<AtomicBool>,
 }
 
 impl NetworkAttachment {
@@ -111,6 +113,7 @@ impl NetworkAttachment {
         let draft = Arc::new(Mutex::new(state));
         let debug = Arc::new(DebugControls::default());
         let tester: Tester = Arc::new(std::sync::OnceLock::new());
+        let loaded = Arc::new(AtomicBool::new(true));
         let workbench_tools = Arc::new(
             super::tools::WorkbenchTools::new(
                 draft.clone(),
@@ -120,7 +123,8 @@ impl NetworkAttachment {
                 tx.clone(),
             )
             .with_tester(tester.clone())
-            .with_root(root.clone()),
+            .with_root(root.clone())
+            .with_loaded(loaded.clone()),
         );
         let fs_tools = Arc::new(
             super::fs_tools::FsTools::new(root.clone())
@@ -139,7 +143,21 @@ impl NetworkAttachment {
             tools,
             lifecycle: Arc::new(Mutex::new(Lifecycle::default())),
             opened: Mutex::new(Vec::new()),
+            loaded,
         })
+    }
+
+    pub fn unloaded(self) -> Self {
+        self.loaded.store(false, Ordering::SeqCst);
+        self
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.loaded.load(Ordering::SeqCst)
+    }
+
+    pub fn load(&self) -> bool {
+        !self.loaded.swap(true, Ordering::SeqCst)
     }
 
     pub fn network(&self) -> NetworkView {
@@ -182,6 +200,7 @@ impl NetworkAttachment {
 
     pub async fn open_item(&self, kind: ArtifactKind, name: &str) -> Result<String, String> {
         let opened = self.open_existing(kind, name).await?;
+        self.load();
         let mut items = self.opened.lock().unwrap();
         if !items
             .iter()
@@ -341,12 +360,16 @@ impl AttachmentHost for NetworkAttachment {
                 super::agents::model_roles(&self.pipeline),
                 artifact::context_section(&self.draft),
             ],
-            PLAN_ATTACHMENT => {
-                let doc = self.plan();
-                vec![super::agents::current_draft(&self.pipeline, &doc)]
-            }
+            PLAN_ATTACHMENT => match self.plan() {
+                Some(doc) => vec![super::agents::current_draft(&self.pipeline, &Some(doc))],
+                None => Vec::new(),
+            },
             _ => Vec::new(),
         }
+    }
+
+    fn loaded(&self) -> bool {
+        self.is_loaded()
     }
 
     fn tools(&self, catalog: Arc<dyn ToolRegistry>) -> Arc<dyn ToolRegistry> {
@@ -375,10 +398,6 @@ impl AttachmentHost for NetworkAttachment {
         crate::attachment::add_tools(
             &mut conversation.stop_tools,
             artifact::STOP_TOOLS.iter().map(|name| name.to_string()),
-        );
-        crate::attachment::add_tools(
-            &mut conversation.standing_tools,
-            ["workbench__*".to_string()],
         );
         let mut base = conversation.clone();
         base.catalog = Arc::new(CompositeRegistry::new(Vec::new()));

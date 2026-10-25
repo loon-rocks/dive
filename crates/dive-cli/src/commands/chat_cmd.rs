@@ -10,12 +10,6 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
     if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
         bail!("chat needs an interactive terminal — use `dive ask` for scripted queries");
     }
-    if let Some(name) = agent
-        .as_deref()
-        .filter(|name| crate::workbench::agents::is_workbench_only(name))
-    {
-        bail!("{name} runs only in the workbench: start it with `dive wb`");
-    }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
     let start = ChatStart::resolve(&runtime, store, agent.as_deref(), thread).await?;

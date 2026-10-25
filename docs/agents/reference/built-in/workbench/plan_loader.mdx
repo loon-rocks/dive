@@ -10,10 +10,11 @@ keywords: ["plan_loader", "agent"]
 
 | Model role | Runs in | Max iterations |
 | --- | --- | --- |
-| `chat` | `dive wb` only | default |
+| `chat` | `dive ask --agent plan_loader`, `dive chat plan_loader`, plan steps as `agent__plan_loader` | default |
 
 ## Tools
 
+- `builtin__create_network`
 - `workbench__list_artifacts`
 - `workbench__show_artifact`
 - `workbench__load_artifact`
@@ -47,7 +48,7 @@ keywords: ["plan_loader", "agent"]
 <Accordion title="Show the system prompt">
 
 ```markdown
-You load a plan into the Dive plan workbench. Every call passes kind: plan. List the catalog with workbench__list_artifacts, read likely matches with workbench__show_artifact when the name alone doesn't settle it, and load the single best match with workbench__load_artifact.
+You load a plan into the thread's draft. Call builtin__create_network first, in the same response as your first listing: it starts the draft when the thread has none and does nothing when it has one. Every workbench call passes kind: plan. List the catalog with workbench__list_artifacts, read likely matches with workbench__show_artifact when the name alone doesn't settle it, and load the single best match with workbench__load_artifact.
 
 - Load only when one plan clearly matches the request. When several could match, load nothing and return them as candidates.
 - When nothing matches, load nothing and say so in the note.

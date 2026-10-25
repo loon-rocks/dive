@@ -21,22 +21,6 @@ pub const PLAN_EDITOR: &str = "plan_editor";
 
 pub const NETWORK_EDITOR: &str = "network_editor";
 
-pub fn workbench_only() -> Vec<dive_core::agent::doc::AgentDoc> {
-    let globals: Vec<String> = dive_core::agent::doc::BUILTINS
-        .iter()
-        .filter_map(|raw| dive_core::agent::doc::parse_agent_source(raw).ok())
-        .map(|doc| doc.name)
-        .collect();
-    let (set, _) = dive_core::agent::doc::AgentSet::load(WORKBENCH_AGENTS, &[]);
-    set.iter()
-        .filter(|doc| !globals.contains(&doc.name))
-        .collect()
-}
-
-pub fn is_workbench_only(name: &str) -> bool {
-    workbench_only().iter().any(|doc| doc.name == name)
-}
-
 pub fn builtin_sources() -> Vec<&'static str> {
     dive_core::agent::doc::BUILTINS
         .iter()
@@ -355,10 +339,10 @@ steps:
     }
 
     #[test]
-    fn each_agent_gets_the_sections_of_the_attachment_kinds_it_reads() {
-        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let root = tempfile::tempdir().unwrap();
-        let host: Arc<dyn AttachmentHost> = Arc::new(
+    fn every_agent_sees_a_loaded_draft_and_nothing_once_it_is_unloaded() {
+        let build = || {
+            let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+            let root = tempfile::tempdir().unwrap();
             NetworkAttachment::new(NetworkSetup {
                 pipeline: super::super::tools::tests::test_pipeline(Vec::new()),
                 tx,
@@ -366,34 +350,23 @@ steps:
                 root: root.path().to_path_buf(),
                 doc: None,
             })
-            .unwrap(),
-        );
-        let (set, _) = AgentSet::load(&builtin_sources(), &[]);
-        let hook = context_hook(Arc::new(set), vec![host]);
-        for builder in [
+            .unwrap()
+        };
+        let loaded: Arc<dyn AttachmentHost> = Arc::new(build());
+        let hook = context_hook(vec![loaded]);
+        for agent in [
+            "chat",
+            "front_desk",
             "network_drafter",
-            "plan_drafter",
-            "tool_drafter",
-            "agent_drafter",
+            "plan_editor",
+            "anyone",
         ] {
-            let sections = hook(builder);
-            assert_eq!(sections.len(), 2, "{builder}");
-            assert!(sections[0].starts_with("## Model roles"), "{builder}");
-            assert!(sections[1].starts_with("## The network draft"), "{builder}");
+            let sections = hook(agent);
+            assert_eq!(sections.len(), 2, "{agent}");
+            assert!(sections[0].starts_with("## Model roles"), "{agent}");
+            assert!(sections[1].starts_with("## The network draft"), "{agent}");
         }
-        let editor = hook("network_editor");
-        assert!(editor[0].starts_with("## Model roles"));
-        assert!(editor[0].contains("Decision model: none configured"));
-        assert_eq!(
-            editor.len(),
-            2,
-            "network sections, and no evidence without an evidence host"
-        );
-        assert!(editor[1].starts_with("## The network draft"));
-        assert_eq!(hook("plan_editor").len(), 1);
-        assert!(hook("plan_editor")[0].starts_with("## Current draft"));
-        assert!(hook("plan_loader").is_empty());
-        assert!(hook("front_desk").is_empty());
-        assert!(hook("chat").is_empty());
+        let unloaded: Arc<dyn AttachmentHost> = Arc::new(build().unloaded());
+        assert!(context_hook(vec![unloaded])("network_drafter").is_empty());
     }
 }

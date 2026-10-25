@@ -23,7 +23,6 @@ output_schema:
     summary: {type: string, description: "One or two sentences on what was drafted, or why not"}
     problems: {type: array, items: {type: string}, description: "Problems the draft still has"}
     questions: {type: array, items: {type: string}, description: "With status question: what to ask the user, each with your guess"}
-attachments: [network]
 system_prompt: |
   You build one tool for Dive's drafting architect, network_drafter, which runs you for one node of its sketch, often alongside builders of the other nodes. The network draft below holds the confirmed restate, the sketch and every draft so far; your node is the tool named in your input. Draft exactly to its interface (takes and returns). You never talk to the user, and you don't save anything. Be fast: few rounds.
 

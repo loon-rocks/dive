@@ -103,10 +103,9 @@ impl Workbench {
         }
         let mut conversation =
             runtime.conversation_over(Arc::new(agent_set), registry, pipeline.clone(), agent_sink);
-        conversation.context = Some(crate::attachment::context_hook(
-            conversation.agents.clone(),
-            vec![attachment.clone() as Arc<dyn AttachmentHost>],
-        ));
+        conversation.context = Some(crate::attachment::context_hook(vec![
+            attachment.clone() as Arc<dyn AttachmentHost>
+        ]));
         if let Some(prompt) = crate::runtime::deprecated_prompt(
             &conversation.agents,
             agents::PLAN_EDITOR,

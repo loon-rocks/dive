@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use dive_core::agent::conversation::{ContextHook, Conversation, HandoffGuard};
-use dive_core::agent::doc::{AgentDoc, AgentSet};
 use dive_core::{Attachment, EventSink, NewEntry, Store, ToolRegistry};
 use serde_json::Value;
 use std::any::Any;
@@ -21,10 +20,16 @@ pub trait AttachmentHost: Send + Sync {
 
     fn sections(&self, kind: &str) -> Vec<String>;
 
-    fn context(&self, agent: &AgentDoc) -> Vec<String> {
+    fn loaded(&self) -> bool {
+        true
+    }
+
+    fn context(&self) -> Vec<String> {
+        if !self.loaded() {
+            return Vec::new();
+        }
         self.kinds()
             .iter()
-            .filter(|kind| agent.reads(kind))
             .flat_map(|kind| self.sections(kind))
             .collect()
     }
@@ -46,25 +51,6 @@ pub trait AttachmentHost: Send + Sync {
     async fn act(&self, action: &str, input: Value) -> Result<Value, String>;
 
     fn as_any(&self) -> &dyn Any;
-}
-
-pub fn agent_sources(kind: &str) -> Vec<&'static str> {
-    match kind {
-        NETWORK_ATTACHMENT | EVIDENCE_ATTACHMENT => {
-            crate::workbench::agents::WORKBENCH_AGENTS.to_vec()
-        }
-        _ => Vec::new(),
-    }
-}
-
-pub fn agent_sources_for(kinds: &[String]) -> Vec<&'static str> {
-    let mut sources: Vec<&'static str> = Vec::new();
-    for source in kinds.iter().flat_map(|kind| agent_sources(kind)) {
-        if !sources.contains(&source) {
-            sources.push(source);
-        }
-    }
-    sources
 }
 
 pub async fn record(store: &dyn Store, thread_id: &str, attachments: &[Attachment]) -> Result<()> {
@@ -100,11 +86,12 @@ pub fn add_tools(tools: &mut Vec<String>, added: impl IntoIterator<Item = String
     }
 }
 
-pub fn context_hook(agents: Arc<AgentSet>, hosts: Vec<Arc<dyn AttachmentHost>>) -> ContextHook {
-    Arc::new(move |agent: &str| match agents.get(agent) {
-        Some(doc) => hosts.iter().flat_map(|host| host.context(&doc)).collect(),
-        None => Vec::new(),
-    })
+pub fn context_hook(hosts: Vec<Arc<dyn AttachmentHost>>) -> ContextHook {
+    Arc::new(move |_agent: &str| hosts.iter().flat_map(|host| host.context()).collect())
+}
+
+pub fn loaded(hosts: &[Arc<dyn AttachmentHost>]) -> Vec<Arc<dyn AttachmentHost>> {
+    hosts.iter().filter(|host| host.loaded()).cloned().collect()
 }
 
 pub fn thread_kinds(declared: &[String]) -> Vec<String> {
@@ -118,7 +105,7 @@ pub fn thread_kinds(declared: &[String]) -> Vec<String> {
 }
 
 pub fn records(hosts: &[Arc<dyn AttachmentHost>], recorded: &[Attachment]) -> Vec<Attachment> {
-    let mut merged: Vec<Attachment> = hosts.iter().map(|host| host.record()).collect();
+    let mut merged: Vec<Attachment> = loaded(hosts).iter().map(|host| host.record()).collect();
     merged.extend(
         recorded
             .iter()
@@ -131,7 +118,6 @@ pub fn records(hosts: &[Arc<dyn AttachmentHost>], recorded: &[Attachment]) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dive_core::agent::doc::builtin_agents;
     use serde_json::json;
 
     struct Fake;
@@ -173,29 +159,56 @@ mod tests {
         }
     }
 
-    fn agent(name: &str, attachments: &str) -> String {
-        format!(
-            "name: {name}\ndescription: d\nmodel: chat\ntools: []\n{attachments}system_prompt: p\n"
-        )
+    struct Unloaded;
+
+    #[async_trait]
+    impl AttachmentHost for Unloaded {
+        fn kind(&self) -> &'static str {
+            EVIDENCE_ATTACHMENT
+        }
+
+        fn kinds(&self) -> &'static [&'static str] {
+            &[EVIDENCE_ATTACHMENT]
+        }
+
+        fn sections(&self, kind: &str) -> Vec<String> {
+            vec![format!("## {kind}")]
+        }
+
+        fn loaded(&self) -> bool {
+            false
+        }
+
+        fn tools(&self, catalog: Arc<dyn ToolRegistry>) -> Arc<dyn ToolRegistry> {
+            catalog
+        }
+
+        fn restore(&self, _history: &[NewEntry]) {}
+
+        fn view(&self) -> Value {
+            json!({})
+        }
+
+        fn record(&self) -> Attachment {
+            Attachment::new(EVIDENCE_ATTACHMENT)
+        }
+
+        async fn act(&self, action: &str, _input: Value) -> Result<Value, String> {
+            Err(format!("no action {action}"))
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
     }
 
     #[test]
-    fn an_agent_gets_an_attachments_sections_only_for_the_kinds_it_reads() {
-        let agents = Arc::new(AgentSet::layered(
-            builtin_agents(&[
-                &agent("drafter", "attachments: [network]\n"),
-                &agent("editor", "attachments: [plan]\n"),
-                &agent("both", "attachments: [plan, network]\n"),
-                &agent("plain", ""),
-            ]),
-            Vec::new(),
-        ));
-        let hook = context_hook(agents, vec![Arc::new(Fake)]);
-        assert_eq!(hook("drafter"), ["## network"]);
-        assert_eq!(hook("editor"), ["## plan"]);
-        assert_eq!(hook("both"), ["## network", "## plan"]);
-        assert!(hook("plain").is_empty());
-        assert!(hook("nobody").is_empty());
+    fn every_agent_sees_what_is_loaded_and_nothing_else() {
+        let hook = context_hook(vec![Arc::new(Fake), Arc::new(Unloaded)]);
+        assert_eq!(hook("chat"), ["## network", "## plan"]);
+        assert_eq!(hook("anyone"), ["## network", "## plan"]);
+        let hosts: Vec<Arc<dyn AttachmentHost>> = vec![Arc::new(Unloaded)];
+        assert!(records(&hosts, &[]).is_empty());
     }
 
     #[test]
@@ -209,18 +222,6 @@ mod tests {
             ["network", "evidence"]
         );
         assert!(thread_kinds(&[]).is_empty());
-    }
-
-    #[test]
-    fn the_agents_of_several_kinds_load_once() {
-        let kinds = vec![
-            NETWORK_ATTACHMENT.to_string(),
-            EVIDENCE_ATTACHMENT.to_string(),
-        ];
-        assert_eq!(
-            agent_sources_for(&kinds).len(),
-            crate::workbench::agents::WORKBENCH_AGENTS.len()
-        );
     }
 
     #[tokio::test]

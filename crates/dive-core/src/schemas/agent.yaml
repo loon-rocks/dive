@@ -52,7 +52,7 @@ properties:
     items:
       type: string
       enum: [network, plan, evidence]
-    description: The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network` or the call an edit session is about for `evidence`. A new thread whose first message goes to an agent that reads `network` gets a network attachment; an `evidence` attachment comes only with an edit session started from a call. Omitted means none.
+    description: No longer used. Dive accepts and ignores it, and `dive config check` notes it. Every agent sees whatever the thread has loaded, and what it can do comes only from its `tools`; a thread loads a network draft or evidence when an agent calls `builtin__create_network`, `builtin__open_network` or `builtin__attach_evidence`, or when you open an edit thread.
   system_prompt:
     type: string
     description: The agent's instructions, rendered with the template language. It can reference `{{session.date}}`, `{{session.user}}` and the `{{rules.*}}` blocks (`control_steps`, `composing`, `templating`, `tool_format`, `agent_format`, `design`), and nothing else. `{{session.date}}` is today's date with no time of day, so the prompt stays the same all day and a resumed thread keeps its prompt cache.
