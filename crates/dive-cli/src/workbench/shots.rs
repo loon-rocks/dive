@@ -493,6 +493,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
             .map(|name| name.to_string())
             .collect(),
         standing_tools: vec!["workbench__*".to_string()],
+        named_standing_tools: Vec::new(),
         handoff_guard: None,
         files: None,
     };
