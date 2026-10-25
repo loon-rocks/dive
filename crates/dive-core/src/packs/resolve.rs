@@ -40,16 +40,13 @@ pub fn resolve_plan_steps(steps: &mut Plan, pack: &str) -> Vec<String> {
 
 pub fn resolve_agent(doc: &mut AgentDoc, pack: &str) -> Vec<String> {
     let mut problems = Vec::new();
-    for (field, names) in [
-        ("tools", &mut doc.tools),
-        ("subagents", &mut doc.subagents),
-        ("handoffs", &mut doc.handoffs),
-    ] {
-        for name in names.iter_mut() {
-            match resolve_name(name, pack) {
-                Ok(resolved) => *name = resolved,
-                Err(problem) => problems.push(format!("{field}: {problem}")),
-            }
+    let tools = doc.tools.iter_mut().map(|entry| ("tools", &mut entry.name));
+    let subagents = doc.subagents.iter_mut().map(|name| ("subagents", name));
+    let handoffs = doc.handoffs.iter_mut().map(|name| ("handoffs", name));
+    for (field, name) in tools.chain(subagents).chain(handoffs) {
+        match resolve_name(name, pack) {
+            Ok(resolved) => *name = resolved,
+            Err(problem) => problems.push(format!("{field}: {problem}")),
         }
     }
     problems
@@ -224,7 +221,10 @@ mod tests {
         )
         .unwrap();
         assert!(resolve_agent(&mut doc, "example").is_empty());
-        assert_eq!(doc.tools, ["example__tool__file_info", "builtin__infer"]);
+        assert_eq!(
+            doc.tool_names(),
+            ["example__tool__file_info", "builtin__infer"]
+        );
         assert_eq!(doc.subagents, ["example__agent__sub"]);
         assert_eq!(doc.handoffs, ["example__agent__other"]);
         assert_eq!(doc.system_prompt, "call $pack__tool__file_info");

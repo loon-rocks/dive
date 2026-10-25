@@ -3,10 +3,14 @@ name: tool_drafter
 description: Builds one tool node of the architect's sketch as a user tool file, test-runs it with the user's approval, and reports back. Run by network_drafter or network_editor as a subagent.
 model: drafter
 tools:
-  - workbench__set_artifact
-  - builtin__open_network
-  - workbench__try_artifact
-  - workbench__show_artifact
+  - workbench__set_artifact:
+      pre_load: true
+  - builtin__open_network:
+      pre_load: true
+  - workbench__try_artifact:
+      pre_load: true
+  - workbench__show_artifact:
+      pre_load: true
   - web__tool__search
   - web__tool__fetch
 input_schema:

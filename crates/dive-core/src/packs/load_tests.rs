@@ -130,7 +130,7 @@ fn a_pack_loads_its_items_under_catalog_names_and_skips_migrations() {
     assert_eq!(helper.name, "example__agent__helper");
     assert_eq!(helper.tool_name(), "example__agent__helper");
     assert_eq!(
-        helper.tools,
+        helper.tool_names(),
         ["example__tool__echo", "example__plan__whoami"]
     );
     assert_eq!(helper.source.describe(), "pack example v1.0.0 (project)");

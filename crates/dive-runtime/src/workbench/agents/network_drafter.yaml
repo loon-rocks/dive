@@ -3,20 +3,33 @@ name: network_drafter
 description: The drafting architect. Interviews you until the problem is clear, sketches the most efficient network of tools, plans and agents that solves it, has the builders draft each node, tests the network and saves it when you say so.
 model: architect
 tools:
-  - builtin__create_network
+  - builtin__create_network:
+      pre_load: true
   - plan__search_tools
-  - workbench__list_artifacts
-  - workbench__show_artifact
-  - workbench__load_artifact
-  - workbench__describe_tool
-  - workbench__set_interview
-  - workbench__propose_designs
-  - workbench__set_sketch
-  - workbench__test_network
-  - workbench__fail_test
-  - workbench__save_network
-  - workbench__discard_artifact
-  - workbench__discard_network
+  - workbench__list_artifacts:
+      pre_load: true
+  - workbench__show_artifact:
+      pre_load: true
+  - workbench__load_artifact:
+      pre_load: true
+  - workbench__describe_tool:
+      pre_load: true
+  - workbench__set_interview:
+      pre_load: true
+  - workbench__propose_designs:
+      pre_load: true
+  - workbench__set_sketch:
+      pre_load: true
+  - workbench__test_network:
+      pre_load: true
+  - workbench__fail_test:
+      pre_load: true
+  - workbench__save_network:
+      pre_load: true
+  - workbench__discard_artifact:
+      pre_load: true
+  - workbench__discard_network:
+      pre_load: true
   - web__tool__search
   - web__tool__fetch
 subagents: [tool_drafter, plan_drafter, agent_drafter]

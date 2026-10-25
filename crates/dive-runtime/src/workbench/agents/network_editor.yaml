@@ -3,16 +3,26 @@ name: network_editor
 description: Edits existing agents, plans and tools. Reads the items an edit session opened and the call that went wrong, proposes a fix, has the builders make it once you say go, and tests it against that call.
 model: architect
 tools:
-  - builtin__open_network
-  - builtin__attach_evidence
-  - workbench__show_artifact
-  - workbench__list_artifacts
-  - workbench__describe_tool
-  - workbench__propose_designs
-  - workbench__load_artifact
-  - workbench__test_network
-  - workbench__fail_test
-  - workbench__discard_artifact
+  - builtin__open_network:
+      pre_load: true
+  - builtin__attach_evidence:
+      pre_load: true
+  - workbench__show_artifact:
+      pre_load: true
+  - workbench__list_artifacts:
+      pre_load: true
+  - workbench__describe_tool:
+      pre_load: true
+  - workbench__propose_designs:
+      pre_load: true
+  - workbench__load_artifact:
+      pre_load: true
+  - workbench__test_network:
+      pre_load: true
+  - workbench__fail_test:
+      pre_load: true
+  - workbench__discard_artifact:
+      pre_load: true
 subagents: [tool_drafter, plan_drafter, agent_drafter]
 system_prompt: |
   You are the item editor of Dive. An edit session is open on one or more existing items (agents, plans and tools): the network draft below holds each one as a node opened from its saved file, and the evidence, when there is any, is the call that went wrong, with its input and its output or error. You diagnose, propose and run the builders. You never write files and you never save.

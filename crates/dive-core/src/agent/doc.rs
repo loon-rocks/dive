@@ -77,7 +77,7 @@ pub struct AgentDoc {
     pub name: String,
     pub description: String,
     pub model: String,
-    pub tools: Vec<String>,
+    pub tools: Vec<ToolEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub subagents: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -95,10 +95,85 @@ pub struct AgentDoc {
     pub source: AgentSource,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawToolEntry", into = "RawToolEntry")]
+pub struct ToolEntry {
+    pub name: String,
+    pub pre_load: bool,
+}
+
+impl ToolEntry {
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            pre_load: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ToolOptions {
+    #[serde(default)]
+    pre_load: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+enum RawToolEntry {
+    Name(String),
+    Options(BTreeMap<String, ToolOptions>),
+}
+
+impl TryFrom<RawToolEntry> for ToolEntry {
+    type Error = String;
+
+    fn try_from(raw: RawToolEntry) -> Result<Self, String> {
+        match raw {
+            RawToolEntry::Name(name) => Ok(Self::named(name)),
+            RawToolEntry::Options(options) => {
+                let mut entries = options.into_iter();
+                match (entries.next(), entries.next()) {
+                    (Some((name, options)), None) => Ok(Self {
+                        name,
+                        pre_load: options.pre_load,
+                    }),
+                    _ => Err("a tools entry with options names exactly one tool, as `<tool>: {pre_load: true}`".to_string()),
+                }
+            }
+        }
+    }
+}
+
+impl From<ToolEntry> for RawToolEntry {
+    fn from(entry: ToolEntry) -> Self {
+        if entry.pre_load {
+            RawToolEntry::Options(BTreeMap::from([(
+                entry.name,
+                ToolOptions { pre_load: true },
+            )]))
+        } else {
+            RawToolEntry::Name(entry.name)
+        }
+    }
+}
+
 pub const ATTACHMENTS_UNUSED: &str =
     "attachments is no longer used and is ignored: agents see whatever the thread has loaded";
 
 impl AgentDoc {
+    pub fn tool_names(&self) -> Vec<String> {
+        self.tools.iter().map(|entry| entry.name.clone()).collect()
+    }
+
+    pub fn pre_loaded(&self) -> Vec<String> {
+        self.tools
+            .iter()
+            .filter(|entry| entry.pre_load)
+            .map(|entry| entry.name.clone())
+            .collect()
+    }
+
     pub fn note(&self) -> Option<String> {
         (!self.attachments.is_empty()).then(|| {
             format!(
@@ -476,8 +551,8 @@ pub fn validate_doc(doc: &AgentDoc, fragments: &[&str]) -> Vec<String> {
     if doc.max_iterations == Some(0) {
         problems.push("max_iterations must be at least 1".to_string());
     }
-    for pattern in &doc.tools {
-        problems.extend(tool_pattern_problem(pattern));
+    for entry in &doc.tools {
+        problems.extend(tool_pattern_problem(&entry.name));
     }
     if let Some(schema) = &doc.input_schema {
         problems.extend(input_schema_problems(schema));
@@ -639,6 +714,27 @@ mod tests {
 
     fn minimal(name: &str, extra: &str) -> String {
         format!("name: {name}\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: p\n{extra}")
+    }
+
+    #[test]
+    fn a_tools_entry_is_a_name_or_a_name_with_pre_load() {
+        let parsed = doc("name: a\ndescription: d\nmodel: chat\ntools:\n  - crm__find\n  - hr__*:\n      pre_load: true\n  - crm__save: {pre_load: false}\nsystem_prompt: p\n");
+        assert_eq!(parsed.tool_names(), ["crm__find", "hr__*", "crm__save"]);
+        assert_eq!(parsed.pre_loaded(), ["hr__*"]);
+        let written = serde_yaml::to_string(&parsed.tools).unwrap();
+        assert_eq!(
+            written,
+            "- crm__find\n- hr__*:\n    pre_load: true\n- crm__save\n"
+        );
+    }
+
+    #[test]
+    fn a_tools_entry_with_options_names_one_tool() {
+        let err = parse_agent_source(
+            "name: a\ndescription: d\nmodel: chat\ntools:\n  - crm__find: {pre_load: true}\n    hr__find: {pre_load: true}\nsystem_prompt: p\n",
+        )
+        .unwrap_err();
+        assert!(err.contains("tools"), "{err}");
     }
 
     #[test]

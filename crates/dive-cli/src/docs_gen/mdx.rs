@@ -193,7 +193,10 @@ pub fn type_label(schema: &Yaml) -> String {
 fn single_type(kind: &str, schema: &Yaml) -> String {
     match kind {
         "array" => match schema.get("items") {
-            Some(items) => format!("{}[]", type_label(items)),
+            Some(items) => match type_label(items) {
+                label if label.contains(" | ") => format!("({label})[]"),
+                label => format!("{label}[]"),
+            },
             None => "any[]".to_string(),
         },
         "object" => match schema.get("additionalProperties") {

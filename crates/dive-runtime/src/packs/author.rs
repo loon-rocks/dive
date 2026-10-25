@@ -257,7 +257,7 @@ fn builtin_catalog(runtime: &Runtime) -> Result<ToolCatalog> {
 fn agent_tool_problems(doc: &AgentDoc, catalog: &ToolCatalog, caller: &Origin) -> Vec<String> {
     let mut input = Map::new();
     input.insert("prompt".to_string(), json!(""));
-    input.insert("tools".to_string(), json!(doc.tools));
+    input.insert("tools".to_string(), json!(doc.tool_names()));
     let plan = vec![Step {
         id: "tools".to_string(),
         tool_name: AGENT_TOOL.to_string(),
@@ -402,7 +402,7 @@ pub async fn check(
                 .into_iter()
                 .map(|problem| format!("{label}: tools: {problem}")),
         );
-        for name in &doc.tools {
+        for name in &doc.tool_names() {
             if loaded.is_migration(name) {
                 problems.push(format!(
                     "{label}: tools: '{name}' is a migration item; only migration plans can call it"

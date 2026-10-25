@@ -2,7 +2,9 @@ version: 1
 name: front_desk
 description: Greets you when the workbench opens, answers questions about what exists, and takes you to the drafting architect or the plan editor.
 model: chat
-tools: [workbench__list_artifacts]
+tools:
+  - workbench__list_artifacts:
+      pre_load: true
 subagents: [plan_loader]
 handoffs: [network_drafter, plan_editor]
 system_prompt: |

@@ -3,9 +3,12 @@ name: plan_drafter
 description: Builds one plan node of the architect's sketch as a plan file and reports back. Run by network_drafter or network_editor as a subagent.
 model: drafter
 tools:
-  - workbench__describe_tool
-  - workbench__set_artifact
-  - builtin__open_network
+  - workbench__describe_tool:
+      pre_load: true
+  - workbench__set_artifact:
+      pre_load: true
+  - builtin__open_network:
+      pre_load: true
   - web__tool__search
   - web__tool__fetch
 input_schema:

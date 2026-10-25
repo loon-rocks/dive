@@ -279,7 +279,7 @@ pub fn literal_self_names(dir: &Path, pack: &str) -> Vec<String> {
             continue;
         };
         for (field, names) in [
-            ("tools", &doc.tools),
+            ("tools", &doc.tool_names()),
             ("subagents", &doc.subagents),
             ("handoffs", &doc.handoffs),
         ] {
@@ -327,7 +327,11 @@ fn mcp_uses(prefix: &str, plans: &[PlanDoc], agents: &[AgentDoc]) -> Vec<McpUse>
         }
     }
     for agent in agents {
-        for tool in agent.tools.iter().filter(|tool| server_tool(tool)) {
+        for tool in agent
+            .tool_names()
+            .into_iter()
+            .filter(|tool| server_tool(tool))
+        {
             add(McpUse {
                 site: format!("agent '{}' tools", agent.name),
                 tool: tool.clone(),

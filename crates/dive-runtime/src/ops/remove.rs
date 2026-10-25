@@ -349,7 +349,7 @@ fn users(runtime: &Runtime, agent_dirs: &[PathBuf], kind: ItemKind, name: &str) 
             .iter()
             .filter(|doc| !(kind == ItemKind::Agent && doc.name == name))
             .filter(|doc| {
-                doc.tools.contains(&reference)
+                doc.tools.iter().any(|entry| entry.name == reference)
                     || (kind == ItemKind::Agent
                         && (doc.subagents.iter().any(|agent| agent == name)
                             || doc.handoffs.iter().any(|agent| agent == name)))
