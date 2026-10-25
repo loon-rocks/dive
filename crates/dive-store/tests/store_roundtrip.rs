@@ -26,9 +26,7 @@ async fn thread_lifecycle_and_message_roundtrip() {
             .await
             .unwrap();
         let messages = vec![
-            ChatMessage::User {
-                content: "list my PRs".into(),
-            },
+            ChatMessage::user("list my PRs"),
             ChatMessage::Assistant {
                 thinking: Vec::new(),
                 content: None,
@@ -62,17 +60,12 @@ async fn thread_lifecycle_and_message_roundtrip() {
 
         // Appending continues the sequence.
         store
-            .append_messages(
-                &thread.id,
-                &[ChatMessage::User {
-                    content: "thanks".into(),
-                }],
-            )
+            .append_messages(&thread.id, &[ChatMessage::user("thanks")])
             .await
             .unwrap();
         let loaded = store.load_messages(&thread.id).await.unwrap();
         assert_eq!(loaded.len(), 5, "{name}");
-        assert!(matches!(&loaded[4], ChatMessage::User { content } if content == "thanks"));
+        assert!(matches!(&loaded[4], ChatMessage::User { content, .. } if content == "thanks"));
 
         let meta = store.get_thread(&thread.id).await.unwrap().unwrap();
         assert_eq!(meta.message_count, 5, "{name}");
@@ -95,12 +88,7 @@ async fn append_to_missing_thread_errors() {
     let dir = tempfile::tempdir().unwrap();
     for (name, store) in backends(&dir) {
         let err = store
-            .append_messages(
-                "nonexistent",
-                &[ChatMessage::User {
-                    content: "hi".into(),
-                }],
-            )
+            .append_messages("nonexistent", &[ChatMessage::user("hi")])
             .await
             .unwrap_err();
         assert!(err.to_string().contains("nonexistent"), "{name}: {err}");
@@ -118,12 +106,7 @@ async fn latest_and_list_order_by_recency() {
 
         // Touching A with a message makes it the most recent.
         store
-            .append_messages(
-                &a.id,
-                &[ChatMessage::User {
-                    content: "hi".into(),
-                }],
-            )
+            .append_messages(&a.id, &[ChatMessage::user("hi")])
             .await
             .unwrap();
 
@@ -176,12 +159,7 @@ async fn threads_record_owner_active_agent_and_every_entry_kind() {
             .append_entries(
                 &thread.id,
                 &[
-                    NewEntry::message(
-                        "user",
-                        ChatMessage::User {
-                            content: "draft a plan".into(),
-                        },
-                    ),
+                    NewEntry::message("user", ChatMessage::user("draft a plan")),
                     NewEntry::new(
                         "orchestrator",
                         EntryBody::Handoff {
@@ -197,9 +175,7 @@ async fn threads_record_owner_active_agent_and_every_entry_kind() {
                             agent: "plan_verifier".into(),
                             caller: "plan_author".into(),
                             input: json!({"goal": "g"}),
-                            messages: vec![ChatMessage::User {
-                                content: "g".into(),
-                            }],
+                            messages: vec![ChatMessage::user("g")],
                             output: json!({"passed": true}),
                             final_: true,
                         },
@@ -260,12 +236,7 @@ async fn entries_keep_their_duration_and_model_usage() {
     for (name, store) in backends(&dir) {
         let thread = store.create_thread("t", "chat", None).await.unwrap();
         let entries = vec![
-            NewEntry::message(
-                "user",
-                ChatMessage::User {
-                    content: "go".into(),
-                },
-            ),
+            NewEntry::message("user", ChatMessage::user("go")),
             NewEntry::message(
                 "chat",
                 ChatMessage::Assistant {
@@ -340,12 +311,7 @@ async fn attachments_replace_the_threads_list_and_survive_appends() {
             .await
             .unwrap();
         store
-            .append_messages(
-                &thread.id,
-                &[ChatMessage::User {
-                    content: "hi".into(),
-                }],
-            )
+            .append_messages(&thread.id, &[ChatMessage::user("hi")])
             .await
             .unwrap();
         let meta = store.get_thread(&thread.id).await.unwrap().unwrap();

@@ -120,7 +120,7 @@ impl ModelRouter {
             None,
             Role::Repair,
             system.to_string(),
-            vec![ChatMessage::User { content: message }],
+            vec![ChatMessage::user(message)],
             "repaired",
             schema.clone(),
         )

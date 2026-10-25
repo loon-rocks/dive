@@ -20,7 +20,7 @@ fn router() -> Arc<ModelRouter> {
                 .as_ref()
                 .map(|_| json!({"category": "bug"}));
             let user = match &req.messages[0] {
-                dive_llm::types::ChatMessage::User { content } => content.clone(),
+                dive_llm::types::ChatMessage::User { content, .. } => content.clone(),
                 _ => String::new(),
             };
             let content = if req.system.is_empty() {

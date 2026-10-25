@@ -154,9 +154,7 @@ async fn infer_verdict(
             "You answer a single yes/no question about the provided data, \
              honestly and conservatively. Answer yes only when the data \
              clearly supports it.",
-            vec![ChatMessage::User {
-                content: question.to_string(),
-            }],
+            vec![ChatMessage::user(question.to_string())],
             "verdict",
         ),
     )

@@ -387,9 +387,7 @@ mod tests {
             MeteredProvider::new(Arc::new(Fixed(usage(1, 1))), "p".into(), capturing.clone());
         let mut req = request("m");
         req.system = "be brief".into();
-        req.messages.push(crate::types::ChatMessage::User {
-            content: "hi".into(),
-        });
+        req.messages.push(crate::types::ChatMessage::user("hi"));
         provider.chat(req.clone()).await.unwrap();
         let mut stream = provider.chat_stream(req).await.unwrap();
         while stream.next().await.is_some() {}

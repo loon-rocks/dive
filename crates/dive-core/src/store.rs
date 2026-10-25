@@ -319,9 +319,7 @@ mod tests {
                 agent: "plan_refiner".to_string(),
                 caller: "plan_author".to_string(),
                 input: json!({"goal": "g"}),
-                messages: vec![ChatMessage::User {
-                    content: "g".to_string(),
-                }],
+                messages: vec![ChatMessage::user("g".to_string())],
                 output: json!({"changes": []}),
                 final_: true,
             },
@@ -398,9 +396,7 @@ mod tests {
         let entries = message_entries(
             "chat",
             &[
-                ChatMessage::User {
-                    content: "hi".to_string(),
-                },
+                ChatMessage::user("hi".to_string()),
                 ChatMessage::Assistant {
                     content: Some("hello".to_string()),
                     thinking: Vec::new(),

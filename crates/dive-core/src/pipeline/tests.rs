@@ -227,7 +227,7 @@ async fn planned_happy_path_flows_data_between_steps() {
     let requests = provider.requests.lock().unwrap();
     let solver_request = requests.last().unwrap();
     assert!(solver_request.messages.iter().any(|m| matches!(
-        m, dive_llm::types::ChatMessage::User { content } if content.contains("team-1")
+        m, dive_llm::types::ChatMessage::User { content, .. } if content.contains("team-1")
     )));
 }
 
@@ -697,7 +697,7 @@ async fn inferred_exit_uses_judge_verdict() {
     let requests = provider.requests.lock().unwrap();
     assert!(matches!(
         &requests[0].messages[0],
-        dive_llm::types::ChatMessage::User { content } if content.contains("\"id\"")
+        dive_llm::types::ChatMessage::User { content, .. } if content.contains("\"id\"")
     ));
 }
 
@@ -991,7 +991,7 @@ async fn inferred_decide_uses_judge_verdict() {
     let requests = provider.requests.lock().unwrap();
     assert!(matches!(
         &requests[0].messages[0],
-        dive_llm::types::ChatMessage::User { content } if content.contains("\"id\"")
+        dive_llm::types::ChatMessage::User { content, .. } if content.contains("\"id\"")
     ));
 }
 
@@ -1526,7 +1526,7 @@ async fn filter_infer_judges_each_item() {
     assert_eq!(requests.len(), 3, "one judge call per item");
     assert!(matches!(
         &requests[1].messages[0],
-        dive_llm::types::ChatMessage::User { content } if content.contains("update readme")
+        dive_llm::types::ChatMessage::User { content, .. } if content.contains("update readme")
     ));
 }
 
@@ -3155,7 +3155,7 @@ fn user_turns(request: &ChatRequest) -> Vec<String> {
         .messages
         .iter()
         .filter_map(|message| match message {
-            dive_llm::types::ChatMessage::User { content } => Some(content.clone()),
+            dive_llm::types::ChatMessage::User { content, .. } => Some(content.clone()),
             _ => None,
         })
         .collect()
@@ -3489,7 +3489,7 @@ async fn the_final_round_withdraws_tools_and_forces_the_schema() {
     assert_eq!(forced.schema, OUT_SCHEMA());
     // And the model is told, not just silently constrained.
     assert!(requests[1].messages.iter().any(|m| matches!(
-        m, dive_llm::types::ChatMessage::User { content } if content.contains("final turn")
+        m, dive_llm::types::ChatMessage::User { content, .. } if content.contains("final turn")
     )));
 
     // The budget is never named in the system prompt: a number reads as an
@@ -3572,7 +3572,7 @@ async fn the_agent_shows_the_model_its_output_schema() {
     let first = requests.first().expect("the agent made a call");
     let sent_as_text = first.system.contains("grobnicate")
         || first.messages.iter().any(|m| {
-            matches!(m, dive_llm::types::ChatMessage::User { content }
+            matches!(m, dive_llm::types::ChatMessage::User { content, .. }
                      if content.contains("grobnicate"))
         });
     let sent_natively = first
@@ -3715,7 +3715,7 @@ async fn agent_prompt_renders_against_prior_step_results() {
     let requests = provider.requests.lock().unwrap();
     assert!(
         requests[0].messages.iter().any(|m| matches!(
-            m, dive_llm::types::ChatMessage::User { content } if content.contains("team-7")
+            m, dive_llm::types::ChatMessage::User { content, .. } if content.contains("team-7")
         )),
         "prompt must render against prior results"
     );
@@ -3876,7 +3876,7 @@ async fn agent_runs_inside_a_map_body_with_item_scope() {
         .iter()
         .flat_map(|r| r.messages.iter())
         .filter_map(|m| match m {
-            dive_llm::types::ChatMessage::User { content } => Some(content.clone()),
+            dive_llm::types::ChatMessage::User { content, .. } => Some(content.clone()),
             _ => None,
         })
         .collect();

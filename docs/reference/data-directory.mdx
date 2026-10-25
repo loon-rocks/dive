@@ -47,6 +47,8 @@ Each line of `entries.jsonl` is one entry. Every entry has these fields:
 | `author` | `user`, or the name of the agent that wrote the entry. |
 | `kind` | `message`, `handoff` or `subagent_run`. The remaining fields depend on the kind. |
 
+A user's `message` entry carries `images` when images were attached to it: their [file references](/integrating/mcp/guides/images-and-files), such as `blob:sha256-….png`. Dive loads those files and sends them to the model with the message on every turn.
+
 A `message` entry written by an agent's turn can also carry:
 
 | Field | Contents |

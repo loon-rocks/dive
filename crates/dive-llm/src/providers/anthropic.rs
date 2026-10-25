@@ -99,7 +99,7 @@ impl AnthropicProvider {
             json!(req.max_tokens.unwrap_or(default_max_tokens)),
         );
 
-        let mut messages = to_anthropic_messages(&req.messages, &references);
+        let mut messages = to_anthropic_messages(&req.messages, &references, &req.images);
         if caching && (messages.len() > 1 || !req.tools.is_empty()) {
             // Breakpoint two: a rolling marker on the tail of the
             // conversation. On a multi-round loop this is the one that pays —
@@ -428,15 +428,38 @@ fn references_in(req: &ChatRequest, defer: bool) -> BTreeMap<&str, Vec<&str>> {
         .collect()
 }
 
+fn image_block(image: &crate::image::ImageData) -> Value {
+    json!({
+        "type": "image",
+        "source": {"type": "base64", "media_type": image.mime, "data": base64(&image.bytes)},
+    })
+}
+
 fn to_anthropic_messages(
     messages: &[ChatMessage],
     references: &BTreeMap<&str, Vec<&str>>,
+    images: &BTreeMap<String, crate::image::ImageData>,
 ) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     for message in messages {
         match message {
-            ChatMessage::User { content } => {
+            ChatMessage::User {
+                content,
+                images: refs,
+            } if refs.is_empty() => {
                 out.push(json!({"role": "user", "content": content}));
+            }
+            ChatMessage::User {
+                content,
+                images: refs,
+            } => {
+                let mut blocks: Vec<Value> = refs
+                    .iter()
+                    .filter_map(|reference| images.get(reference))
+                    .map(image_block)
+                    .collect();
+                blocks.push(json!({"type": "text", "text": user_text(content, refs)}));
+                out.push(json!({"role": "user", "content": blocks}));
             }
             ChatMessage::Assistant {
                 content,
@@ -477,7 +500,16 @@ fn to_anthropic_messages(
                         .iter()
                         .map(|name| json!({"type": "tool_reference", "tool_name": name}))
                         .collect::<Vec<_>>()),
-                    None => json!(rendered),
+                    None => {
+                        let attached = images_in(&rendered, images);
+                        if attached.is_empty() {
+                            json!(rendered)
+                        } else {
+                            let mut blocks = vec![json!({"type": "text", "text": rendered})];
+                            blocks.extend(attached.into_iter().map(image_block));
+                            json!(blocks)
+                        }
+                    }
                 };
                 let block = json!({
                     "type": "tool_result",
@@ -640,9 +672,7 @@ mod tests {
         let request = ChatRequest {
             model: "m".into(),
             system: "Be brief.".into(),
-            messages: vec![ChatMessage::User {
-                content: "hi".into(),
-            }],
+            messages: vec![ChatMessage::user("hi")],
             response_schema: Some(ResponseSchema {
                 name: "answer".into(),
                 schema: json!({"type": "object"}),
@@ -697,9 +727,7 @@ mod tests {
 
     fn conversation() -> Vec<ChatMessage> {
         vec![
-            ChatMessage::User {
-                content: "the task, with a large stable brief".into(),
-            },
+            ChatMessage::user("the task, with a large stable brief"),
             ChatMessage::Assistant {
                 content: None,
                 thinking: Vec::new(),
@@ -902,9 +930,7 @@ mod tests {
         // two read it back rather than re-sending it.
         let req = ChatRequest {
             model: "claude-sonnet-5".into(),
-            messages: vec![ChatMessage::User {
-                content: "a very large task brief".into(),
-            }],
+            messages: vec![ChatMessage::user("a very large task brief")],
             tools: vec![ToolSpec {
                 name: "search".into(),
                 description: "search things".into(),
@@ -925,9 +951,7 @@ mod tests {
         let req = ChatRequest {
             model: "claude-sonnet-5".into(),
             system: "a stable drafting prompt".into(),
-            messages: vec![ChatMessage::User {
-                content: "a request that differs on every call".into(),
-            }],
+            messages: vec![ChatMessage::user("a request that differs on every call")],
             response_schema: Some(ResponseSchema {
                 name: "draft".into(),
                 schema: json!({"type": "object"}),
@@ -994,9 +1018,66 @@ mod tests {
                 is_error: false,
             },
         ];
-        let rendered = to_anthropic_messages(&messages, &BTreeMap::new());
+        let rendered = to_anthropic_messages(&messages, &BTreeMap::new(), &BTreeMap::new());
         assert_eq!(rendered.len(), 2);
         assert_eq!(rendered[1]["content"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn attached_and_tool_returned_images_are_sent_as_image_blocks() {
+        let shot = "blob:sha256-aaa.png".to_string();
+        let made = "blob:sha256-bbb.jpg".to_string();
+        let images = BTreeMap::from([
+            (
+                shot.clone(),
+                crate::image::ImageData {
+                    mime: "image/png".into(),
+                    bytes: b"png".to_vec(),
+                },
+            ),
+            (
+                made.clone(),
+                crate::image::ImageData {
+                    mime: "image/jpeg".into(),
+                    bytes: b"jpg".to_vec(),
+                },
+            ),
+        ]);
+        let messages = vec![
+            ChatMessage::User {
+                content: "what's wrong here?".into(),
+                images: vec![shot.clone()],
+            },
+            ChatMessage::Assistant {
+                content: None,
+                thinking: Vec::new(),
+                tool_calls: vec![ToolCall {
+                    id: "a".into(),
+                    name: "edit".into(),
+                    arguments: json!({}),
+                }],
+            },
+            ChatMessage::ToolResult {
+                tool_call_id: "a".into(),
+                content: json!({"images": [{"ref": made}]}),
+                is_error: false,
+            },
+        ];
+        let rendered = to_anthropic_messages(&messages, &BTreeMap::new(), &images);
+        let user = rendered[0]["content"].as_array().unwrap();
+        assert_eq!(user[0]["type"], "image");
+        assert_eq!(user[0]["source"]["media_type"], "image/png");
+        assert_eq!(user[0]["source"]["data"], base64(b"png"));
+        assert_eq!(
+            user[1]["text"],
+            format!("what's wrong here?\n\nAttached images: {shot}")
+        );
+        let result = rendered[2]["content"][0]["content"].as_array().unwrap();
+        assert_eq!(result[0]["type"], "text");
+        assert_eq!(result[1]["source"]["media_type"], "image/jpeg");
+
+        let plain = to_anthropic_messages(&[ChatMessage::user("hi")], &BTreeMap::new(), &images);
+        assert_eq!(plain[0]["content"], "hi");
     }
 
     #[test]

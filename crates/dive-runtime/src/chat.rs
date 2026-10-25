@@ -495,17 +495,30 @@ impl ChatSession {
     }
 
     pub async fn send(&mut self, message: &str) -> Result<TurnReport> {
-        self.turn(Some(message)).await
+        self.send_with(message, Vec::new()).await
+    }
+
+    pub async fn send_with(&mut self, message: &str, images: Vec<String>) -> Result<TurnReport> {
+        self.turn(Some(dive_llm::types::ChatMessage::User {
+            content: message.to_string(),
+            images,
+        }))
+        .await
     }
 
     pub async fn begin(&mut self) -> Result<TurnReport> {
         self.turn(None).await
     }
 
-    async fn turn(&mut self, message: Option<&str>) -> Result<TurnReport> {
+    async fn turn(&mut self, user: Option<dive_llm::types::ChatMessage>) -> Result<TurnReport> {
+        let message = match &user {
+            Some(dive_llm::types::ChatMessage::User { content, .. }) => Some(content.as_str()),
+            _ => None,
+        };
         let mut thread_error = None;
         if self.thread.is_none() {
             let title = message
+                .filter(|message| !message.trim().is_empty())
                 .map(str::to_string)
                 .or_else(|| self.title.clone())
                 .unwrap_or_else(|| self.active.clone());
@@ -540,7 +553,7 @@ impl ChatSession {
         }
         let turn = self
             .conversation
-            .run_turn_from(&self.history, &self.active, message);
+            .run_turn_with(&self.history, &self.active, user.clone());
         let result: Result<ConversationTurn> = match &self.cancel {
             Some(cancel) => match cancel.run(turn).await {
                 Ok(result) => result.map_err(Into::into),
@@ -1056,9 +1069,7 @@ mod tests {
         vec![
             NewEntry::message(
                 "user",
-                dive_llm::types::ChatMessage::User {
-                    content: "a tool that counts words".to_string(),
-                },
+                dive_llm::types::ChatMessage::user("a tool that counts words".to_string()),
             ),
             NewEntry::message(
                 "network_drafter",
@@ -1380,7 +1391,7 @@ mod tests {
             .iter()
             .find_map(|entry| match &entry.body {
                 dive_core::store::EntryBody::Message {
-                    message: dive_llm::types::ChatMessage::User { content },
+                    message: dive_llm::types::ChatMessage::User { content, .. },
                 } if entry.author == "context:network_editor" => Some(content.clone()),
                 _ => None,
             })

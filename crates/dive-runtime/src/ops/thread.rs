@@ -201,7 +201,7 @@ mod tests {
             NewEntry::new(
                 "chat",
                 EntryBody::Message {
-                    message: ChatMessage::User { content: text },
+                    message: ChatMessage::user(text),
                 },
             )
         };

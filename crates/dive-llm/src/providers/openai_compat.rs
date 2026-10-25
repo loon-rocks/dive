@@ -86,7 +86,7 @@ impl OpenAiCompatProvider {
             }
         }
         let mut messages = vec![json!({"role": "system", "content": system})];
-        messages.extend(to_openai_messages(&req.messages));
+        messages.extend(to_openai_messages(&req.messages, &req.images));
         body.insert("messages".into(), json!(messages));
         if stream {
             body.insert("stream".into(), json!(true));
@@ -299,11 +299,42 @@ fn offered_tools(req: &ChatRequest) -> Vec<&ToolSpec> {
     offered
 }
 
-fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
-    messages
-        .iter()
-        .map(|message| match message {
-            ChatMessage::User { content } => json!({"role": "user", "content": content}),
+fn image_part(image: &crate::image::ImageData) -> Value {
+    json!({
+        "type": "image_url",
+        "image_url": {"url": format!("data:{};base64,{}", image.mime, base64(&image.bytes))},
+    })
+}
+
+fn to_openai_messages(
+    messages: &[ChatMessage],
+    images: &std::collections::BTreeMap<String, crate::image::ImageData>,
+) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    let mut from_tools: Vec<Value> = Vec::new();
+    for message in messages {
+        if !matches!(message, ChatMessage::ToolResult { .. }) && !from_tools.is_empty() {
+            out.push(tool_images(std::mem::take(&mut from_tools)));
+        }
+        out.push(match message {
+            ChatMessage::User {
+                content,
+                images: refs,
+            } if refs.is_empty() => {
+                json!({"role": "user", "content": content})
+            }
+            ChatMessage::User {
+                content,
+                images: refs,
+            } => {
+                let mut parts = vec![json!({"type": "text", "text": user_text(content, refs)})];
+                parts.extend(
+                    refs.iter()
+                        .filter_map(|reference| images.get(reference))
+                        .map(image_part),
+                );
+                json!({"role": "user", "content": parts})
+            }
             ChatMessage::Assistant {
                 content,
                 tool_calls,
@@ -341,10 +372,21 @@ fn to_openai_messages(messages: &[ChatMessage]) -> Vec<Value> {
                     Value::String(s) => s.clone(),
                     other => other.to_string(),
                 };
+                from_tools.extend(images_in(&rendered, images).into_iter().map(image_part));
                 json!({"role": "tool", "tool_call_id": tool_call_id, "content": rendered})
             }
-        })
-        .collect()
+        });
+    }
+    if !from_tools.is_empty() {
+        out.push(tool_images(from_tools));
+    }
+    out
+}
+
+fn tool_images(parts: Vec<Value>) -> Value {
+    let mut content = vec![json!({"type": "text", "text": "Images from the tool results above."})];
+    content.extend(parts);
+    json!({"role": "user", "content": content})
 }
 
 fn parse_response(value: &Value, wants_structured: bool) -> Result<ChatResponse, LlmError> {
@@ -434,6 +476,68 @@ fn parse_json_content(text: &str) -> Result<Value, LlmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn images_go_in_user_parts_and_tool_images_follow_the_tool_messages() {
+        let shot = "blob:sha256-aaa.png".to_string();
+        let made = "blob:sha256-bbb.webp".to_string();
+        let images = std::collections::BTreeMap::from([
+            (
+                shot.clone(),
+                crate::image::ImageData {
+                    mime: "image/png".into(),
+                    bytes: b"png".to_vec(),
+                },
+            ),
+            (
+                made.clone(),
+                crate::image::ImageData {
+                    mime: "image/webp".into(),
+                    bytes: b"webp".to_vec(),
+                },
+            ),
+        ]);
+        let messages = vec![
+            ChatMessage::User {
+                content: String::new(),
+                images: vec![shot.clone()],
+            },
+            ChatMessage::Assistant {
+                content: None,
+                thinking: Vec::new(),
+                tool_calls: vec![ToolCall {
+                    id: "a".into(),
+                    name: "edit".into(),
+                    arguments: json!({}),
+                }],
+            },
+            ChatMessage::ToolResult {
+                tool_call_id: "a".into(),
+                content: json!({"ref": made}),
+                is_error: false,
+            },
+            ChatMessage::Assistant {
+                content: Some("done".into()),
+                thinking: Vec::new(),
+                tool_calls: Vec::new(),
+            },
+        ];
+        let rendered = to_openai_messages(&messages, &images);
+        let parts = rendered[0]["content"].as_array().unwrap();
+        assert_eq!(parts[0]["text"], format!("Attached images: {shot}"));
+        assert_eq!(
+            parts[1]["image_url"]["url"],
+            format!("data:image/png;base64,{}", base64(b"png"))
+        );
+        assert_eq!(rendered[2]["role"], "tool");
+        assert_eq!(rendered[3]["role"], "user");
+        assert_eq!(
+            rendered[3]["content"][1]["image_url"]["url"],
+            format!("data:image/webp;base64,{}", base64(b"webp"))
+        );
+        assert_eq!(rendered[4]["role"], "assistant");
+        assert_eq!(rendered.len(), 5);
+    }
 
     #[test]
     fn builds_json_schema_then_falls_back_to_json_object_body() {

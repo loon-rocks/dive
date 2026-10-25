@@ -142,7 +142,7 @@ fn render_entry(entry: &ThreadEntry) -> String {
 
 fn render_message(author: &str, message: &ChatMessage) -> String {
     match message {
-        ChatMessage::User { content } => format!("{author}> {content}\n"),
+        ChatMessage::User { content, .. } => format!("{author}> {content}\n"),
         ChatMessage::Assistant {
             content,
             tool_calls,

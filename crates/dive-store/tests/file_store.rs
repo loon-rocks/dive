@@ -15,9 +15,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 fn user(content: &str) -> ChatMessage {
-    ChatMessage::User {
-        content: content.into(),
-    }
+    ChatMessage::user(content)
 }
 
 #[tokio::test]

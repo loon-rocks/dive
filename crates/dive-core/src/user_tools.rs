@@ -1270,7 +1270,7 @@ impl UserToolRegistry {
             render_str(prompt, roots).map_err(|e| ToolError::Transport(e.to_string()))?;
         let request = ChatRequest {
             system: system.unwrap_or_default().to_string(),
-            messages: vec![ChatMessage::User { content: rendered }],
+            messages: vec![ChatMessage::user(rendered)],
             response_schema: schema.as_ref().map(|schema| ResponseSchema {
                 name: doc.name.clone(),
                 schema: schema.clone(),
