@@ -1,4 +1,12 @@
 use super::*;
+
+#[test]
+fn the_standard_roles_are_default_and_every_engine_role() {
+    let engine: Vec<&str> = std::iter::once("default")
+        .chain(dive_config::Role::ALL.iter().map(|role| role.as_str()))
+        .collect();
+    assert_eq!(STANDARD_ROLES.to_vec(), engine);
+}
 use dive_core::secrets::MemorySecrets;
 
 const GLOBAL: &str = r#"version = 5
