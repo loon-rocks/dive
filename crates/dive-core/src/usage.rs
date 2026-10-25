@@ -265,13 +265,7 @@ impl UsageMeter for UsageLedger {
             input: call.input,
             output: call.output,
         };
-        crate::trace::record(crate::trace::Call::Model {
-            role: event.role.clone(),
-            site: event.site.clone(),
-            model_type: event.kind,
-            ms: u64::try_from(event.elapsed.as_millis()).unwrap_or(u64::MAX),
-            usage: crate::store::EntryUsage::new(&event.model, &event.usage),
-        });
+        crate::trace::model(event.span());
         self.calls.lock().unwrap().push(CallRecord {
             kind: call.kind,
             provider: call.provider,
@@ -304,6 +298,60 @@ pub struct ModelCallEvent {
     pub cost_usd: Option<f64>,
     pub input: Option<serde_json::Value>,
     pub output: Option<serde_json::Value>,
+}
+
+impl ModelCallEvent {
+    pub fn span(&self) -> crate::trace::ModelSpan {
+        let usage = &self.usage;
+        let mut attributes = std::collections::BTreeMap::from([
+            (
+                "gen_ai.operation.name".to_string(),
+                self.kind.as_str().into(),
+            ),
+            (
+                "gen_ai.provider.name".to_string(),
+                self.provider.clone().into(),
+            ),
+            (
+                "gen_ai.request.model".to_string(),
+                self.model.clone().into(),
+            ),
+            (
+                "gen_ai.usage.input_tokens".to_string(),
+                usage.input_tokens.into(),
+            ),
+            (
+                "gen_ai.usage.output_tokens".to_string(),
+                usage.output_tokens.into(),
+            ),
+            (
+                "gen_ai.usage.cache_read.input_tokens".to_string(),
+                usage.cache_read_input_tokens.into(),
+            ),
+            (
+                "gen_ai.usage.cache_creation.input_tokens".to_string(),
+                usage.cache_creation_input_tokens.into(),
+            ),
+            ("dive.role".to_string(), self.role.clone().into()),
+            ("dive.site".to_string(), self.site.clone().into()),
+        ]);
+        if usage.output_image_tokens > 0 {
+            attributes.insert(
+                "dive.usage.output_image_tokens".to_string(),
+                usage.output_image_tokens.into(),
+            );
+        }
+        if let Some(cost) = self.cost_usd {
+            attributes.insert("dive.cost_usd".to_string(), cost.into());
+        }
+        crate::trace::ModelSpan {
+            name: format!("{} {}", self.kind.as_str(), self.model),
+            elapsed: self.elapsed,
+            attributes,
+            input: self.input.clone(),
+            output: self.output.clone(),
+        }
+    }
 }
 
 /// What a run spent.

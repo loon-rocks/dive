@@ -5,6 +5,7 @@
 //! ```text
 //! <root>/threads/<id>/meta.json       thread metadata (atomic rename writes)
 //! <root>/threads/<id>/entries.jsonl   one ThreadEntry per line (O_APPEND)
+//! <root>/threads/<id>/spans.jsonl     one finished trace Span per line (O_APPEND)
 //! <root>/threads/<id>/.lock           advisory lock for append+meta updates
 //! <root>/shapes/<tool>.json           one file per tool shape (atomic rename)
 //! <root>/files/<hash>.<ext>           stored files, see `ObjectFiles`
@@ -19,8 +20,8 @@
 //! assume a local filesystem (flock over NFS is unreliable).
 
 use dive_core::store::{
-    message_entries, Attachment, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta,
-    ToolShape,
+    message_entries, Attachment, EntryBody, NewEntry, Span, Store, StoreError, ThreadEntry,
+    ThreadMeta, ToolShape,
 };
 use dive_llm::types::ChatMessage;
 use fs4::fs_std::FileExt;
@@ -40,6 +41,8 @@ const FORMAT_VERSION: u32 = STORE_FORMAT;
 const FORMAT_MARKER: &str = "FORMAT";
 
 const ENTRIES_FILE: &str = "entries.jsonl";
+
+const SPANS_FILE: &str = "spans.jsonl";
 
 const LEGACY_MESSAGES_FILE: &str = "messages.jsonl";
 
@@ -365,14 +368,28 @@ fn legacy_entries(dir: &Path, at: i64) -> Result<Option<Vec<ThreadEntry>>, Store
     ))
 }
 
-fn entry_lines(entries: &[ThreadEntry]) -> Result<Vec<u8>, StoreError> {
+fn json_lines<T: Serialize>(items: &[T], what: &str) -> Result<Vec<u8>, StoreError> {
     let mut buf = Vec::new();
-    for entry in entries {
-        serde_json::to_writer(&mut buf, entry)
-            .map_err(|e| StoreError(format!("serializing thread entry: {e}")))?;
+    for item in items {
+        serde_json::to_writer(&mut buf, item)
+            .map_err(|e| StoreError(format!("serializing {what}: {e}")))?;
         buf.push(b'\n');
     }
     Ok(buf)
+}
+
+fn entry_lines(entries: &[ThreadEntry]) -> Result<Vec<u8>, StoreError> {
+    json_lines(entries, "thread entry")
+}
+
+fn append_to(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| StoreError(format!("opening {}: {e}", path.display())))?
+        .write_all(bytes)
+        .map_err(|e| StoreError(format!("appending to {}: {e}", path.display())))
 }
 
 fn upgrade_legacy_log(dir: &Path, meta: &mut MetaFile) -> Result<(), StoreError> {
@@ -549,6 +566,26 @@ impl Store for FileStore {
             Ok(read_jsonl::<ThreadEntry>(&dir.join(ENTRIES_FILE))?.unwrap_or_default())
         })
         .await
+    }
+
+    async fn append_spans(&self, thread_id: &str, spans: &[Span]) -> Result<(), StoreError> {
+        if spans.is_empty() {
+            return Ok(());
+        }
+        let thread_id = thread_id.to_string();
+        let dir = self.thread_dir(&thread_id);
+        let lines = json_lines(spans, "trace span")?;
+        self.blocking(move || {
+            let (_lock, _) = lock_existing_thread(&dir, &thread_id)?;
+            append_to(&dir.join(SPANS_FILE), &lines)
+        })
+        .await
+    }
+
+    async fn load_spans(&self, thread_id: &str) -> Result<Vec<Span>, StoreError> {
+        let dir = self.thread_dir(thread_id);
+        self.blocking(move || Ok(read_jsonl::<Span>(&dir.join(SPANS_FILE))?.unwrap_or_default()))
+            .await
     }
 
     async fn set_active_agent(&self, thread_id: &str, agent: &str) -> Result<(), StoreError> {

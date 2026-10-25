@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use toml_edit::{DocumentMut, Item, Value};
 
-pub const CONFIG_FORMAT: u32 = 5;
+pub const CONFIG_FORMAT: u32 = 6;
 
 pub const CONFIG_FORMAT_OLDEST: u32 = 1;
 
@@ -18,6 +18,7 @@ const MIGRATIONS: &[Migration] = &[
     telemetry_section_added,
     config_version_4_additions,
     config_version_5_additions,
+    telemetry_content_opt_in,
 ];
 
 const RETIRED_ROLES: &[&str] = &["embedder", "use_case_solver"];
@@ -65,6 +66,19 @@ fn named_models_become_roles(doc: &mut DocumentMut) -> Result<Vec<String>, Strin
 
 fn telemetry_section_added(_doc: &mut DocumentMut) -> Result<Vec<String>, String> {
     Ok(Vec::new())
+}
+
+fn telemetry_content_opt_in(doc: &mut DocumentMut) -> Result<Vec<String>, String> {
+    let Some(telemetry) = doc.get_mut("telemetry").and_then(Item::as_table_like_mut) else {
+        return Ok(Vec::new());
+    };
+    if telemetry.contains_key("capture_content") {
+        return Ok(Vec::new());
+    }
+    telemetry.insert("capture_content", toml_edit::value(true));
+    Ok(vec![
+        "telemetry.capture_content now defaults to false, so this file says true to keep exporting call content".to_string(),
+    ])
 }
 
 fn config_version_5_additions(doc: &mut DocumentMut) -> Result<Vec<String>, String> {

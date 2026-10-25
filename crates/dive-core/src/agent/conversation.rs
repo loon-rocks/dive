@@ -48,6 +48,7 @@ pub struct Conversation {
     pub standing_tools: Vec<String>,
     pub handoff_guard: Option<HandoffGuard>,
     pub files: Option<Arc<dyn crate::files::BlobStore>>,
+    pub trace: crate::trace::Content,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -72,6 +73,7 @@ pub struct ConversationTurn {
     pub entries: Vec<NewEntry>,
     pub tool_calls_made: u32,
     pub tools_used: Vec<String>,
+    pub spans: Vec<crate::trace::Span>,
 }
 
 impl Conversation {
@@ -109,6 +111,33 @@ impl Conversation {
     }
 
     pub async fn run_turn_with(
+        &self,
+        history: &[NewEntry],
+        active: &str,
+        user: Option<ChatMessage>,
+    ) -> Result<ConversationTurn, ConversationError> {
+        let mut open = crate::trace::Open::new(crate::trace::SpanKind::Turn, active)
+            .attr("gen_ai.operation.name", "invoke_agent")
+            .attr("gen_ai.agent.name", active);
+        if let Some(ChatMessage::User { content, .. }) = &user {
+            open = open.input(&Value::String(content.clone()));
+        }
+        let root = crate::trace::Root {
+            open,
+            events: self.events.clone(),
+            content: self.trace,
+            trace_id: None,
+        };
+        let (result, traced) = crate::trace::root(root, self.turn(history, active, user)).await;
+        match &result {
+            Ok(turn) => traced.close(false, Some(&Value::String(turn.text.clone()))),
+            Err(error) => traced.close(true, Some(&json!({ "error": error.to_string() }))),
+        }
+        let spans = traced.spans();
+        result.map(|turn| ConversationTurn { spans, ..turn })
+    }
+
+    async fn turn(
         &self,
         history: &[NewEntry],
         active: &str,
@@ -185,6 +214,7 @@ impl Conversation {
                     entries,
                     tool_calls_made,
                     tools_used,
+                    spans: Vec::new(),
                 });
             };
             handoffs += 1;
@@ -210,6 +240,7 @@ impl Conversation {
                     entries,
                     tool_calls_made,
                     tools_used,
+                    spans: Vec::new(),
                 });
             }
             active = target;
@@ -392,6 +423,7 @@ impl Conversation {
                 is_error: true,
             }
         };
+        let span = crate::trace::current_span_id();
         let entry = NewEntry::new(
             caller,
             EntryBody::SubagentRun {
@@ -402,7 +434,8 @@ impl Conversation {
                 output: outcome.output,
                 final_: outcome.final_,
             },
-        );
+        )
+        .in_span(span);
         (result, Some(entry))
     }
 }
@@ -515,23 +548,27 @@ impl TaskTools for RegistryTools<'_> {
         _round: u32,
     ) -> Result<Vec<ChatMessage>, TaskError> {
         let runs = calls.iter().map(|call| async {
-            let (outcome, traced) = crate::trace::tool(crate::trace::FrameKind::Tool, async {
-                self.events.tool_started(&call.name, &call.arguments);
-                let started = std::time::Instant::now();
-                let outcome = self
-                    .registry
-                    .invoke(&call.name, call.arguments.clone())
-                    .await
-                    .unwrap_or_else(|e| ToolOutcome {
-                        result: json!({ "error": e.to_string() }),
-                        is_error: true,
-                    });
-                self.events
-                    .tool_finished(&call.name, started.elapsed(), outcome.is_error);
-                outcome
-            })
-            .await;
-            traced.finish(&call.name, outcome.is_error);
+            let open = crate::trace::Open::tool(&call.name)
+                .attr("gen_ai.tool.call.id", call.id.clone())
+                .input(&call.arguments);
+            let (outcome, traced) =
+                crate::trace::span(crate::trace::FrameKind::Tool, open, async {
+                    self.events.tool_started(&call.name, &call.arguments);
+                    let started = std::time::Instant::now();
+                    let outcome = self
+                        .registry
+                        .invoke(&call.name, call.arguments.clone())
+                        .await
+                        .unwrap_or_else(|e| ToolOutcome {
+                            result: json!({ "error": e.to_string() }),
+                            is_error: true,
+                        });
+                    self.events
+                        .tool_finished(&call.name, started.elapsed(), outcome.is_error);
+                    outcome
+                })
+                .await;
+            traced.close(outcome.is_error, Some(&outcome.result));
             ChatMessage::ToolResult {
                 tool_call_id: call.id.clone(),
                 content: outcome.result,
@@ -982,6 +1019,7 @@ mod tests {
             standing_tools: Vec::new(),
             handoff_guard: None,
             files: None,
+            trace: Default::default(),
         };
         (conversation, provider)
     }
@@ -1707,27 +1745,42 @@ mod tests {
                 )
             })
             .expect("the subagent's tool result");
-        let kinds: Vec<String> = result
-            .calls
+        let run = result
+            .span
+            .as_ref()
+            .expect("the tool result names its span");
+        let span = |id: &str| turn.spans.iter().find(|span| span.span_id == id).unwrap();
+        assert_eq!(span(run).kind, crate::trace::SpanKind::Agent);
+        let kinds: Vec<String> = turn
+            .spans
             .iter()
-            .map(|call| match call {
-                crate::trace::Call::Model { site, .. } => format!("model {site}"),
-                crate::trace::Call::Tool { name, .. } => format!("tool {name}"),
+            .filter(|span| span.parent_span_id.as_ref() == Some(run))
+            .map(|span| match span.kind {
+                crate::trace::SpanKind::Model => {
+                    format!("model {}", span.attribute("dive.site").unwrap())
+                }
+                _ => format!("tool {}", span.name),
             })
             .collect();
         assert_eq!(
             kinds,
             [
-                "model agent:front/agent__helper",
+                "model \"agent:front/agent__helper\"",
                 "tool t__echo",
-                "model agent:front/agent__helper"
+                "model \"agent:front/agent__helper\""
             ]
         );
-        assert!(turn
-            .entries
+        let root = turn
+            .spans
             .iter()
-            .filter(|entry| entry.usage.is_some())
-            .all(|entry| entry.calls.is_empty()));
+            .find(|span| span.parent_span_id.is_none())
+            .unwrap();
+        assert_eq!(root.kind, crate::trace::SpanKind::Turn);
+        for entry in turn.entries.iter().filter(|entry| entry.usage.is_some()) {
+            let model = span(entry.span.as_ref().expect("a model round names its span"));
+            assert_eq!(model.kind, crate::trace::SpanKind::Model);
+            assert_eq!(model.parent_span_id.as_ref(), Some(&root.span_id));
+        }
     }
 
     #[tokio::test]

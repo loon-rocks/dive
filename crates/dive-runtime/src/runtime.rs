@@ -103,7 +103,7 @@ impl Runtime {
         // would silently miss whatever was already handed out.
         let usage = Arc::new(
             UsageLedger::new(loaded.config.pricing.clone())
-                .with_content_capture(options.capture_content),
+                .with_content_capture(options.capture_content || loaded.config.trace.content),
         );
         let router = router.with_meter(usage.clone());
         let files = crate::files::open(&loaded.config, storage_backend(&loaded.config, &options)?);
@@ -563,6 +563,14 @@ impl Runtime {
             standing_tools: Vec::new(),
             handoff_guard: None,
             files: Some(self.files()),
+            trace: self.trace_content(),
+        }
+    }
+
+    pub fn trace_content(&self) -> dive_core::trace::Content {
+        dive_core::trace::Content {
+            keep: self.config.trace.content,
+            clip: self.config.trace.clip_bytes,
         }
     }
 
@@ -715,6 +723,7 @@ pub async fn persist_turn(
     turn: &ConversationTurn,
 ) -> Result<()> {
     store.append_entries(&meta.id, &turn.entries).await?;
+    store.append_spans(&meta.id, &turn.spans).await?;
     if turn.active != active {
         store.set_active_agent(&meta.id, &turn.active).await?;
     }

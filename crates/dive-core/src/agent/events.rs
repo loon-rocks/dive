@@ -1,6 +1,7 @@
 //! Progress events emitted by the agent loop. Sinks render them for a TTY,
 //! as JSONL, or (later) into a TUI.
 
+use crate::trace::Span;
 use crate::usage::{ModelCallEvent, UsageReport};
 use serde_json::Value;
 use std::sync::Arc;
@@ -74,6 +75,8 @@ pub trait EventSink: Send + Sync {
         self.tool_finished(name, elapsed, is_error);
     }
     fn attachment_changed(&self, _kind: &str, _view: &Value) {}
+    fn span_started(&self, _span: &Span) {}
+    fn span_finished(&self, _span: &Span) {}
 }
 
 #[derive(Debug, Clone, Default)]
@@ -211,6 +214,14 @@ impl EventSink for TeeSink {
             .iter()
             .for_each(|s| s.attachment_changed(kind, view));
     }
+
+    fn span_started(&self, span: &Span) {
+        self.sinks.iter().for_each(|s| s.span_started(span));
+    }
+
+    fn span_finished(&self, span: &Span) {
+        self.sinks.iter().for_each(|s| s.span_finished(span));
+    }
 }
 
 pub struct SubagentSink {
@@ -259,6 +270,14 @@ impl EventSink for SubagentSink {
     fn subagent_tool_finished(&self, run: u64, name: &str, elapsed: Duration, is_error: bool) {
         self.inner
             .subagent_tool_finished(run, name, elapsed, is_error);
+    }
+
+    fn span_started(&self, span: &Span) {
+        self.inner.span_started(span);
+    }
+
+    fn span_finished(&self, span: &Span) {
+        self.inner.span_finished(span);
     }
 }
 

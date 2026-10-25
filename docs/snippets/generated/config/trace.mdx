@@ -1,0 +1,11 @@
+<ParamField body="trace" type="object">
+  What each thread's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the thread's `spans.jsonl`.
+</ParamField>
+
+<ParamField body="trace.content" type="boolean" default="true">
+  Keep every call's input and output in the thread's trace. Off keeps names, timing, status and token counts only.
+</ParamField>
+
+<ParamField body="trace.clip_bytes" type="integer">
+  Clip each kept input and output to about this many bytes of JSON, in the trace and in exported spans. Absent keeps them whole.
+</ParamField>

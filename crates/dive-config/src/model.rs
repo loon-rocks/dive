@@ -35,6 +35,8 @@ pub struct Config {
     pub workbench: WorkbenchConfig,
     #[serde(default)]
     pub telemetry: TelemetryConfig,
+    #[serde(default)]
+    pub trace: TraceConfig,
     /// Per-model token prices, e.g. `[pricing."claude-sonnet-5"]`. Keyed by
     /// the model id as written in `[models]` — that is what goes on the wire.
     /// Absent prices mean usage is reported in tokens with no dollar figure.
@@ -234,7 +236,7 @@ pub struct WorkbenchConfig {
     pub log_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct TelemetryConfig {
     pub endpoint: Option<String>,
@@ -249,18 +251,23 @@ pub struct TelemetryConfig {
     pub missing_env: Vec<MissingEnv>,
 }
 
-impl Default for TelemetryConfig {
+/// What each thread's trace keeps of the calls it records.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct TraceConfig {
+    /// Keep every call's input and output (model prompts and responses,
+    /// tool arguments and results) in the thread's trace. Default: true.
+    pub content: bool,
+    /// Clip each kept input and output to about this many bytes of JSON.
+    /// Absent keeps them whole; it also clips what telemetry exports.
+    pub clip_bytes: Option<usize>,
+}
+
+impl Default for TraceConfig {
     fn default() -> Self {
         Self {
-            endpoint: None,
-            protocol: TelemetryProtocol::default(),
-            timeout_secs: None,
-            service_name: None,
-            headers: BTreeMap::new(),
-            resource: BTreeMap::new(),
-            capture_content: true,
-            logs: false,
-            missing_env: Vec::new(),
+            content: true,
+            clip_bytes: None,
         }
     }
 }

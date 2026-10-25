@@ -168,6 +168,9 @@ impl Workbench {
         if let Err(error) = self.store.append_entries(&id, &turn.entries).await {
             tracing::warn!("couldn't save the draft turn: {error}");
         }
+        if let Err(error) = self.store.append_spans(&id, &turn.spans).await {
+            tracing::warn!("couldn't save the draft turn's trace: {error}");
+        }
         if turn.active != active {
             let _ = self.store.set_active_agent(&id, &turn.active).await;
         }

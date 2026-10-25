@@ -536,6 +536,19 @@ impl crate::store::Store for ShapeOnlyStore {
     ) -> Result<(), crate::store::StoreError> {
         unimplemented!()
     }
+    async fn append_spans(
+        &self,
+        _: &str,
+        _: &[crate::store::Span],
+    ) -> Result<(), crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn load_spans(
+        &self,
+        _: &str,
+    ) -> Result<Vec<crate::store::Span>, crate::store::StoreError> {
+        unimplemented!()
+    }
     async fn load_entries(
         &self,
         _: &str,

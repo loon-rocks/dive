@@ -1,0 +1,14 @@
+version = 6
+
+[storage.files]
+backend = "s3"
+endpoint = "https://s3.example.test"
+bucket = "graph"
+region = "garage"
+prefix = "team"
+access_key_id = "key"
+secret_access_key = "secret"
+
+[mcp.browser]
+command = "browser-mcp"
+files = "url"

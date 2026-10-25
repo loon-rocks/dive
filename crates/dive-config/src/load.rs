@@ -1152,7 +1152,7 @@ fallbacks = [
         assert_eq!(empty.protocol, TelemetryProtocol::HttpProtobuf);
         assert_eq!(empty.service_name(), "dive");
         assert_eq!(empty.timeout_secs(), 30);
-        assert!(empty.capture_content);
+        assert!(!empty.capture_content);
         assert!(!empty.logs);
 
         let dir = tempfile::tempdir().unwrap();
@@ -1183,6 +1183,51 @@ fallbacks = [
         assert_eq!(telemetry.headers["x-langfuse-ingestion-version"], "4");
         assert_eq!(telemetry.resource["deployment.environment"], "dev");
         assert!(telemetry.missing_env.is_empty());
+    }
+
+    #[test]
+    fn a_trace_keeps_content_whole_unless_told_otherwise() {
+        let empty = load_from(&[]).unwrap().config.trace;
+        assert!(empty.content);
+        assert_eq!(empty.clip_bytes, None);
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(
+            dir.path(),
+            "config.toml",
+            "version = 6\n[trace]\ncontent = false\nclip_bytes = 2048\n",
+        );
+        let trace = load_from(&[path]).unwrap().config.trace;
+        assert!(!trace.content);
+        assert_eq!(trace.clip_bytes, Some(2048));
+    }
+
+    #[test]
+    fn an_older_telemetry_section_keeps_exporting_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let older = write(
+            dir.path(),
+            "older.toml",
+            "version = 5\n[telemetry]\nendpoint = \"http://localhost:4318\"\n",
+        );
+        assert!(
+            load_from(&[older])
+                .unwrap()
+                .config
+                .telemetry
+                .capture_content
+        );
+        let newer = write(
+            dir.path(),
+            "newer.toml",
+            "version = 6\n[telemetry]\nendpoint = \"http://localhost:4318\"\n",
+        );
+        assert!(
+            !load_from(&[newer])
+                .unwrap()
+                .config
+                .telemetry
+                .capture_content
+        );
     }
 
     #[test]

@@ -25,8 +25,8 @@ pub use model::{
     FilesBackend, FilesConfig, FilesMode, McpServerConfig, MissingEnv, ModelChoice, ModelKind,
     ModelPrice, ModelRoles, PlanPaths, PriceTier, ProjectConfig, PromptConfig, ProviderConfig,
     ProviderKind, Rates, Role, Settings, StorageBackend, StorageConfig, TelemetryConfig,
-    TelemetryProtocol, TokenCounts, ToolOverride, ToolPaths, UserConfig, WorkbenchConfig,
-    DEFAULT_ROLE,
+    TelemetryProtocol, TokenCounts, ToolOverride, ToolPaths, TraceConfig, UserConfig,
+    WorkbenchConfig, DEFAULT_ROLE,
 };
 
 pub const SCHEMA: &str = include_str!("schema.yaml");

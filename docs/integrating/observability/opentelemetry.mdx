@@ -76,7 +76,10 @@ Langfuse groups the traces of one thread, or one workbench session, into a sessi
 
 - One trace per run or turn; steps, tool calls and model calls as spans
 - Model, token usage and cost on each model call
-- `capture_content` controls whether prompts and responses are included; `logs` exports logs too
+- `capture_content` includes each call's input and output: prompts, responses, tool arguments and results. It's off unless you turn it on. Content is exported whole; set [`trace.clip_bytes`](/reference/configuration#param-trace-clip-bytes) to clip it
+- `logs` exports logs too
+
+Dive also keeps every turn's trace with its thread, whether or not telemetry is on. See [Thread traces](/reference/data-directory#thread-traces).
 
 ## Check it worked
 

@@ -1,0 +1,28 @@
+version = 6
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "test-key"
+
+[providers.gemini]
+type = "gemini"
+api_key = "test-key"
+
+[models.default]
+provider = "anthropic"
+model = "claude-sonnet-5"
+
+[models.image]
+provider = "gemini"
+model = "gemini-nano-banana-2.1"
+
+[models.hero_art]
+type = "image"
+provider = "gemini"
+model = "gemini-3-pro-image"
+description = "Detailed scenes and text in images"
+
+[pricing."gemini-nano-banana-2.1"]
+input = 0.30
+output = 2.50
+output_image = 30.0

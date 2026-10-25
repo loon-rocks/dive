@@ -168,7 +168,7 @@ fn clearing_every_choice_removes_the_sections_from_the_file() {
 
 #[test]
 fn saving_creates_a_missing_project_file() {
-    let (_dir, layers) = layers("version = 5\n", None);
+    let (_dir, layers) = layers("version = 6\n", None);
     save_in(
         &layers,
         &StorageEdit {
@@ -178,7 +178,7 @@ fn saving_creates_a_missing_project_file() {
     )
     .unwrap();
     assert!(
-        text(&layers).starts_with("version = 5"),
+        text(&layers).starts_with("version = 6"),
         "{}",
         text(&layers)
     );

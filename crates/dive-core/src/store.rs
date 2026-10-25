@@ -2,6 +2,7 @@
 //! Implemented by dive-store; behind a trait so backends (file, memory,
 //! future remote stores) can be swapped.
 
+pub use crate::trace::Span;
 use async_trait::async_trait;
 use dive_llm::types::{ChatMessage, Usage};
 use serde::{Deserialize, Serialize};
@@ -75,8 +76,8 @@ pub struct ThreadEntry {
     pub ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<EntryUsage>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub calls: Vec<crate::trace::Call>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,7 +126,7 @@ impl EntryUsage {
 pub struct Stamp {
     pub ms: Option<u64>,
     pub usage: Option<EntryUsage>,
-    pub calls: Vec<crate::trace::Call>,
+    pub span: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,7 +159,7 @@ pub struct NewEntry {
     pub body: EntryBody,
     pub ms: Option<u64>,
     pub usage: Option<EntryUsage>,
-    pub calls: Vec<crate::trace::Call>,
+    pub span: Option<String>,
 }
 
 impl NewEntry {
@@ -168,7 +169,7 @@ impl NewEntry {
             body,
             ms: None,
             usage: None,
-            calls: Vec::new(),
+            span: None,
         }
     }
 
@@ -176,11 +177,15 @@ impl NewEntry {
         Self::new(author, EntryBody::Message { message })
     }
 
+    pub fn in_span(self, span: Option<String>) -> Self {
+        Self { span, ..self }
+    }
+
     pub fn stamped(self, stamp: Stamp) -> Self {
         Self {
             ms: stamp.ms,
             usage: stamp.usage,
-            calls: stamp.calls,
+            span: stamp.span,
             ..self
         }
     }
@@ -193,7 +198,7 @@ impl NewEntry {
             body: self.body,
             ms: self.ms,
             usage: self.usage,
-            calls: self.calls,
+            span: self.span,
         }
     }
 }
@@ -205,7 +210,7 @@ impl From<ThreadEntry> for NewEntry {
             body: entry.body,
             ms: entry.ms,
             usage: entry.usage,
-            calls: entry.calls,
+            span: entry.span,
         }
     }
 }
@@ -264,6 +269,8 @@ pub trait Store: Send + Sync {
     async fn append_entries(&self, thread_id: &str, entries: &[NewEntry])
         -> Result<(), StoreError>;
     async fn load_entries(&self, thread_id: &str) -> Result<Vec<ThreadEntry>, StoreError>;
+    async fn append_spans(&self, thread_id: &str, spans: &[Span]) -> Result<(), StoreError>;
+    async fn load_spans(&self, thread_id: &str) -> Result<Vec<Span>, StoreError>;
     async fn set_active_agent(&self, thread_id: &str, agent: &str) -> Result<(), StoreError>;
     async fn set_attachments(
         &self,
@@ -300,7 +307,7 @@ mod tests {
             },
             ms: None,
             usage: None,
-            calls: Vec::new(),
+            span: None,
         };
         let value = serde_json::to_value(&entry).unwrap();
         assert_eq!(
@@ -325,7 +332,7 @@ mod tests {
             },
             ms: None,
             usage: None,
-            calls: Vec::new(),
+            span: None,
         };
         let value = serde_json::to_value(&run).unwrap();
         assert_eq!(value["kind"], json!("subagent_run"));
