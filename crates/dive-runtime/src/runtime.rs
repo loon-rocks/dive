@@ -790,7 +790,12 @@ pub fn load_packs(loaded: &dive_config::LoadedConfig) -> Result<crate::packs::In
 }
 
 pub fn load_config(workspace: &Workspace) -> Result<dive_config::LoadedConfig> {
-    dive_config::load_from(&workspace.config_paths(), &dive_core::secrets::system())
+    let mut loaded =
+        dive_config::load_from(&workspace.config_paths(), &dive_core::secrets::system())?;
+    if workspace.is_global() {
+        dive_config::without_project_paths(&mut loaded.config);
+    }
+    Ok(loaded)
 }
 
 pub fn config_notices(loaded: &dive_config::LoadedConfig) -> Vec<String> {
@@ -878,11 +883,7 @@ pub fn global_config_dir() -> PathBuf {
 }
 
 pub fn is_global_dir(dir: &Path) -> bool {
-    let global = global_config_dir();
-    match (dir.canonicalize(), global.canonicalize()) {
-        (Ok(dir), Ok(global)) => dir == global,
-        _ => dir == global,
-    }
+    dive_config::is_global_dir(dir)
 }
 
 #[derive(Debug, Clone, Default)]

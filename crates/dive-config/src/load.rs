@@ -31,6 +31,23 @@ pub fn project_config_path() -> PathBuf {
     crate::legacy::project_dir(Path::new(".")).join("config.toml")
 }
 
+pub fn is_global_dir(dir: &Path) -> bool {
+    let global = crate::expand_tilde(&global_config_path());
+    let Some(global) = global.parent() else {
+        return false;
+    };
+    match (dir.canonicalize(), global.canonicalize()) {
+        (Ok(dir), Ok(global)) => dir == global,
+        _ => dir == global,
+    }
+}
+
+pub fn without_project_paths(config: &mut crate::Config) {
+    let absolute = |path: &PathBuf| crate::expand_tilde(path).is_absolute();
+    config.tools.paths.retain(absolute);
+    config.plans.paths.retain(absolute);
+}
+
 /// Load and merge the global and project config files.
 ///
 /// Missing files are skipped; `~` in path values is expanded; `${VAR}`
@@ -403,6 +420,19 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_global_workspace_drops_project_relative_tool_and_plan_paths() {
+        let mut config = crate::Config::default();
+        config.tools.paths = vec![
+            PathBuf::from("./.dive/tools"),
+            PathBuf::from("~/.config/dive/tools"),
+        ];
+        config.plans.paths = vec![PathBuf::from("./.dive/plans"), PathBuf::from("/srv/plans")];
+        without_project_paths(&mut config);
+        assert_eq!(config.tools.paths, [PathBuf::from("~/.config/dive/tools")]);
+        assert_eq!(config.plans.paths, [PathBuf::from("/srv/plans")]);
+    }
     use crate::model::{ModelChoice, ModelKind, ModelRoles, ProviderKind, Role};
     use crate::secrets::{EnvSource, Origin, Resolved};
 

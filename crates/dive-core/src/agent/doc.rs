@@ -228,8 +228,10 @@ pub fn load_agent_dir(dir: &Path) -> LoadedAgents {
 
 pub fn agent_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
-    if let Some(parent) = dive_config::project_config_path().parent() {
-        dirs.push(parent.join("agents"));
+    if !dive_config::is_global_dir(std::path::Path::new(".")) {
+        if let Some(parent) = dive_config::project_config_path().parent() {
+            dirs.push(parent.join("agents"));
+        }
     }
     if let Some(parent) = dive_config::global_config_path().parent() {
         dirs.push(parent.join("agents"));

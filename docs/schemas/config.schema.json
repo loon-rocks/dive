@@ -243,7 +243,7 @@
             "./.dive/plans",
             "~/.config/dive/plans"
           ],
-          "description": "Plan directories, searched in order.",
+          "description": "Plan directories, searched in order. New plans are saved to the first one. In the global workspace (`~/.config/dive`), relative entries such as `./.dive/plans` are skipped.",
           "items": {
             "type": "string"
           },
@@ -544,7 +544,7 @@
             "./.dive/tools",
             "~/.config/dive/tools"
           ],
-          "description": "Tool directories, searched in order.",
+          "description": "Tool directories, searched in order. New tools are saved to the first one. In the global workspace (`~/.config/dive`), relative entries such as `./.dive/tools` are skipped.",
           "items": {
             "type": "string"
           },
