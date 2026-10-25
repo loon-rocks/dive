@@ -610,6 +610,7 @@ pub struct ModelRoles(BTreeMap<String, ModelChoice>);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
     Chat,
+    Architect,
     Drafter,
     Planner,
     Outliner,
@@ -621,8 +622,9 @@ pub enum Role {
 }
 
 impl Role {
-    pub const ALL: [Role; 9] = [
+    pub const ALL: [Role; 10] = [
         Role::Chat,
+        Role::Architect,
         Role::Drafter,
         Role::Planner,
         Role::Outliner,
@@ -636,6 +638,7 @@ impl Role {
     pub fn as_str(self) -> &'static str {
         match self {
             Role::Chat => "chat",
+            Role::Architect => "architect",
             Role::Drafter => "drafter",
             Role::Planner => "planner",
             Role::Outliner => "outliner",
@@ -666,6 +669,7 @@ impl Role {
     pub fn description(self) -> &'static str {
         match self {
             Role::Chat => "Conversational agents that call tools over several turns. The usual choice for an agent.",
+            Role::Architect => "Interviews you, designs networks of tools, plans and agents, and runs the drafters: network_drafter and network_editor. Used by Dive itself.",
             Role::Drafter => "Drafts the tools, plans and agents the workbench's architect sketches. Used by Dive itself.",
             Role::Planner => "Drafts whole plans from a goal: long structured output that needs strong reasoning. Used by Dive itself.",
             Role::Outliner => "Lists a goal's inputs and steps before the planner drafts. Used by Dive itself.",
@@ -680,14 +684,14 @@ impl Role {
     pub fn offered(self) -> bool {
         !matches!(
             self,
-            Role::Drafter | Role::Planner | Role::Outliner | Role::Repair
+            Role::Architect | Role::Drafter | Role::Planner | Role::Outliner | Role::Repair
         )
     }
 
     pub fn fallback(self) -> Option<Role> {
         match self {
             Role::Outliner => Some(Role::Planner),
-            Role::Drafter => Some(Role::Chat),
+            Role::Architect | Role::Drafter => Some(Role::Chat),
             _ => None,
         }
     }
