@@ -547,7 +547,7 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
         "| Model role | Runs in | Max iterations |\n| --- | --- | --- |\n| `{}` | {runs} | {max} |\n",
         text(doc, "model")
     );
-    list_section(&mut out, "Tools", &strings(doc, "tools"), None);
+    tools_section(&mut out, doc);
     let link_base = if workbench {
         format!("/{AGENT_DIR}/workbench")
     } else {
@@ -592,6 +592,30 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
     }
     panel(&mut out, "RequestExample", &blocks);
     finish(out)
+}
+
+fn tools_section(out: &mut String, doc: &Yaml) {
+    let Some(entries) = doc.get("tools").and_then(Yaml::as_sequence) else {
+        return;
+    };
+    if entries.is_empty() {
+        return;
+    }
+    let _ = writeln!(out, "## Tools\n");
+    for entry in entries {
+        if let Some(name) = entry.as_str() {
+            let _ = writeln!(out, "- `{name}`");
+        } else if let Some((name, options)) = entry.as_mapping().and_then(|map| map.iter().next()) {
+            let name = name.as_str().unwrap_or_default();
+            let pre_load = options.get("pre_load").and_then(Yaml::as_bool) == Some(true);
+            let _ = writeln!(
+                out,
+                "- `{name}`{}",
+                if pre_load { " (pre-loaded)" } else { "" }
+            );
+        }
+    }
+    out.push('\n');
 }
 
 fn list_section(out: &mut String, heading: &str, items: &[String], link_base: Option<&str>) {

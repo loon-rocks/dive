@@ -652,7 +652,7 @@ impl Pipeline {
             problems.push(format!("model: {error}"));
         }
         let defs = self.planner_tool_defs().await;
-        for pattern in &doc.tools {
+        for pattern in doc.tools.iter().map(|entry| &entry.name) {
             let matches = defs
                 .iter()
                 .any(|def| super::catalog::glob_matches(pattern, &def.name));

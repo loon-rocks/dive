@@ -97,7 +97,7 @@ pub async fn reachable_tools(pipeline: &Pipeline, entry: &str, own: &[String]) -
         }
         if let Some(agent) = name.strip_prefix("agent__") {
             if let Some(doc) = pipeline.agents.get(agent) {
-                for pattern in &doc.tools {
+                for pattern in &doc.tool_names() {
                     if !pattern.contains('*') {
                         queue.push_back(pattern.clone());
                         continue;

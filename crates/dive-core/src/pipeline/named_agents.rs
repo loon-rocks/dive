@@ -103,7 +103,7 @@ impl Pipeline {
             path: &agent_path,
             scope: &empty,
             allowed: &allowed,
-            brief_search: !deferral::lists_search(&doc.tools),
+            brief_search: !deferral::lists_search(&doc.tool_names()),
         };
         let site = CallSite::role(doc.model.clone())
             .at(path.to_string())
@@ -148,7 +148,7 @@ impl Pipeline {
             .filter(|tool| {
                 doc.tools
                     .iter()
-                    .any(|pattern| glob_matches(pattern, &tool.name))
+                    .any(|entry| glob_matches(&entry.name, &tool.name))
             })
             .collect();
         let subagents: Vec<ToolDef> = doc
@@ -159,13 +159,14 @@ impl Pipeline {
             .map(|target| named_agent_tool_def(&target))
             .collect();
         let mut standing: Vec<String> = self.always_loaded.to_vec();
+        standing.extend(doc.pre_loaded());
         standing.extend(subagents.iter().map(|def| def.name.clone()));
         let own = deferral::deferrable(&defs, &standing)
             .into_iter()
             .cloned()
             .collect();
         let pool = self
-            .agent_search_pool(own, deferral::lists_search(&doc.tools))
+            .agent_search_pool(own, deferral::lists_search(&doc.tool_names()))
             .await;
         defs.extend(subagents);
         deferral::with_search(&mut defs, &standing, search);

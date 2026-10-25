@@ -286,10 +286,6 @@ impl ChatStart {
         for host in &hosts {
             host.wire(&mut conversation);
         }
-        crate::attachment::add_tools(
-            &mut conversation.named_standing_tools,
-            crate::attach::ATTACH_TOOLS.map(String::from),
-        );
         let mut session = self
             .over(
                 conversation,
@@ -1268,26 +1264,17 @@ mod tests {
             .any(|section| section.starts_with("## The network draft")));
     }
 
-    #[tokio::test]
-    async fn the_attach_tools_an_agent_names_are_loaded_from_the_start() {
-        let dir = tempfile::tempdir().unwrap();
-        let runtime = file_runtime(dir.path(), Vec::new());
-        let chat = runtime
-            .open_thread(
-                ThreadOpen {
-                    root: Some(dir.path().to_path_buf()),
-                    agent: Some("network_editor".to_string()),
-                    ..Default::default()
-                },
-                Arc::new(Changes::default()),
-                PipelineHooks::default(),
-                None,
-            )
-            .await
-            .unwrap();
-        let standing = &chat.conversation().named_standing_tools;
-        for tool in crate::attach::ATTACH_TOOLS {
-            assert!(standing.iter().any(|pattern| pattern == tool), "{tool}");
+    #[test]
+    fn every_workbench_and_attach_tool_a_built_in_agent_names_is_pre_loaded() {
+        for source in crate::workbench::agents::builtin_sources() {
+            let doc = dive_core::agent::doc::parse_agent_source(source).unwrap();
+            for entry in &doc.tools {
+                if entry.name.starts_with("workbench__")
+                    || crate::attach::ATTACH_TOOLS.contains(&entry.name.as_str())
+                {
+                    assert!(entry.pre_load, "{}: {}", doc.name, entry.name);
+                }
+            }
         }
     }
 

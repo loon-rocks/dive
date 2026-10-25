@@ -46,7 +46,6 @@ pub struct Conversation {
     pub progress_tools: Vec<String>,
     pub stop_tools: Vec<String>,
     pub standing_tools: Vec<String>,
-    pub named_standing_tools: Vec<String>,
     pub handoff_guard: Option<HandoffGuard>,
     pub files: Option<Arc<dyn crate::files::BlobStore>>,
 }
@@ -547,7 +546,7 @@ struct ConversationTools {
     conversation: Conversation,
     base: AllowlistRegistry,
     lists_search: bool,
-    named: Vec<String>,
+    pre_loaded: Vec<String>,
     subagents: Vec<ToolDef>,
     handoffs: Vec<String>,
     back_to: Option<String>,
@@ -587,9 +586,9 @@ impl ConversationTools {
         let origin = crate::packs::Origin::of(doc.source.pack());
         Self {
             conversation: conversation.clone(),
-            base: AllowlistRegistry::new(conversation.catalog.clone(), doc.tools.clone()),
-            lists_search: deferral::lists_search(&doc.tools),
-            named: deferral::named(&doc.tools),
+            base: AllowlistRegistry::new(conversation.catalog.clone(), doc.tool_names()),
+            lists_search: deferral::lists_search(&doc.tool_names()),
+            pre_loaded: doc.pre_loaded(),
             subagents: doc
                 .subagents
                 .iter()
@@ -614,17 +613,7 @@ impl ConversationTools {
     fn standing(&self) -> Vec<String> {
         let mut standing: Vec<String> = self.conversation.pipeline.always_loaded.to_vec();
         standing.extend(self.conversation.standing_tools.iter().cloned());
-        standing.extend(
-            self.named
-                .iter()
-                .filter(|name| {
-                    self.conversation
-                        .named_standing_tools
-                        .iter()
-                        .any(|pattern| crate::pipeline::catalog::glob_matches(pattern, name))
-                })
-                .cloned(),
-        );
+        standing.extend(self.pre_loaded.iter().cloned());
         standing.extend(self.subagents.iter().map(|def| def.name.clone()));
         standing.extend(self.handoff_tools());
         standing
@@ -991,7 +980,6 @@ mod tests {
             progress_tools: Vec::new(),
             stop_tools: Vec::new(),
             standing_tools: Vec::new(),
-            named_standing_tools: Vec::new(),
             handoff_guard: None,
             files: None,
         };
@@ -1109,10 +1097,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn named_standing_patterns_load_only_the_tools_an_agent_names_in_full() {
-        let (mut conversation, provider) =
-            searching(r#"["crm__find_contact", "hr__*"]"#, vec![text("done")]);
-        conversation.named_standing_tools = vec!["crm__*".to_string(), "hr__*".to_string()];
+    async fn pre_loaded_tools_load_from_the_start_and_the_rest_wait_for_search() {
+        let (conversation, provider) = searching(
+            r#"[{"crm__find_contact": {"pre_load": true}}, "hr__*"]"#,
+            vec![text("done")],
+        );
         conversation.run_turn(&[], "finder", "go").await.unwrap();
         let requests = provider.requests.lock().unwrap().clone();
         let deferred = |name: &str| {

@@ -3,20 +3,34 @@ name: plan_editor
 description: Works on the plan loaded in the workbench — reads, edits, validates, runs, and saves it with the user, one targeted change at a time.
 model: chat
 tools:
-  - workbench__update_metadata
-  - workbench__add_step
-  - workbench__update_step
-  - workbench__delete_step
-  - workbench__restore_draft
-  - workbench__try_artifact
-  - workbench__save_artifact
-  - workbench__load_artifact
-  - workbench__list_artifacts
-  - workbench__show_artifact
-  - workbench__describe_tool
-  - workbench__glob
-  - workbench__grep
-  - workbench__read_file
+  - workbench__update_metadata:
+      pre_load: true
+  - workbench__add_step:
+      pre_load: true
+  - workbench__update_step:
+      pre_load: true
+  - workbench__delete_step:
+      pre_load: true
+  - workbench__restore_draft:
+      pre_load: true
+  - workbench__try_artifact:
+      pre_load: true
+  - workbench__save_artifact:
+      pre_load: true
+  - workbench__load_artifact:
+      pre_load: true
+  - workbench__list_artifacts:
+      pre_load: true
+  - workbench__show_artifact:
+      pre_load: true
+  - workbench__describe_tool:
+      pre_load: true
+  - workbench__glob:
+      pre_load: true
+  - workbench__grep:
+      pre_load: true
+  - workbench__read_file:
+      pre_load: true
   - web__tool__search
   - web__tool__fetch
 handoffs: [network_drafter]
