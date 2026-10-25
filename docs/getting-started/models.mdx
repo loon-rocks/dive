@@ -68,7 +68,8 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 
 | Role | Used for |
 | --- | --- |
-| `chat` | Agents. Every built-in agent uses it, except the workbench's builders |
+| `chat` | Agents. Every built-in agent uses it, except the drafting architects and the workbench's builders |
+| `architect` | The drafting architects, `network_drafter` and `network_editor`: the interview, the design, and running the builders. Falls back to `chat` |
 | `drafter` | The workbench's builders, which draft each tool, plan and agent the drafting architect sketches. Falls back to `chat` |
 | `planner` | Drafting plans |
 | `outliner` | Listing a goal's inputs and steps before the planner drafts. Falls back to `planner` |
@@ -95,7 +96,7 @@ model = "jev-latest"
 
 Standard roles have a fixed type: `decider` is `decision`, `image` is `image`, and the rest are `chat`. Once a role is saved its type stays: the agents, plans and tools that use it expect that kind of model, so Settings and `dive`'s model commands refuse to change it. Add a new role for another type instead. Dive never works out a role's type from its provider or model, so a config that puts a role on a provider of the wrong type fails to load and names the fix.
 
-Drafters see every role, with its model, type and description, when they pick a model for an agent or step, and the description steers them toward the smallest model that fits. Standard roles have built-in descriptions, and a `description` you set replaces it. A prompt tool's `model` input, and `builtin__generate_image`'s, offer the configured roles of the matching type that have a description, leaving out `planner`, `outliner`, `drafter` and `repair` unless you describe them yourself; the input appears once there are two to choose between. Settings edits a role's description alongside its model; clearing it there removes the line.
+Drafters see every role, with its model, type and description, when they pick a model for an agent or step, and the description steers them toward the smallest model that fits. Standard roles have built-in descriptions, and a `description` you set replaces it. A prompt tool's `model` input, and `builtin__generate_image`'s, offer the configured roles of the matching type that have a description, leaving out `architect`, `planner`, `outliner`, `drafter` and `repair` unless you describe them yourself; the input appears once there are two to choose between. Settings edits a role's description alongside its model; clearing it there removes the line.
 
 ## Fallbacks
 

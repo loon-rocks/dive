@@ -63,7 +63,7 @@ properties:
           description: Credentials profile, where the provider uses one.
   models:
     type: object
-    description: Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge`, `decider` and `image`; any other name is a custom role.
+    description: Model roles, as `[models.<role>]`. Standard roles are `default`, `chat`, `architect`, `drafter`, `planner`, `outliner`, `solver`, `repair`, `judge`, `decider` and `image`; any other name is a custom role.
     additionalProperties:
       type: object
       required: [provider, model]

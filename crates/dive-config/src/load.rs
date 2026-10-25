@@ -600,7 +600,15 @@ description = "fast and cheap"
         assert_eq!(
             models.known_names(),
             vec![
-                "chat", "default", "drafter", "judge", "nano", "outliner", "planner", "repair",
+                "architect",
+                "chat",
+                "default",
+                "drafter",
+                "judge",
+                "nano",
+                "outliner",
+                "planner",
+                "repair",
                 "solver"
             ]
         );

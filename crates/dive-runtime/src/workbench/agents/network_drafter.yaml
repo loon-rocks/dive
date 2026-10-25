@@ -1,7 +1,7 @@
 version: 2
 name: network_drafter
 description: The drafting architect. Interviews you until the problem is clear, sketches the most efficient network of tools, plans and agents that solves it, has the builders draft each node, tests the network and saves it when you say so.
-model: chat
+model: architect
 tools:
   - builtin__create_network
   - plan__search_tools
