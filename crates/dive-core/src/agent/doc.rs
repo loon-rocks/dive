@@ -684,9 +684,14 @@ mod tests {
         assert!(errors.is_empty(), "{errors:?}");
         let fragments: Vec<&str> = global_fragments().into_keys().collect();
         let problems = set.validate(&fragments);
-        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            problems,
+            ["agent 'chat' (built-in): handoff 'front_desk' is not a defined agent"],
+            "front_desk ships with dive-runtime, which validates the whole set"
+        );
         let chat = set.get("chat").unwrap();
         assert_eq!(chat.subagents, ["chat"]);
+        assert_eq!(chat.handoffs, ["front_desk"]);
         assert_eq!(chat.source, AgentSource::Builtin);
     }
 

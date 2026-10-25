@@ -237,13 +237,19 @@ mod tests {
             "bad.yaml",
             "name: bad\ndescription: d\nmodel: chat\ntools: [map]\nsubagents: [ghost]\nsystem_prompt: hi\n",
         );
-        let verdict = validate(dive_core::agent::doc::BUILTINS, &[], &[], Some(&path)).unwrap();
+        let verdict = validate(
+            &crate::workbench::agents::builtin_sources(),
+            &[],
+            &[],
+            Some(&path),
+        )
+        .unwrap();
         assert!(!verdict.ok);
         assert_eq!(
             verdict.error,
             Some(format!("{} has problems", path.display()))
         );
-        let clean = validate(dive_core::agent::doc::BUILTINS, &[], &[], None).unwrap();
+        let clean = validate(&crate::workbench::agents::builtin_sources(), &[], &[], None).unwrap();
         assert!(clean.ok, "{clean:?}");
         assert!(serde_json::to_value(&clean).unwrap().get("error").is_none());
     }

@@ -3,7 +3,7 @@ use crate::runtime::{Runtime, RuntimeOptions};
 use anyhow::Result;
 use dive_config::pack::{load_manifest, LayerKind, MANIFEST_FILE, SUPPORTED_OS};
 use dive_config::Config;
-use dive_core::agent::doc::{AgentDoc, AgentSet, AgentSource, BUILTINS};
+use dive_core::agent::doc::{AgentDoc, AgentSet, AgentSource};
 use dive_core::packs::{
     catalog_name, inspect_pack, literal_self_names, requirements, split_catalog_name, ItemKind,
     LoadedPack, Origin, PackSource, SELF_PREFIX,
@@ -389,7 +389,7 @@ pub async fn check(
             }
         }
     }
-    let (set, _) = AgentSet::load(BUILTINS, &[]);
+    let (set, _) = AgentSet::load(&crate::workbench::agents::builtin_sources(), &[]);
     let set = set.with_packs(loaded.agents.iter().cloned());
     let fragments: Vec<&str> = dive_core::agent::doc::global_fragments()
         .into_keys()
