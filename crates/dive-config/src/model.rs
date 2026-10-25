@@ -687,14 +687,6 @@ impl Role {
             Role::Architect | Role::Drafter | Role::Planner | Role::Outliner | Role::Repair
         )
     }
-
-    pub fn fallback(self) -> Option<Role> {
-        match self {
-            Role::Outliner => Some(Role::Planner),
-            Role::Architect | Role::Drafter => Some(Role::Chat),
-            _ => None,
-        }
-    }
 }
 
 impl std::fmt::Display for Role {
@@ -732,10 +724,7 @@ impl ModelRoles {
         if !role.falls_back_to_default() {
             return None;
         }
-        match role.fallback() {
-            Some(fallback) => self.resolve(fallback.as_str()),
-            None => self.0.get(DEFAULT_ROLE),
-        }
+        self.0.get(DEFAULT_ROLE)
     }
 
     pub fn resolve_role(&self, role: Role) -> Option<&ModelChoice> {

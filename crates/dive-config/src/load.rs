@@ -637,7 +637,7 @@ description = "fast and cheap"
     }
 
     #[test]
-    fn the_outliner_role_falls_back_to_planner_before_default() {
+    fn every_chat_role_falls_back_to_default_and_nothing_else() {
         let choice = |model: &str| ModelChoice {
             kind: None,
             provider: "p".into(),
@@ -653,8 +653,15 @@ description = "fast and cheap"
         ]);
         assert_eq!(
             with_planner.resolve_role(Role::Outliner).unwrap().model,
-            "planner-model"
+            "default-model"
         );
+        let with_chat = ModelRoles::from([
+            ("default", choice("default-model")),
+            ("chat", choice("chat-model")),
+        ]);
+        for role in [Role::Architect, Role::Drafter] {
+            assert_eq!(with_chat.resolve_role(role).unwrap().model, "default-model");
+        }
         let default_only = ModelRoles::from([("default", choice("default-model"))]);
         assert_eq!(
             default_only.resolve_role(Role::Outliner).unwrap().model,
