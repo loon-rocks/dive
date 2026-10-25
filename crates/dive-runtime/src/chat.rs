@@ -286,6 +286,10 @@ impl ChatStart {
         for host in &hosts {
             host.wire(&mut conversation);
         }
+        crate::attachment::add_tools(
+            &mut conversation.named_standing_tools,
+            crate::attach::ATTACH_TOOLS.map(String::from),
+        );
         let mut session = self
             .over(
                 conversation,
@@ -1262,6 +1266,29 @@ mod tests {
         assert!(sections
             .iter()
             .any(|section| section.starts_with("## The network draft")));
+    }
+
+    #[tokio::test]
+    async fn the_attach_tools_an_agent_names_are_loaded_from_the_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = file_runtime(dir.path(), Vec::new());
+        let chat = runtime
+            .open_thread(
+                ThreadOpen {
+                    root: Some(dir.path().to_path_buf()),
+                    agent: Some("network_editor".to_string()),
+                    ..Default::default()
+                },
+                Arc::new(Changes::default()),
+                PipelineHooks::default(),
+                None,
+            )
+            .await
+            .unwrap();
+        let standing = &chat.conversation().named_standing_tools;
+        for tool in crate::attach::ATTACH_TOOLS {
+            assert!(standing.iter().any(|pattern| pattern == tool), "{tool}");
+        }
     }
 
     #[tokio::test]

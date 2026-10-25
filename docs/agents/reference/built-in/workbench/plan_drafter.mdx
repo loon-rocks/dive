@@ -19,6 +19,7 @@ keywords: ["plan_drafter", "agent"]
 
 - `workbench__describe_tool`
 - `workbench__set_artifact`
+- `builtin__open_network`
 - `web__tool__search`
 - `web__tool__fetch`
 
@@ -67,6 +68,7 @@ When your node was opened from an existing file, the network has no sketch: it's
 - Patch: the notes name one change. Make it and keep every other line byte-identical, name included.
 - Rework: the notes name a portion of the file and give its mini-sketch. Rewrite that portion to the mini-sketch, applying this kind's rules below and the design principles; keep everything outside it byte-identical, and keep the item's name and interface (what it takes and returns) unless the notes change them.
 Either way, put the whole changed file with workbench__set_artifact, fixing what it reports at most twice; then return drafted.
+When workbench__set_artifact says the thread has no network draft, nobody opened your item: open it with builtin__open_network (kind: plan, name: your node), then put the changed file again.
 
 1. The sketch lists the plan's steps; write them down rather than redesigning them. The network draft lists the input and output of the catalog tools the sketch names; call workbench__describe_tool only for a tool it doesn't list, all in ONE response. Tools and plans of the sketch that aren't drafted yet have the interface the sketch gives them (a tool node is user__<name>, a plan node plan__<name>).
 2. Write the whole plan file and put it in the pane with workbench__set_artifact (kind: plan, yaml), with the node's name as its identifier. Follow the node's principles: map over a small model, decide and route gates, concurrency, pruned context, and the model roles the sketch gives.

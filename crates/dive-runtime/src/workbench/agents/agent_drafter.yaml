@@ -4,6 +4,7 @@ description: Builds one agent node of the architect's sketch as an agent file an
 model: drafter
 tools:
   - workbench__set_artifact
+  - builtin__open_network
   - workbench__show_artifact
   - workbench__describe_tool
   - web__tool__search
@@ -30,6 +31,7 @@ system_prompt: |
   - Patch: the notes name one change. Make it and keep every other line byte-identical, name included.
   - Rework: the notes name a portion of the file and give its mini-sketch. Rewrite that portion to the mini-sketch, applying this kind's rules below and the design principles; keep everything outside it byte-identical, and keep the item's name and interface (what it takes and returns) unless the notes change them.
   Either way, put the whole changed file with workbench__set_artifact, fixing what it reports at most twice; then return drafted.
+  When workbench__set_artifact says the thread has no network draft, nobody opened your item: open it with builtin__open_network (kind: agent, name: your node), then put the changed file again.
 
   1. Write the whole agent file and put it in the pane with workbench__set_artifact (kind: agent), under the node's exact name and with the node's model role.
      - Its tools are what its edges call: a tool node as user__<name>, a plan node as plan__<name>, plus the existing catalog tools the sketch names. A subagent edge goes in subagents and a handoff edge in handoffs, by agent name. Nodes that aren't drafted yet already count as existing. Use workbench__describe_tool only when you need an existing tool's exact input.
