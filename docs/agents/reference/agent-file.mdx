@@ -54,7 +54,7 @@ Unknown keys are a load error. For completion in your editor, start the file wit
 </ParamField>
 
 <ParamField body="attachments" type="enum<string>[]">
-  The kinds of thread attachment this agent reads. Before it runs, each attachment of a listed kind adds its sections to the agent's context, such as the network draft for `network` or the call an edit session is about for `evidence`. A new thread whose first message goes to an agent that reads `network` gets a network attachment; an `evidence` attachment comes only with an edit session started from a call. Omitted means none.
+  No longer used. Dive accepts and ignores it, and `dive config check` notes it. Every agent sees whatever the thread has loaded, and what it can do comes only from its `tools`; a thread loads a network draft or evidence when an agent calls `builtin__create_network`, `builtin__open_network` or `builtin__attach_evidence`, or when you open an edit thread.
 </ParamField>
 
 <ParamField body="system_prompt" type="string" required>

@@ -95,9 +95,18 @@ pub struct AgentDoc {
     pub source: AgentSource,
 }
 
+pub const ATTACHMENTS_UNUSED: &str =
+    "attachments is no longer used and is ignored: agents see whatever the thread has loaded";
+
 impl AgentDoc {
-    pub fn reads(&self, kind: &str) -> bool {
-        self.attachments.iter().any(|read| read == kind)
+    pub fn note(&self) -> Option<String> {
+        (!self.attachments.is_empty()).then(|| {
+            format!(
+                "agent '{}' ({}): {ATTACHMENTS_UNUSED}",
+                self.name,
+                self.source.describe()
+            )
+        })
     }
 
     pub fn tool_name(&self) -> String {
@@ -468,14 +477,6 @@ pub fn validate_doc(doc: &AgentDoc, fragments: &[&str]) -> Vec<String> {
     for pattern in &doc.tools {
         problems.extend(tool_pattern_problem(pattern));
     }
-    for kind in &doc.attachments {
-        if !crate::store::ATTACHMENT_KINDS.contains(&kind.as_str()) {
-            problems.push(format!(
-                "attachments: '{kind}' is not an attachment kind (known: {})",
-                crate::store::ATTACHMENT_KINDS.join(", ")
-            ));
-        }
-    }
     if let Some(schema) = &doc.input_schema {
         problems.extend(input_schema_problems(schema));
     }
@@ -656,24 +657,18 @@ mod tests {
     }
 
     #[test]
-    fn attachments_declare_known_kinds_and_default_to_none() {
+    fn attachments_still_parse_but_only_earn_a_note() {
         let plain = doc(&minimal("a", ""));
-        assert!(plain.attachments.is_empty());
-        assert!(!plain.reads("network"));
-        let reader = doc(&minimal("b", "attachments: [network]\n"));
-        assert!(reader.reads("network") && !reader.reads("plan"));
+        assert!(plain.attachments.is_empty() && plain.note().is_none());
         assert!(serde_yaml::to_string(&plain)
             .unwrap()
             .find("attachments")
             .is_none());
-        let unknown = doc(&minimal("c", "attachments: [spreadsheet]\n"));
-        let problems = AgentSet::layered(vec![unknown], vec![]).validate(&[]);
-        assert!(
-            problems
-                .iter()
-                .any(|p| p.contains("'spreadsheet' is not an attachment kind")),
-            "{problems:?}"
-        );
+        let old = doc(&minimal("c", "attachments: [spreadsheet]\n"));
+        assert!(AgentSet::layered(vec![old.clone()], vec![])
+            .validate(&[])
+            .is_empty());
+        assert!(old.note().unwrap().contains(ATTACHMENTS_UNUSED));
     }
 
     #[test]

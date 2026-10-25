@@ -31,7 +31,7 @@ pub fn run(command: AgentCommand) -> Result<()> {
 }
 
 pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
-    let listed = ops::agent::list(dirs, packs, &crate::workbench::agents::workbench_only());
+    let listed = ops::agent::list(&crate::workbench::agents::builtin_sources(), dirs, packs);
     let text: String = listed
         .agents
         .iter()
@@ -50,9 +50,9 @@ pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
 
 pub(crate) fn show(dirs: &[PathBuf], packs: &[AgentDoc], name: &str) -> Result<Outcome> {
     let detail = ops::agent::show(
+        &crate::workbench::agents::builtin_sources(),
         dirs,
         packs,
-        &crate::workbench::agents::workbench_only(),
         name,
     )?;
     let body = serde_json::to_value(&detail)?;
@@ -135,9 +135,8 @@ mod tests {
                 .unwrap()
                 .clone()
         };
-        assert_eq!(by_name("plan_drafter")["workbenchOnly"], true);
-        assert_eq!(by_name("tool_drafter")["workbenchOnly"], false);
-        assert_eq!(by_name("chat")["workbenchOnly"], false);
+        assert_eq!(by_name("plan_drafter")["source"], "built-in");
+        assert_eq!(by_name("front_desk")["source"], "built-in");
         assert_eq!(
             by_name("search_bot")["subagentIo"],
             "typed input -> typed output"

@@ -533,11 +533,7 @@ fn agent_page(doc: &Yaml, workbench: bool, words: &Content) -> String {
     let mut out = String::new();
     page_head(&mut out, &title, name, words, &[name, "agent"]);
     let default_agent = name == dive_core::agent::doc::CHAT_AGENT;
-    let runs = if name == "network_editor" {
-        "edit threads opened through `dive-runtime`; `dive chat --thread` reopens one".to_string()
-    } else if workbench {
-        "`dive wb` only".to_string()
-    } else if default_agent {
+    let runs = if default_agent {
         "`dive ask` and `dive chat`, as the default agent".to_string()
     } else {
         format!("`dive ask --agent {name}`, `dive chat {name}`, plan steps as `agent__{name}`")

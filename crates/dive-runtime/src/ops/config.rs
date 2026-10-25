@@ -263,6 +263,11 @@ pub async fn check(workspace: &Workspace) -> ConfigCheck {
                         .iter()
                         .map(|note| format!("{}: {note}", layer.path.display()))
                 }));
+                let (agents, _) = dive_core::agent::doc::AgentSet::load(
+                    &[],
+                    &dive_core::agent::doc::agent_dirs(),
+                );
+                warnings.extend(agents.iter().filter_map(|doc| doc.note()));
                 match InstalledPacks::for_config(&loaded) {
                     Ok(installed) => {
                         let manager = dive_mcp::McpManager::new(loaded.config.mcp.clone());

@@ -483,10 +483,9 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         events: Arc::new(ChannelSink::agent(tx.clone())),
         session: BTreeMap::from([("date", "2026-07-19".to_string()), ("user", String::new())]),
         prompt_overrides: BTreeMap::new(),
-        context: Some(dive_runtime::attachment::context_hook(
-            agent_set.clone(),
-            vec![attachment.clone() as Arc<dyn dive_runtime::attachment::AttachmentHost>],
-        )),
+        context: Some(dive_runtime::attachment::context_hook(vec![
+            attachment.clone() as Arc<dyn dive_runtime::attachment::AttachmentHost>,
+        ])),
         default_max_iterations: 8,
         progress_tools: progress_tools(),
         stop_tools: super::artifact::STOP_TOOLS

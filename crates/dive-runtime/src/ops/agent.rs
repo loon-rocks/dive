@@ -10,7 +10,6 @@ pub struct AgentSummary {
     pub name: String,
     pub description: String,
     pub source: String,
-    pub workbench_only: bool,
     pub model: String,
     pub subagents: Vec<String>,
     pub handoffs: Vec<String>,
@@ -52,40 +51,25 @@ pub fn subagent_io(doc: &AgentDoc) -> &'static str {
     }
 }
 
-fn source(doc: &AgentDoc, workbench: bool) -> String {
-    if workbench {
-        "built-in, workbench only (dive wb)".to_string()
-    } else {
-        doc.source.describe()
-    }
-}
-
-fn runnable_and_workbench(
+fn listed(
+    builtin_sources: &[&str],
     dirs: &[PathBuf],
     packs: &[AgentDoc],
-    workbench_only: &[AgentDoc],
-) -> (Vec<(AgentDoc, bool)>, Vec<String>) {
-    let (set, errors) = AgentSet::load(dive_core::agent::doc::BUILTINS, dirs);
-    let set = set.with_packs(packs.iter().cloned());
-    let mut agents: Vec<(AgentDoc, bool)> = set.iter().map(|doc| (doc, false)).collect();
-    for doc in workbench_only {
-        if !agents.iter().any(|(known, _)| known.name == doc.name) {
-            agents.push((doc.clone(), true));
-        }
-    }
-    agents.sort_by(|(a, _), (b, _)| a.name.cmp(&b.name));
+) -> (Vec<AgentDoc>, Vec<String>) {
+    let (set, errors) = AgentSet::load(builtin_sources, dirs);
+    let mut agents: Vec<AgentDoc> = set.with_packs(packs.iter().cloned()).iter().collect();
+    agents.sort_by(|a, b| a.name.cmp(&b.name));
     (agents, errors)
 }
 
-pub fn list(dirs: &[PathBuf], packs: &[AgentDoc], workbench_only: &[AgentDoc]) -> AgentList {
-    let (listed, load_errors) = runnable_and_workbench(dirs, packs, workbench_only);
+pub fn list(builtin_sources: &[&str], dirs: &[PathBuf], packs: &[AgentDoc]) -> AgentList {
+    let (listed, load_errors) = listed(builtin_sources, dirs, packs);
     let agents: Vec<AgentSummary> = listed
         .iter()
-        .map(|(doc, workbench)| AgentSummary {
+        .map(|doc| AgentSummary {
             name: doc.name.clone(),
             description: doc.description.clone(),
-            source: source(doc, *workbench),
-            workbench_only: *workbench,
+            source: doc.source.describe(),
             model: doc.model.clone(),
             subagents: doc.subagents.clone(),
             handoffs: doc.handoffs.clone(),
@@ -100,14 +84,14 @@ pub fn list(dirs: &[PathBuf], packs: &[AgentDoc], workbench_only: &[AgentDoc]) -
 }
 
 pub fn show(
+    builtin_sources: &[&str],
     dirs: &[PathBuf],
     packs: &[AgentDoc],
-    workbench_only: &[AgentDoc],
     name: &str,
 ) -> Result<AgentDetail> {
-    let (listed, _) = runnable_and_workbench(dirs, packs, workbench_only);
-    let Some((doc, workbench)) = listed.iter().find(|(doc, _)| doc.name == name).cloned() else {
-        let known: Vec<String> = listed.iter().map(|(d, _)| d.name.clone()).collect();
+    let (listed, _) = listed(builtin_sources, dirs, packs);
+    let Some(doc) = listed.iter().find(|doc| doc.name == name).cloned() else {
+        let known: Vec<String> = listed.iter().map(|d| d.name.clone()).collect();
         bail!("unknown agent '{name}' (defined: {})", known.join(", "));
     };
     let mut value = serde_yaml::to_value(&doc)?;
@@ -115,7 +99,7 @@ pub fn show(
     Ok(AgentDetail {
         yaml: serde_yaml::to_string(&value)?,
         source: doc.source.describe(),
-        label: source(&doc, workbench),
+        label: doc.source.describe(),
         agent: doc,
     })
 }
@@ -180,22 +164,18 @@ mod tests {
         path
     }
 
-    fn workbench_agent() -> AgentDoc {
-        dive_core::agent::doc::parse_agent_source(
-            "name: wb_helper\ndescription: helps\nmodel: chat\ntools: []\nsystem_prompt: hi\n",
-        )
-        .unwrap()
-    }
+    const HELPER: &str =
+        "name: wb_helper\ndescription: helps\nmodel: chat\ntools: []\nsystem_prompt: hi\n";
 
     #[test]
-    fn list_merges_project_files_and_workbench_agents_with_the_cli_shape() {
+    fn list_merges_project_files_and_every_built_in_agent_with_the_cli_shape() {
         let dir = tempfile::tempdir().unwrap();
         write_agent(
             dir.path(),
             "search_bot.yaml",
             "name: search_bot\ndescription: searches\nmodel: chat\ntools: []\ninput_schema: {type: object}\nsystem_prompt: hi\n",
         );
-        let listed = list(&[dir.path().to_path_buf()], &[], &[workbench_agent()]);
+        let listed = list(&[HELPER], &[dir.path().to_path_buf()], &[]);
         assert_eq!(listed.count, listed.agents.len());
         let bot = listed
             .agents
@@ -208,8 +188,7 @@ mod tests {
             .iter()
             .find(|agent| agent.name == "wb_helper")
             .unwrap();
-        assert!(helper.workbench_only);
-        assert_eq!(helper.source, "built-in, workbench only (dive wb)");
+        assert_eq!(helper.source, "built-in");
         let value = serde_json::to_value(&listed).unwrap();
         assert_eq!(value["loadErrors"], json!([]));
         assert_eq!(
@@ -225,15 +204,14 @@ mod tests {
                 "name",
                 "source",
                 "subagentIo",
-                "subagents",
-                "workbenchOnly"
+                "subagents"
             ]
         );
     }
 
     #[test]
     fn show_stamps_the_yaml_and_names_unknown_agents() {
-        let detail = show(&[], &[], &[workbench_agent()], "wb_helper").unwrap();
+        let detail = show(&[HELPER], &[], &[], "wb_helper").unwrap();
         assert!(
             detail
                 .yaml
@@ -241,7 +219,7 @@ mod tests {
             "{}",
             detail.yaml
         );
-        assert_eq!(detail.label, "built-in, workbench only (dive wb)");
+        assert_eq!(detail.label, "built-in");
         let value = serde_json::to_value(&detail).unwrap();
         assert_eq!(value["agent"]["name"], "wb_helper");
         let error = show(&[], &[], &[], "nope").unwrap_err().to_string();

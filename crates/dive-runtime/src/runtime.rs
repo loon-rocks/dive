@@ -311,17 +311,7 @@ impl Runtime {
     }
 
     pub fn agent_set(&self) -> dive_core::agent::doc::AgentSet {
-        self.agent_set_for(None)
-    }
-
-    pub fn agent_set_for(&self, attachment: Option<&str>) -> dive_core::agent::doc::AgentSet {
-        let kinds: Vec<String> = attachment.map(str::to_string).into_iter().collect();
-        self.agent_set_for_kinds(&kinds)
-    }
-
-    pub fn agent_set_for_kinds(&self, kinds: &[String]) -> dive_core::agent::doc::AgentSet {
-        let mut sources = dive_core::agent::doc::BUILTINS.to_vec();
-        sources.extend(crate::attachment::agent_sources_for(kinds));
+        let sources = crate::workbench::agents::builtin_sources();
         let (set, errors) =
             dive_core::agent::doc::AgentSet::load(&sources, &dive_core::agent::doc::agent_dirs());
         for error in errors {

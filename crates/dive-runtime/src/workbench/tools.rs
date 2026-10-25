@@ -111,6 +111,16 @@ pub struct WorkbenchTools {
     tx: UnboundedSender<WorkbenchEvent>,
     tester: super::artifact::Tester,
     root: Option<PathBuf>,
+    loaded: Option<Arc<std::sync::atomic::AtomicBool>>,
+}
+
+pub const NO_DRAFT: &str = "this thread has no network draft; call builtin__create_network to start one, or builtin__open_network to open an existing agent, plan or tool";
+
+fn needs_draft(name: &str) -> bool {
+    !matches!(
+        name,
+        DESCRIBE_TOOL | super::artifact::LIST_ARTIFACTS | super::artifact::SHOW_ARTIFACT
+    )
 }
 
 impl WorkbenchTools {
@@ -129,11 +139,17 @@ impl WorkbenchTools {
             tx,
             tester: Arc::new(std::sync::OnceLock::new()),
             root: None,
+            loaded: None,
         }
     }
 
     pub fn with_root(mut self, root: PathBuf) -> Self {
         self.root = Some(root);
+        self
+    }
+
+    pub fn with_loaded(mut self, loaded: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        self.loaded = Some(loaded);
         self
     }
 
@@ -1036,6 +1052,16 @@ impl ToolRegistry for WorkbenchTools {
             // Not ours: stay silent, or the composite registry's fallthrough
             // (the fs tools are also workbench__*) double-logs the call.
             other => return Err(ToolError::Unknown(other.to_string())),
+        }
+        let unloaded = self
+            .loaded
+            .as_ref()
+            .is_some_and(|loaded| !loaded.load(std::sync::atomic::Ordering::SeqCst));
+        if unloaded && needs_draft(name) {
+            return Ok(ToolOutcome {
+                result: serde_json::json!({ "error": NO_DRAFT }),
+                is_error: true,
+            });
         }
         tracing::debug!(
             target: "workbench",

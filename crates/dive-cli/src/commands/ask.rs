@@ -17,13 +17,6 @@ pub struct AskArgs {
 pub async fn run(args: AskArgs) -> Result<()> {
     let message = resolve_message(args.message)?;
 
-    if let Some(name) = args
-        .agent
-        .as_deref()
-        .filter(|name| crate::workbench::agents::is_workbench_only(name))
-    {
-        bail!("{name} runs only in the workbench: start it with `dive wb`");
-    }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
     let mut start = ChatStart::resolve(&runtime, store, args.agent.as_deref(), args.thread).await?;
