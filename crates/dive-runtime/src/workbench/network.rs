@@ -15,9 +15,35 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 pub struct Restate {
     pub outcome: String,
+    pub problem: String,
+    pub change: String,
     pub success: String,
     pub constraint: String,
     pub out_of_scope: Vec<String>,
+}
+
+impl Restate {
+    pub fn is_edit(&self) -> bool {
+        !self.problem.is_empty() || !self.change.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EditRole {
+    Edit,
+    New,
+    AsIs,
+}
+
+impl EditRole {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Edit => "edit",
+            Self::New => "new",
+            Self::AsIs => "as is",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -198,6 +224,7 @@ pub struct Node {
     pub principles: Vec<String>,
     pub takes: String,
     pub returns: String,
+    pub change: String,
     pub sketched: bool,
     pub status: NodeStatus,
     pub yaml: Option<String>,
@@ -221,6 +248,7 @@ impl Node {
             principles: Vec::new(),
             takes: String::new(),
             returns: String::new(),
+            change: String::new(),
             sketched: true,
             status: NodeStatus::Sketched,
             yaml: None,
@@ -258,6 +286,18 @@ impl Node {
 
     pub fn drafted(&self) -> bool {
         self.yaml.is_some()
+    }
+
+    pub fn role(&self) -> EditRole {
+        match (&self.base, self.change.is_empty()) {
+            (None, _) => EditRole::New,
+            (Some(_), false) => EditRole::Edit,
+            (Some(_), true) => EditRole::AsIs,
+        }
+    }
+
+    pub fn edit_pending(&self) -> bool {
+        self.sketched && self.role() == EditRole::Edit && !self.changed()
     }
 
     pub fn changed(&self) -> bool {
@@ -333,6 +373,8 @@ pub struct NodeView {
     pub principles: Vec<String>,
     pub takes: String,
     pub returns: String,
+    pub change: String,
+    pub role: EditRole,
     pub sketched: bool,
     pub status: NodeStatus,
     pub yaml: Option<String>,
@@ -375,7 +417,7 @@ impl NetworkView {
     }
 
     pub fn is_edit(&self) -> bool {
-        self.restate.is_none() && self.nodes.iter().any(|node| node.base.is_some())
+        self.nodes.iter().any(|node| node.base.is_some())
     }
 }
 
@@ -588,13 +630,23 @@ impl Network {
         let restate = &input["restate"];
         let restate = Restate {
             outcome: text(restate, "outcome"),
+            problem: text(restate, "problem"),
+            change: text(restate, "change"),
             success: text(restate, "success"),
             constraint: text(restate, "constraint"),
             out_of_scope: strings(&restate["out_of_scope"]),
         };
-        if restate.outcome.is_empty() {
+        if restate.is_edit() {
+            if restate.problem.is_empty() || restate.change.is_empty() || restate.success.is_empty()
+            {
+                return Err(
+                    "an edit's restate needs problem, change and success: what went wrong or what's wanted, the change, and how the test shows it worked"
+                        .to_string(),
+                );
+            }
+        } else if restate.outcome.is_empty() {
             return Err(
-                "restate.outcome is required: the confirmed restate goes with every sketch"
+                "restate.outcome is required: the confirmed restate goes with every sketch (an edit passes problem, change and success instead)"
                     .to_string(),
             );
         }
@@ -674,6 +726,7 @@ impl Network {
             node.principles = principles;
             node.takes = text(raw, "takes");
             node.returns = text(raw, "returns");
+            node.change = text(raw, "change");
             node.sketched = true;
             if raw["proposed"].as_bool().unwrap_or(false) && !node.drafted() {
                 node.status = NodeStatus::Proposed;
@@ -783,7 +836,18 @@ impl Network {
     }
 
     pub fn is_edit(&self) -> bool {
-        self.restate.is_none() && self.nodes.iter().any(|node| node.base.is_some())
+        self.nodes.iter().any(|node| node.base.is_some())
+    }
+
+    fn close_sketch(&mut self) {
+        self.restate = None;
+        self.edges.clear();
+        self.interview = None;
+        self.designs = None;
+        for node in &mut self.nodes {
+            node.sketched = false;
+            node.change.clear();
+        }
     }
 
     pub fn saved(&mut self, written: &[(ArtifactKind, String, PathBuf)]) {
@@ -791,6 +855,7 @@ impl Network {
             self.clear();
             return;
         }
+        self.close_sketch();
         for (kind, name, path) in written {
             if let Some(node) = self.node_mut(*kind, name) {
                 node.base = node.yaml.clone();
@@ -811,6 +876,7 @@ impl Network {
             return self.clear();
         }
         let changed = self.nodes.iter().filter(|node| node.changed()).count();
+        self.close_sketch();
         self.nodes.retain(|node| node.base.is_some());
         for node in &mut self.nodes {
             node.yaml = node.base.clone();
@@ -855,7 +921,12 @@ impl Network {
             .iter()
             .position(|node| node.kind == kind && node.name == name && node.drafted())?;
         let node = &mut self.nodes[index];
-        if node.sketched {
+        if node.sketched && node.base.is_some() {
+            node.yaml = node.base.clone();
+            node.problems.clear();
+            node.last_run = None;
+            node.status = NodeStatus::Drafted;
+        } else if node.sketched {
             node.yaml = None;
             node.problems.clear();
             node.last_run = None;
@@ -920,6 +991,8 @@ impl Network {
                     principles: node.principles.clone(),
                     takes: node.takes.clone(),
                     returns: node.returns.clone(),
+                    change: node.change.clone(),
+                    role: node.role(),
                     sketched: node.sketched,
                     status: node.status,
                     yaml: node.yaml.clone(),
@@ -949,8 +1022,18 @@ impl Network {
     pub fn missing(&self) -> Vec<String> {
         self.nodes
             .iter()
-            .filter(|node| node.sketched && !node.drafted())
-            .map(|node| format!("{} {}", node.kind.label(), node.name))
+            .filter(|node| node.sketched && (!node.drafted() || node.edit_pending()))
+            .map(|node| {
+                if node.edit_pending() {
+                    format!(
+                        "{} {} (its edit isn't made yet)",
+                        node.kind.label(),
+                        node.name
+                    )
+                } else {
+                    format!("{} {}", node.kind.label(), node.name)
+                }
+            })
             .collect()
     }
 
@@ -997,18 +1080,24 @@ impl Network {
             return section;
         }
         if let Some(restate) = &self.restate {
-            section.push_str(&format!(
-                "Confirmed restate:\n- Outcome: {}\n- Success: {}\n- Constraint: {}\n- Out of scope: {}\n",
-                restate.outcome,
-                restate.success,
-                restate.constraint,
-                if restate.out_of_scope.is_empty() {
-                    "(nothing named)".to_string()
-                } else {
-                    restate.out_of_scope.join("; ")
-                }
-            ));
+            let out_of_scope = if restate.out_of_scope.is_empty() {
+                "(nothing named)".to_string()
+            } else {
+                restate.out_of_scope.join("; ")
+            };
+            if restate.is_edit() {
+                section.push_str(&format!(
+                    "Confirmed restate of the edit:\n- Problem: {}\n- Change: {}\n- Success: {}\n- Out of scope: {}\n",
+                    restate.problem, restate.change, restate.success, out_of_scope
+                ));
+            } else {
+                section.push_str(&format!(
+                    "Confirmed restate:\n- Outcome: {}\n- Success: {}\n- Constraint: {}\n- Out of scope: {}\n",
+                    restate.outcome, restate.success, restate.constraint, out_of_scope
+                ));
+            }
         }
+        let edit = self.is_edit() && self.restate.is_some();
         section.push_str("Nodes:\n");
         for node in &self.nodes {
             section.push_str(&format!(
@@ -1051,6 +1140,16 @@ impl Network {
                         &node.returns
                     }
                 ));
+            }
+            if edit && node.sketched {
+                section.push_str(&match node.role() {
+                    EditRole::Edit if node.edit_pending() => {
+                        format!("  edit, not made yet: {}\n", node.change)
+                    }
+                    EditRole::Edit => format!("  edit, made: {}\n", node.change),
+                    EditRole::New => "  new in this edit\n".to_string(),
+                    EditRole::AsIs => "  as is: context only, nothing changes in it\n".to_string(),
+                });
             }
             if let Some(note) = &node.note {
                 section.push_str(&format!("  {note}\n"));
@@ -1638,5 +1737,202 @@ mod tests {
             network.designs.is_none(),
             "a sketch settles the design question"
         );
+    }
+
+    const AGENT: &str = "name: research_agent\nmodel: chat\ntools: [plan__ranked_search]\n";
+    const RANKED: &str = "identifier: ranked_search\nname: Ranked search\nsteps: []\n";
+
+    fn opened(name: &str, yaml: &str) -> Existing {
+        Existing {
+            yaml: yaml.to_string(),
+            editing: Some(PathBuf::from(format!("/work/{name}.yaml"))),
+            name: name.to_string(),
+            origin: Origin::File,
+        }
+    }
+
+    fn edit() -> Network {
+        let mut network = Network::default();
+        network.open(
+            ArtifactKind::Agent,
+            opened("research_agent", AGENT),
+            Vec::new(),
+        );
+        network.open(
+            ArtifactKind::Plan,
+            opened("ranked_search", RANKED),
+            Vec::new(),
+        );
+        network
+    }
+
+    fn edit_sketch() -> Value {
+        json!({
+            "restate": {
+                "problem": "research_agent spends a turn each round picking pages",
+                "change": "A plan searches, ranks and reads in one call",
+                "success": "The F1 question answers with every claim linked to a page it read",
+                "out_of_scope": ["The date tool"]
+            },
+            "nodes": [
+                {"name": "research_agent", "kind": "agent", "job": "Researches", "change": "Calls research_round instead of picking pages"},
+                {"name": "research_round", "kind": "plan", "job": "ranked_search → map crawl4ai_read", "takes": "question, queries", "returns": "pages, unread"},
+                {"name": "ranked_search", "kind": "plan", "job": "Ranked search"}
+            ],
+            "edges": [
+                {"from": "research_agent", "to": "research_round", "kind": "calls"},
+                {"from": "research_round", "to": "ranked_search", "kind": "calls"}
+            ]
+        })
+    }
+
+    fn role(network: &Network, kind: ArtifactKind, name: &str) -> EditRole {
+        network.node(kind, name).unwrap().role()
+    }
+
+    #[test]
+    fn an_edit_keeps_being_an_edit_once_it_is_sketched() {
+        let mut network = edit();
+        assert!(network.is_edit());
+        network.set_sketch(&edit_sketch()).unwrap();
+        assert!(network.is_edit());
+        assert!(network.view().is_edit());
+        assert!(network.restate.as_ref().unwrap().is_edit());
+        assert_eq!(
+            role(&network, ArtifactKind::Agent, "research_agent"),
+            EditRole::Edit
+        );
+        assert_eq!(
+            role(&network, ArtifactKind::Plan, "research_round"),
+            EditRole::New
+        );
+        assert_eq!(
+            role(&network, ArtifactKind::Plan, "ranked_search"),
+            EditRole::AsIs
+        );
+        assert_eq!(
+            network.missing(),
+            [
+                "agent research_agent (its edit isn't made yet)",
+                "plan research_round"
+            ]
+        );
+
+        network
+            .put_draft(
+                ArtifactKind::Plan,
+                "research_round",
+                "identifier: research_round\nname: Research round\nsteps: []\n".into(),
+                Vec::new(),
+            )
+            .unwrap();
+        network
+            .put_draft(
+                ArtifactKind::Agent,
+                "research_agent",
+                format!("{AGENT}description: edited\n"),
+                Vec::new(),
+            )
+            .unwrap();
+        assert!(network.missing().is_empty());
+        assert_eq!(network.view().unsaved(), 2);
+    }
+
+    #[test]
+    fn an_edit_restate_needs_its_problem_change_and_success() {
+        let mut network = edit();
+        let mut bad = edit_sketch();
+        bad["restate"]["success"] = json!("");
+        let refused = network.set_sketch(&bad).unwrap_err();
+        assert!(refused.contains("problem, change and success"), "{refused}");
+        let mut neither = edit_sketch();
+        neither["restate"] = json!({"success": "s", "out_of_scope": []});
+        let refused = network.set_sketch(&neither).unwrap_err();
+        assert!(refused.contains("restate.outcome"), "{refused}");
+    }
+
+    #[test]
+    fn the_context_section_marks_what_each_node_of_an_edit_does() {
+        let mut network = edit();
+        network.set_sketch(&edit_sketch()).unwrap();
+        let section = network.context_section();
+        assert!(
+            section.contains("Confirmed restate of the edit:"),
+            "{section}"
+        );
+        assert!(section.contains("- Change: A plan searches, ranks and reads in one call"));
+        assert!(
+            section.contains("edit, not made yet: Calls research_round instead of picking pages")
+        );
+        assert!(section.contains("new in this edit"));
+        assert!(section.contains("as is: context only"));
+        assert!(!section.contains("Outcome:"));
+    }
+
+    #[test]
+    fn saving_an_edit_closes_its_sketch_and_keeps_every_item_open() {
+        let mut network = edit();
+        network.set_sketch(&edit_sketch()).unwrap();
+        network
+            .put_draft(
+                ArtifactKind::Plan,
+                "research_round",
+                "identifier: research_round\nname: Research round\nsteps: []\n".into(),
+                Vec::new(),
+            )
+            .unwrap();
+        network.saved(&[(
+            ArtifactKind::Plan,
+            "research_round".to_string(),
+            PathBuf::from("/work/plans/research_round.yaml"),
+        )]);
+        assert!(network.restate.is_none());
+        assert!(network.edges.is_empty());
+        assert_eq!(network.nodes.len(), 3, "the new plan stays open");
+        assert!(network
+            .nodes
+            .iter()
+            .all(|node| !node.sketched && node.change.is_empty()));
+        let round = network.node(ArtifactKind::Plan, "research_round").unwrap();
+        assert!(round.base.is_some() && !round.changed());
+        assert!(network.is_edit());
+    }
+
+    #[test]
+    fn discarding_an_edit_drops_its_new_items_and_its_sketch() {
+        let mut network = edit();
+        network.set_sketch(&edit_sketch()).unwrap();
+        network
+            .put_draft(
+                ArtifactKind::Agent,
+                "research_agent",
+                format!("{AGENT}description: edited\n"),
+                Vec::new(),
+            )
+            .unwrap();
+        assert_eq!(network.discard_all(), 1);
+        assert!(network.restate.is_none());
+        assert_eq!(network.nodes.len(), 2);
+        assert!(!network.has_edits());
+    }
+
+    #[test]
+    fn discarding_one_sketched_edit_goes_back_to_its_saved_file() {
+        let mut network = edit();
+        network.set_sketch(&edit_sketch()).unwrap();
+        network
+            .put_draft(
+                ArtifactKind::Agent,
+                "research_agent",
+                format!("{AGENT}description: edited\n"),
+                Vec::new(),
+            )
+            .unwrap();
+        network
+            .discard(ArtifactKind::Agent, "research_agent")
+            .unwrap();
+        let agent = network.node(ArtifactKind::Agent, "research_agent").unwrap();
+        assert_eq!(agent.yaml.as_deref(), Some(AGENT));
+        assert!(agent.edit_pending());
     }
 }

@@ -35,6 +35,10 @@ keywords: ["workbench__set_sketch"]
 <ParamField body="nodes" type="object[]" required>
 </ParamField>
 
+<ParamField body="nodes.[].change" type="string">
+  An edit: what changes in this opened item, in one line, specific enough for its builder. Omit for an opened item that stays as it is and for a new node
+</ParamField>
+
 <ParamField body="nodes.[].job" type="string" required>
   What this node does, in one sentence
 </ParamField>
@@ -70,16 +74,27 @@ keywords: ["workbench__set_sketch"]
 <ParamField body="restate" type="object" required>
 </ParamField>
 
-<ParamField body="restate.constraint" type="string" required>
+<ParamField body="restate.change" type="string">
+  An edit: the change, in one sentence
+</ParamField>
+
+<ParamField body="restate.constraint" type="string">
+  A new network: the limit it works within
 </ParamField>
 
 <ParamField body="restate.out_of_scope" type="string[]" required>
 </ParamField>
 
-<ParamField body="restate.outcome" type="string" required>
+<ParamField body="restate.outcome" type="string">
+  A new network: what the user gets. Required unless problem and change are given
+</ParamField>
+
+<ParamField body="restate.problem" type="string">
+  An edit: what went wrong, or what the user wants changed
 </ParamField>
 
 <ParamField body="restate.success" type="string" required>
+  How the test shows it worked; in an edit, the evidence's input and what the answer must do
 </ParamField>
 
 ## Output

@@ -17,8 +17,8 @@ pub use attachment::{NetworkAttachment, NetworkAttachmentView, NetworkSetup, Net
 pub use effects::{save_draft, Workbench};
 pub use event::{GateKind, WorkbenchEvent};
 pub use network::{
-    Design, Designs, EdgeKind, Fact, FactState, Interview, NetworkView, NodeSecret, NodeStatus,
-    NodeView, Restate, TestRun,
+    Design, Designs, EdgeKind, EditRole, Fact, FactState, Interview, NetworkView, NodeSecret,
+    NodeStatus, NodeView, Restate, TestRun,
 };
 pub use runner::{DebugControls, UiDecision};
 pub use secrets::{SecretState, TestSecret};

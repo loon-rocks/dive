@@ -535,6 +535,53 @@ mod tests {
     }
 
     #[test]
+    fn a_sketched_edit_replays_with_its_new_plan_as_a_node() {
+        let saved = "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\n";
+        let digest = "identifier: digest\nname: Digest\ndescription: d\nsteps: []\n";
+        let items = |_: ArtifactKind, _: &str| Some(opened_file("word_count", saved));
+        let opened = [(ArtifactKind::Tool, "word_count".to_string())];
+        let sketch = json!({
+            "restate": {
+                "problem": "Counts are read one file at a time",
+                "change": "A digest plan counts every file at once",
+                "success": "One count per file",
+                "out_of_scope": []
+            },
+            "nodes": [
+                {"name": "digest", "kind": "plan", "job": "map word_count"},
+                {"name": "word_count", "kind": "tool", "job": "Counts words"}
+            ],
+            "edges": [{"from": "digest", "to": "word_count", "kind": "calls"}]
+        });
+        let entries = vec![
+            call("1", artifact::SET_SKETCH, sketch),
+            result(
+                "1",
+                json!({"nodes": 2, "edges": 1, "drafted": ["word_count"]}),
+            ),
+            call(
+                "2",
+                artifact::SET_ARTIFACT,
+                json!({"kind": "plan", "yaml": digest}),
+            ),
+            result(
+                "2",
+                json!({"name": "digest", "kind": "plan", "problems": []}),
+            ),
+        ];
+
+        let network = network(&entries, &opened, &items);
+        assert!(network.is_edit());
+        assert!(network.restate.as_ref().unwrap().is_edit());
+        let plan = network.node(ArtifactKind::Plan, "digest").unwrap();
+        assert_eq!(plan.yaml.as_deref(), Some(digest));
+        assert_eq!(plan.role(), super::super::network::EditRole::New);
+        let tool = network.node(ArtifactKind::Tool, "word_count").unwrap();
+        assert_eq!(tool.role(), super::super::network::EditRole::AsIs);
+        assert!(network.missing().is_empty());
+    }
+
+    #[test]
     fn a_saved_edit_keeps_its_items_and_a_discarded_one_reverts_them() {
         let saved = "name: word_count\ndescription: Counts words\nkind: exec\ncommand: wc\n";
         let edited =
