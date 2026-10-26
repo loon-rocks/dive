@@ -1312,6 +1312,36 @@ mod tests {
             )
             .await
             .unwrap();
+        let span = |id: &str, parent: &str, name: &str, kind: dive_core::trace::SpanKind| {
+            dive_core::trace::Span {
+                trace_id: "t".into(),
+                span_id: id.into(),
+                parent_span_id: Some(parent.into()),
+                name: name.into(),
+                kind,
+                start_time_unix_nano: 1,
+                end_time_unix_nano: Some(2),
+                status: Default::default(),
+                attributes: Default::default(),
+                input: None,
+                output: None,
+            }
+        };
+        let mut called = span(
+            "s1",
+            "turn",
+            "agent__front_desk",
+            dive_core::trace::SpanKind::Tool,
+        );
+        called
+            .attributes
+            .insert("gen_ai.tool.call.id".into(), json!("c1"));
+        let mut inner = span("s2", "s1", "plan__digest", dive_core::trace::SpanKind::Plan);
+        inner.output = Some(json!({"error": "boom"}));
+        store
+            .append_spans(&source.id, &[called, inner])
+            .await
+            .unwrap();
         let chat = open(&runtime, dir.path(), ThreadOpen::default()).await;
         let registry = chat.conversation().catalog.clone();
         let outcome = registry
@@ -1327,6 +1357,14 @@ mod tests {
             .expect("evidence is loaded");
         assert_eq!(evidence.view()["item"]["name"], json!("front_desk"));
         assert_eq!(evidence.view()["error"], json!("boom"));
+        assert!(
+            evidence.view()["trace"][0]
+                .as_str()
+                .unwrap()
+                .starts_with("plan__digest ok"),
+            "{}",
+            evidence.view()
+        );
         let missing = registry
             .invoke(
                 crate::attach::ATTACH_EVIDENCE,
@@ -1442,6 +1480,7 @@ mod tests {
             input: json!({"text": "one two three"}),
             output: Some(json!("1")),
             error: None,
+            trace: Vec::new(),
         }
     }
 

@@ -831,7 +831,13 @@ pub async fn test_network(
     let asking = pipeline
         .clone()
         .with_interlocutor(interlocutor_for(pipeline, tx));
-    let over = Arc::new(network::overlay(&asking, &network));
+    let steps = Arc::new(crate::run_trace::StepLog::default());
+    let mut overlaid = network::overlay(&asking, &network);
+    overlaid.events = Arc::new(dive_core::TeeSink::new(vec![
+        overlaid.events.clone(),
+        steps.clone(),
+    ]));
+    let over = Arc::new(overlaid);
     let run = match node.kind {
         ArtifactKind::Tool => {
             let called = over
@@ -927,12 +933,16 @@ pub async fn test_network(
             }
         }
     };
-    let report = json!({
+    let mut report = json!({
         "passed": run.passed,
         "ran": run.ran,
         "answer": run.answer,
-        "note": "passed means it ran without an error; judge the answer against the restate, and call workbench__fail_test when it falls short",
+        "note": "passed means it ran without an error; judge the answer against the restate, and call workbench__fail_test when it falls short. `steps` lists every plan step that ran, nested plans included, with which branch each gate took and the start of each result: read it to find where the answer went wrong",
     });
+    let steps = steps.lines();
+    if !steps.is_empty() {
+        report["steps"] = json!(steps);
+    }
     draft.lock().unwrap().network.record_test(run);
     publish(draft, tx);
     outcome(report, false)
@@ -1504,8 +1514,9 @@ pub fn tool_defs() -> Vec<ToolDef> {
             description: "Test the drafted, unsaved network once, after the user approves: one \
                           conversation turn starting at an agent node with `message`, or one run \
                           of a plan node with `input`. Every agent runs on its own model and \
-                          tools run for real; nothing is saved. Returns which nodes ran and the \
-                          answer. Every node has to be drafted without problems first. When a \
+                          tools run for real; nothing is saved. Returns which nodes ran, the \
+                          answer, and every plan step that ran, nested plans included, with the \
+                          branch each gate took and the start of each result. Every node has to be drafted without problems first. When a \
                           tool the test would call needs a secret that isn't set, nothing runs \
                           and it returns status missing_secrets with each missing secret, the \
                           tools that need it and its description."
