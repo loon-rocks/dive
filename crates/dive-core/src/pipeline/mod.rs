@@ -33,6 +33,7 @@ mod prompts;
 pub mod route;
 mod search;
 mod state;
+pub mod test_run;
 #[cfg(test)]
 mod tests;
 
@@ -45,7 +46,7 @@ pub use drafter::{drafter_tool_defs, stamped, write_file, Drafted, DraftedTools}
 pub use exit::{ExitStatus, PlanExit, EXIT_TOOL};
 pub use filter::FILTER_TOOL;
 pub use gate::{ErrorDecision, ExecutionGate, GateContext, GateDecision, StepPath};
-pub use interlocutor::{AskOutcome, AskRequest, Interlocutor};
+pub use interlocutor::{AskDetail, AskOutcome, AskRequest, Interlocutor};
 pub use iterate::{MAP_TOOL, REDUCE_TOOL};
 pub use named_agents::{named_agent_tool_def, SubagentRun, AGENT_TOOL_PREFIX, MAX_SUBAGENT_DEPTH};
 pub use native_tools::{is_native_tool, native_tool_defs, plan_doc, NATIVE_TOOLS};

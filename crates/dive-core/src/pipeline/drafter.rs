@@ -1,5 +1,6 @@
 use super::gate::StepPath;
-use super::interlocutor::{AskOutcome, AskRequest};
+use super::interlocutor::{AskDetail, AskOutcome, AskRequest};
+use super::test_run::TestRunPreview;
 use super::{Pipeline, ToolCatalog};
 use crate::agent::doc::{global_fragments, parse_agent_source, validate_doc, AgentDoc, AgentSet};
 use crate::secrets::{Origin, SecretSource};
@@ -147,16 +148,17 @@ pub fn drafter_tool_defs() -> Vec<ToolDef> {
         ToolDef {
             name: TRY_TOOL_TOOL.to_string(),
             description: "Test-runs a drafted user tool once, before it is saved. Checks the \
-                          tool file, asks the user to approve the run (showing what will run), \
-                          then runs it on the sample input and records its output shape. Nothing \
+                          tool file, asks the user to approve the run (showing what will run and \
+                          your purpose), then runs it on the sample input and records its output shape. Nothing \
                           runs without the user's yes."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
-                "required": ["yaml", "input"],
+                "required": ["yaml", "input", "purpose"],
                 "properties": {
                     "yaml": {"type": "string", "description": "The whole user tool file"},
-                    "input": {"type": "object", "description": "Sample input for one run, matching the tool's input_schema"}
+                    "input": {"type": "object", "description": "Sample input for one run, matching the tool's input_schema"},
+                    "purpose": {"type": "string", "description": "One sentence the user reads before approving: what this run checks, e.g. \"Check it returns README.md's text and size.\""}
                 }
             }),
             output_schema: Some(json!({
@@ -242,28 +244,6 @@ fn parse_tool(yaml: &str) -> Result<UserToolDoc, Vec<String>> {
     let doc = parse_tool_source(yaml).map_err(|error| vec![error])?;
     validate_tool(&doc).map_err(|error| vec![error])?;
     Ok(doc)
-}
-
-fn run_preview(doc: &UserToolDoc, input: &Value) -> String {
-    let what = match &doc.kind {
-        ToolKind::Exec { command, args, .. } => {
-            let mut line = command.clone();
-            for arg in args {
-                line.push(' ');
-                line.push_str(arg);
-            }
-            format!("runs: {line}")
-        }
-        ToolKind::Prompt { .. } => "makes one model call with its prompt".to_string(),
-        ToolKind::Reshape { .. } => "reshapes its input, with no side effects".to_string(),
-        ToolKind::Decision { .. } => "asks the decision model its questions".to_string(),
-        ToolKind::Image { .. } => "generates an image with the image model".to_string(),
-    };
-    format!(
-        "Test-run the drafted tool {USER_TOOL_PREFIX}{} once? It {what}\n\nwith input: {}",
-        doc.name,
-        serde_json::to_string_pretty(input).unwrap_or_default()
-    )
 }
 
 pub fn write_file(path: &Path, yaml: &str, overwrite: bool) -> Result<PathBuf, String> {
@@ -373,66 +353,29 @@ impl Pipeline {
         Some(catalog)
     }
 
-    async fn approve_run(
-        &self,
-        doc: &UserToolDoc,
-        sample: &Value,
-        unset: &[String],
-    ) -> Result<std::collections::BTreeMap<String, String>, Value> {
+    async fn approve_run(&self, preview: TestRunPreview) -> Result<(), Value> {
         let Some(interlocutor) = &self.interlocutor else {
             return Err(json!({
                 "ran": false,
                 "reason": "nobody can approve a test run here; ask the user whether to save it untested"
             }));
         };
-        let mut prompt = run_preview(doc, sample);
-        let mut properties = serde_json::Map::new();
-        properties.insert(
-            "run".to_string(),
-            json!({"type": "boolean", "description": "Run it now?"}),
-        );
-        if unset.is_empty() {
-            prompt.push_str(
-                "\n\nRunning this exact draft with this exact input again won't ask; any change to either will.",
-            );
-        } else {
-            prompt.push_str(&format!(
-                "\n\nIt needs {}, which isn't set. Enter a value below for this run only: it isn't saved, and it is never passed to the model.",
-                unset.join(", ")
-            ));
-            for var in unset {
-                properties.insert(
-                    var.clone(),
-                    json!({"type": "string", "description": format!("{var} for this test run only (never saved, never passed to the model)")}),
-                );
-            }
-        }
-        let mut order = vec![json!("run")];
-        order.extend(unset.iter().map(|var| json!(var)));
         let outcome = interlocutor
             .ask(AskRequest {
                 path: StepPath::top("try_tool"),
                 call_stack: self.call_stack.clone(),
-                prompt,
+                prompt: preview.prompt(),
                 schema: json!({
                     "type": "object",
                     "required": ["run"],
-                    "properties": properties,
-                    "propertyOrder": order,
+                    "properties": {"run": {"type": "boolean", "description": "Run it now?"}}
                 }),
                 default: Some(json!({"run": true})),
+                detail: Some(AskDetail::TestRun(preview)),
             })
             .await;
         match outcome {
-            AskOutcome::Answered(answer) if answer["run"] == json!(true) => {
-                let mut secrets = std::collections::BTreeMap::new();
-                for var in unset {
-                    if let Some(value) = answer[var].as_str().filter(|value| !value.is_empty()) {
-                        secrets.insert(var.clone(), value.to_string());
-                    }
-                }
-                Ok(secrets)
-            }
+            AskOutcome::Answered(answer) if answer["run"] == json!(true) => Ok(()),
             AskOutcome::Unavailable(reason) => Err(
                 json!({"ran": false, "reason": format!("the user couldn't be asked: {reason}")}),
             ),
@@ -451,23 +394,27 @@ impl Pipeline {
             _ => json!({}),
         };
         let unset = crate::user_tools::unset_env_vars(&doc, self.drafted.secrets.as_ref());
+        let preview = TestRunPreview::new(&doc, input["purpose"].as_str(), &sample, &unset);
         let approval = format!("{yaml}\n{sample}");
         let remembered =
             unset.is_empty() && self.drafted.approved.lock().unwrap().contains(&approval);
-        let secrets = if remembered {
-            std::collections::BTreeMap::new()
-        } else {
-            match self.approve_run(&doc, &sample, &unset).await {
-                Ok(secrets) => secrets,
-                Err(refusal) => return Ok(refusal),
+        let unasked = unset.is_empty() && preview.safe_to_run_unasked();
+        if !remembered && !unasked {
+            if let Err(refusal) = self.approve_run(preview).await {
+                return Ok(refusal);
             }
-        };
-        if !remembered && unset.is_empty() {
+            let still = crate::user_tools::unset_env_vars(&doc, self.drafted.secrets.as_ref());
+            if !still.is_empty() {
+                return Ok(json!({
+                    "ran": false,
+                    "needs_env": still,
+                    "reason": format!("{} still isn't set; ask the user to set it, then test again", still.join(", ")),
+                }));
+            }
             self.drafted.approved.lock().unwrap().insert(approval);
         }
         let name = format!("{USER_TOOL_PREFIX}{}", doc.name);
-        let hidden = stored_values(&doc, self.drafted.secrets.as_ref(), &secrets);
-        let doc = crate::user_tools::with_env_values(&doc, &secrets);
+        let hidden = stored_values(&doc, self.drafted.secrets.as_ref(), &Default::default());
         let registry = UserToolRegistry::new(vec![doc], self.router.clone())
             .with_secrets(self.drafted.secrets.clone());
         let outcome = registry
@@ -476,14 +423,13 @@ impl Pipeline {
             .map_err(|error| redacted_text(&error.to_string(), &hidden))?;
         let result = redacted(outcome.result, &hidden);
         let mut report = json!({"ran": true, "is_error": outcome.is_error, "result": result});
+        if unasked && !remembered {
+            report["approval"] = json!("automatic");
+        }
         let outcome = ToolOutcome {
             result: report["result"].clone(),
             is_error: outcome.is_error,
         };
-        if !unset.is_empty() {
-            report["needs_env"] = json!(unset);
-            report["note"] = json!("these environment variables have to be set where Dive starts before the tool works outside this test; their values were never passed to you");
-        }
         if !outcome.is_error {
             let shape = crate::shapes::infer_schema(&outcome.result);
             if let Some(store) = &self.store {
@@ -519,8 +465,8 @@ impl Pipeline {
             .await)
     }
 
-    pub async fn try_tool_file(&self, yaml: &str, input: Value) -> Value {
-        self.try_tool(json!({"yaml": yaml, "input": input}))
+    pub async fn try_tool_file(&self, yaml: &str, input: Value, purpose: Option<&str>) -> Value {
+        self.try_tool(json!({"yaml": yaml, "input": input, "purpose": purpose}))
             .await
             .unwrap_or_else(|error| json!({"ran": false, "problems": [error]}))
     }
@@ -554,6 +500,7 @@ impl Pipeline {
                     "properties": {"save": {"type": "boolean", "description": "Save it now?"}}
                 }),
                 default: Some(json!({"save": true})),
+                detail: None,
             })
             .await;
         match outcome {

@@ -19,6 +19,10 @@ keywords: ["builtin__try_tool"]
   Sample input for one run, matching the tool's input_schema
 </ParamField>
 
+<ParamField body="purpose" type="string" required>
+  One sentence the user reads before approving: what this run checks, e.g. "Check it returns README.md's text and size."
+</ParamField>
+
 <ParamField body="yaml" type="string" required>
   The whole user tool file
 </ParamField>
@@ -51,6 +55,7 @@ keywords: ["builtin__try_tool"]
   input:
     yaml: "{{input.yaml}}"
     input: "{{input.input}}"
+    purpose: "{{input.purpose}}"
 ```
 
 </RequestExample>
