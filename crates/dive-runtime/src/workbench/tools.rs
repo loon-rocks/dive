@@ -430,14 +430,14 @@ impl WorkbenchTools {
     }
 
     async fn plan_into_network(&self, doc: &PlanDoc) -> Option<ToolOutcome> {
-        let in_network = {
-            let state = self.draft.lock().unwrap();
-            state.network.restate.is_some()
-                || state
-                    .network
-                    .node(super::artifact::ArtifactKind::Plan, &doc.identifier)
-                    .is_some()
-        };
+        let in_network = self.plans_open_as_nodes()
+            || self
+                .draft
+                .lock()
+                .unwrap()
+                .network
+                .node(super::artifact::ArtifactKind::Plan, &doc.identifier)
+                .is_some();
         if !in_network {
             return None;
         }
@@ -3190,6 +3190,35 @@ steps:
         let reopened = existing(ArtifactKind::Tool, "builtin__reshape", &tools.pipeline).unwrap();
         assert_eq!(reopened.editing, Some(path));
         assert!(reopened.yaml.contains("read_only: true"));
+    }
+
+    #[tokio::test]
+    async fn a_new_plan_drafted_while_editing_joins_the_edit_as_a_node() {
+        use crate::workbench::artifact::ArtifactKind;
+        let (tools, _rx, _dir) = item_tools(Vec::new(), Vec::new());
+        let opened = tools
+            .invoke(
+                crate::workbench::artifact::LOAD_ARTIFACT,
+                json!({"kind": "tool", "name": "builtin__reshape"}),
+            )
+            .await
+            .unwrap();
+        assert!(!opened.is_error, "{}", opened.result);
+        let set = tools
+            .invoke(SET_ARTIFACT, json!({"kind": "plan", "yaml": report_yaml()}))
+            .await
+            .unwrap();
+        assert!(!set.is_error, "{}", set.result);
+        assert_eq!(set.result["kind"], json!("plan"), "{}", set.result);
+        let state = tools.draft.lock().unwrap();
+        assert!(state.doc.is_none(), "the plan pane stays empty");
+        assert!(state.network.is_edit());
+        let node = state
+            .network
+            .node(ArtifactKind::Plan, "report_on_x")
+            .expect("the new plan is a node of the edit");
+        assert!(node.base.is_none());
+        assert_eq!(state.network.view().unsaved(), 1);
     }
 
     #[tokio::test]
