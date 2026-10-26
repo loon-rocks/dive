@@ -616,7 +616,8 @@ description = "fast and cheap"
         assert_eq!(no_default.known_names(), vec!["nano"]);
         assert_eq!(
             models.described().map(|(name, _)| name).collect::<Vec<_>>(),
-            vec!["default", "judge", "nano"]
+            vec!["chat", "default", "judge", "nano", "solver"],
+            "a standard role that falls back to default is offered under its own name"
         );
         assert_eq!(models.description_of("nano"), Some("fast and cheap"));
         assert_eq!(

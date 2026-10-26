@@ -1080,16 +1080,21 @@ impl UserToolRegistry {
     /// Add a `model` property to a caller-model prompt tool's catalog
     /// schema, enumerating the configured roles that carry a description
     /// of their own or a built-in one — the planner's routing signal for
-    /// picking the smallest adequate model. Fewer than two → no property:
-    /// a knob with nothing to choose between would only invite invented
-    /// names.
+    /// picking the smallest adequate model. Fewer than two distinct models
+    /// → no property: a knob with nothing to choose between would only
+    /// invite invented names.
     fn advertise_named_models(&self, schema: &mut Value, kind: ModelKind) {
         let described: Vec<(&str, &str)> = self
             .router
             .described_models()
             .filter(|(name, _)| self.router.kind_of_role(name) == Some(kind))
             .collect();
-        if described.len() < 2 {
+        let models: std::collections::BTreeSet<&str> = described
+            .iter()
+            .filter_map(|(name, _)| self.router.roles().resolve(name))
+            .map(|choice| choice.model.as_str())
+            .collect();
+        if models.len() < 2 {
             return;
         }
         let names: Vec<&str> = described.iter().map(|(name, _)| *name).collect();

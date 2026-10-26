@@ -793,8 +793,11 @@ impl ModelRoles {
 
     pub fn described(&self) -> impl Iterator<Item = (&str, &str)> {
         self.known_names().into_iter().filter_map(|name| {
-            let choice = self.0.get(name)?;
-            let offered = choice.description.is_some()
+            let own = self
+                .0
+                .get(name)
+                .and_then(|choice| choice.description.as_ref());
+            let offered = own.is_some()
                 || name == DEFAULT_ROLE
                 || Role::from_name(name).is_some_and(Role::offered);
             offered.then(|| self.description_of(name).map(|text| (name, text)))?

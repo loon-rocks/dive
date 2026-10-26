@@ -1297,7 +1297,11 @@ async fn caller_model_tools_advertise_named_models_in_the_catalog() {
     let defs = registry.tools().await.unwrap();
     let infer = defs.iter().find(|d| d.name == "builtin__infer").unwrap();
     let model = &infer.input_schema["properties"]["model"];
-    assert_eq!(model["enum"], json!(["default", "nano"]));
+    assert_eq!(
+        model["enum"],
+        json!(["chat", "default", "judge", "nano", "solver"]),
+        "standard chat roles that fall back to default are offered too"
+    );
     let description = model["description"].as_str().unwrap();
     assert!(
         description.contains("nano — fast and cheap"),
@@ -1714,7 +1718,7 @@ async fn builtin_decide_is_listed_only_with_a_decision_model_and_offers_no_choic
     let infer = defs.iter().find(|d| d.name == "builtin__infer").unwrap();
     assert_eq!(
         infer.input_schema["properties"]["model"]["enum"],
-        json!(["default", "nano"])
+        json!(["chat", "default", "judge", "nano", "solver"])
     );
 }
 
