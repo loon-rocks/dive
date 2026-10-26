@@ -888,7 +888,8 @@ pub fn tool_defs() -> Vec<ToolDef> {
             description: "Describe one tool from the plan catalog, or one of Dive's native \
                           builtin__ tools, without calling it: its description, input schema, declared output schema, the output \
                           shape observed in earlier runs, and whether it's read-only. Use it \
-                          to write a step's input and the templates that read its result."
+                          to write a step's input and the templates that read its result. \
+                          Plans drafted in this thread's network draft can be described too."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
