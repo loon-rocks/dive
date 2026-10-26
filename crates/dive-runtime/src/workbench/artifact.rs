@@ -1442,7 +1442,10 @@ pub fn tool_defs() -> Vec<ToolDef> {
                           tool) with its job, model role and the design principles it applies, \
                           and the edges between nodes. Nodes keep their drafts across sketches; \
                           a drafted node left out of the new sketch is reported so it can be \
-                          discarded. Nothing is drafted or written."
+                          discarded. In an edit, the restate is problem, change, success and \
+                          out_of_scope, and each opened item that changes carries its `change`; \
+                          an opened item without one is context, and a node that wasn't opened \
+                          is new. Nothing is drafted or written."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -1450,11 +1453,13 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "properties": {
                     "restate": {
                         "type": "object",
-                        "required": ["outcome", "success", "constraint", "out_of_scope"],
+                        "required": ["success", "out_of_scope"],
                         "properties": {
-                            "outcome": {"type": "string"},
-                            "success": {"type": "string"},
-                            "constraint": {"type": "string"},
+                            "outcome": {"type": "string", "description": "A new network: what the user gets. Required unless problem and change are given"},
+                            "constraint": {"type": "string", "description": "A new network: the limit it works within"},
+                            "problem": {"type": "string", "description": "An edit: what went wrong, or what the user wants changed"},
+                            "change": {"type": "string", "description": "An edit: the change, in one sentence"},
+                            "success": {"type": "string", "description": "How the test shows it worked; in an edit, the evidence's input and what the answer must do"},
                             "out_of_scope": {"type": "array", "items": {"type": "string"}}
                         }
                     },
@@ -1471,6 +1476,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                                 "principles": {"type": "array", "items": {"type": "string"}, "description": "The design principles this node applies"},
                                 "takes": {"type": "string", "description": "Its input, field by field, as the nodes that call it will pass it"},
                                 "returns": {"type": "string", "description": "Its output, field by field, as the nodes that read it expect it"},
+                                "change": {"type": "string", "description": "An edit: what changes in this opened item, in one line, specific enough for its builder. Omit for an opened item that stays as it is and for a new node"},
                                 "proposed": {"type": "boolean", "description": "True for a node a pending question would add"}
                             }
                         }

@@ -1668,9 +1668,18 @@ fn network_lines(view: &dive_runtime::workbench::NetworkView) -> Vec<Line<'stati
     }
     if let Some(restate) = &view.restate {
         lines.push(Line::styled(
-            restate.outcome.clone(),
+            if restate.is_edit() {
+                restate.change.clone()
+            } else {
+                restate.outcome.clone()
+            },
             ACCENT.add_modifier(Modifier::BOLD),
         ));
+        artifact_field(
+            &mut lines,
+            "problem",
+            Some(restate.problem.clone()).filter(|s| !s.is_empty()),
+        );
         artifact_field(
             &mut lines,
             "success",
@@ -1705,8 +1714,13 @@ fn network_lines(view: &dive_runtime::workbench::NetworkView) -> Vec<Line<'stati
         }
         if !node.sketched && view.restate.is_some() {
             line.push_str(" · not in the sketch");
+        } else if node.sketched && view.is_edit() {
+            line.push_str(&format!(" · {}", node.role.label()));
         }
         lines.push(Line::styled(line, style));
+        if !node.change.is_empty() {
+            lines.push(Line::styled(format!("  {}", node.change), Style::default()));
+        }
         if !node.job.is_empty() {
             lines.push(Line::styled(format!("  {}", node.job), DIM));
         }

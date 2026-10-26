@@ -1859,7 +1859,7 @@ steps:
 
     #[test]
     fn an_open_draft_takes_the_pane_and_the_save_and_discard_keys() {
-        use dive_runtime::workbench::{ArtifactKind, NetworkView, NodeStatus, NodeView};
+        use dive_runtime::workbench::{ArtifactKind, EditRole, NetworkView, NodeStatus, NodeView};
         let mut app = App::new(Some(two_step_doc()));
         app.ws.tab = WsTab::Run;
         update(
@@ -1873,6 +1873,8 @@ steps:
                     principles: Vec::new(),
                     takes: String::new(),
                     returns: String::new(),
+                    change: String::new(),
+                    role: EditRole::New,
                     sketched: false,
                     status: NodeStatus::Drafted,
                     yaml: Some("name: triager\n".to_string()),
