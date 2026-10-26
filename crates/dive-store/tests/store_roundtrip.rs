@@ -221,18 +221,6 @@ async fn entries_keep_their_duration_and_model_usage() {
         cache_creation_input_tokens: 3,
         cache_read_input_tokens: 4,
     };
-    let nested = vec![dive_core::trace::Call::Tool {
-        name: "plan__digest".into(),
-        ms: 6,
-        is_error: false,
-        calls: vec![dive_core::trace::Call::Model {
-            role: "judge".into(),
-            site: "plan__digest/E1".into(),
-            model_type: dive_config::ModelKind::Chat,
-            ms: 4,
-            usage: usage.clone(),
-        }],
-    }];
     for (name, store) in backends(&dir) {
         let thread = store.create_thread("t", "chat", None).await.unwrap();
         let entries = vec![
@@ -248,7 +236,7 @@ async fn entries_keep_their_duration_and_model_usage() {
             .stamped(Stamp {
                 ms: Some(120),
                 usage: Some(usage.clone()),
-                calls: Vec::new(),
+                span: Some("00f067aa0ba902b7".into()),
             }),
             NewEntry::message(
                 "chat",
@@ -261,7 +249,7 @@ async fn entries_keep_their_duration_and_model_usage() {
             .stamped(Stamp {
                 ms: Some(7),
                 usage: None,
-                calls: nested.clone(),
+                span: Some("53995c3f42cd8ad8".into()),
             }),
         ];
         store.append_entries(&thread.id, &entries).await.unwrap();
@@ -283,14 +271,58 @@ async fn entries_keep_their_duration_and_model_usage() {
         assert!(
             first.get("ms").is_none()
                 && first.get("usage").is_none()
-                && first.get("calls").is_none(),
+                && first.get("span").is_none(),
             "{name}"
         );
-        assert_eq!(loaded[2].calls, nested, "{name}");
+        assert_eq!(
+            loaded[2].span.as_deref(),
+            Some("53995c3f42cd8ad8"),
+            "{name}"
+        );
         let back = NewEntry::from(loaded[1].clone());
         assert_eq!(
             (back.ms, back.usage),
             (Some(120), Some(usage.clone())),
+            "{name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_thread_keeps_its_trace_spans_in_order_until_it_is_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let span = |id: &str, parent: Option<&str>, start: u64| dive_core::trace::Span {
+        trace_id: "4bf92f3577b34da6a3ce929d0e0e4736".into(),
+        span_id: id.into(),
+        parent_span_id: parent.map(str::to_string),
+        name: id.into(),
+        kind: dive_core::trace::SpanKind::Tool,
+        start_time_unix_nano: start,
+        end_time_unix_nano: Some(start + 1),
+        status: Default::default(),
+        attributes: Default::default(),
+        input: Some(json!({"q": id})),
+        output: None,
+    };
+    for (name, store) in backends(&dir) {
+        let thread = store.create_thread("t", "chat", None).await.unwrap();
+        assert!(
+            store.load_spans(&thread.id).await.unwrap().is_empty(),
+            "{name}"
+        );
+        let first = vec![span("a", None, 1), span("b", Some("a"), 2)];
+        let second = vec![span("c", None, 3)];
+        store.append_spans(&thread.id, &first).await.unwrap();
+        store.append_spans(&thread.id, &second).await.unwrap();
+        let loaded = store.load_spans(&thread.id).await.unwrap();
+        assert_eq!(loaded, [first, second].concat(), "{name}");
+        assert!(
+            store.append_spans("missing", &loaded).await.is_err(),
+            "{name}"
+        );
+        store.delete_thread(&thread.id).await.unwrap();
+        assert!(
+            store.load_spans(&thread.id).await.unwrap().is_empty(),
             "{name}"
         );
     }

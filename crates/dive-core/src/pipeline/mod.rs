@@ -1114,7 +1114,11 @@ impl Pipeline {
         }
 
         let started = std::time::Instant::now();
-        let (invoked, traced) = crate::trace::tool(crate::trace::FrameKind::Step, async {
+        let open = crate::trace::Open::tool(tool_name)
+            .attr("dive.step.path", path_text.clone())
+            .attr("dive.plan.stack", self.call_stack.join("/"))
+            .input(&rendered);
+        let (invoked, traced) = crate::trace::span(crate::trace::FrameKind::Step, open, async {
             self.events
                 .step_started(&self.call_stack, &path_text, tool_name, &rendered);
             self.events.tool_started(tool_name, &rendered);
@@ -1179,11 +1183,11 @@ impl Pipeline {
         .await;
         let outcome = match invoked {
             Ok(outcome) => {
-                traced.finish(tool_name, outcome.is_error);
+                traced.close(outcome.is_error, Some(&outcome.result));
                 outcome
             }
             Err(error) => {
-                traced.finish(tool_name, true);
+                traced.close(true, Some(&json!({"error": "aborted"})));
                 return Err(error);
             }
         };

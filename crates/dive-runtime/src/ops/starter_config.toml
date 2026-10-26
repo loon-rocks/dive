@@ -66,11 +66,16 @@ model = "claude-sonnet-5"
 # variables override these values.
 # [telemetry]
 # endpoint = "https://cloud.langfuse.com/api/public/otel"
-# capture_content = true    # default; false keeps prompts, completions, and tool I/O off spans
+# capture_content = false   # default; true exports prompts, completions, and tool I/O on spans
 # logs = false              # also export the diagnostic log (-v / DIVE_LOG)
 # [telemetry.headers]
 # Authorization = "Basic ${LANGFUSE_AUTH}"   # base64 of pk-lf-…:sk-lf-…
 # "x-langfuse-ingestion-version" = "4"
+
+# What each thread's trace keeps of the calls a turn makes.
+# [trace]
+# content = true            # default; false keeps only names, timing, status and token counts
+# clip_bytes = 16384        # clip each kept input and output; absent keeps them whole
 
 # [mcp.github]
 # command = "docker"

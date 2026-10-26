@@ -40,6 +40,8 @@ pub struct ThreadDetail {
     #[serde(flatten)]
     pub summary: ThreadSummary,
     pub entries: Vec<ThreadEntry>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<dive_core::trace::Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -78,6 +80,7 @@ pub async fn show(store: &dyn Store, id: &str) -> Result<ThreadDetail> {
     Ok(ThreadDetail {
         summary: ThreadSummary::from(&meta),
         entries: store.load_entries(id).await?,
+        spans: store.load_spans(id).await?,
     })
 }
 

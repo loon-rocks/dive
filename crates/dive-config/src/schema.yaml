@@ -321,12 +321,23 @@ properties:
         description: Extra resource attributes.
       capture_content:
         type: boolean
-        default: true
-        description: Include prompts and responses in spans.
+        default: false
+        description: Include each call's input and output (prompts, responses, tool arguments and results) in exported spans.
       logs:
         type: boolean
         default: false
         description: Export logs as well as traces.
+  trace:
+    type: object
+    description: What each thread's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the thread's `spans.jsonl`.
+    properties:
+      content:
+        type: boolean
+        default: true
+        description: Keep the input and output of every tool, plan, agent and turn in the thread's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.
+      clip_bytes:
+        type: integer
+        description: Clip each kept input and output to about this many bytes of JSON, in the trace and in exported spans. Absent keeps them whole.
   pricing:
     type: object
     description: Prices per model id, as `[pricing."<model>"]`, in USD per million tokens. Without them, usage is reported in tokens only.

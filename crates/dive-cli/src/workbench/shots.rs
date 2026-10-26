@@ -495,6 +495,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         standing_tools: vec!["workbench__*".to_string()],
         handoff_guard: None,
         files: None,
+        trace: Default::default(),
     };
 
     let start_agent = spec.agent.clone().unwrap_or_else(|| {

@@ -130,16 +130,31 @@ impl Agent {
             // `stream_once` opens *and* drains the stream, so one scope over
             // the call covers the terminal event that carries the counts.
             let called = Instant::now();
-            let response = self
-                .call_site
-                .clone()
-                .scope(self.stream_once(messages, &tools, &mut images))
-                .await?;
+            let open = crate::trace::Open::new(
+                crate::trace::SpanKind::Model,
+                format!("chat {}", self.model),
+            )
+            .attr("gen_ai.operation.name", "chat")
+            .attr("gen_ai.request.model", self.model.clone());
+            let (response, model_span) =
+                crate::trace::span(crate::trace::FrameKind::Model, open, async {
+                    self.call_site
+                        .clone()
+                        .scope(self.stream_once(messages, &tools, &mut images))
+                        .await
+                })
+                .await;
+            let failure = response
+                .as_ref()
+                .err()
+                .map(|error| json!({"error": error.to_string()}));
+            model_span.close(failure.is_some(), failure.as_ref());
+            let response = response?;
             usage.add(&response.usage);
             stamps.push(Stamp {
                 ms: Some(millis(called.elapsed())),
                 usage: Some(EntryUsage::new(&self.model, &response.usage)),
-                calls: Vec::new(),
+                span: model_span.span_id(),
             });
 
             messages.push(ChatMessage::Assistant {
@@ -274,24 +289,28 @@ impl Agent {
     /// in the returned messages.
     async fn execute_calls(&self, calls: &[ToolCall]) -> Vec<(ChatMessage, Stamp)> {
         let futures = calls.iter().map(|call| async {
-            let (outcome, traced) = crate::trace::tool(crate::trace::FrameKind::Tool, async {
-                self.events.tool_started(&call.name, &call.arguments);
-                let started = Instant::now();
-                let outcome = self
-                    .registry
-                    .invoke(&call.name, call.arguments.clone())
-                    .await
-                    .unwrap_or_else(|e| ToolOutcome {
-                        result: json!({ "error": e.to_string() }),
-                        is_error: true,
-                    });
-                self.events
-                    .tool_finished(&call.name, started.elapsed(), outcome.is_error);
-                outcome
-            })
-            .await;
+            let open = crate::trace::Open::tool(&call.name)
+                .attr("gen_ai.tool.call.id", call.id.clone())
+                .input(&call.arguments);
+            let (outcome, traced) =
+                crate::trace::span(crate::trace::FrameKind::Tool, open, async {
+                    self.events.tool_started(&call.name, &call.arguments);
+                    let started = Instant::now();
+                    let outcome = self
+                        .registry
+                        .invoke(&call.name, call.arguments.clone())
+                        .await
+                        .unwrap_or_else(|e| ToolOutcome {
+                            result: json!({ "error": e.to_string() }),
+                            is_error: true,
+                        });
+                    self.events
+                        .tool_finished(&call.name, started.elapsed(), outcome.is_error);
+                    outcome
+                })
+                .await;
+            traced.close(outcome.is_error, Some(&outcome.result));
             let ms = traced.ms();
-            let inner = traced.finish(&call.name, outcome.is_error);
             (
                 ChatMessage::ToolResult {
                     tool_call_id: call.id.clone(),
@@ -301,7 +320,7 @@ impl Agent {
                 Stamp {
                     ms: Some(ms),
                     usage: None,
-                    calls: inner,
+                    span: traced.span_id(),
                 },
             )
         });

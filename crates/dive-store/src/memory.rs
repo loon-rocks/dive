@@ -2,7 +2,7 @@
 //! Nothing survives the process.
 
 use dive_core::store::{
-    Attachment, EntryBody, NewEntry, Store, StoreError, ThreadEntry, ThreadMeta, ToolShape,
+    Attachment, EntryBody, NewEntry, Span, Store, StoreError, ThreadEntry, ThreadMeta, ToolShape,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -17,6 +17,7 @@ pub struct MemoryStore {
 struct Inner {
     threads: HashMap<String, (ThreadMeta, Vec<ThreadEntry>)>,
     shapes: HashMap<String, ToolShape>,
+    spans: HashMap<String, Vec<Span>>,
 }
 
 impl MemoryStore {
@@ -93,7 +94,9 @@ impl Store for MemoryStore {
     }
 
     async fn delete_thread(&self, id: &str) -> Result<bool, StoreError> {
-        Ok(self.inner.lock().unwrap().threads.remove(id).is_some())
+        let mut inner = self.inner.lock().unwrap();
+        inner.spans.remove(id);
+        Ok(inner.threads.remove(id).is_some())
     }
 
     async fn append_entries(
@@ -127,6 +130,30 @@ impl Store for MemoryStore {
             .threads
             .get(thread_id)
             .map(|(_, entries)| entries.clone())
+            .unwrap_or_default())
+    }
+
+    async fn append_spans(&self, thread_id: &str, spans: &[Span]) -> Result<(), StoreError> {
+        let mut inner = self.inner.lock().unwrap();
+        if !inner.threads.contains_key(thread_id) {
+            return Err(StoreError(format!("no thread {thread_id}")));
+        }
+        inner
+            .spans
+            .entry(thread_id.to_string())
+            .or_default()
+            .extend(spans.iter().cloned());
+        Ok(())
+    }
+
+    async fn load_spans(&self, thread_id: &str) -> Result<Vec<Span>, StoreError> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .spans
+            .get(thread_id)
+            .cloned()
             .unwrap_or_default())
     }
 

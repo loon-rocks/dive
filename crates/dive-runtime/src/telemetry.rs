@@ -16,7 +16,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const MAX_ATTRIBUTE_BYTES: usize = 64 * 1024;
 const EXPORT_BATCH_SPANS: usize = 16;
 const EXPORT_QUEUE_SPANS: usize = 8192;
 const EXPORT_DELAY: Duration = Duration::from_secs(2);
@@ -29,6 +28,7 @@ struct Telemetry {
     logger_provider: Option<SdkLoggerProvider>,
     tracer: SdkTracer,
     capture_content: bool,
+    clip: Option<usize>,
     common: Vec<KeyValue>,
 }
 
@@ -63,6 +63,10 @@ pub fn init(config_paths: &[PathBuf], env: &dyn Fn(&str) -> Option<String>) -> I
     }
     match build(&resolved) {
         Ok(built) => {
+            let built = Telemetry {
+                clip: loaded.config.trace.clip_bytes,
+                ..built
+            };
             init.active = TELEMETRY.set(built).is_ok();
         }
         Err(problem) => init
@@ -178,6 +182,7 @@ fn build(config: &TelemetryConfig) -> anyhow::Result<Telemetry> {
         logger_provider,
         tracer,
         capture_content: config.capture_content,
+        clip: None,
         common,
     })
 }
@@ -318,12 +323,15 @@ pub fn report_plan_result(
 
 pub fn exporter(run: RunInfo) -> Option<Arc<dyn EventSink>> {
     let telemetry = TELEMETRY.get()?;
-    Some(Arc::new(OtlpSink::new(
-        telemetry.tracer.clone(),
-        run,
-        telemetry.capture_content,
-        telemetry.common.clone(),
-    )))
+    Some(Arc::new(
+        OtlpSink::new(
+            telemetry.tracer.clone(),
+            run,
+            telemetry.capture_content,
+            telemetry.common.clone(),
+        )
+        .clipped(telemetry.clip),
+    ))
 }
 
 pub fn attach(sink: Arc<dyn EventSink>, run: RunInfo) -> Arc<dyn EventSink> {
@@ -344,6 +352,7 @@ pub struct OtlpSink {
     tracer: SdkTracer,
     run: RunInfo,
     capture: bool,
+    clip: Option<usize>,
     common: Vec<KeyValue>,
     state: Mutex<State>,
 }
@@ -356,50 +365,8 @@ struct State {
     run: Option<RunStart>,
 }
 
-fn clip_strings(value: &mut Value, cap: usize) {
-    match value {
-        Value::String(text) if text.len() > cap => {
-            let mut cut = cap;
-            while !text.is_char_boundary(cut) {
-                cut -= 1;
-            }
-            let dropped = text.len() - cut;
-            text.truncate(cut);
-            text.push_str(&format!("…[{dropped} bytes truncated]"));
-        }
-        Value::Array(items) => items.iter_mut().for_each(|item| clip_strings(item, cap)),
-        Value::Object(map) => map.values_mut().for_each(|item| clip_strings(item, cap)),
-        _ => {}
-    }
-}
-
 fn clipped_json(value: &Value, budget: usize) -> String {
-    let text = serde_json::to_string(value).unwrap_or_default();
-    if text.len() <= budget {
-        return text;
-    }
-    let mut cap = budget / 2;
-    while cap >= 64 {
-        let mut clipped = value.clone();
-        clip_strings(&mut clipped, cap);
-        let text = serde_json::to_string(&clipped).unwrap_or_default();
-        if text.len() <= budget {
-            return text;
-        }
-        cap /= 2;
-    }
-    let mut preview = text.clone();
-    let mut cut = budget / 2;
-    while !preview.is_char_boundary(cut) {
-        cut -= 1;
-    }
-    preview.truncate(cut);
-    serde_json::json!({
-        "truncated": true,
-        "bytes": text.len(),
-        "preview": preview,
-    })
-    .to_string()
+    serde_json::to_string(&trace::clipped(value, budget)).unwrap_or_default()
 }
 
 impl OtlpSink {
@@ -419,9 +386,15 @@ impl OtlpSink {
             tracer,
             run,
             capture,
+            clip: None,
             common,
             state: Mutex::new(State::default()),
         }
+    }
+
+    pub fn clipped(mut self, clip: Option<usize>) -> Self {
+        self.clip = clip;
+        self
     }
 
     fn attrs(&self, state: &State) -> Vec<KeyValue> {
@@ -507,7 +480,11 @@ impl OtlpSink {
         if !self.capture {
             return None;
         }
-        Some(KeyValue::new(key, clipped_json(value, MAX_ATTRIBUTE_BYTES)))
+        let text = match self.clip {
+            Some(budget) => clipped_json(value, budget),
+            None => serde_json::to_string(value).unwrap_or_default(),
+        };
+        Some(KeyValue::new(key, text))
     }
 
     fn root_event(&self, name: &'static str, attributes: Vec<KeyValue>) {
@@ -1097,27 +1074,27 @@ mod tests {
 
     #[tokio::test]
     async fn parallel_and_subagent_tool_calls_each_get_a_span_under_their_caller() {
-        use dive_core::trace::{tool, FrameKind};
+        use dive_core::trace::{span, FrameKind, Open};
         let (sink, exporter, provider) = harness(RunInfo::conversation("ask", None), true);
         let builder = |agent: &'static str, inner: &'static str| {
             let sink = &sink;
             async move {
-                let ((), traced) = tool(FrameKind::Tool, async {
+                let ((), traced) = span(FrameKind::Tool, Open::tool(agent), async {
                     sink.tool_started(agent, &json!({}));
                     tokio::task::yield_now().await;
                     sink.model_call(&call(agent, None));
-                    let ((), inner_traced) = tool(FrameKind::Tool, async {
+                    let ((), inner_traced) = span(FrameKind::Tool, Open::tool(inner), async {
                         sink.subagent_tool_started(1, inner, &json!({}));
                         tokio::task::yield_now().await;
                         sink.model_call(&call(inner, None));
                         sink.subagent_tool_finished(1, inner, Duration::ZERO, false);
                     })
                     .await;
-                    inner_traced.finish(inner, false);
+                    inner_traced.close(false, None);
                     sink.tool_finished(agent, Duration::ZERO, false);
                 })
                 .await;
-                traced.finish(agent, false);
+                traced.close(false, None);
             }
         };
         futures::join!(
@@ -1230,6 +1207,39 @@ mod tests {
             attribute(second, "session.id"),
             Some(&OtelValue::from("thread-9"))
         );
+    }
+
+    const MAX_ATTRIBUTE_BYTES: usize = 64 * 1024;
+
+    #[test]
+    fn content_is_exported_whole_unless_clipping_is_asked_for() {
+        let big = json!({"data": "x".repeat(200_000)});
+        for (clip, whole) in [(None, true), (Some(MAX_ATTRIBUTE_BYTES), false)] {
+            let (sink, exporter, provider) = harness(RunInfo::plan_run("echo"), true);
+            let sink = sink.clipped(clip);
+            sink.step_started(&[], "E1", "builtin__reshape", &big);
+            sink.step_finished(
+                &[],
+                "E1",
+                "builtin__reshape",
+                &json!({}),
+                false,
+                Duration::ZERO,
+            );
+            sink.run_finished(&json!({}), false);
+            drop(sink);
+            provider.force_flush().unwrap();
+            let spans = exporter.get_finished_spans().unwrap();
+            let step = spans
+                .iter()
+                .find(|span| span.name == "E1 builtin__reshape")
+                .unwrap();
+            let Some(OtelValue::String(input)) = attribute(step, "langfuse.observation.input")
+            else {
+                panic!("the step carries its input");
+            };
+            assert_eq!(input.as_str().len() > MAX_ATTRIBUTE_BYTES, whole);
+        }
     }
 
     #[test]

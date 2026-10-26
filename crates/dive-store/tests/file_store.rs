@@ -7,7 +7,6 @@ mod common;
 
 use common::MessageLog;
 use dive_core::store::{Attachment, EntryUsage, Store, ThreadEntry};
-use dive_core::trace::Call;
 use dive_llm::types::ChatMessage;
 use dive_store::{FileStore, STORE_FORMAT};
 use serde_json::json;
@@ -291,14 +290,26 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
 
 #[test]
 fn entries_without_timing_round_trip_byte_for_byte() {
-    for version in ["v2", "v3", "v4"] {
+    let raw = std::fs::read_to_string(fixture_dir("v2").join("threads/a1b2c3d4e5f6/entries.jsonl"))
+        .unwrap();
+    for line in raw.lines() {
+        let entry: ThreadEntry = serde_json::from_str(line).unwrap();
+        assert_eq!(serde_json::to_string(&entry).unwrap(), line);
+    }
+}
+
+#[test]
+fn entries_from_before_spans_load_and_drop_their_nested_calls() {
+    for version in ["v3", "v4"] {
         let raw = std::fs::read_to_string(
             fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
         )
         .unwrap();
         for line in raw.lines() {
             let entry: ThreadEntry = serde_json::from_str(line).unwrap();
-            assert_eq!(serde_json::to_string(&entry).unwrap(), line, "{version}");
+            assert_eq!(entry.span, None, "{version}");
+            let text = serde_json::to_string(&entry).unwrap();
+            assert!(!text.contains("\"calls\""), "{version}: {text}");
         }
     }
 }
@@ -380,20 +391,6 @@ async fn a_frozen_version_4_data_directory_opens_as_is() {
         })
     );
     assert!(entries[2].usage.is_none());
-    match entries[2].calls.as_slice() {
-        [Call::Tool { name: first, .. }, Call::Tool {
-            name: second,
-            calls,
-            ..
-        }] => {
-            assert_eq!(
-                (first.as_str(), second.as_str()),
-                ("linear__list_issues", "builtin__infer")
-            );
-            assert!(matches!(calls.as_slice(), [Call::Model { role, .. }] if role == "judge"));
-        }
-        other => panic!("expected two nested tool calls, got {other:?}"),
-    }
     assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
     let draft = store.get_thread("c0ffee000001").await.unwrap().unwrap();
     assert_eq!(

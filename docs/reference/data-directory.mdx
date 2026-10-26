@@ -13,6 +13,7 @@ Dive keeps its runtime state in one directory, `~/.local/share/dive` by default.
 | `FORMAT` | The directory's [file version](/reference/file-versions), as a single number. |
 | `threads/<id>/meta.json` | A thread's title, timestamps, message count, the agent that owns it and the one that's active, the project it was started in, and its attachments. |
 | `threads/<id>/entries.jsonl` | A thread's history, one entry per line: messages, handoffs between agents, and subagent runs. |
+| `threads/<id>/spans.jsonl` | A thread's trace: every call each turn made, at any depth, one span per line. |
 | `threads/<id>/.lock` | A lock file that keeps concurrent writers in order. |
 | `files/<hash>.<ext>` | Files that tools return and that you attach, such as images, named by a SHA-256 hash of their contents. Only when [`[storage.files]`](/reference/configuration#param-storage-files) keeps files on disk, the default. |
 | `cache/files/<hash>.<ext>` | Files downloaded from an S3 bucket, kept to 512 MB by dropping the least recently used. Safe to delete. |
@@ -55,16 +56,25 @@ A `message` entry written by an agent's turn can also carry:
 | --- | --- |
 | `ms` | On a model reply, how long the model call took. On a tool result, how long the tool call took. In milliseconds. |
 | `usage` | On a model reply only: `model`, the model that answered, plus `input_tokens`, `output_tokens`, `cache_creation_input_tokens` and `cache_read_input_tokens` for that call. |
-| `calls` | On a tool result only: every model call and tool call the tool call made, at any depth, in the order they finished. A subagent's model calls and tool calls, a plan's steps and the plans those steps call all appear here. |
+| `span` | On a model reply, the span of the model call that wrote it. On a tool result, the span of the tool call. On a subagent run, the span of the call that ran the subagent. See [Thread traces](#thread-traces). |
 
-Each item in `calls` has a `kind`:
+These fields are left out when Dive has nothing to record: on user messages, handoffs, the messages of a turn that failed, and entries written before Dive recorded them. Entries written before spans existed may carry a `calls` field, which Dive no longer reads.
 
-| Kind | Fields |
+## Thread traces
+
+Each line of `spans.jsonl` is one finished span, shaped like an [OpenTelemetry](https://opentelemetry.io/docs/concepts/signals/traces/) span. Each turn is one trace: its root span is the turn, and every model call, tool call, plan, plan step and subagent the turn ran is a span under it, at any depth. Spans are written when the turn ends, so a turn that fails or is cancelled leaves none.
+
+| Field | Contents |
 | --- | --- |
-| `model` | `role`, the model role; `site`, where the call was made, such as `agent:front_desk/agent__tool_drafter` or `plan__digest/E1`; `decision`, present and `true` for a decision model; `ms`; and `usage`, as above. |
-| `tool` | `name`; `ms`; `is_error`, present and `true` when the call failed; and `calls`, the calls it made in turn, left out when there are none. |
-
-These fields are left out when Dive has nothing to record: on user messages, handoffs, subagent runs, the messages of a turn that failed, tool calls that made no calls of their own, and entries written before Dive recorded them.
+| `trace_id` | 32 hex characters, shared by every span of one turn. |
+| `span_id` | 16 hex characters. Entries name their span by this id. |
+| `parent_span_id` | The span this call was made from, left out on a turn's root. |
+| `name` | The tool or agent name, `chat <model>` for a model call, or the active agent's name on the root. |
+| `kind` | `turn`, `agent`, `plan`, `tool` or `model`. |
+| `start_time_unix_nano`, `end_time_unix_nano` | When the call started and ended, in nanoseconds since the epoch. |
+| `status` | `code`, `ok` or `error`, and on an error, its `message`. |
+| `attributes` | Facts about the call, named after the OpenTelemetry [generative AI conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) where one fits: `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.agent.name`, `gen_ai.request.model`, `gen_ai.provider.name` and the `gen_ai.usage.*` token counts, plus `dive.role`, `dive.site`, `dive.cost_usd`, `dive.step.path` and `dive.plan.stack`. |
+| `input`, `output` | What the call was given and what it returned: a tool's arguments and result, a step's rendered input and result, a turn's message and reply. Model calls don't keep theirs. Kept only while [`trace.content`](/reference/configuration#param-trace-content) is on, and clipped only when [`trace.clip_bytes`](/reference/configuration#param-trace-clip-bytes) is set. |
 
 ## Share a directory between processes
 
