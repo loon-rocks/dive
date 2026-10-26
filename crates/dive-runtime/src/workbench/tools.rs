@@ -525,40 +525,13 @@ impl WorkbenchTools {
         let Some(name) = input.get("name").and_then(Value::as_str) else {
             return error_outcome("describe_tool requires a 'name' string");
         };
-        if let Some(identifier) = self
-            .pipeline
-            .packs
-            .plan_target(name)
-            .filter(|_| self.pipeline.packs.shows(&self.pipeline.origin, name))
-        {
-            if let Some(doc) = self
-                .pipeline
-                .plans
-                .iter()
-                .find(|d| d.identifier == identifier)
-            {
-                return ToolOutcome {
-                    result: json!({
-                        "name": name,
-                        "description": doc.tool_description(),
-                        "inputSchema": doc.tool_input_schema(),
-                        "readOnly": null,
-                    }),
-                    is_error: false,
-                };
-            }
-        }
-        let mut defs = self.pipeline.planner_tool_defs().await;
-        let natives: Vec<_> = dive_core::pipeline::native_tool_defs()
-            .into_iter()
-            .filter(|native| defs.iter().all(|def| def.name != native.name))
-            .collect();
-        defs.extend(natives);
-        let Some(def) = defs.iter().find(|def| def.name == name).cloned() else {
-            let servers = self.pipeline.registry.servers().await;
-            return error_outcome(&unknown_tool_message(name, &defs, &servers));
+        let network = self.draft.lock().unwrap().network.clone();
+        let pipeline = if network.nodes.is_empty() {
+            (*self.pipeline).clone()
+        } else {
+            super::network::overlay(&self.pipeline, &network)
         };
-        let observed = match &self.pipeline.store {
+        let observed = match &pipeline.store {
             Some(store) => store
                 .tool_shapes()
                 .await
@@ -567,6 +540,35 @@ impl WorkbenchTools {
                 .find(|shape| shape.tool == name)
                 .map(|shape| json!({"schema": shape.schema, "example": shape.example})),
             None => None,
+        };
+        if let Some(identifier) = pipeline
+            .packs
+            .plan_target(name)
+            .filter(|_| pipeline.packs.shows(&pipeline.origin, name))
+        {
+            if let Some(doc) = pipeline.plans.iter().find(|d| d.identifier == identifier) {
+                return ToolOutcome {
+                    result: json!({
+                        "name": name,
+                        "description": doc.tool_description(),
+                        "inputSchema": doc.tool_input_schema(),
+                        "outputSchema": doc.result_schema(),
+                        "observedOutput": observed,
+                        "readOnly": null,
+                    }),
+                    is_error: false,
+                };
+            }
+        }
+        let mut defs = pipeline.planner_tool_defs().await;
+        let natives: Vec<_> = dive_core::pipeline::native_tool_defs()
+            .into_iter()
+            .filter(|native| defs.iter().all(|def| def.name != native.name))
+            .collect();
+        defs.extend(natives);
+        let Some(def) = defs.iter().find(|def| def.name == name).cloned() else {
+            let servers = pipeline.registry.servers().await;
+            return error_outcome(&unknown_tool_message(name, &defs, &servers));
         };
         ToolOutcome {
             result: json!({
@@ -886,7 +888,8 @@ pub fn tool_defs() -> Vec<ToolDef> {
             description: "Describe one tool from the plan catalog, or one of Dive's native \
                           builtin__ tools, without calling it: its description, input schema, declared output schema, the output \
                           shape observed in earlier runs, and whether it's read-only. Use it \
-                          to write a step's input and the templates that read its result."
+                          to write a step's input and the templates that read its result. \
+                          Plans drafted in this thread's network draft can be described too."
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -2172,6 +2175,43 @@ steps:
                 {"id": "E0", "tool_name": "t__search", "input": {"query": "x"}},
             ],
         })
+    }
+
+    #[tokio::test]
+    async fn describe_tool_gives_a_plan_s_output_and_sees_plans_drafted_in_the_thread() {
+        let saved = str::parse::<PlanDoc>(
+            "identifier: ranked\nname: Ranked\ndescription: d\nsteps:\n  - id: E0\n    tool_name: t__search\n    input: { query: x }\nfinish:\n  output:\n    results: \"{{E0.results}}\"\n",
+        )
+        .unwrap();
+        let (tools, _rx) = draft_tools(test_pipeline(vec![saved]));
+        let described = tools.describe_tool(&json!({"name": "plan__ranked"})).await;
+        assert!(!described.is_error, "{}", described.result);
+        assert_eq!(
+            described.result["outputSchema"]["required"],
+            json!(["results"])
+        );
+
+        let missing = tools
+            .describe_tool(&json!({"name": "plan__report_on_x"}))
+            .await;
+        assert!(missing.is_error);
+        tools
+            .draft
+            .lock()
+            .unwrap()
+            .network
+            .put_draft(
+                crate::workbench::artifact::ArtifactKind::Plan,
+                "report_on_x",
+                report_yaml(),
+                Vec::new(),
+            )
+            .unwrap();
+        let drafted = tools
+            .describe_tool(&json!({"name": "plan__report_on_x"}))
+            .await;
+        assert!(!drafted.is_error, "{}", drafted.result);
+        assert!(drafted.result["outputSchema"].is_object());
     }
 
     #[tokio::test]
