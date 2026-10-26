@@ -14,6 +14,7 @@ rust = { version = "1.94", components = "rustfmt,clippy" }
 # lts alias currently resolves past it.
 "node" = "24"
 "npm:mint" = "latest"
+"cargo:cargo-sweep" = "0.8.0"
 
 [tasks.build]
 description = "Build the whole workspace"
@@ -42,6 +43,10 @@ run = "git config core.hooksPath .githooks"
 [tasks."worktrees:clean"]
 description = "Remove worktrees under .claude/worktrees whose pull request merged or closed, with their build output (pass --apply to remove; lists them otherwise)"
 run = "scripts/clean-worktrees.sh"
+
+[tasks.clean]
+description = "Delete build output in the target dir that no build used in the hours before the latest one (default 6), so old builds don't pile up; `mise run clean 1` keeps only the last hour's"
+run = "scripts/clean-target.sh"
 
 [tasks.run]
 description = "Run the dive binary (pass args after --)"
