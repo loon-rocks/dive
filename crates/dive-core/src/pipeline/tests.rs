@@ -6155,65 +6155,75 @@ async fn a_drafted_agent_is_validated_saved_and_callable_right_away() {
     assert!(pipeline.live_catalog().unwrap().agents.contains("triager"));
 }
 
-#[tokio::test]
-async fn a_secret_for_a_test_run_is_asked_in_the_form_used_once_and_kept_from_the_model() {
-    let tool = "name: whoami\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"token\\\":\\\"%s\\\"}\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${DIVE_TEST_NEVER_SET_TOKEN}\"\n";
-    let (pipeline, _dir, human) = drafting_pipeline(vec![AskOutcome::Answered(
-        json!({"run": true, "DIVE_TEST_NEVER_SET_TOKEN": "hunter22"}),
-    )]);
-    let tried = pipeline
-        .call_native("builtin__try_tool", json!({"yaml": tool, "input": {}}))
-        .await;
-    assert_eq!(tried.result["ran"], json!(true), "{}", tried.result);
-    assert_eq!(tried.result["result"]["token"], "[secret]");
-    assert!(!tried.result.to_string().contains("hunter22"));
-    assert_eq!(
-        tried.result["needs_env"],
-        json!(["DIVE_TEST_NEVER_SET_TOKEN"])
-    );
-    let asked = human.asked.lock().unwrap();
-    assert!(asked[0].prompt.contains("never passed to the model"));
-    assert!(asked[0].schema["properties"]["DIVE_TEST_NEVER_SET_TOKEN"].is_object());
-}
-
-#[tokio::test]
-async fn a_try_run_asks_only_for_names_no_source_has_and_hides_stored_values_from_the_model() {
-    let tool = "name: whoami\ndescription: Echoes tokens\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"stored\\\":\\\"%s\\\",\\\"asked\\\":\\\"%s\\\"}\" \"$STORED\" \"$ASKED\"']\nenv:\n  STORED: \"${DIVE_TEST_STORED_DRAFT_TOKEN}\"\n  ASKED: \"${DIVE_TEST_NEVER_SET_DRAFT_TOKEN}\"\n";
-    let (mut pipeline, _dir, human) = drafting_pipeline(vec![AskOutcome::Answered(
-        json!({"run": true, "DIVE_TEST_NEVER_SET_DRAFT_TOKEN": "oneoff99"}),
-    )]);
-    let store = crate::secrets::MemorySecrets::store()
-        .with("DIVE_TEST_STORED_DRAFT_TOKEN", "stored-hunter22");
+fn with_stored(pipeline: &mut Pipeline, name: &str, value: &str) {
+    let store = crate::secrets::MemorySecrets::store().with(name, value);
     pipeline.drafted = Arc::new(super::Drafted::new(None, None).with_secrets(Arc::new(
         crate::secrets::ChainedSource::new(vec![
             Arc::new(crate::secrets::EnvSource),
             Arc::new(store),
         ]),
     )));
+}
+
+#[tokio::test]
+async fn a_test_run_whose_secret_isnt_set_names_it_and_does_not_run_while_it_stays_unset() {
+    let tool = "name: whoami\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"token\\\":\\\"%s\\\"}\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${DIVE_TEST_NEVER_SET_TOKEN}\"\n";
+    let (pipeline, _dir, human) =
+        drafting_pipeline(vec![AskOutcome::Answered(json!({"run": true}))]);
+    let tried = pipeline
+        .call_native(
+            "builtin__try_tool",
+            json!({"yaml": tool, "input": {}, "purpose": "Check it echoes the token."}),
+        )
+        .await;
+    assert_eq!(tried.result["ran"], json!(false), "{}", tried.result);
+    assert_eq!(
+        tried.result["needs_env"],
+        json!(["DIVE_TEST_NEVER_SET_TOKEN"])
+    );
+    let asked = human.asked.lock().unwrap();
+    assert_eq!(
+        asked[0].schema["properties"].as_object().unwrap().len(),
+        1,
+        "the form only asks whether to run"
+    );
+    let Some(super::AskDetail::TestRun(preview)) = &asked[0].detail else {
+        panic!("no test-run detail: {:?}", asked[0].detail);
+    };
+    assert_eq!(preview.unset, vec!["DIVE_TEST_NEVER_SET_TOKEN"]);
+    assert_eq!(preview.secrets, vec!["DIVE_TEST_NEVER_SET_TOKEN"]);
+    assert_eq!(
+        preview.purpose.as_deref(),
+        Some("Check it echoes the token.")
+    );
+    assert!(asked[0].prompt.contains("isn't set"), "{}", asked[0].prompt);
+}
+
+#[tokio::test]
+async fn a_try_run_hides_stored_secret_values_from_the_model() {
+    let tool = "name: whoami\ndescription: Echoes tokens\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"{\\\"stored\\\":\\\"%s\\\"}\" \"$STORED\"']\nenv:\n  STORED: \"${DIVE_TEST_STORED_DRAFT_TOKEN}\"\n";
+    let (mut pipeline, _dir, human) =
+        drafting_pipeline(vec![AskOutcome::Answered(json!({"run": true}))]);
+    with_stored(
+        &mut pipeline,
+        "DIVE_TEST_STORED_DRAFT_TOKEN",
+        "stored-hunter22",
+    );
     let tried = pipeline
         .call_native("builtin__try_tool", json!({"yaml": tool, "input": {}}))
         .await;
     assert_eq!(tried.result["ran"], json!(true), "{}", tried.result);
     assert_eq!(tried.result["result"]["stored"], "[secret]");
-    assert_eq!(tried.result["result"]["asked"], "[secret]");
-    let shown = tried.result.to_string();
-    assert!(!shown.contains("stored-hunter22") && !shown.contains("oneoff99"));
-    assert_eq!(
-        tried.result["needs_env"],
-        json!(["DIVE_TEST_NEVER_SET_DRAFT_TOKEN"])
-    );
-    let asked = human.asked.lock().unwrap();
-    let properties = &asked[0].schema["properties"];
-    assert!(properties["DIVE_TEST_NEVER_SET_DRAFT_TOKEN"].is_object());
-    assert!(properties.get("DIVE_TEST_STORED_DRAFT_TOKEN").is_none());
+    assert!(!tried.result.to_string().contains("stored-hunter22"));
+    assert_eq!(human.prompts().len(), 1, "a tool with a secret always asks");
 }
 
 #[tokio::test]
 async fn short_secrets_and_secrets_with_escaped_characters_are_redacted_too() {
-    let tool = "name: echo\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"%s\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${DIVE_TEST_NEVER_SET_SHORT}\"\n";
-    let (pipeline, _dir, _) = drafting_pipeline(vec![AskOutcome::Answered(
-        json!({"run": true, "DIVE_TEST_NEVER_SET_SHORT": "a\"\\b"}),
-    )]);
+    let tool = "name: echo\ndescription: Echoes a token\nkind: exec\ncommand: sh\nargs: ['-c', 'printf \"%s\" \"$TOKEN\"']\nenv:\n  TOKEN: \"${DIVE_TEST_STORED_SHORT}\"\n";
+    let (mut pipeline, _dir, _) =
+        drafting_pipeline(vec![AskOutcome::Answered(json!({"run": true}))]);
+    with_stored(&mut pipeline, "DIVE_TEST_STORED_SHORT", "a\"\\b");
     let tried = pipeline
         .call_native("builtin__try_tool", json!({"yaml": tool, "input": {}}))
         .await;
@@ -6226,6 +6236,42 @@ async fn short_secrets_and_secrets_with_escaped_characters_are_redacted_too() {
             .contains("a\\\"\\\\b"),
         "{shown}"
     );
+}
+
+#[tokio::test]
+async fn a_read_only_test_that_only_reads_runs_without_asking() {
+    let tool = "name: greet\ndescription: Greets\nkind: exec\nread_only: true\ncommand: printf\nargs: ['{\"hi\":\"%s\"}', '{{input.name}}']\n";
+    let (pipeline, _dir, human) = drafting_pipeline(vec![]);
+    let tried = pipeline
+        .call_native(
+            "builtin__try_tool",
+            json!({"yaml": tool, "input": {"name": "Ann"}, "purpose": "Check it greets Ann."}),
+        )
+        .await;
+    assert_eq!(tried.result["result"]["hi"], "Ann", "{}", tried.result);
+    assert_eq!(tried.result["approval"], "automatic");
+    assert!(human.prompts().is_empty());
+}
+
+#[tokio::test]
+async fn a_test_that_may_write_asks_with_its_effects_and_purpose() {
+    let tool = "name: note\ndescription: Saves a note\nkind: exec\nread_only: true\ncommand: sh\nargs: ['-c', 'echo hi > note.txt; printf \"{}\"']\n";
+    let (pipeline, _dir, human) =
+        drafting_pipeline(vec![AskOutcome::Answered(json!({"run": false}))]);
+    pipeline
+        .call_native(
+            "builtin__try_tool",
+            json!({"yaml": tool, "input": {}, "purpose": "Check it writes the note."}),
+        )
+        .await;
+    let asked = human.asked.lock().unwrap();
+    let Some(super::AskDetail::TestRun(preview)) = &asked[0].detail else {
+        panic!("no test-run detail");
+    };
+    assert_eq!(preview.effects.writes, Some(true));
+    assert_eq!(preview.read_only, Some(true));
+    assert_eq!(preview.tool, "user__note");
+    assert!(asked[0].prompt.contains("Check it writes the note."));
 }
 
 #[tokio::test]

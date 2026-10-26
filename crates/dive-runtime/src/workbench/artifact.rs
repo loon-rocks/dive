@@ -303,7 +303,9 @@ pub async fn try_artifact(
         Value::Object(_) => input["input"].clone(),
         _ => json!({}),
     };
-    let run = asking.try_tool_file(&yaml, sample).await;
+    let run = asking
+        .try_tool_file(&yaml, sample, input["purpose"].as_str())
+        .await;
     draft
         .lock()
         .unwrap()
@@ -709,6 +711,7 @@ async fn ask_yes(
                 "properties": {key: {"type": "boolean", "description": "Go ahead?"}}
             }),
             default: Some(json!({key: true})),
+            detail: None,
         })
         .await;
     match answer {
@@ -1340,6 +1343,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                     "kind": kind_property("What the draft is"),
                     "name": {"type": "string", "description": "Tools: which tool draft, when there are several"},
                     "input": {"type": "object", "description": "A tool's sample input matching its input_schema, or a plan's input validated against its input_schema"},
+                    "purpose": {"type": "string", "description": "Tools: one sentence the user reads before approving the run, saying what it checks, e.g. \"Check it returns README.md's text and refuses a path outside the project.\""},
                     "gated": {"type": "boolean", "description": "Plans only: debug run, pausing for the user's decisions and breaking on errors. Default false."},
                     "breakpoints": {"type": "array", "items": {"type": "string"}, "description": "Plans only: top-level step ids to pause at. Implies gated; the run proceeds until a breakpoint (or a failing call) and pauses for the USER."}
                 }

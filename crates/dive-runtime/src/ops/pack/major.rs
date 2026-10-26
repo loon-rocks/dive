@@ -52,6 +52,7 @@ impl Consent {
                     }
                 }),
                 default: None,
+                detail: None,
             })
             .await;
         match outcome {

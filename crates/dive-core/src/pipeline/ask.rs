@@ -338,6 +338,7 @@ impl Pipeline {
                         prompt: prompt.clone(),
                         schema: schema.clone(),
                         default,
+                        detail: None,
                     })
                     .await
             }

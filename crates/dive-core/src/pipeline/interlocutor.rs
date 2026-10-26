@@ -34,6 +34,13 @@ pub struct AskRequest {
     /// show it so the human knows the shape.
     pub schema: Value,
     pub default: Option<Value>,
+    pub detail: Option<AskDetail>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AskDetail {
+    TestRun(super::test_run::TestRunPreview),
 }
 
 /// How a human responded — or didn't.

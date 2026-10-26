@@ -317,6 +317,7 @@ mod tests {
             prompt: "Pick one".to_string(),
             schema,
             default: None,
+            detail: None,
         }
     }
 
