@@ -348,8 +348,6 @@ impl ModelCallEvent {
             name: format!("{} {}", self.kind.as_str(), self.model),
             elapsed: self.elapsed,
             attributes,
-            input: self.input.clone(),
-            output: self.output.clone(),
         }
     }
 }

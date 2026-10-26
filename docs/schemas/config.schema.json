@@ -562,7 +562,7 @@
         },
         "content": {
           "default": true,
-          "description": "Keep every call's input and output in the thread's trace. Off keeps names, timing, status and token counts only.",
+          "description": "Keep the input and output of every tool, plan, agent and turn in the thread's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.",
           "type": "boolean"
         }
       },

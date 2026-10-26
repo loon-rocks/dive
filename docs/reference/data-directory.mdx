@@ -74,7 +74,7 @@ Each line of `spans.jsonl` is one finished span, shaped like an [OpenTelemetry](
 | `start_time_unix_nano`, `end_time_unix_nano` | When the call started and ended, in nanoseconds since the epoch. |
 | `status` | `code`, `ok` or `error`, and on an error, its `message`. |
 | `attributes` | Facts about the call, named after the OpenTelemetry [generative AI conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) where one fits: `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.agent.name`, `gen_ai.request.model`, `gen_ai.provider.name` and the `gen_ai.usage.*` token counts, plus `dive.role`, `dive.site`, `dive.cost_usd`, `dive.step.path` and `dive.plan.stack`. |
-| `input`, `output` | What the call was given and what it returned: a model call's request and response, a tool's arguments and result, a step's rendered input and result. Kept only while [`trace.content`](/reference/configuration#param-trace-content) is on, and clipped only when [`trace.clip_bytes`](/reference/configuration#param-trace-clip-bytes) is set. |
+| `input`, `output` | What the call was given and what it returned: a tool's arguments and result, a step's rendered input and result, a turn's message and reply. Model calls don't keep theirs. Kept only while [`trace.content`](/reference/configuration#param-trace-content) is on, and clipped only when [`trace.clip_bytes`](/reference/configuration#param-trace-clip-bytes) is set. |
 
 ## Share a directory between processes
 

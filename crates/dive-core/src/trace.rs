@@ -439,8 +439,6 @@ pub struct ModelSpan {
     pub name: String,
     pub elapsed: Duration,
     pub attributes: BTreeMap<String, Value>,
-    pub input: Option<Value>,
-    pub output: Option<Value>,
 }
 
 pub fn model(call: ModelSpan) {
@@ -457,10 +455,6 @@ pub fn model(call: ModelSpan) {
                 *filled = true;
                 span.name = call.name;
                 span.attributes.extend(call.attributes);
-                span.input = call.input.and_then(|input| recorder.content.kept(&input));
-                span.output = call
-                    .output
-                    .and_then(|output| recorder.content.kept(&output));
                 return;
             }
         }
@@ -480,10 +474,8 @@ pub fn model(call: ModelSpan) {
             message: None,
         },
         attributes: call.attributes,
-        input: call.input.and_then(|input| recorder.content.kept(&input)),
-        output: call
-            .output
-            .and_then(|output| recorder.content.kept(&output)),
+        input: None,
+        output: None,
     });
 }
 
@@ -519,8 +511,6 @@ mod tests {
             name: name.to_string(),
             elapsed: Duration::from_millis(5),
             attributes: BTreeMap::from([("dive.role".to_string(), json!(name))]),
-            input: Some(json!({"messages": [name]})),
-            output: Some(json!({"content": name})),
         }
     }
 
@@ -584,7 +574,7 @@ mod tests {
                 .find(|span| span.name == name && span.kind == SpanKind::Model)
                 .unwrap();
             assert_eq!(call.parent_span_id.as_ref(), Some(&step.span_id));
-            assert_eq!(call.output, Some(json!({"content": name})));
+            assert_eq!((&call.input, &call.output), (&None, &None));
         }
         assert!(spans.iter().all(|span| span.trace_id == top.trace_id));
         let seen = events.0.lock().unwrap();
@@ -611,7 +601,7 @@ mod tests {
         let spans = turn.spans();
         let first = spans.iter().find(|span| span.name == "first").unwrap();
         assert_eq!(first.kind, SpanKind::Model);
-        assert_eq!(first.input, Some(json!({"messages": ["first"]})));
+        assert_eq!(first.attribute("dive.role"), Some(&json!("first")));
         let repair = spans.iter().find(|span| span.name == "repair").unwrap();
         assert_eq!(repair.parent_span_id.as_ref(), Some(&first.span_id));
     }

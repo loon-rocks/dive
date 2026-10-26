@@ -103,7 +103,7 @@ impl Runtime {
         // would silently miss whatever was already handed out.
         let usage = Arc::new(
             UsageLedger::new(loaded.config.pricing.clone())
-                .with_content_capture(options.capture_content || loaded.config.trace.content),
+                .with_content_capture(options.capture_content),
         );
         let router = router.with_meter(usage.clone());
         let files = crate::files::open(&loaded.config, storage_backend(&loaded.config, &options)?);
