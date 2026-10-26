@@ -31,6 +31,8 @@ pub struct Evidence {
     pub output: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trace: Vec<String>,
 }
 
 impl Evidence {
@@ -62,6 +64,16 @@ impl Evidence {
             (Some(error), _) => section.push_str(&format!("\n### Error\n{error}\n")),
             (None, Some(output)) => section.push_str(&format!("\n### Output\n{}\n", shown(output))),
             (None, None) => section.push_str("\n(no output was recorded)\n"),
+        }
+        if self.trace.is_empty() && self.item.kind != ArtifactKind::Tool {
+            section.push_str(
+                "\n### How it ran\n(no trace of the steps inside this call was recorded)\n",
+            );
+        } else if !self.trace.is_empty() {
+            section.push_str("\n### How it ran\nEvery plan, agent and tool call inside it, in order, with its step path (a route's branch is part of the path: depth/quick/quick_check/else/esc_run took `quick`, then `else`) and the start of its output:\n");
+            for line in &self.trace {
+                section.push_str(&format!("- {line}\n"));
+            }
         }
         section
     }
@@ -201,6 +213,7 @@ pub async fn from_call(
         .item(&asked.name)
         .or_else(|| editable.item(&format!("agent__{author}")))
         .ok_or_else(|| format!("{} isn't an agent, plan or tool Dive can edit", asked.name))?;
+    let spans = store.load_spans(thread).await.unwrap_or_default();
     Ok(Evidence {
         thread: thread.to_string(),
         call: Some(call.to_string()),
@@ -208,6 +221,7 @@ pub async fn from_call(
         input: asked.arguments,
         output: (!is_error).then(|| parsed(&content)),
         error: is_error.then(|| error_text(&content)),
+        trace: crate::run_trace::from_spans(&spans, call),
     })
 }
 
@@ -301,6 +315,7 @@ mod tests {
             input: json!({"since": "v0.15.0"}),
             output: None,
             error: Some("step E2: no tool named git_log".to_string()),
+            trace: Vec::new(),
         }
     }
 
@@ -332,6 +347,12 @@ mod tests {
         );
         assert!(section.contains("\"since\": \"v0.15.0\""));
         assert!(section.contains("### Error\nstep E2: no tool named git_log"));
+        assert!(section.contains("(no trace of the steps inside this call was recorded)"));
+        let mut traced = evidence();
+        traced.trace = vec!["depth/quick/quick_run plan__research_quick ok: x".to_string()];
+        assert!(traced
+            .section()
+            .contains("- depth/quick/quick_run plan__research_quick ok: x"));
         let mut long = evidence();
         long.error = None;
         long.output = Some(json!("x".repeat(SHOWN_CHARS + 10)));
