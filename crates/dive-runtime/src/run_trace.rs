@@ -6,6 +6,7 @@ use std::time::Duration;
 
 const MAX_LINES: usize = 80;
 const SUMMARY_CHARS: usize = 240;
+pub const FOCUS_MARK: &str = "  ← the focus";
 const PLUMBING: [&str; 7] = [
     "builtin__reshape",
     "builtin__flatten",
@@ -58,45 +59,90 @@ fn text_attribute<'a>(span: &'a Span, key: &str) -> &'a str {
 }
 
 pub fn from_spans(spans: &[Span], call: &str) -> Vec<String> {
-    let Some(root) = spans
+    spans
         .iter()
         .find(|span| text_attribute(span, "gen_ai.tool.call.id") == call)
-    else {
-        return Vec::new();
-    };
-    let mut lines = Vec::new();
-    walk(spans, &root.span_id, 0, &mut lines);
-    capped(lines)
+        .map(|root| outline(spans, &root.span_id, None))
+        .unwrap_or_default()
 }
 
-fn walk(spans: &[Span], parent: &str, depth: usize, lines: &mut Vec<String>) {
+pub fn outline(spans: &[Span], root: &str, focus: Option<&str>) -> Vec<String> {
+    let mut lines = Vec::new();
+    walk(spans, root, 0, focus, &mut lines);
+    match lines.iter().position(|line| line.ends_with(FOCUS_MARK)) {
+        Some(at) if at >= MAX_LINES => {
+            let from = at - MAX_LINES / 2;
+            let mut kept = vec![format!("({from} earlier steps not shown)")];
+            kept.extend(lines.drain(from..));
+            capped(kept)
+        }
+        _ => capped(lines),
+    }
+}
+
+fn speaks(spans: &[Span], span: &Span) -> bool {
+    span.kind == SpanKind::Model
+        && span
+            .parent_span_id
+            .as_deref()
+            .and_then(|parent| spans.iter().find(|other| other.span_id == parent))
+            .is_some_and(|parent| matches!(parent.kind, SpanKind::Agent | SpanKind::Turn))
+}
+
+fn line(span: &Span, depth: usize) -> String {
+    let status = if span.is_error() { "failed" } else { "ok" };
+    let took = span
+        .ms()
+        .map(|ms| format!(" in {ms}ms"))
+        .unwrap_or_default();
+    if span.kind == SpanKind::Model {
+        let role = text_attribute(span, "dive.role");
+        return format!(
+            "{}model call, {} role ({}){took}",
+            "  ".repeat(depth),
+            if role.is_empty() { "chat" } else { role },
+            span.name,
+        );
+    }
+    let path = text_attribute(span, "dive.step.path");
+    let output = span.output.as_ref().map(summary).unwrap_or_default();
+    format!(
+        "{}{}{} {status}{took}: {output}",
+        "  ".repeat(depth),
+        if path.is_empty() {
+            String::new()
+        } else {
+            format!("{path} ")
+        },
+        span.name,
+    )
+}
+
+fn walk(spans: &[Span], parent: &str, depth: usize, focus: Option<&str>, lines: &mut Vec<String>) {
     let mut children: Vec<&Span> = spans
         .iter()
         .filter(|span| span.parent_span_id.as_deref() == Some(parent))
         .collect();
     children.sort_by_key(|span| span.start_time_unix_nano);
     for span in children {
-        let shown = matches!(span.kind, SpanKind::Plan | SpanKind::Agent | SpanKind::Tool)
-            && !PLUMBING.contains(&span.name.as_str());
+        let shown = (matches!(span.kind, SpanKind::Plan | SpanKind::Agent | SpanKind::Tool)
+            && !PLUMBING.contains(&span.name.as_str()))
+            || speaks(spans, span)
+            || focus == Some(span.span_id.as_str());
         if shown {
-            let path = text_attribute(span, "dive.step.path");
-            let status = if span.is_error() { "failed" } else { "ok" };
-            let output = span.output.as_ref().map(summary).unwrap_or_default();
-            lines.push(format!(
-                "{}{}{} {status}{}: {output}",
-                "  ".repeat(depth),
-                if path.is_empty() {
-                    String::new()
-                } else {
-                    format!("{path} ")
-                },
-                span.name,
-                span.ms()
-                    .map(|ms| format!(" in {ms}ms"))
-                    .unwrap_or_default(),
-            ));
+            let mut text = line(span, depth);
+            if focus == Some(span.span_id.as_str()) {
+                text.push_str(FOCUS_MARK);
+            }
+            lines.push(text);
         }
-        walk(spans, &span.span_id, depth + usize::from(shown), lines);
+        walk(
+            spans,
+            &span.span_id,
+            depth + usize::from(shown),
+            focus,
+            lines,
+        );
     }
 }
 

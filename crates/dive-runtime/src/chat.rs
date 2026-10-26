@@ -146,17 +146,17 @@ impl ChatStart {
             Start::Agent(Some(name)) => (vec![(ArtifactKind::Agent, name.clone())], None),
             Start::Tool(Some(name)) => (vec![(ArtifactKind::Tool, name.clone())], None),
             Start::Edit { items, evidence } => {
-                let items = edited(items, evidence.as_ref())?;
+                let items = edited(items, evidence.as_deref())?;
                 if evidence.is_some() {
                     attachments.push(EVIDENCE_ATTACHMENT.to_string());
                 }
-                title = Some(edit_title(&items, evidence.as_ref()));
+                title = Some(edit_title(&items, evidence.as_deref()));
                 (
                     items
                         .into_iter()
                         .map(|item| (item.kind, item.name))
                         .collect(),
-                    evidence.clone(),
+                    evidence.as_deref().cloned(),
                 )
             }
             _ => (Vec::new(), None),
@@ -355,7 +355,15 @@ impl ChatStart {
 
 fn edited(items: &[Item], evidence: Option<&Evidence>) -> Result<Vec<Item>> {
     let mut edited: Vec<Item> = Vec::new();
-    for item in items.iter().chain(evidence.map(|evidence| &evidence.item)) {
+    let found = evidence.into_iter().flat_map(|evidence| {
+        std::iter::once(&evidence.item).chain(
+            evidence
+                .focus
+                .as_ref()
+                .and_then(|focus| focus.item.as_ref()),
+        )
+    });
+    for item in items.iter().chain(found) {
         if !edited.contains(item) {
             edited.push(item.clone());
         }
@@ -367,11 +375,33 @@ fn edited(items: &[Item], evidence: Option<&Evidence>) -> Result<Vec<Item>> {
 }
 
 fn edit_title(items: &[Item], evidence: Option<&Evidence>) -> String {
+    let failed = evidence.is_some_and(|evidence| {
+        evidence.error.is_some()
+            || evidence
+                .focus
+                .as_ref()
+                .is_some_and(|focus| focus.error.is_some())
+    });
     let verb = match evidence {
-        Some(evidence) if evidence.error.is_some() => "Fix",
+        Some(_) if failed => "Fix",
         Some(_) => "Improve",
         None => "Edit",
     };
+    if let Some(evidence) = evidence {
+        let within = format!("{} {}", evidence.item.kind.label(), evidence.item.name);
+        if let Some(focus) = &evidence.focus {
+            let what = match (&focus.model, &focus.step, &focus.item) {
+                (Some(_), _, _) => "a model call".to_string(),
+                (_, Some(path), _) => path.rsplit('/').next().unwrap_or(path).to_string(),
+                (_, _, Some(item)) => item.name.clone(),
+                _ => focus.name.clone(),
+            };
+            return format!("{verb} {what} in {within}");
+        }
+        if evidence.turn {
+            return format!("{verb} a turn of {within}");
+        }
+    }
     let named: Vec<String> = items
         .iter()
         .map(|item| format!("{} {}", item.kind.label(), item.name))
@@ -1481,6 +1511,8 @@ mod tests {
             output: Some(json!("1")),
             error: None,
             trace: Vec::new(),
+            turn: false,
+            focus: None,
         }
     }
 
@@ -1500,7 +1532,7 @@ mod tests {
                 ThreadOpen {
                     draft: Some(Start::Edit {
                         items: Vec::new(),
-                        evidence: Some(word_count_evidence()),
+                        evidence: Some(Box::new(word_count_evidence())),
                     }),
                     root: Some(dir.path().to_path_buf()),
                     ..Default::default()
@@ -1595,7 +1627,7 @@ mod tests {
             ThreadOpen {
                 draft: Some(Start::Edit {
                     items: Vec::new(),
-                    evidence: Some(word_count_evidence()),
+                    evidence: Some(Box::new(word_count_evidence())),
                 }),
                 ..Default::default()
             },
@@ -1663,7 +1695,7 @@ mod tests {
             ThreadOpen {
                 draft: Some(Start::Edit {
                     items: Vec::new(),
-                    evidence: Some(word_count_evidence()),
+                    evidence: Some(Box::new(word_count_evidence())),
                 }),
                 ..Default::default()
             },
@@ -1694,6 +1726,45 @@ mod tests {
         let later = next_messages.as_array().unwrap();
         assert!(later.len() > earlier.len());
         assert_eq!(&later[..earlier.len()], earlier.as_slice());
+    }
+
+    #[test]
+    fn a_focused_edit_opens_the_step_s_item_too_and_is_titled_by_the_step() {
+        let plan = Item {
+            kind: ArtifactKind::Plan,
+            name: "research".to_string(),
+        };
+        let tool = Item {
+            kind: ArtifactKind::Tool,
+            name: "crawl4ai_read".to_string(),
+        };
+        let mut evidence = word_count_evidence();
+        evidence.item = plan.clone();
+        evidence.focus = Some(crate::evidence::Focus {
+            span: "R".to_string(),
+            name: "user__crawl4ai_read".to_string(),
+            step: Some("depth/quick/read_pages".to_string()),
+            model: None,
+            item: Some(tool.clone()),
+            input: json!({}),
+            output: None,
+            error: Some("timed out".to_string()),
+        });
+        assert_eq!(edited(&[], Some(&evidence)).unwrap(), vec![plan, tool]);
+        assert_eq!(
+            edit_title(&[], Some(&evidence)),
+            "Fix read_pages in plan research"
+        );
+        evidence.focus = None;
+        evidence.turn = true;
+        evidence.item = Item {
+            kind: ArtifactKind::Agent,
+            name: "research_agent".to_string(),
+        };
+        assert_eq!(
+            edit_title(&[], Some(&evidence)),
+            "Improve a turn of agent research_agent"
+        );
     }
 
     #[tokio::test]
