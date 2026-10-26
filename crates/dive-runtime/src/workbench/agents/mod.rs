@@ -38,7 +38,7 @@ pub enum Start {
     Tool(Option<String>),
     Edit {
         items: Vec<crate::evidence::Item>,
-        evidence: Option<crate::evidence::Evidence>,
+        evidence: Option<Box<crate::evidence::Evidence>>,
     },
 }
 
