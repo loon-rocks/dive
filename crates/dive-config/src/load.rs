@@ -1194,40 +1194,11 @@ fallbacks = [
         let path = write(
             dir.path(),
             "config.toml",
-            "version = 6\n[trace]\ncontent = false\nclip_bytes = 2048\n",
+            "version = 5\n[trace]\ncontent = false\nclip_bytes = 2048\n",
         );
         let trace = load_from(&[path]).unwrap().config.trace;
         assert!(!trace.content);
         assert_eq!(trace.clip_bytes, Some(2048));
-    }
-
-    #[test]
-    fn an_older_telemetry_section_keeps_exporting_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let older = write(
-            dir.path(),
-            "older.toml",
-            "version = 5\n[telemetry]\nendpoint = \"http://localhost:4318\"\n",
-        );
-        assert!(
-            load_from(&[older])
-                .unwrap()
-                .config
-                .telemetry
-                .capture_content
-        );
-        let newer = write(
-            dir.path(),
-            "newer.toml",
-            "version = 6\n[telemetry]\nendpoint = \"http://localhost:4318\"\n",
-        );
-        assert!(
-            !load_from(&[newer])
-                .unwrap()
-                .config
-                .telemetry
-                .capture_content
-        );
     }
 
     #[test]

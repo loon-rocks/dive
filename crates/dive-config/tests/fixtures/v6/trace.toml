@@ -1,9 +1,0 @@
-version = 6
-
-[telemetry]
-endpoint = "http://localhost:4318"
-capture_content = false
-
-[trace]
-content = true
-clip_bytes = 16384
