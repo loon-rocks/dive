@@ -565,6 +565,7 @@ pub async fn load_node(
             "load_artifact",
             format!("Attach the {} {name} to this edit? {reason}", kind.label()),
             "attach",
+            None,
         )
         .await
         {
@@ -698,6 +699,7 @@ async fn ask_yes(
     what: &str,
     prompt: String,
     key: &str,
+    detail: Option<dive_core::pipeline::AskDetail>,
 ) -> Result<(), String> {
     let interlocutor = interlocutor_for(pipeline, tx);
     let answer = interlocutor
@@ -711,7 +713,7 @@ async fn ask_yes(
                 "properties": {key: {"type": "boolean", "description": "Go ahead?"}}
             }),
             default: Some(json!({key: true})),
-            detail: None,
+            detail,
         })
         .await;
     match answer {
@@ -758,6 +760,45 @@ fn ran_in(entries: &[dive_core::NewEntry], tools_used: &[String]) -> Vec<String>
     ran.into_iter().collect()
 }
 
+pub(crate) fn network_preview(
+    network: &network::Network,
+    node: &network::Node,
+    input: &Value,
+    secrets: &[String],
+) -> dive_core::pipeline::test_run::TestRunPreview {
+    use dive_core::pipeline::test_run::{RunKind, TestRunPreview};
+    let purpose = input["purpose"].as_str();
+    let plan_input = match &input["input"] {
+        Value::Object(_) => input["input"].clone(),
+        _ => json!({}),
+    };
+    let parsed = |node: &network::Node| {
+        node.yaml
+            .as_deref()
+            .and_then(|yaml| dive_core::user_tools::parse_tool_source(yaml).ok())
+    };
+    if node.kind == ArtifactKind::Tool {
+        if let Some(doc) = parsed(node) {
+            return TestRunPreview::new(&doc, purpose, &plan_input, &[]);
+        }
+    }
+    let tools: Vec<dive_core::user_tools::UserToolDoc> = network
+        .nodes
+        .iter()
+        .filter(|node| node.kind == ArtifactKind::Tool && node.drafted())
+        .filter_map(parsed)
+        .collect();
+    let (entry, runs, shown) = match node.kind {
+        ArtifactKind::Agent => (
+            node.runtime_name(),
+            RunKind::Agent,
+            json!({"message": input["message"].as_str().unwrap_or_default()}),
+        ),
+        _ => (node.catalog_name(), RunKind::Plan, plan_input),
+    };
+    TestRunPreview::network(&entry, runs, purpose, &shown, &tools, secrets.to_vec())
+}
+
 pub async fn test_network(
     draft: &SharedDraft,
     pipeline: &Pipeline,
@@ -796,10 +837,6 @@ pub async fn test_network(
         Value::Object(_) => input["input"].clone(),
         _ => json!({}),
     };
-    let what = match node.kind {
-        ArtifactKind::Agent => format!("send \"{message}\" to {}", node.runtime_name()),
-        _ => format!("run {} with {plan_input}", node.catalog_name()),
-    };
     if node.kind == ArtifactKind::Agent && message.trim().is_empty() {
         return error("`message` is required to test an agent");
     }
@@ -815,15 +852,18 @@ pub async fn test_network(
         &own,
     )
     .await;
+    let needed_names: Vec<String> = needed.iter().map(|secret| secret.name.clone()).collect();
     if let Some(report) = wait_for_secrets(draft, pipeline, tx, needed) {
         return outcome(report, false);
     }
+    let preview = network_preview(&network, &node, input, &needed_names);
     if let Err(refusal) = ask_yes(
         pipeline,
         tx,
         "test_network",
-        format!("Test the network: {what}? Tools in it run for real, on each agent's own model, and nothing is saved."),
+        preview.prompt(),
         "run",
+        Some(dive_core::pipeline::AskDetail::TestRun(preview)),
     )
     .await
     {
@@ -1174,6 +1214,7 @@ pub async fn save_network(
                 listing.join("\n")
             ),
             "save",
+            None,
         )
         .await?;
     }
@@ -1531,7 +1572,8 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "properties": {
                     "entry": {"type": "string", "description": "The agent or plan node the test starts at"},
                     "message": {"type": "string", "description": "Agents: the user message to send"},
-                    "input": {"type": "object", "description": "Plans: the plan's input"}
+                    "input": {"type": "object", "description": "Plans: the plan's input"},
+                    "purpose": {"type": "string", "description": "One sentence the user reads before approving the test, saying what it checks, e.g. \"Check it files the note and replies with its path.\""}
                 }
             }),
             output_schema: None,

@@ -73,6 +73,16 @@ pub enum AskOutcome {
 #[async_trait]
 pub trait Interlocutor: Send + Sync {
     async fn ask(&self, request: AskRequest) -> AskOutcome;
+
+    async fn notify(&self, _notice: Notice) {}
+}
+
+#[derive(Debug, Clone)]
+pub struct Notice {
+    pub path: StepPath,
+    pub call_stack: Vec<String>,
+    pub detail: AskDetail,
+    pub approval: super::test_run::Approval,
 }
 
 /// An interlocutor that always declines to be reachable. Installed

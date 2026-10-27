@@ -3034,6 +3034,30 @@ steps:
         assert!(replayed.tests.is_empty());
     }
 
+    #[test]
+    fn a_network_test_shows_its_purpose_its_drafted_tools_and_what_they_were_found_to_do() {
+        let (tools, _rx, _dir) = secret_network(Arc::new(dive_core::secrets::MemorySecrets::env()));
+        let network = tools.draft.lock().unwrap().network.clone();
+        let node = network
+            .nodes
+            .iter()
+            .find(|node| node.names("report"))
+            .unwrap()
+            .clone();
+        let preview = crate::workbench::artifact::network_preview(
+            &network,
+            &node,
+            &json!({"entry": "report", "input": {"week": 3}, "purpose": "Check it reports week 3."}),
+            &["DIVE_T_NOTIFY".to_string()],
+        );
+        assert_eq!(preview.runs, dive_core::pipeline::test_run::RunKind::Plan);
+        assert_eq!(preview.purpose.as_deref(), Some("Check it reports week 3."));
+        assert_eq!(preview.input, json!({"week": 3}));
+        assert_eq!(preview.uses, vec!["user__notify"]);
+        assert_eq!(preview.effects.writes, Some(true));
+        assert_eq!(preview.secrets, vec!["DIVE_T_NOTIFY"]);
+    }
+
     #[tokio::test]
     async fn secrets_set_in_the_environment_or_the_project_store_let_the_test_run() {
         use dive_core::secrets::{ChainedSource, InProject, MemorySecrets};
