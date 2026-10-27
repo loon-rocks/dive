@@ -113,6 +113,8 @@ model = "qwen3:8b"
 images = false
 ```
 
+The setting is per model in the chain. When a role that takes no images fails over to a fallback that does, the fallback gets the images, and the other way round. That holds for agents on the role too: one whose role and fallbacks all take no images never loads the files it sees. Plan validation checks `agent__<name>` steps against the agent's `model` role as well as `infer`, `decide` and prompt-tool steps.
+
 ## Decision models
 
 A decision model answers a question about a piece of data with a probability instead of text, faster and cheaper than a chat model. Connect one with a `systemone` provider, which defaults to TypeSafe's API, and map it to `decider`:
@@ -129,7 +131,7 @@ model = "jev-latest"
 
 Decision models run [`decide` conditions](/plans/reference/conditions-and-bodies#decide), [decision tools](/tools/reference/tool-file/decision) such as `builtin__decide`, and tool search when Dive drafts a plan. Without one, tool search ranks tools by keyword. Dive never swaps a chat model for a decision model or the reverse, and refuses a config that maps one to the other's role.
 
-A decision model reads images too. When a `decide` condition's `state` or `question`, or a decision tool's input, holds a file reference, Dive sends the image to TypeSafe with the request, as an asset the reference names, and adds the `TypeSafe-Danger-Zone-Images: true` header that TypeSafe needs for images. Requests without images are sent exactly as before. TypeSafe takes PNG and JPEG between 280 and 1568 pixels a side, so Dive converts GIF and WebP to PNG, scales a larger image down, pads a smaller one with white, and applies a photo's EXIF rotation. TypeSafe's images support is in preview and needs a Jev model that accepts images; set `images = false` on a decision role whose model doesn't.
+A decision model reads images too. When a `decide` condition's `state` or `question`, or a decision tool's input, holds a file reference, Dive sends the image to TypeSafe with the request, as an asset the reference names, and adds the `TypeSafe-Danger-Zone-Images: true` header that TypeSafe needs for images. Requests without images are sent exactly as before. TypeSafe takes PNG and JPEG between 280 and 1568 pixels a side, so Dive converts GIF and WebP to PNG, scales a larger image down, pads a smaller one with white, and applies a photo's EXIF rotation. An image Dive can't read or convert is left out and the decision goes ahead with the reference text, and when the images together would be over TypeSafe's 32 MiB request limit, Dive leaves out the largest until the rest fit. TypeSafe's images support is in preview and needs a Jev model that accepts images; set `images = false` on a decision role whose model doesn't.
 
 ## Image models
 
