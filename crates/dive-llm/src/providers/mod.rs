@@ -1,10 +1,10 @@
 mod anthropic;
 mod gemini;
+mod image_fit;
 mod openai_compat;
 #[cfg(test)]
 pub(crate) mod stub;
 mod systemone;
-mod typesafe_images;
 
 pub use anthropic::AnthropicProvider;
 pub use gemini::GeminiProvider;

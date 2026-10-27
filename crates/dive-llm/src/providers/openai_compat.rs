@@ -86,7 +86,8 @@ impl OpenAiCompatProvider {
             }
         }
         let mut messages = vec![json!({"role": "system", "content": system})];
-        messages.extend(to_openai_messages(&req.messages, &req.images));
+        let images = super::image_fit::fit_all(&req.images, &super::image_fit::CHAT);
+        messages.extend(to_openai_messages(&req.messages, &images));
         body.insert("messages".into(), json!(messages));
         if stream {
             body.insert("stream".into(), json!(true));

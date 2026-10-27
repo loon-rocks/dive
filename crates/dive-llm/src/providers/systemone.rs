@@ -1,4 +1,4 @@
-use super::typesafe_images::{prepare, Prepared, MAX_REQUEST_BYTES};
+use super::image_fit::{fit, Prepared, MAX_REQUEST_BYTES, TYPESAFE};
 use crate::decision::{
     Answer, DecisionProvider, DecisionRequest, DecisionResponse, LikelihoodCriteria, Question,
 };
@@ -89,7 +89,7 @@ impl SystemOneProvider {
             if !text.contains(reference.as_str()) {
                 continue;
             }
-            match prepare(reference, image) {
+            match fit(reference, image, &TYPESAFE, req.images.len()) {
                 Ok(image) => prepared.push((reference.clone(), image)),
                 Err(error) => {
                     tracing::warn!(file = %reference, %error, "image left out of a decision")
@@ -425,12 +425,8 @@ mod tests {
             SHOT.to_string(),
             crate::ImageData {
                 mime: "image/png".into(),
-                bytes: super::super::typesafe_images::tests::encoded(
-                    600,
-                    400,
-                    image::ImageFormat::Png,
-                )
-                .into(),
+                bytes: super::super::image_fit::tests::encoded(600, 400, image::ImageFormat::Png)
+                    .into(),
             },
         );
         req
