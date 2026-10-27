@@ -1,6 +1,6 @@
 use super::gate::StepPath;
-use super::interlocutor::{AskDetail, AskOutcome, AskRequest};
-use super::test_run::TestRunPreview;
+use super::interlocutor::{AskDetail, AskOutcome, AskRequest, Notice};
+use super::test_run::{Approval, TestRunPreview};
 use super::{Pipeline, ToolCatalog};
 use crate::agent::doc::{global_fragments, parse_agent_source, validate_doc, AgentDoc, AgentSet};
 use crate::secrets::{Origin, SecretSource};
@@ -412,6 +412,19 @@ impl Pipeline {
                 }));
             }
             self.drafted.approved.lock().unwrap().insert(approval);
+        } else if let Some(interlocutor) = &self.interlocutor {
+            interlocutor
+                .notify(Notice {
+                    path: StepPath::top("try_tool"),
+                    call_stack: self.call_stack.clone(),
+                    detail: AskDetail::TestRun(preview),
+                    approval: if remembered {
+                        Approval::Remembered
+                    } else {
+                        Approval::Automatic
+                    },
+                })
+                .await;
         }
         let name = format!("{USER_TOOL_PREFIX}{}", doc.name);
         let hidden = stored_values(&doc, self.drafted.secrets.as_ref(), &Default::default());

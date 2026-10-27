@@ -19,6 +19,15 @@ pub struct TestRunPreview {
     pub unset: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only: Option<bool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub uses: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Approval {
+    Automatic,
+    Remembered,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -29,6 +38,8 @@ pub enum RunKind {
     Reshape,
     Decision,
     Image,
+    Agent,
+    Plan,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -72,13 +83,57 @@ impl TestRunPreview {
                 .collect(),
             unset: unset.to_vec(),
             read_only: doc.read_only,
+            uses: Vec::new(),
+        }
+    }
+
+    pub fn network(
+        entry: &str,
+        runs: RunKind,
+        purpose: Option<&str>,
+        input: &Value,
+        tools: &[UserToolDoc],
+        secrets: Vec<String>,
+    ) -> Self {
+        let scans: Vec<Effects> = tools
+            .iter()
+            .map(|doc| Self::new(doc, None, &Value::Null, &[]).effects)
+            .collect();
+        let found = |pick: fn(&Effects) -> Option<bool>| {
+            scans
+                .iter()
+                .any(|effects| pick(effects) == Some(true))
+                .then_some(true)
+        };
+        Self {
+            tool: entry.to_string(),
+            purpose: purpose
+                .map(str::trim)
+                .filter(|purpose| !purpose.is_empty())
+                .map(str::to_string),
+            runs,
+            program: None,
+            command: None,
+            input: input.clone(),
+            effects: Effects {
+                writes: found(|effects| effects.writes),
+                network: found(|effects| effects.network),
+            },
+            flagged: Vec::new(),
+            secrets,
+            unset: Vec::new(),
+            read_only: None,
+            uses: tools
+                .iter()
+                .map(|doc| format!("{USER_TOOL_PREFIX}{}", doc.name))
+                .collect(),
         }
     }
 
     pub fn safe_to_run_unasked(&self) -> bool {
         match self.runs {
             RunKind::Prompt | RunKind::Reshape | RunKind::Decision => true,
-            RunKind::Image => false,
+            RunKind::Image | RunKind::Agent | RunKind::Plan => false,
             RunKind::Exec => {
                 self.read_only == Some(true)
                     && self.effects.writes == Some(false)
@@ -95,8 +150,15 @@ impl TestRunPreview {
             RunKind::Reshape => "reshapes its input, with no side effects".to_string(),
             RunKind::Decision => "asks the decision model its questions".to_string(),
             RunKind::Image => "generates an image with the image model".to_string(),
+            RunKind::Agent | RunKind::Plan => {
+                "runs for real, tools and each agent's own model included, and saves nothing"
+                    .to_string()
+            }
         };
-        let mut prompt = format!("Test-run the drafted tool {} once?", self.tool);
+        let mut prompt = match self.runs {
+            RunKind::Agent | RunKind::Plan => format!("Test the network from {}?", self.tool),
+            _ => format!("Test-run the drafted tool {} once?", self.tool),
+        };
         if let Some(purpose) = &self.purpose {
             prompt.push(' ');
             prompt.push_str(purpose);
@@ -486,6 +548,37 @@ mod tests {
         assert_eq!(quiet.effects.writes, Some(false));
         let loud = exec("sh", &["-c", "echo hi > out.txt"], Some(true));
         assert_eq!(loud.effects.writes, Some(true));
+    }
+
+    #[test]
+    fn a_network_test_carries_the_effects_its_drafted_tools_were_found_to_have() {
+        let tool = |name: &str, script: &str| {
+            crate::user_tools::parse_tool_source(&format!(
+                "name: {name}\ndescription: t\nkind: exec\ncommand: sh\nargs: {}\n",
+                serde_json::to_string(&["-c", script]).unwrap()
+            ))
+            .unwrap()
+        };
+        let preview = TestRunPreview::network(
+            "agent__notes",
+            RunKind::Agent,
+            Some("Check it files a note."),
+            &json!({"message": "save hello"}),
+            &[tool("save", "echo hi > note.txt"), tool("look", "ls")],
+            vec!["TOKEN".to_string()],
+        );
+        assert_eq!(
+            preview.effects,
+            Effects {
+                writes: Some(true),
+                network: None
+            }
+        );
+        assert_eq!(preview.uses, vec!["user__save", "user__look"]);
+        assert!(!preview.safe_to_run_unasked());
+        assert!(preview
+            .prompt()
+            .starts_with("Test the network from agent__notes? Check it files a note."));
     }
 
     #[test]

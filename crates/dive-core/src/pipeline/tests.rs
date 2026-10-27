@@ -4279,6 +4279,7 @@ async fn an_explicitly_empty_tool_list_fails_the_step_rather_than_granting_every
 struct ScriptedHuman {
     outcome: Mutex<Vec<AskOutcome>>,
     asked: Mutex<Vec<AskRequest>>,
+    told: Mutex<Vec<super::Notice>>,
 }
 
 impl ScriptedHuman {
@@ -4286,6 +4287,7 @@ impl ScriptedHuman {
         Arc::new(Self {
             outcome: Mutex::new(outcomes),
             asked: Mutex::new(Vec::new()),
+            told: Mutex::new(Vec::new()),
         })
     }
 
@@ -4305,6 +4307,10 @@ impl ScriptedHuman {
 
 #[async_trait]
 impl Interlocutor for ScriptedHuman {
+    async fn notify(&self, notice: super::Notice) {
+        self.told.lock().unwrap().push(notice);
+    }
+
     async fn ask(&self, request: AskRequest) -> AskOutcome {
         self.asked.lock().unwrap().push(request);
         let mut outcomes = self.outcome.lock().unwrap();
@@ -6251,6 +6257,10 @@ async fn a_read_only_test_that_only_reads_runs_without_asking() {
     assert_eq!(tried.result["result"]["hi"], "Ann", "{}", tried.result);
     assert_eq!(tried.result["approval"], "automatic");
     assert!(human.prompts().is_empty());
+    let told = human.told.lock().unwrap();
+    assert_eq!(told[0].approval, super::test_run::Approval::Automatic);
+    let super::AskDetail::TestRun(preview) = &told[0].detail;
+    assert_eq!(preview.purpose.as_deref(), Some("Check it greets Ann."));
 }
 
 #[tokio::test]
@@ -6291,6 +6301,10 @@ async fn an_approved_test_run_is_not_asked_about_again_until_the_draft_or_input_
         human.prompts().len(),
         1,
         "one approval covers re-runs of the same draft and input"
+    );
+    assert_eq!(
+        human.told.lock().unwrap()[0].approval,
+        super::test_run::Approval::Remembered
     );
     pipeline
         .call_native(
