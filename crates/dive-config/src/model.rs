@@ -601,6 +601,10 @@ impl ModelChoice {
     pub fn takes_images(&self) -> bool {
         self.images.unwrap_or(true)
     }
+
+    pub fn any_model_takes_images(&self) -> bool {
+        self.takes_images() || self.fallbacks.iter().any(FallbackChoice::takes_images)
+    }
 }
 
 /// One failover candidate for a [`ModelChoice`]. Deliberately narrower than

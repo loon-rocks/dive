@@ -84,37 +84,60 @@ impl SystemOneProvider {
     async fn send(&self, req: &DecisionRequest) -> Result<reqwest::Response, LlmError> {
         let mut body = WireRequest::from(req);
         let text = req.text();
-        let mut images: Vec<(String, Prepared)> = Vec::new();
+        let mut prepared: Vec<(String, Prepared)> = Vec::new();
         for (reference, image) in &req.images {
             if !text.contains(reference.as_str()) {
                 continue;
             }
+            match prepare(reference, image) {
+                Ok(image) => prepared.push((reference.clone(), image)),
+                Err(error) => {
+                    tracing::warn!(file = %reference, %error, "image left out of a decision")
+                }
+            }
+        }
+        if prepared.is_empty() {
+            return crate::retry::with_retries(|| self.post_once(&body)).await;
+        }
+        let state_bytes = serde_json::to_vec(&body)
+            .map_err(|e| LlmError::Parse(e.to_string()))?
+            .len();
+        let mut total = state_bytes
+            + prepared
+                .iter()
+                .map(|(_, image)| image.bytes.len())
+                .sum::<usize>();
+        while total > MAX_REQUEST_BYTES && !prepared.is_empty() {
+            let largest = prepared
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, (_, image))| image.bytes.len())
+                .map(|(index, _)| index)
+                .unwrap_or_default();
+            let (reference, image) = prepared.remove(largest);
+            total -= image.bytes.len();
+            tracing::warn!(
+                file = %reference,
+                bytes = image.bytes.len(),
+                "image left out of a decision, which would be over TypeSafe's {MAX_REQUEST_BYTES} bytes"
+            );
+        }
+        if prepared.is_empty() {
+            return crate::retry::with_retries(|| self.post_once(&body)).await;
+        }
+        let mut images: Vec<(String, Prepared)> = Vec::new();
+        for (reference, image) in prepared {
             let name = format!("a{}", images.len());
             body.assets.insert(
-                reference.clone(),
+                reference,
                 WireAsset {
                     kind: "image",
                     part: name.clone(),
                 },
             );
-            images.push((name, prepare(reference, image)?));
-        }
-        if images.is_empty() {
-            let body = WireRequest::from(req);
-            return crate::retry::with_retries(|| self.post_once(&body)).await;
+            images.push((name, image));
         }
         let json = serde_json::to_vec(&body).map_err(|e| LlmError::Parse(e.to_string()))?;
-        let total = json.len()
-            + images
-                .iter()
-                .map(|(_, image)| image.bytes.len())
-                .sum::<usize>();
-        if total > MAX_REQUEST_BYTES {
-            return Err(LlmError::Unsupported(format!(
-                "a decision request with {} images is {total} bytes, and TypeSafe takes at most {MAX_REQUEST_BYTES}",
-                images.len()
-            )));
-        }
         crate::retry::with_retries(|| self.post_with_images(&json, &images)).await
     }
 }
@@ -459,6 +482,18 @@ mod tests {
             .iter()
             .any(|(key, _)| key == "typesafe-danger-zone-images"));
         assert!(seen.body.get("assets").is_none());
+    }
+
+    #[tokio::test]
+    async fn an_image_that_cant_be_read_is_left_out_and_the_decision_still_goes() {
+        let (base, seen) = stub(vec![(200, answered())]).await;
+        let provider = SystemOneProvider::new(Some(base), None);
+        let mut req = with_shot(request(), true);
+        req.images.get_mut(SHOT).unwrap().bytes = b"not an image".to_vec();
+        provider.decide(req).await.unwrap();
+        let seen = seen.lock().unwrap()[0].clone();
+        assert!(seen.body.get("assets").is_none());
+        assert_eq!(seen.body["state"], json!({"page": SHOT}));
     }
 
     #[tokio::test]

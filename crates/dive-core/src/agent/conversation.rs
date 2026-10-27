@@ -326,7 +326,10 @@ impl Conversation {
             max_iterations: doc.max_iterations.unwrap_or(self.default_max_iterations),
             progress_tools: self.progress_tools.clone(),
             call_site: CallSite::role(doc.model.clone()).at(format!("agent:{}", doc.name)),
-            files: self.files.clone(),
+            files: self
+                .files
+                .clone()
+                .filter(|_| choice.any_model_takes_images()),
         })
     }
 

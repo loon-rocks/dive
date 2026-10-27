@@ -902,7 +902,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: UPDATE_METADATA.to_string(),
@@ -943,7 +943,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 json!({"ok": true, "identifier": "sprint_report", "name": "Sprint report"}),
             ),
             read_only: None,
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: ADD_STEP.to_string(),
@@ -977,7 +977,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: Some(json!({"ok": true, "id": "E4", "index": 2, "steps": 5})),
             read_only: None,
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: UPDATE_STEP.to_string(),
@@ -1005,7 +1005,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: Some(json!({"ok": true, "id": "fetch_issues"})),
             read_only: None,
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: DELETE_STEP.to_string(),
@@ -1024,7 +1024,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: Some(json!({"ok": true, "id": "E2", "steps": 3})),
             read_only: None,
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: RESTORE_DRAFT.to_string(),
@@ -1037,7 +1037,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: Some(json!({"restored": "sprint_report", "dirty": true})),
             read_only: None,
- file_input: Default::default(),
+            file_input: Default::default(),
         },
     ];
     defs.extend(super::artifact::tool_defs());
