@@ -5,7 +5,7 @@ use async_trait::async_trait;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageData {
     pub mime: String,
-    pub bytes: Vec<u8>,
+    pub bytes: bytes::Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,7 +174,7 @@ mod tests {
     fn too_many_input_images_is_refused() {
         let image = Part::Image(ImageData {
             mime: "image/png".into(),
-            bytes: vec![1],
+            bytes: vec![1].into(),
         });
         let mut req = request();
         req.parts.push(image.clone());

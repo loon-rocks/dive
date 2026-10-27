@@ -486,14 +486,14 @@ mod tests {
                 shot.clone(),
                 crate::image::ImageData {
                     mime: "image/png".into(),
-                    bytes: b"png".to_vec(),
+                    bytes: b"png".to_vec().into(),
                 },
             ),
             (
                 made.clone(),
                 crate::image::ImageData {
                     mime: "image/webp".into(),
-                    bytes: b"webp".to_vec(),
+                    bytes: b"webp".to_vec().into(),
                 },
             ),
         ]);

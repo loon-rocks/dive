@@ -143,6 +143,7 @@ pub struct ChatRequest {
     pub cache: CacheHint,
     pub tool_references: std::collections::BTreeMap<String, Vec<String>>,
     pub images: std::collections::BTreeMap<String, crate::image::ImageData>,
+    pub withheld_images: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

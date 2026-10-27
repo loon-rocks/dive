@@ -2223,7 +2223,7 @@ impl dive_llm::ImageProvider for Painter {
                 dive_llm::Part::Text("done".into()),
                 dive_llm::Part::Image(dive_llm::ImageData {
                     mime: "image/png".into(),
-                    bytes: format!("png {}", seen.len()).into_bytes(),
+                    bytes: format!("png {}", seen.len()).into_bytes().into(),
                 }),
             ],
             usage: Usage::default(),
@@ -2299,7 +2299,7 @@ async fn generate_image_stores_each_image_and_saves_it_into_the_workspace() {
             dive_llm::Part::Text("the cat, in a hat".into()),
             dive_llm::Part::Image(dive_llm::ImageData {
                 mime: "image/jpeg".into(),
-                bytes: b"cat".to_vec()
+                bytes: b"cat".to_vec().into()
             })
         ]
     );

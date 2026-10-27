@@ -69,7 +69,7 @@ model = "qwen3:8b"
 images = false
 ```
 
-Requests to that model carry a note naming the images it wasn't sent, instead of the images. Plan validation reports a step that sends a file to such a role, wherever the tool's output schema or recorded shape shows the value is a file.
+Requests to that model carry a note naming the images it wasn't sent, instead of the images. The note goes with the message or tool result that names them, under `images_not_sent` in a tool result, so earlier turns stay the same from one call to the next and the provider's prompt cache keeps working. The call's recorded input lists the refs under `images_not_sent` too, which is how the desktop app marks them in a call's detail. Plan validation reports a step that sends a file to such a role, wherever the tool's output schema or recorded shape shows the value is a file.
 
 Decision models get images through TypeSafe, which needs a Jev model that accepts images. Dive sends PNG and JPEG as they are, converts GIF and WebP to PNG, and scales each image to between 280 and 1568 pixels a side.
 

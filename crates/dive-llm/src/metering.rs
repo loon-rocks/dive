@@ -44,14 +44,18 @@ pub struct ModelCall {
 }
 
 pub fn request_content(req: &ChatRequest) -> Value {
-    json!({
+    let mut content = json!({
         "system": req.system,
         "messages": req.messages,
         "tools": req.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
         "temperature": req.temperature,
         "max_tokens": req.max_tokens,
         "response_schema": req.response_schema.as_ref().map(|s| s.name.as_str()),
-    })
+    });
+    if !req.withheld_images.is_empty() {
+        content["images_not_sent"] = json!(req.withheld_images);
+    }
+    content
 }
 
 pub fn response_content(response: &ChatResponse) -> Value {

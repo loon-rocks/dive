@@ -1135,7 +1135,7 @@ impl UserToolRegistry {
             let bytes = files.get(&blob).await.map_err(|e| e.to_string())?;
             parts.push(Part::Image(ImageData {
                 mime: blob.mime().to_string(),
-                bytes,
+                bytes: bytes.into(),
             }));
         }
         let request = ImageRequest {
@@ -1163,7 +1163,7 @@ impl UserToolRegistry {
         let mut images = Vec::new();
         for image in responses.iter().flat_map(|response| response.images()) {
             let stored = files
-                .put(image.bytes.clone(), &image.mime)
+                .put(image.bytes.clone().into(), &image.mime)
                 .await
                 .map_err(|e| e.to_string())?;
             let mut entry = serde_json::to_value(&stored).map_err(|e| e.to_string())?;
