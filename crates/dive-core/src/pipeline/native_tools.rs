@@ -61,6 +61,7 @@ pub fn native_tool_defs() -> Vec<ToolDef> {
         })),
         output_example: None,
         read_only: Some(true),
+        file_input: Default::default(),
     }];
     defs.extend(search_tool_defs());
     defs.extend(compose_tool_defs());

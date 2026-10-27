@@ -1344,6 +1344,7 @@ pub fn overlay(pipeline: &Pipeline, network: &Network) -> Pipeline {
                     output_schema: None,
                     output_example: None,
                     read_only: None,
+                    file_input: Default::default(),
                 }),
             },
             ArtifactKind::Plan => {

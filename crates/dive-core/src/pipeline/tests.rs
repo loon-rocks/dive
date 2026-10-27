@@ -78,6 +78,7 @@ impl ToolRegistry for MockRegistry {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             })
             .collect())
     }
@@ -141,6 +142,7 @@ fn pipeline_with_named(
             description: None,
             fallbacks: Vec::new(),
             context_window: None,
+            images: None,
         },
     );
     let roles = ModelRoles::new(entries);
@@ -726,6 +728,7 @@ fn named_model(model: &str) -> std::collections::BTreeMap<String, ModelChoice> {
             description: None,
             fallbacks: Vec::new(),
             context_window: None,
+            images: None,
         },
     );
     named
@@ -4971,6 +4974,7 @@ fn pipeline_with_decider(
         description: None,
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     entries.insert("default".to_string(), choice("mock", "test"));
     entries.insert("decider".to_string(), choice("typesafe", "jev-latest"));
@@ -5707,6 +5711,7 @@ fn searching(scorer: Option<Scorer>) -> (Pipeline, Option<Arc<ScoringDecider>>) 
         description: None,
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     let mut entries = std::collections::BTreeMap::new();
     entries.insert("default".to_string(), choice("mock", "test"));
@@ -6455,4 +6460,140 @@ finish:
     assert_eq!(call.result["kind"], json!("empty_data"));
     assert_eq!(call.result["step"], json!("E1"));
     assert!(call.result.get("empty_data").is_none());
+}
+
+struct OneImage;
+
+#[async_trait]
+impl crate::files::BlobStore for OneImage {
+    async fn put(
+        &self,
+        _: Vec<u8>,
+        _: &str,
+    ) -> Result<crate::files::StoredFile, crate::files::FileError> {
+        Err(crate::files::FileError("read only".into()))
+    }
+    async fn get(&self, _: &crate::files::BlobRef) -> Result<Vec<u8>, crate::files::FileError> {
+        Ok(b"pixels".to_vec())
+    }
+    async fn delete(&self, _: &crate::files::BlobRef) -> Result<(), crate::files::FileError> {
+        Ok(())
+    }
+    async fn locate(
+        &self,
+        _: &crate::files::BlobRef,
+    ) -> Result<crate::files::FileLocation, crate::files::FileError> {
+        Err(crate::files::FileError("nowhere".into()))
+    }
+    async fn materialize(
+        &self,
+        _: &crate::files::BlobRef,
+    ) -> Result<std::path::PathBuf, crate::files::FileError> {
+        Err(crate::files::FileError("nowhere".into()))
+    }
+}
+
+const SHOT: &str =
+    "blob:sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.png";
+
+fn pipeline_seeing_images(
+    responses: Vec<ChatResponse>,
+    takes_images: bool,
+) -> (Pipeline, Arc<ScriptedProvider>) {
+    let registry = search_registry(json!({"files": [{"ref": SHOT, "mime": "image/png"}]}));
+    let (mut pipeline, provider) = pipeline(responses, registry, 1);
+    let mut providers: std::collections::HashMap<String, Arc<dyn ChatProvider>> =
+        std::collections::HashMap::new();
+    providers.insert("mock".to_string(), provider.clone());
+    let roles = ModelRoles::new(std::collections::BTreeMap::from([(
+        "default".to_string(),
+        ModelChoice {
+            kind: None,
+            provider: "mock".to_string(),
+            model: "test".to_string(),
+            temperature: None,
+            description: None,
+            fallbacks: Vec::new(),
+            context_window: None,
+            images: Some(takes_images),
+        },
+    )]));
+    pipeline.router = Arc::new(
+        dive_llm::ModelRouter::with_providers(providers, roles)
+            .with_meter(pipeline.usage.clone())
+            .with_image_source(Arc::new(crate::files::FileImages(Arc::new(OneImage)))),
+    );
+    (pipeline, provider)
+}
+
+#[tokio::test]
+async fn an_infer_gate_sees_the_image_a_ref_in_its_question_names() {
+    let (pipeline, provider) = pipeline_seeing_images(
+        vec![structured(json!({"verdict": true, "reason": "a table"}))],
+        true,
+    );
+    let plan: Plan = serde_json::from_value(json!([
+        {"id": "E0", "toolName": "t__search", "input": {"query": "x"}},
+        {"id": "E1", "toolName": "exit", "input": {
+            "infer": "Does this page have a pricing table? {{E0.files.0.ref}}",
+            "status": "success",
+        }}
+    ]))
+    .unwrap();
+    pipeline
+        .run_explicit("q", plan, Finish::Silent, None)
+        .await
+        .unwrap();
+    let requests = provider.requests.lock().unwrap();
+    let image = &requests[0].images[SHOT];
+    assert_eq!(image.bytes, b"pixels");
+}
+
+#[tokio::test]
+async fn the_solver_sees_images_in_the_data_it_writes_from() {
+    let (pipeline, provider) = pipeline_seeing_images(vec![text("A pricing page.")], true);
+    let plan: Plan = serde_json::from_value(json!([
+        {"id": "E0", "toolName": "t__search", "input": {"query": "x"}},
+    ]))
+    .unwrap();
+    pipeline
+        .run_explicit(
+            "describe the page",
+            plan,
+            Finish::Solver(SolverData {
+                query_to_answer: "describe the page".into(),
+                data: serde_json::from_value(json!({"shot": "{{E0}}"})).unwrap(),
+                ..Default::default()
+            }),
+            None,
+        )
+        .await
+        .unwrap();
+    let requests = provider.requests.lock().unwrap();
+    assert!(requests.last().unwrap().images.contains_key(SHOT));
+}
+
+#[tokio::test]
+async fn a_gate_on_a_role_without_images_gets_the_note_instead() {
+    let (pipeline, provider) = pipeline_seeing_images(
+        vec![structured(
+            json!({"verdict": false, "reason": "can't see it"}),
+        )],
+        false,
+    );
+    let plan: Plan = serde_json::from_value(json!([
+        {"id": "E0", "toolName": "t__search", "input": {"query": "x"}},
+        {"id": "E1", "toolName": "exit", "input": {
+            "infer": "Does this page have a pricing table? {{E0.files.0.ref}}",
+            "status": "success",
+        }}
+    ]))
+    .unwrap();
+    pipeline
+        .run_explicit("q", plan, Finish::Silent, None)
+        .await
+        .unwrap();
+    let requests = provider.requests.lock().unwrap();
+    assert!(requests[0].images.is_empty());
+    assert!(requests[0].system.contains("doesn't take images"));
 }

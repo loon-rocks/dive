@@ -87,6 +87,9 @@ properties:
         context_window:
           type: integer
           description: The model's context window in tokens.
+        images:
+          type: boolean
+          description: "Whether the model takes images. Omitted, it does: every image a ref names in what the role reads (a tool result, a step's input, an instruction) is sent with the request. Set `false` for a text-only model, and requests carry a note in place of each image instead. On a decision model, images go to TypeSafe as assets."
         fallbacks:
           type: array
           description: Models to try, in order, when this one fails.
@@ -106,6 +109,9 @@ properties:
               context_window:
                 type: integer
                 description: The model's context window in tokens.
+              images:
+                type: boolean
+                description: Whether this fallback model takes images. Omitted, it does.
   mcp:
     type: object
     description: MCP servers, as `[mcp.<name>]`. Their tools join the catalog as `<name>__<tool>`.

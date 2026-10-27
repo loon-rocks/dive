@@ -1979,6 +1979,7 @@ solver:
             output_schema,
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         };
         let mut tools = vec![
             tool("user__git_log", None),

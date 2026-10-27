@@ -331,6 +331,7 @@ impl ServerHandle {
                 }),
                 output_example: overrides.and_then(|o| o.output_example.clone()),
                 read_only: tool.annotations.as_ref().and_then(|a| a.read_only_hint),
+                file_input: Default::default(),
             });
         }
         tracing::info!(

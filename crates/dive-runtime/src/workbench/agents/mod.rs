@@ -67,12 +67,21 @@ pub fn model_roles(pipeline: &Pipeline) -> String {
             Some(dive_config::ModelKind::Image) => " (image model: builtin__generate_image only)",
             _ => "",
         };
+        let images = match pipeline.router.kind_of_role(name) {
+            Some(dive_config::ModelKind::Image) => "",
+            _ if !choice.takes_images() => " (takes no images: refs reach it as text)",
+            _ => "",
+        };
         let description = roles
             .description_of(name)
             .map(|description| format!(": {description}"))
             .unwrap_or_default();
-        section.push_str(&format!("- {name} → {}{kind}{description}\n", choice.model));
+        section.push_str(&format!(
+            "- {name} → {}{kind}{images}{description}\n",
+            choice.model
+        ));
     }
+    section.push_str("Every other role takes images: a file ref in what it reads (a tool result, a step's input, an instruction) reaches it as the image.\n");
     section.push_str(&decision_line(pipeline));
     section
 }
@@ -244,6 +253,7 @@ steps:
             description: None,
             fallbacks: Vec::new(),
             context_window: None,
+            images: None,
         }
     }
 
@@ -257,6 +267,9 @@ steps:
                     if *provider == "ts" {
                         choice.kind = Some(dive_config::ModelKind::Decision);
                     }
+                    if *provider == "text" {
+                        choice.images = Some(false);
+                    }
                     (role.to_string(), choice)
                 })
                 .collect(),
@@ -268,6 +281,28 @@ steps:
         let mut pipeline = (*super::super::tools::tests::test_pipeline(Vec::new())).clone();
         pipeline.router = Arc::new(router);
         pipeline
+    }
+
+    #[test]
+    fn the_model_roles_section_marks_the_roles_that_take_no_images() {
+        let section = model_roles(&pipeline_with_roles(&[("default", "p"), ("judge", "text")]));
+        assert!(
+            section.contains("- judge → text-model (takes no images: refs reach it as text)"),
+            "{section}"
+        );
+        assert!(
+            section.contains("- default → p-model: General"),
+            "{section}"
+        );
+        assert!(
+            section
+                .trim_end()
+                .lines()
+                .last()
+                .unwrap()
+                .starts_with("Decision model:"),
+            "{section}"
+        );
     }
 
     #[test]

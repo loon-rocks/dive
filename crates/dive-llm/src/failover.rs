@@ -104,6 +104,7 @@ pub(crate) struct DecisionCandidate {
     pub provider_name: String,
     pub model: String,
     pub context_window: Option<u32>,
+    pub images: bool,
 }
 
 pub(crate) struct FailoverDecider {
@@ -123,6 +124,9 @@ impl DecisionProvider for FailoverDecider {
         for candidate in &self.fallbacks {
             let mut attempt = req.clone();
             attempt.model = candidate.model.clone();
+            if !candidate.images {
+                attempt.images.clear();
+            }
             check_context_window(
                 &self.role,
                 &candidate.model,

@@ -214,6 +214,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         };
         let mut defs = vec![
             def("example__tool__file_info"),

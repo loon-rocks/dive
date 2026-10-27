@@ -20,6 +20,15 @@ pub struct ToolDef {
     pub output_example: Option<Value>,
     /// True when the source annotates the tool as read-only.
     pub read_only: Option<bool>,
+    pub file_input: FileInput,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum FileInput {
+    #[default]
+    Passed,
+    Paths,
+    Model(String),
 }
 
 /// The result of invoking a tool. `is_error` results flow back to the model
@@ -282,6 +291,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }
     }
 

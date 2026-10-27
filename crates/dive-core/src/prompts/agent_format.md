@@ -4,7 +4,7 @@ Keys:
 - `version`: the file version; leave it out and Dive stamps the current one.
 - `name` (required): starts with a lowercase letter; lowercase letters, digits and `_` only.
 - `description` (required): what the agent is for, written for the people and agents choosing it.
-- `model` (required): a configured model role, usually `chat`.
+- `model` (required): a configured model role, usually `chat`. An agent that looks at images, such as screenshots its tools return, needs a role that takes images; the Model roles section marks the ones that don't.
 - `tools` (required): the catalog tools the agent may call, as exact names (`linear__get_issue`) or `*` globs (`linear__*`). `[]` means none. List only what the job needs: an agent can do anything its tools can. Never list plan step names (`map`, `exit`, `route`, …) or generated names (`agent__…`, `transfer_to_…`). The agent finds its tools by search when it needs them; write a tool it calls on almost every turn as `- linear__get_issue: {pre_load: true}` to load it from the start.
 - `subagents`: agents this one can run in a fresh context, each called as `agent__<name>`.
 - `handoffs`: agents this one can hand the conversation to, each as `transfer_to_<name>`. An agent can't hand off to itself.

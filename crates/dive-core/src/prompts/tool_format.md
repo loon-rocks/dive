@@ -26,6 +26,8 @@ Templates in a tool reference only its input: `{{input.city}}`, `{{input.repo}}`
 - `cwd`: the working directory.
 - `timeout_secs`: default 60.
 - `output`: `json` (the default) parses stdout as JSON; `text` wraps stdout as `{"text": …}`. Prefer JSON: ask the command for JSON (`gh … --json`, `curl` against a JSON API, `jq -c`).
+- Files in: an input property with `format: blob` (or an array whose `items` have it) takes a file ref such as `blob:sha256-….png`, and the command receives it as a local path. Declare every input that takes a file this way; any other input gets the ref as plain text.
+- Files out: write each file into the directory named by `$DIVE_OUT`, with the extension of its type (`.png`, `.jpg`, `.pdf`). When the command exits 0, Dive stores them and adds `files` to the result, each with a `ref`, `mime` and `bytes`; with `output: json`, stdout may then be empty. Never print a file's bytes or base64 to stdout.
 A non-zero exit, a timeout, or `json` output that doesn't parse comes back as a tool error with stderr.
 
 `prompt` makes one model call:
@@ -33,7 +35,7 @@ A non-zero exit, a timeout, or `json` output that doesn't parse comes back as a 
 - `system`: a fixed system prompt.
 - `model`: a model role, default `chat`.
 - `output_schema` (top level) makes the result structured JSON; without it the result is `{"text": …}`.
-Use it for judgment over text the caller passes in: classify, extract, summarize.
+Use it for judgment over text the caller passes in: classify, extract, summarize. A file ref in the input reaches the model as the image when its role takes images, so a prompt tool can also describe or check a screenshot.
 
 `reshape` copies and renames fields of its input with `shape`, a template tree over `{{input.*}}`. It computes nothing.
 
@@ -53,4 +55,21 @@ input_schema:
   required: [city]
   properties:
     city: {type: string, description: "City name, such as Denver"}
+```
+
+An exec tool that returns a file:
+
+```yaml
+name: page_screenshot
+description: A full-page PNG screenshot of a web page, returned as a file ref under files.
+kind: exec
+command: bash
+args: ["-c", "npx -y playwright screenshot --full-page \"$1\" \"$DIVE_OUT/page.png\" >&2", "--", "{{input.url}}"]
+timeout_secs: 120
+read_only: true
+input_schema:
+  type: object
+  required: [url]
+  properties:
+    url: {type: string, description: "The page to capture, such as https://example.com/pricing"}
 ```

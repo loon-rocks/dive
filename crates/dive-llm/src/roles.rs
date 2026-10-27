@@ -4,6 +4,7 @@ use crate::decision::{check_context_window, DecisionProvider, DecisionRequest, D
 use crate::failover::{
     Candidate, DecisionCandidate, FailoverDecider, FailoverImager, FailoverProvider, ImageCandidate,
 };
+use crate::image_input::{ImageSource, WithoutImages};
 use crate::metering::{MeteredDecider, MeteredImager, MeteredProvider};
 use crate::providers::{
     AnthropicProvider, GeminiProvider, OpenAiCompatProvider, SystemOneProvider,
@@ -30,6 +31,7 @@ pub struct ModelRouter {
     /// Installed by [`ModelRouter::with_meter`]. `None` means no metering,
     /// which is the default so tests and embedders pay nothing for it.
     meter: Option<Arc<dyn UsageMeter>>,
+    image_source: Option<Arc<dyn ImageSource>>,
 }
 
 impl ModelRouter {
@@ -50,6 +52,7 @@ impl ModelRouter {
             unavailable: HashMap::new(),
             roles,
             meter: None,
+            image_source: None,
         }
     }
 
@@ -77,6 +80,40 @@ impl ModelRouter {
     pub fn with_meter(mut self, meter: Arc<dyn UsageMeter>) -> Self {
         self.meter = Some(meter);
         self
+    }
+
+    pub fn with_image_source(mut self, source: Arc<dyn ImageSource>) -> Self {
+        self.image_source = Some(source);
+        self
+    }
+
+    pub fn image_source(&self) -> Option<&Arc<dyn ImageSource>> {
+        self.image_source.as_ref()
+    }
+
+    pub(crate) async fn attach_images(&self, choice: &ModelChoice, req: &mut ChatRequest) {
+        if !choice.takes_images() {
+            return;
+        }
+        if let Some(source) = &self.image_source {
+            crate::image_input::attach(source.as_ref(), req).await;
+        }
+    }
+
+    fn imageless(
+        &self,
+        provider: Arc<dyn ChatProvider>,
+        role: &str,
+        takes_images: bool,
+    ) -> Arc<dyn ChatProvider> {
+        if takes_images {
+            return provider;
+        }
+        Arc::new(WithoutImages {
+            inner: provider,
+            role: role.to_string(),
+            source: self.image_source.clone(),
+        })
     }
 
     pub fn from_config(config: &Config) -> Result<Self, LlmError> {
@@ -162,6 +199,7 @@ impl ModelRouter {
             unavailable,
             roles: config.models.clone(),
             meter: None,
+            image_source: None,
         };
         // A typo'd fallback provider would otherwise surface only at the
         // moment of an outage — exactly when the fallback was supposed to
@@ -277,6 +315,7 @@ impl ModelRouter {
                     provider_name: fallback.provider.clone(),
                     model: fallback.model.clone(),
                     context_window: fallback.context_window,
+                    images: fallback.takes_images(),
                 })
             })
             .collect::<Result<Vec<_>, LlmError>>()?;
@@ -296,6 +335,12 @@ impl ModelRouter {
         let (decider, choice, role) = self.resolve_decider(name)?;
         req.model = choice.model.clone();
         check_context_window(&role, &choice.model, choice.context_window, &req)?;
+        if choice.takes_images() {
+            if let Some(source) = &self.image_source {
+                let refs = source.refs_in(&req.text());
+                crate::image_input::load_into(source.as_ref(), &refs, &mut req.images).await;
+            }
+        }
         decider.decide(req).await
     }
 
@@ -374,7 +419,10 @@ impl ModelRouter {
             .ok_or_else(|| LlmError::NoModelForRole(role.to_string()))?;
         self.ensure_chat(role.as_str(), choice)?;
         let provider = self.provider(&choice.provider)?;
-        Ok((self.with_failover(Arc::clone(provider), choice)?, choice))
+        Ok((
+            self.with_failover(Arc::clone(provider), choice, role.as_str())?,
+            choice,
+        ))
     }
 
     /// Wrap a provider in the usage meter, when one is installed. Applied to
@@ -401,8 +449,13 @@ impl ModelRouter {
         &self,
         primary: Arc<dyn ChatProvider>,
         choice: &ModelChoice,
+        role: &str,
     ) -> Result<Arc<dyn ChatProvider>, LlmError> {
-        let primary = self.metered(primary, &choice.provider);
+        let primary = self.imageless(
+            self.metered(primary, &choice.provider),
+            role,
+            choice.takes_images(),
+        );
         if choice.fallbacks.is_empty() {
             return Ok(primary);
         }
@@ -412,7 +465,11 @@ impl ModelRouter {
             .map(|fallback| {
                 let provider = self.provider(&fallback.provider)?;
                 Ok(Candidate {
-                    provider: self.metered(Arc::clone(provider), &fallback.provider),
+                    provider: self.imageless(
+                        self.metered(Arc::clone(provider), &fallback.provider),
+                        role,
+                        fallback.takes_images(),
+                    ),
                     provider_name: fallback.provider.clone(),
                     model: fallback.model.clone(),
                     temperature: fallback.temperature,
@@ -441,7 +498,10 @@ impl ModelRouter {
             })?;
         self.ensure_chat(name, choice)?;
         let provider = self.provider(&choice.provider)?;
-        Ok((self.with_failover(Arc::clone(provider), choice)?, choice))
+        Ok((
+            self.with_failover(Arc::clone(provider), choice, name)?,
+            choice,
+        ))
     }
 
     /// The roles carrying a `description`, for catalog surfaces that
@@ -458,6 +518,7 @@ impl ModelRouter {
     /// temperature applied (request model/temperature are overwritten).
     pub async fn chat(&self, role: Role, mut req: ChatRequest) -> Result<ChatResponse, LlmError> {
         let (provider, choice) = self.resolve(role)?;
+        self.attach_images(choice, &mut req).await;
         req.model = choice.model.clone();
         req.temperature = req.temperature.or(choice.temperature);
         let structured = req.response_schema.is_some();
@@ -471,6 +532,7 @@ impl ModelRouter {
         mut req: ChatRequest,
     ) -> Result<EventStream, LlmError> {
         let (provider, choice) = self.resolve(role)?;
+        self.attach_images(choice, &mut req).await;
         req.model = choice.model.clone();
         req.temperature = req.temperature.or(choice.temperature);
         provider.chat_stream(req).await
@@ -483,6 +545,7 @@ impl ModelRouter {
         mut req: ChatRequest,
     ) -> Result<ChatResponse, LlmError> {
         let (provider, choice) = self.resolve_named(name)?;
+        self.attach_images(choice, &mut req).await;
         req.model = choice.model.clone();
         req.temperature = req.temperature.or(choice.temperature);
         let structured = req.response_schema.is_some();
@@ -505,7 +568,7 @@ pub(crate) fn refuse_truncated(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ChatResponse, StopReason, StreamEvent, Usage};
+    use crate::types::{ChatMessage, ChatResponse, StopReason, StreamEvent, Usage};
     use async_trait::async_trait;
     use dive_config::FallbackChoice;
     use futures::StreamExt;
@@ -556,7 +619,162 @@ mod tests {
             description: None,
             fallbacks,
             context_window: None,
+            images: None,
         }
+    }
+
+    struct Seen {
+        healthy: bool,
+        requests: std::sync::Mutex<Vec<ChatRequest>>,
+    }
+
+    #[async_trait]
+    impl ChatProvider for Seen {
+        async fn chat(&self, req: ChatRequest) -> Result<ChatResponse, LlmError> {
+            self.requests.lock().unwrap().push(req);
+            if !self.healthy {
+                return Err(LlmError::Api {
+                    status: 503,
+                    body: "down".into(),
+                    retry_after: None,
+                });
+            }
+            Ok(ChatResponse {
+                content: Some("ok".into()),
+                tool_calls: Vec::new(),
+                thinking: Vec::new(),
+                structured: None,
+                stop_reason: StopReason::EndTurn,
+                usage: Usage::default(),
+            })
+        }
+
+        async fn chat_stream(&self, req: ChatRequest) -> Result<EventStream, LlmError> {
+            let response = self.chat(req).await?;
+            Ok(futures::stream::once(async move { Ok(StreamEvent::Completed(response)) }).boxed())
+        }
+    }
+
+    struct Shots {
+        loads: std::sync::Mutex<u32>,
+    }
+
+    #[async_trait]
+    impl ImageSource for Shots {
+        fn refs_in(&self, text: &str) -> Vec<String> {
+            if text.contains("blob:shot.png") {
+                vec!["blob:shot.png".to_string()]
+            } else {
+                Vec::new()
+            }
+        }
+
+        async fn load(&self, _reference: &str) -> Result<crate::ImageData, String> {
+            *self.loads.lock().unwrap() += 1;
+            Ok(crate::ImageData {
+                mime: "image/png".into(),
+                bytes: vec![1, 2, 3],
+            })
+        }
+    }
+
+    fn seen(healthy: bool) -> Arc<Seen> {
+        Arc::new(Seen {
+            healthy,
+            requests: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+
+    fn shot_request() -> ChatRequest {
+        ChatRequest {
+            system: "Judge it.".into(),
+            messages: vec![ChatMessage::user(
+                "Is there a pricing table in blob:shot.png?",
+            )],
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn a_role_that_takes_images_is_sent_the_images_its_request_names() {
+        let provider = seen(true);
+        let shots = Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        });
+        let router = ModelRouter::with_providers(
+            HashMap::from([("p".to_string(), provider.clone() as Arc<dyn ChatProvider>)]),
+            dive_config::ModelRoles::from([("judge", choice("p", "m", Vec::new()))]),
+        )
+        .with_image_source(shots.clone());
+        router.chat_named("judge", shot_request()).await.unwrap();
+        let sent = provider.requests.lock().unwrap()[0].clone();
+        assert_eq!(sent.images.len(), 1);
+        assert_eq!(sent.system, "Judge it.");
+        match &sent.messages[0] {
+            ChatMessage::User { images, .. } => {
+                assert_eq!(images, &vec!["blob:shot.png".to_string()])
+            }
+            other => panic!("expected a user message, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_role_that_takes_no_images_gets_a_note_and_nothing_is_loaded() {
+        let provider = seen(true);
+        let shots = Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        });
+        let mut judge = choice("p", "m", Vec::new());
+        judge.images = Some(false);
+        let router = ModelRouter::with_providers(
+            HashMap::from([("p".to_string(), provider.clone() as Arc<dyn ChatProvider>)]),
+            dive_config::ModelRoles::from([("judge", judge)]),
+        )
+        .with_image_source(shots.clone());
+        router.chat_named("judge", shot_request()).await.unwrap();
+        let sent = provider.requests.lock().unwrap()[0].clone();
+        assert!(sent.images.is_empty());
+        assert!(sent.system.ends_with(
+            "[images not sent, because model role \"judge\" doesn't take images: blob:shot.png]"
+        ));
+        assert_eq!(*shots.loads.lock().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_fallback_that_takes_no_images_gets_the_note_when_it_answers() {
+        let primary = seen(false);
+        let backup = seen(true);
+        let shots = Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        });
+        let router = ModelRouter::with_providers(
+            HashMap::from([
+                ("down".to_string(), primary.clone() as Arc<dyn ChatProvider>),
+                ("local".to_string(), backup.clone() as Arc<dyn ChatProvider>),
+            ]),
+            dive_config::ModelRoles::from([(
+                "judge",
+                choice(
+                    "down",
+                    "m",
+                    vec![FallbackChoice {
+                        provider: "local".into(),
+                        model: "small".into(),
+                        temperature: None,
+                        context_window: None,
+                        images: Some(false),
+                    }],
+                ),
+            )]),
+        )
+        .with_image_source(shots);
+        router.chat_named("judge", shot_request()).await.unwrap();
+        assert_eq!(primary.requests.lock().unwrap()[0].images.len(), 1);
+        let fell_back = backup.requests.lock().unwrap()[0].clone();
+        assert!(fell_back.images.is_empty());
+        assert!(fell_back
+            .system
+            .contains("doesn't take images: blob:shot.png"));
     }
 
     #[tokio::test]
@@ -586,6 +804,7 @@ mod tests {
                     model: "backup-model".into(),
                     temperature: None,
                     context_window: None,
+                    images: None,
                 }],
             ),
         )]);
@@ -627,6 +846,7 @@ mod tests {
                         model: "nano-backup".into(),
                         temperature: None,
                         context_window: None,
+                        images: None,
                     }],
                 ),
             ),
@@ -679,6 +899,7 @@ mod tests {
                     model: "backup-model".into(),
                     temperature: None,
                     context_window: None,
+                    images: None,
                 }],
             ),
         )]);
@@ -762,6 +983,7 @@ mod tests {
                     model: "m2".into(),
                     temperature: None,
                     context_window: None,
+                    images: None,
                 }],
             ),
         )]);
@@ -856,6 +1078,7 @@ mod tests {
             model: "m".into(),
             temperature: None,
             context_window: None,
+            images: None,
         };
         let error = startup_error(&mixed_config(&[
             ("default", choice("anthropic", "m", vec![])),
@@ -876,6 +1099,7 @@ mod tests {
             model: "openjev-latest".into(),
             temperature: None,
             context_window: None,
+            images: None,
         };
         let router = ModelRouter::from_config(&mixed_config(&[
             ("default", choice("anthropic", "m", vec![])),
@@ -938,6 +1162,7 @@ mod tests {
                     criteria: None,
                 },
             )]),
+            images: Default::default(),
         }
     }
 
@@ -1008,6 +1233,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_decider_is_sent_the_images_its_state_names_unless_its_role_takes_none() {
+        let primary = ScriptedDecider::new("ts", true);
+        let router = decision_router(
+            choice("typesafe", "jev-1.14.0", vec![]),
+            vec![("typesafe", primary.clone())],
+        )
+        .with_image_source(Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        }));
+        router
+            .decide_named(
+                None,
+                decision_request(serde_json::json!({"page": "blob:shot.png"})),
+            )
+            .await
+            .unwrap();
+        assert!(primary.seen.lock().unwrap()[0]
+            .images
+            .contains_key("blob:shot.png"));
+
+        let text_only = ScriptedDecider::new("ts", true);
+        let mut decider = choice("typesafe", "jev-1.12.0", vec![]);
+        decider.images = Some(false);
+        let router = decision_router(decider, vec![("typesafe", text_only.clone())])
+            .with_image_source(Arc::new(Shots {
+                loads: std::sync::Mutex::new(0),
+            }));
+        router
+            .decide_named(
+                None,
+                decision_request(serde_json::json!({"page": "blob:shot.png"})),
+            )
+            .await
+            .unwrap();
+        assert!(text_only.seen.lock().unwrap()[0].images.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_decider_fallback_that_takes_no_images_is_sent_none() {
+        let primary = ScriptedDecider::new("ts", false);
+        let local = ScriptedDecider::new("local", true);
+        let router = decision_router(
+            choice(
+                "typesafe",
+                "jev-1.14.0",
+                vec![FallbackChoice {
+                    provider: "local".into(),
+                    model: "small".into(),
+                    temperature: None,
+                    context_window: None,
+                    images: Some(false),
+                }],
+            ),
+            vec![("typesafe", primary.clone()), ("local", local.clone())],
+        )
+        .with_image_source(Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        }));
+        router
+            .decide_named(
+                None,
+                decision_request(serde_json::json!({"page": "blob:shot.png"})),
+            )
+            .await
+            .unwrap();
+        assert!(!primary.seen.lock().unwrap()[0].images.is_empty());
+        assert!(local.seen.lock().unwrap()[0].images.is_empty());
+    }
+
+    #[tokio::test]
     async fn a_decider_fails_over_to_its_fallback_on_an_outage() {
         let primary = ScriptedDecider::new("ts", false);
         let local = ScriptedDecider::new("local", true);
@@ -1016,6 +1311,7 @@ mod tests {
             model: "openjev-latest".into(),
             temperature: None,
             context_window: None,
+            images: None,
         };
         let router = decision_router(
             choice("typesafe", "jev-latest", vec![fallback]),
@@ -1054,6 +1350,7 @@ mod tests {
                             model: "openjev-latest".into(),
                             temperature: None,
                             context_window: None,
+                            images: None,
                         }],
                     )
                 },
@@ -1149,6 +1446,7 @@ mod tests {
                         model: "pro".into(),
                         temperature: None,
                         context_window: None,
+                        images: None,
                     }],
                 ),
             )]),
@@ -1235,6 +1533,7 @@ mod tests {
             model: "openjev-latest".into(),
             temperature: None,
             context_window: Some(10),
+            images: None,
         };
         let router = decision_router(
             choice("typesafe", "jev-latest", vec![fallback]),

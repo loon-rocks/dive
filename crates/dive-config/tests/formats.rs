@@ -248,3 +248,14 @@ fn image_roles_take_their_type_and_price_image_tokens() {
         Some(30.0)
     );
 }
+
+#[test]
+fn roles_and_fallbacks_take_images_unless_they_say_not() {
+    let path = fixture_dir(CONFIG_FORMAT).join("image_input.toml");
+    let config = load_from(std::slice::from_ref(&path)).unwrap().config;
+    let default = config.models.get("default").unwrap();
+    assert_eq!(default.images, None);
+    assert!(default.takes_images());
+    assert!(!default.fallbacks[0].takes_images());
+    assert!(!config.models.get("judge").unwrap().takes_images());
+}

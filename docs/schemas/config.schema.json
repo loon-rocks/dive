@@ -145,6 +145,10 @@
                   "description": "The model's context window in tokens.",
                   "type": "integer"
                 },
+                "images": {
+                  "description": "Whether this fallback model takes images. Omitted, it does.",
+                  "type": "boolean"
+                },
                 "model": {
                   "description": "The provider's model id.",
                   "type": "string"
@@ -165,6 +169,10 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "images": {
+            "description": "Whether the model takes images. Omitted, it does: every image a ref names in what the role reads (a tool result, a step's input, an instruction) is sent with the request. Set `false` for a text-only model, and requests carry a note in place of each image instead. On a decision model, images go to TypeSafe as assets.",
+            "type": "boolean"
           },
           "model": {
             "description": "The provider's model id.",

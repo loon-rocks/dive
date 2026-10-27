@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use toml_edit::{DocumentMut, Item, Value};
 
-pub const CONFIG_FORMAT: u32 = 5;
+pub const CONFIG_FORMAT: u32 = 6;
 
 pub const CONFIG_FORMAT_OLDEST: u32 = 1;
 
@@ -18,6 +18,7 @@ const MIGRATIONS: &[Migration] = &[
     telemetry_section_added,
     config_version_4_additions,
     config_version_5_additions,
+    model_images_added,
 ];
 
 const RETIRED_ROLES: &[&str] = &["embedder", "use_case_solver"];
@@ -64,6 +65,10 @@ fn named_models_become_roles(doc: &mut DocumentMut) -> Result<Vec<String>, Strin
 }
 
 fn telemetry_section_added(_doc: &mut DocumentMut) -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
+
+fn model_images_added(_doc: &mut DocumentMut) -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }
 

@@ -1,0 +1,19 @@
+version = 6
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "test-key"
+
+[providers.typesafe]
+type = "systemone"
+api_key = "test-key"
+
+[models.default]
+provider = "anthropic"
+model = "claude-sonnet-5"
+
+[models.triage]
+type = "decision"
+provider = "typesafe"
+model = "jev-latest"
+description = "routes tickets"

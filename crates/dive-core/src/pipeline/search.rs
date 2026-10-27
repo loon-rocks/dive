@@ -35,6 +35,7 @@ pub fn search_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: SCORE_CANDIDATES_TOOL.to_string(),
@@ -74,6 +75,7 @@ pub fn search_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: DESCRIBE_TOOLS_TOOL.to_string(),
@@ -96,6 +98,7 @@ pub fn search_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
     ]
 }
@@ -428,6 +431,7 @@ impl Pipeline {
                     criteria,
                 },
             )]),
+            images: Default::default(),
         };
         let response = CallSite::as_role(role, self.router.decide_named(Some(role), request))
             .await

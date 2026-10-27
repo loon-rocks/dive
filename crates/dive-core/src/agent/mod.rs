@@ -42,29 +42,6 @@ pub struct Agent {
     pub files: Option<Arc<dyn crate::files::BlobStore>>,
 }
 
-const MODEL_IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-
-fn model_images(messages: &[ChatMessage]) -> Vec<crate::files::BlobRef> {
-    let mut found: Vec<crate::files::BlobRef> = Vec::new();
-    for message in messages {
-        let refs = match message {
-            ChatMessage::User { images, .. } => images
-                .iter()
-                .filter_map(|reference| crate::files::BlobRef::parse(reference))
-                .collect(),
-            ChatMessage::ToolResult { content, .. } => crate::files::refs_in(content),
-            ChatMessage::Assistant { .. } => Vec::new(),
-        };
-        for blob in refs {
-            let mime = crate::files::mime_for(blob.extension());
-            if MODEL_IMAGE_TYPES.contains(&mime) && !found.contains(&blob) {
-                found.push(blob);
-            }
-        }
-    }
-    found
-}
-
 /// Failures of the agent loop (`ask`/`chat`/workbench turns). The plan
 /// pipeline never runs the agent loop, so these sit outside its
 /// `EmptyData`/`BadPath` error taxonomy: they surface directly to the user
@@ -232,39 +209,13 @@ impl Agent {
         }
     }
 
-    async fn load_images(
-        &self,
-        messages: &[ChatMessage],
-        images: &mut BTreeMap<String, ImageData>,
-    ) {
-        let Some(files) = &self.files else {
-            return;
-        };
-        for blob in model_images(messages) {
-            let reference = blob.to_string();
-            if images.contains_key(&reference) {
-                continue;
-            }
-            match files.get(&blob).await {
-                Ok(bytes) => {
-                    let mime = crate::files::mime_for(blob.extension()).to_string();
-                    images.insert(reference, ImageData { mime, bytes });
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, file = %reference, "couldn't load an image for the model")
-                }
-            }
-        }
-    }
-
     async fn stream_once(
         &self,
         messages: &[ChatMessage],
         tools: &[ToolSpec],
         images: &mut BTreeMap<String, ImageData>,
     ) -> Result<ChatResponse, AgentError> {
-        self.load_images(messages, images).await;
-        let request = ChatRequest {
+        let mut request = ChatRequest {
             images: images.clone(),
             model: self.model.clone(),
             system: self.system_prompt.clone(),
@@ -274,6 +225,14 @@ impl Agent {
             tool_references: deferral::references(messages),
             ..Default::default()
         };
+        if let Some(files) = &self.files {
+            dive_llm::image_input::attach(
+                &crate::files::FileImages(Arc::clone(files)),
+                &mut request,
+            )
+            .await;
+            images.clone_from(&request.images);
+        }
         let mut stream = self.provider.chat_stream(request).await?;
         while let Some(event) = stream.next().await {
             match event? {
@@ -396,6 +355,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             }])
         }
 
@@ -409,33 +369,6 @@ mod tests {
                 is_error: self.error_mode,
             })
         }
-    }
-
-    #[test]
-    fn the_model_is_sent_attached_images_and_images_tools_return() {
-        let hash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
-        let messages = vec![
-            ChatMessage::User {
-                content: "look".into(),
-                images: vec![format!("blob:sha256-{hash}.png")],
-            },
-            ChatMessage::ToolResult {
-                tool_call_id: "a".into(),
-                content: json!({"files": [{"ref": format!("blob:sha256-{hash}.jpg")}, {"ref": format!("blob:sha256-{hash}.wav")}], "again": format!("blob:sha256-{hash}.png")}),
-                is_error: false,
-            },
-        ];
-        let found: Vec<String> = model_images(&messages)
-            .iter()
-            .map(ToString::to_string)
-            .collect();
-        assert_eq!(
-            found,
-            [
-                format!("blob:sha256-{hash}.png"),
-                format!("blob:sha256-{hash}.jpg")
-            ]
-        );
     }
 
     struct OneFile(Vec<u8>);
@@ -487,6 +420,39 @@ mod tests {
         assert_eq!(
             (image.mime.as_str(), image.bytes.as_slice()),
             ("image/png", b"pixels".as_slice())
+        );
+    }
+
+    #[tokio::test]
+    async fn a_turn_sends_images_named_inside_tool_results_and_text_but_never_audio() {
+        let hash = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        let provider = Arc::new(ScriptedProvider::new(vec![text_response("a cat")]));
+        let (mut agent, _) = agent(Vec::new(), false);
+        agent.provider = provider.clone();
+        agent.files = Some(Arc::new(OneFile(b"pixels".to_vec())));
+        let mut messages = vec![
+            ChatMessage::user(format!(
+                "compare blob:sha256-{hash}.gif with the screenshot"
+            )),
+            ChatMessage::ToolResult {
+                tool_call_id: "a".into(),
+                content: json!({
+                    "files": [{"ref": format!("blob:sha256-{hash}.jpg")}, {"ref": format!("blob:sha256-{hash}.wav")}],
+                    "summary": format!("saved blob:sha256-{hash}.png"),
+                }),
+                is_error: false,
+            },
+        ];
+        agent.run_turn(&mut messages).await.unwrap();
+        let seen = provider.seen_requests.lock().unwrap();
+        let sent: Vec<&String> = seen[0].images.keys().collect();
+        assert_eq!(
+            sent,
+            [
+                &format!("blob:sha256-{hash}.gif"),
+                &format!("blob:sha256-{hash}.jpg"),
+                &format!("blob:sha256-{hash}.png"),
+            ]
         );
     }
 

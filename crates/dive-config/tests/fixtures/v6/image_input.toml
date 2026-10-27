@@ -1,0 +1,23 @@
+version = 6
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "test-key"
+
+[providers.local]
+type = "openai_compat"
+base_url = "http://localhost:11434/v1"
+
+[models.default]
+provider = "anthropic"
+model = "claude-sonnet-5"
+
+[[models.default.fallbacks]]
+provider = "local"
+model = "qwen3:8b"
+images = false
+
+[models.judge]
+provider = "local"
+model = "qwen3:8b"
+images = false

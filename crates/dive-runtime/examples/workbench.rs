@@ -91,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     );

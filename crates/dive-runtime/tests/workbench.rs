@@ -111,6 +111,7 @@ fn runtime(root: &std::path::Path) -> Runtime {
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     );

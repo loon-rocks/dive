@@ -78,19 +78,19 @@ impl ModelRouter {
             Some(name) => self.resolve_named(name)?,
             None => self.resolve(role)?,
         };
-        let response = provider
-            .chat(ChatRequest {
-                model: choice.model.clone(),
-                system,
-                messages,
-                temperature: choice.temperature,
-                response_schema: Some(ResponseSchema {
-                    name: schema_name.to_string(),
-                    schema,
-                }),
-                ..Default::default()
-            })
-            .await?;
+        let mut request = ChatRequest {
+            model: choice.model.clone(),
+            system,
+            messages,
+            temperature: choice.temperature,
+            response_schema: Some(ResponseSchema {
+                name: schema_name.to_string(),
+                schema,
+            }),
+            ..Default::default()
+        };
+        self.attach_images(choice, &mut request).await;
+        let response = provider.chat(request).await?;
         refuse_truncated(true, None, response)?
             .structured
             .ok_or_else(|| LlmError::SchemaMismatch("model produced no structured output".into()))

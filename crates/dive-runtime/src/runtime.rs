@@ -105,8 +105,10 @@ impl Runtime {
             UsageLedger::new(loaded.config.pricing.clone())
                 .with_content_capture(options.capture_content),
         );
-        let router = router.with_meter(usage.clone());
         let files = crate::files::open(&loaded.config, storage_backend(&loaded.config, &options)?);
+        let router = router
+            .with_meter(usage.clone())
+            .with_image_source(Arc::new(dive_core::files::FileImages(files.clone())));
         let registry =
             Arc::new(McpManager::new(loaded.config.mcp.clone()).with_files(files.clone()));
         let drafted = Arc::new(

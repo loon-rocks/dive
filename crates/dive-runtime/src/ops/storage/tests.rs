@@ -178,7 +178,7 @@ fn saving_creates_a_missing_project_file() {
     )
     .unwrap();
     assert!(
-        text(&layers).starts_with("version = 5"),
+        text(&layers).starts_with(&format!("version = {}", dive_config::CONFIG_FORMAT)),
         "{}",
         text(&layers)
     );
