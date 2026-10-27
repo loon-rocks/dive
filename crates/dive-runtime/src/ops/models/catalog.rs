@@ -43,6 +43,8 @@ struct CatalogModel {
 #[derive(Debug, Clone, Default, Deserialize)]
 struct CatalogModalities {
     #[serde(default)]
+    input: Vec<String>,
+    #[serde(default)]
     output: Vec<String>,
 }
 
@@ -117,18 +119,37 @@ impl Catalog {
         Self::parse(&text)
     }
 
+    fn model(
+        &self,
+        kind: ProviderKind,
+        base_url: Option<&str>,
+        model: &str,
+    ) -> Option<&CatalogModel> {
+        let provider = self.provider_for(kind, base_url)?;
+        provider.models.get(model).or_else(|| {
+            (kind == ProviderKind::Gemini && base_url.is_none())
+                .then(|| self.0.get("google-vertex")?.models.get(model))
+                .flatten()
+        })
+    }
+
+    pub fn takes_images(
+        &self,
+        kind: ProviderKind,
+        base_url: Option<&str>,
+        model: &str,
+    ) -> Option<bool> {
+        let modalities = self.model(kind, base_url, model)?.modalities.as_ref()?;
+        Some(modalities.input.iter().any(|kind| kind == "image"))
+    }
+
     pub fn price(
         &self,
         kind: ProviderKind,
         base_url: Option<&str>,
         model: &str,
     ) -> Option<ModelPrice> {
-        let provider = self.provider_for(kind, base_url)?;
-        let found = provider.models.get(model).or_else(|| {
-            (kind == ProviderKind::Gemini && base_url.is_none())
-                .then(|| self.0.get("google-vertex")?.models.get(model))
-                .flatten()
-        })?;
+        let found = self.model(kind, base_url, model)?;
         let cost = found.cost.as_ref()?;
         let (output, output_image) = match (kind, found.draws_images()) {
             (ProviderKind::Gemini, true) => {
@@ -204,6 +225,19 @@ pub async fn fill_prices(
     let catalog = Catalog::fetch().await?;
     let current = view(workspace, secrets);
     fill_prices_in(&Layers::of(workspace), &current, &catalog, refresh)
+}
+
+pub fn model_takes_images(
+    catalog: &Catalog,
+    current: &ModelsView,
+    provider: &str,
+    model: &str,
+) -> Option<bool> {
+    let entry = current
+        .providers
+        .iter()
+        .find(|entry| entry.name == provider)?;
+    catalog.takes_images(entry.kind, entry.base_url.as_deref(), model.trim())
 }
 
 pub fn fill_prices_in(

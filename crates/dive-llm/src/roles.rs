@@ -674,7 +674,7 @@ mod tests {
             *self.loads.lock().unwrap() += 1;
             Ok(crate::ImageData {
                 mime: "image/png".into(),
-                bytes: vec![1, 2, 3],
+                bytes: vec![1, 2, 3].into(),
             })
         }
     }
@@ -735,8 +735,10 @@ mod tests {
         router.chat_named("judge", shot_request()).await.unwrap();
         let sent = provider.requests.lock().unwrap()[0].clone();
         assert!(sent.images.is_empty());
-        assert!(sent.system.ends_with(
-            "[images not sent, because model role \"judge\" doesn't take images: blob:shot.png]"
+        assert_eq!(sent.system, "Judge it.");
+        assert_eq!(sent.withheld_images, ["blob:shot.png"]);
+        assert!(format!("{:?}", sent.messages).contains(
+            "[images not sent, because model role \\\"judge\\\" doesn't take images: blob:shot.png]"
         ));
         assert_eq!(*shots.loads.lock().unwrap(), 0);
     }
@@ -773,9 +775,7 @@ mod tests {
         assert_eq!(primary.requests.lock().unwrap()[0].images.len(), 1);
         let fell_back = backup.requests.lock().unwrap()[0].clone();
         assert!(fell_back.images.is_empty());
-        assert!(fell_back
-            .system
-            .contains("doesn't take images: blob:shot.png"));
+        assert!(format!("{:?}", fell_back.messages).contains("doesn't take images: blob:shot.png"));
     }
 
     #[tokio::test]
@@ -811,7 +811,7 @@ mod tests {
         router.chat_named("judge", shot_request()).await.unwrap();
         let first = primary.requests.lock().unwrap()[0].clone();
         assert!(first.images.is_empty());
-        assert!(first.system.contains("doesn't take images: blob:shot.png"));
+        assert!(format!("{:?}", first.messages).contains("doesn't take images: blob:shot.png"));
         assert_eq!(backup.requests.lock().unwrap()[0].images.len(), 1);
     }
 
@@ -1479,7 +1479,7 @@ mod tests {
             Ok(crate::ImageResponse {
                 parts: vec![crate::Part::Image(crate::ImageData {
                     mime: "image/png".into(),
-                    bytes: req.model.into_bytes(),
+                    bytes: req.model.into_bytes().into(),
                 })],
                 usage: Usage {
                     input_tokens: 10,

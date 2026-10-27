@@ -6546,7 +6546,7 @@ async fn an_infer_gate_sees_the_image_a_ref_in_its_question_names() {
         .unwrap();
     let requests = provider.requests.lock().unwrap();
     let image = &requests[0].images[SHOT];
-    assert_eq!(image.bytes, b"pixels");
+    assert_eq!(&image.bytes[..], b"pixels");
 }
 
 #[tokio::test]
@@ -6595,5 +6595,5 @@ async fn a_gate_on_a_role_without_images_gets_the_note_instead() {
         .unwrap();
     let requests = provider.requests.lock().unwrap();
     assert!(requests[0].images.is_empty());
-    assert!(requests[0].system.contains("doesn't take images"));
+    assert!(format!("{:?}", requests[0].messages).contains("doesn't take images"));
 }

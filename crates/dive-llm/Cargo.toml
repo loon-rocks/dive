@@ -13,6 +13,7 @@ thiserror.workspace = true
 async-trait.workspace = true
 futures.workspace = true
 tokio.workspace = true
+bytes.workspace = true
 reqwest.workspace = true
 schemars.workspace = true
 tracing.workspace = true

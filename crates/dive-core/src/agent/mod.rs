@@ -95,6 +95,7 @@ impl Agent {
         let mut stall = 0u32;
         let mut iteration = 0u32;
         let mut images = BTreeMap::new();
+        let mut scanned = 0;
 
         loop {
             if stall >= self.max_iterations {
@@ -117,7 +118,7 @@ impl Agent {
                 crate::trace::span(crate::trace::FrameKind::Model, open, async {
                     self.call_site
                         .clone()
-                        .scope(self.stream_once(messages, &tools, &mut images))
+                        .scope(self.stream_once(messages, &tools, &mut images, &mut scanned))
                         .await
                 })
                 .await;
@@ -214,6 +215,7 @@ impl Agent {
         messages: &[ChatMessage],
         tools: &[ToolSpec],
         images: &mut BTreeMap<String, ImageData>,
+        scanned: &mut usize,
     ) -> Result<ChatResponse, AgentError> {
         let mut request = ChatRequest {
             images: images.clone(),
@@ -226,12 +228,14 @@ impl Agent {
             ..Default::default()
         };
         if let Some(files) = &self.files {
-            dive_llm::image_input::attach(
+            dive_llm::image_input::attach_since(
                 &crate::files::FileImages(Arc::clone(files)),
                 &mut request,
+                *scanned,
             )
             .await;
             images.clone_from(&request.images);
+            *scanned = request.messages.len();
         }
         let mut stream = self.provider.chat_stream(request).await?;
         while let Some(event) = stream.next().await {
@@ -418,7 +422,7 @@ mod tests {
         let seen = provider.seen_requests.lock().unwrap();
         let image = &seen[0].images[reference];
         assert_eq!(
-            (image.mime.as_str(), image.bytes.as_slice()),
+            (image.mime.as_str(), &image.bytes[..]),
             ("image/png", b"pixels".as_slice())
         );
     }

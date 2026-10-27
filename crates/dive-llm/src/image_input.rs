@@ -70,11 +70,16 @@ pub async fn load_into(
 }
 
 pub async fn attach(source: &dyn ImageSource, req: &mut ChatRequest) {
-    let refs = message_refs(source, &req.messages);
-    if refs.is_empty() {
+    attach_since(source, req, 0).await;
+}
+
+pub async fn attach_since(source: &dyn ImageSource, req: &mut ChatRequest, from: usize) {
+    let start = from.min(req.messages.len());
+    let refs = message_refs(source, &req.messages[start..]);
+    load_into(source, &refs, &mut req.images).await;
+    if req.images.is_empty() {
         return;
     }
-    load_into(source, &refs, &mut req.images).await;
     for message in &mut req.messages {
         if let ChatMessage::User { content, images } = message {
             for reference in source.refs_in(content) {
@@ -93,37 +98,51 @@ pub fn withheld_note(role: &str, refs: &[String]) -> String {
     )
 }
 
-pub fn withhold(source: Option<&dyn ImageSource>, role: &str, mut req: ChatRequest) -> ChatRequest {
-    let mut refs: Vec<String> = req.images.keys().cloned().collect();
-    for message in &req.messages {
-        if let ChatMessage::User { images, .. } = message {
-            refs.extend(images.iter().cloned());
-        }
-    }
-    if let Some(source) = source {
-        refs.extend(message_refs(source, &req.messages));
-    }
-    let mut unique: Vec<String> = Vec::new();
+fn add_unique(found: &mut Vec<String>, refs: impl IntoIterator<Item = String>) {
     for reference in refs {
-        if !unique.contains(&reference) {
-            unique.push(reference);
+        if !found.contains(&reference) {
+            found.push(reference);
         }
     }
-    if unique.is_empty() {
-        return req;
-    }
-    req.images.clear();
+}
+
+pub fn withhold(source: Option<&dyn ImageSource>, role: &str, mut req: ChatRequest) -> ChatRequest {
+    let mut withheld: Vec<String> = Vec::new();
     for message in &mut req.messages {
-        if let ChatMessage::User { images, .. } = message {
-            images.clear();
+        let mut named: Vec<String> = Vec::new();
+        match message {
+            ChatMessage::User { content, images } => {
+                add_unique(&mut named, images.drain(..));
+                if let Some(source) = source {
+                    add_unique(&mut named, source.refs_in(content));
+                }
+                if !named.is_empty() {
+                    content.push_str("\n\n");
+                    content.push_str(&withheld_note(role, &named));
+                }
+            }
+            ChatMessage::ToolResult { content, .. } => {
+                if let Some(source) = source {
+                    add_unique(&mut named, source.refs_in(&content.to_string()));
+                }
+                if !named.is_empty() {
+                    let note = serde_json::Value::String(withheld_note(role, &named));
+                    match content {
+                        serde_json::Value::Object(fields) => {
+                            fields.insert("images_not_sent".to_string(), note);
+                        }
+                        other => {
+                            *other = serde_json::json!({"result": other.take(), "images_not_sent": note});
+                        }
+                    }
+                }
+            }
+            ChatMessage::Assistant { .. } => {}
         }
+        add_unique(&mut withheld, named);
     }
-    let note = withheld_note(role, &unique);
-    req.system = if req.system.is_empty() {
-        note
-    } else {
-        format!("{}\n\n{note}", req.system)
-    };
+    add_unique(&mut withheld, std::mem::take(&mut req.images).into_keys());
+    req.withheld_images = withheld;
     req
 }
 
@@ -174,7 +193,7 @@ mod tests {
             self.loaded.lock().unwrap().push(reference.to_string());
             Ok(ImageData {
                 mime: "image/png".to_string(),
-                bytes: reference.as_bytes().to_vec(),
+                bytes: reference.as_bytes().to_vec().into(),
             })
         }
     }
@@ -221,7 +240,7 @@ mod tests {
             "blob:a.png".to_string(),
             ImageData {
                 mime: "image/png".to_string(),
-                bytes: Vec::new(),
+                bytes: Vec::new().into(),
             },
         );
         attach(&source, &mut req).await;
@@ -242,6 +261,20 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn only_messages_after_the_last_scan_are_read_for_new_refs() {
+        let source = source();
+        let mut req = ChatRequest {
+            messages: vec![
+                ChatMessage::user("blob:a.png"),
+                ChatMessage::user("blob:b.png"),
+            ],
+            ..Default::default()
+        };
+        attach_since(&source, &mut req, 1).await;
+        assert_eq!(*source.loaded.lock().unwrap(), ["blob:b.png"]);
+    }
+
     #[test]
     fn a_role_without_images_gets_the_note_and_no_bytes() {
         let source = source();
@@ -257,19 +290,62 @@ mod tests {
             "blob:a.png".to_string(),
             ImageData {
                 mime: "image/png".to_string(),
-                bytes: vec![1],
+                bytes: vec![1].into(),
             },
         );
         let req = withhold(Some(&source), "judge", req);
         assert!(req.images.is_empty());
-        assert_eq!(
-            req.system,
-            "You judge.\n\n[images not sent, because model role \"judge\" doesn't take images: blob:a.png]"
-        );
+        assert_eq!(req.system, "You judge.");
+        assert_eq!(req.withheld_images, ["blob:a.png"]);
         match &req.messages[0] {
-            ChatMessage::User { images, .. } => assert!(images.is_empty()),
+            ChatMessage::User { content, images } => {
+                assert!(images.is_empty());
+                assert_eq!(
+                    content,
+                    "Look at blob:a.png\n\n[images not sent, because model role \"judge\" doesn't take images: blob:a.png]"
+                );
+            }
             other => panic!("expected a user message, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_tool_result_that_names_an_image_carries_the_note_beside_it() {
+        let req = withhold(
+            Some(&source()),
+            "judge",
+            ChatRequest {
+                messages: vec![
+                    ChatMessage::ToolResult {
+                        tool_call_id: "t1".to_string(),
+                        content: json!({"files": [{"ref": "blob:b.png"}]}),
+                        is_error: false,
+                    },
+                    ChatMessage::ToolResult {
+                        tool_call_id: "t2".to_string(),
+                        content: json!("blob:c.png"),
+                        is_error: false,
+                    },
+                ],
+                ..Default::default()
+            },
+        );
+        let notes: Vec<serde_json::Value> = req
+            .messages
+            .iter()
+            .map(|message| match message {
+                ChatMessage::ToolResult { content, .. } => content.clone(),
+                other => panic!("expected a tool result, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            notes,
+            [
+                json!({"files": [{"ref": "blob:b.png"}], "images_not_sent": withheld_note("judge", &["blob:b.png".to_string()])}),
+                json!({"result": "blob:c.png", "images_not_sent": withheld_note("judge", &["blob:c.png".to_string()])}),
+            ]
+        );
+        assert_eq!(req.withheld_images, ["blob:b.png", "blob:c.png"]);
     }
 
     #[test]

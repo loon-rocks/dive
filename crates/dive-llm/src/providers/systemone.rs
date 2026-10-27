@@ -60,7 +60,7 @@ impl SystemOneProvider {
         for (name, image) in images {
             form = form.part(
                 name.clone(),
-                reqwest::multipart::Part::bytes(image.bytes.clone())
+                reqwest::multipart::Part::stream(image.bytes.clone())
                     .file_name(format!("{name}.{}", image.extension))
                     .mime_str(image.mime)
                     .map_err(LlmError::Http)?,
@@ -429,7 +429,8 @@ mod tests {
                     600,
                     400,
                     image::ImageFormat::Png,
-                ),
+                )
+                .into(),
             },
         );
         req
@@ -489,7 +490,7 @@ mod tests {
         let (base, seen) = stub(vec![(200, answered())]).await;
         let provider = SystemOneProvider::new(Some(base), None);
         let mut req = with_shot(request(), true);
-        req.images.get_mut(SHOT).unwrap().bytes = b"not an image".to_vec();
+        req.images.get_mut(SHOT).unwrap().bytes = b"not an image".to_vec().into();
         provider.decide(req).await.unwrap();
         let seen = seen.lock().unwrap()[0].clone();
         assert!(seen.body.get("assets").is_none());

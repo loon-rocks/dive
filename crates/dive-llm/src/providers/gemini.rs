@@ -228,7 +228,7 @@ impl WireInteraction {
                         .map_err(|e| LlmError::Parse(format!("gemini image data: {e}")))?;
                     parts.push(Part::Image(ImageData {
                         mime: block.mime_type.unwrap_or_else(|| "image/png".to_string()),
-                        bytes,
+                        bytes: bytes.into(),
                     }));
                 }
                 _ => {}
@@ -294,7 +294,7 @@ mod tests {
                 Part::Text("a fox in the snow".into()),
                 Part::Image(ImageData {
                     mime: "image/jpeg".into(),
-                    bytes: vec![9, 9],
+                    bytes: vec![9, 9].into(),
                 }),
             ],
             aspect_ratio: Some("16:9".into()),
@@ -327,7 +327,7 @@ mod tests {
             response.images().cloned().collect::<Vec<_>>(),
             vec![ImageData {
                 mime: "image/png".into(),
-                bytes: png()
+                bytes: png().into()
             }]
         );
         assert_eq!(response.text().as_deref(), Some("Here is your fox."));

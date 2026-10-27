@@ -15,7 +15,7 @@ pub const MAX_REQUEST_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prepared {
-    pub bytes: Vec<u8>,
+    pub bytes: bytes::Bytes,
     pub mime: &'static str,
     pub extension: &'static str,
 }
@@ -86,7 +86,7 @@ pub fn prepare(reference: &str, image: &ImageData) -> Result<Prepared, LlmError>
             .encode_image(&decoded.to_rgb8())
             .map_err(|e| refused(reference, e))?;
         Prepared {
-            bytes,
+            bytes: bytes.into(),
             mime: "image/jpeg",
             extension: "jpg",
         }
@@ -95,7 +95,7 @@ pub fn prepare(reference: &str, image: &ImageData) -> Result<Prepared, LlmError>
             .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
             .map_err(|e| refused(reference, e))?;
         Prepared {
-            bytes,
+            bytes: bytes.into(),
             mime: "image/png",
             extension: "png",
         }
@@ -135,7 +135,7 @@ pub(crate) mod tests {
     fn data(bytes: Vec<u8>) -> ImageData {
         ImageData {
             mime: "image/png".into(),
-            bytes,
+            bytes: bytes.into(),
         }
     }
 

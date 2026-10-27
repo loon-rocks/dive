@@ -62,6 +62,8 @@ pub struct Fallback {
     pub provider: String,
     pub model: String,
     pub temperature: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -74,6 +76,8 @@ pub struct RoleEntry {
     pub fallbacks: Vec<Fallback>,
     pub kind: Option<ModelKind>,
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<bool>,
     pub origin: Origin,
 }
 
@@ -127,6 +131,8 @@ pub struct RoleEdit {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub fallbacks: Vec<Fallback>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -355,9 +361,11 @@ pub fn view_layers(layers: &Layers, resolver: &dyn SecretSource) -> ModelsView {
                         provider: fallback.provider,
                         model: fallback.model,
                         temperature: fallback.temperature,
+                        images: fallback.images,
                     })
                     .collect(),
                 description: choice.description,
+                images: choice.images,
                 origin,
                 role,
             }),
@@ -575,6 +583,17 @@ pub(crate) fn set_optional(table: &mut Table, key: &str, text: Option<&str>) {
     }
 }
 
+fn set_images(table: &mut Table, images: Option<bool>) {
+    match images {
+        Some(images) => {
+            table.insert("images", value(images));
+        }
+        None => {
+            table.remove("images");
+        }
+    }
+}
+
 fn set_number(table: &mut Table, key: &str, number: Option<f64>) {
     match number {
         Some(number) => {
@@ -759,6 +778,7 @@ pub fn save_role_in(layers: &Layers, original: Option<&str>, change: &RoleEdit) 
                 entry.remove("description");
             }
         }
+        set_images(&mut entry, change.images);
         if change.fallbacks.is_empty() {
             entry.remove("fallbacks");
         } else {
@@ -772,6 +792,7 @@ pub fn save_role_in(layers: &Layers, original: Option<&str>, change: &RoleEdit) 
                     "temperature",
                     fallback.temperature.map(f64::from),
                 );
+                set_images(&mut table, fallback.images);
                 let window = old_fallbacks
                     .iter()
                     .find(|old| old.provider == fallback.provider && old.model == fallback.model)
@@ -983,7 +1004,10 @@ fn describe(error: dive_llm::LlmError) -> String {
 }
 
 mod catalog;
-pub use catalog::{fill_prices, fill_prices_in, Catalog, PriceFill, CATALOG_SOURCE, CATALOG_URL};
+pub use catalog::{
+    fill_prices, fill_prices_in, model_takes_images, Catalog, PriceFill, CATALOG_SOURCE,
+    CATALOG_URL,
+};
 
 #[cfg(test)]
 mod tests;

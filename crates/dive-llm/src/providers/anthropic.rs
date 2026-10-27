@@ -1032,14 +1032,14 @@ mod tests {
                 shot.clone(),
                 crate::image::ImageData {
                     mime: "image/png".into(),
-                    bytes: b"png".to_vec(),
+                    bytes: b"png".to_vec().into(),
                 },
             ),
             (
                 made.clone(),
                 crate::image::ImageData {
                     mime: "image/jpeg".into(),
-                    bytes: b"jpg".to_vec(),
+                    bytes: b"jpg".to_vec().into(),
                 },
             ),
         ]);

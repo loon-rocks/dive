@@ -212,13 +212,16 @@ fn saving_a_role_rewrites_its_fallbacks_and_keeps_fields_the_form_does_not_show(
                     provider: "local".to_string(),
                     model: "llama3".to_string(),
                     temperature: None,
+                    images: None,
                 },
                 Fallback {
                     provider: "anthropic".to_string(),
                     model: "claude-haiku-4-5".to_string(),
                     temperature: Some(0.5),
+                    images: None,
                 },
             ],
+            images: None,
         },
     )
     .unwrap();
@@ -242,6 +245,43 @@ fn saving_a_role_rewrites_its_fallbacks_and_keeps_fields_the_form_does_not_show(
 }
 
 #[test]
+fn a_role_and_its_fallbacks_say_whether_they_take_images() {
+    let (_dir, layers) = layers(GLOBAL, Some(PROJECT));
+    let save = |images: Option<bool>, fallback_images: Option<bool>| {
+        save_role_in(
+            &layers,
+            Some("planner"),
+            &RoleEdit {
+                kind: None,
+                role: "planner".to_string(),
+                provider: "local".to_string(),
+                model: "llama3".to_string(),
+                temperature: None,
+                description: None,
+                fallbacks: vec![Fallback {
+                    provider: "anthropic".to_string(),
+                    model: "claude-haiku-4-5".to_string(),
+                    temperature: None,
+                    images: fallback_images,
+                }],
+                images,
+            },
+        )
+        .unwrap();
+    };
+    save(Some(false), Some(true));
+    let written = text(&layers);
+    assert_eq!(written.matches("images = false").count(), 1, "{written}");
+    assert_eq!(written.matches("images = true").count(), 1, "{written}");
+    let view = view_layers(&layers, &resolver());
+    let planner = view.roles.iter().find(|r| r.role == "planner").unwrap();
+    assert_eq!(planner.images, Some(false));
+    assert_eq!(planner.fallbacks[0].images, Some(true));
+    save(None, None);
+    assert!(!text(&layers).contains("images ="));
+}
+
+#[test]
 fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
     let (_dir, layers) = layers(GLOBAL, Some(PROJECT));
     let before = text(&layers);
@@ -256,6 +296,7 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
             temperature: None,
             description: None,
             fallbacks: Vec::new(),
+            images: None,
         },
     )
     .unwrap_err()
@@ -272,6 +313,7 @@ fn a_change_that_would_not_load_is_refused_and_nothing_is_written() {
             temperature: None,
             description: None,
             fallbacks: Vec::new(),
+            images: None,
         },
     )
     .unwrap_err()
@@ -520,12 +562,12 @@ const CATALOG: &str = r#"{
     "id": "anthropic",
     "models": {
       "claude-sonnet-5-5": {"cost": {"input": 2, "output": 10, "cache_read": 0.1, "cache_write": 2.5}},
-      "claude-haiku-4-5": {"cost": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write": 1.25}},
+      "claude-haiku-4-5": {"cost": {"input": 1, "output": 5, "cache_read": 0.1, "cache_write": 1.25}, "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]}},
       "claude-haiku-5-5": {"cost": {"input": 0.1, "output": 0.5, "cache_read": 0.01, "cache_write": 0.125,
         "tiers": [{"input": 0.5, "output": 2.5, "cache_read": 0.05, "cache_write": 0.625, "tier": {"type": "context", "size": 100000}}]}}
     }
   },
-  "ollama-cloud": {"api": "https://ollama.example.com/v1", "models": {"llama3": {"cost": {"input": 0, "output": 0}}}}
+  "ollama-cloud": {"api": "https://ollama.example.com/v1", "models": {"llama3": {"cost": {"input": 0, "output": 0}, "modalities": {"input": ["text"], "output": ["text"]}}}}
 }"#;
 
 const WITH_HAIKU: &str = r#"version = 5
@@ -541,6 +583,25 @@ fn price_of(layers: &Layers, model: &str) -> PriceEntry {
         .into_iter()
         .find(|price| price.model == model)
         .unwrap()
+}
+
+#[test]
+fn the_catalogue_says_whether_a_model_takes_images() {
+    let (_dir, layers) = layers(GLOBAL, Some(WITH_HAIKU));
+    let catalog = Catalog::parse(CATALOG).unwrap();
+    let current = view_layers(&layers, &resolver());
+    assert_eq!(
+        model_takes_images(&catalog, &current, "anthropic", "claude-haiku-4-5"),
+        Some(true)
+    );
+    assert_eq!(
+        model_takes_images(&catalog, &current, "anthropic", "claude-sonnet-5-5"),
+        None
+    );
+    assert_eq!(
+        model_takes_images(&catalog, &current, "nowhere", "claude-haiku-4-5"),
+        None
+    );
 }
 
 #[test]
@@ -663,6 +724,7 @@ fn a_saved_role_keeps_its_type() {
         temperature: None,
         description: None,
         fallbacks: Vec::new(),
+        images: None,
     };
     let refused = save_role_in(
         &layers,
@@ -709,6 +771,7 @@ fn a_role_description_is_written_trimmed_and_removed_when_cleared() {
         temperature: None,
         description: description.map(str::to_string),
         fallbacks: Vec::new(),
+        images: None,
     };
     save_role_in(
         &layers,

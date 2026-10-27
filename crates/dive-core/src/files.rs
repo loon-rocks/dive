@@ -181,7 +181,7 @@ impl dive_llm::ImageSource for FileImages {
         let bytes = self.0.get(&blob).await.map_err(|e| e.to_string())?;
         Ok(dive_llm::ImageData {
             mime: blob.mime().to_string(),
-            bytes,
+            bytes: bytes.into(),
         })
     }
 }
