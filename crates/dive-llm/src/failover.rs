@@ -110,13 +110,18 @@ pub(crate) struct DecisionCandidate {
 pub(crate) struct FailoverDecider {
     pub role: String,
     pub primary: Arc<dyn DecisionProvider>,
+    pub primary_images: bool,
     pub fallbacks: Vec<DecisionCandidate>,
 }
 
 #[async_trait]
 impl DecisionProvider for FailoverDecider {
     async fn decide(&self, req: DecisionRequest) -> Result<DecisionResponse, LlmError> {
-        let mut last = match self.primary.decide(req.clone()).await {
+        let mut first = req.clone();
+        if !self.primary_images {
+            first.images.clear();
+        }
+        let mut last = match self.primary.decide(first).await {
             Ok(response) => return Ok(response),
             Err(error) if is_transient(&error) => error,
             Err(error) => return Err(error),

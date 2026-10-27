@@ -101,7 +101,7 @@ pub fn route_tool_def() -> crate::tools::ToolDef {
             "reason": "…",
             "result": {"…": "…"}
         })),
-        read_only: None, // effect depends entirely on what the branch calls,
+        read_only: None, // effect depends entirely on what the branch calls
         file_input: Default::default(),
     }
 }

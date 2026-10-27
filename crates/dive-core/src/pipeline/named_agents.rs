@@ -27,7 +27,7 @@ pub fn named_agent_tool_def(doc: &AgentDoc) -> ToolDef {
         output_schema: Some(doc.subagent_output_schema()),
         output_example: None,
         read_only: None,
-        file_input: Default::default(),
+        file_input: crate::tools::FileInput::Model(doc.model.clone()),
     }
 }
 

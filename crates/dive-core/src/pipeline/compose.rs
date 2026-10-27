@@ -1214,6 +1214,21 @@ mod tests {
     }
 
     #[test]
+    fn a_file_sent_to_a_named_agent_on_a_role_that_takes_no_images_is_a_problem() {
+        let agent = crate::agent::doc::parse_agent_source(
+            "name: reviewer\ndescription: d\nmodel: judge\ntools: []\nsystem_prompt: p\n",
+        )
+        .unwrap();
+        let mut defs = file_defs();
+        defs.push(super::super::named_agent_tool_def(&agent));
+        let doc = file_plan("  - id: review\n    tool_name: agent__reviewer\n    input: {task: \"Review {{shot.files.0.ref}}\"}\n");
+        assert_eq!(
+            file_problems(&doc, &defs, &file_shapes(), &text_only_judge()),
+            ["step review: `{{shot.files.0.ref}}` is a file, but model role 'judge' takes no images (images = false), so its model gets only the ref; use a role that takes images"]
+        );
+    }
+
+    #[test]
     fn a_path_whose_shape_is_unknown_is_not_checked() {
         let doc = file_plan("  - id: gate\n    tool_name: exit\n    input:\n      infer: \"Pricing table? {{shot.files.0.ref}}\"\n      status: success\n");
         assert!(

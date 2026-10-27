@@ -109,8 +109,8 @@ pub fn filter_tool_def() -> crate::tools::ToolDef {
             "dropped_count": 1,
             "probabilities": [0.91, 0.12, 0.77]
         })),
-        read_only: Some(true), // evaluates conditions; never dispatches,
- file_input: Default::default(),
+        read_only: Some(true), // evaluates conditions; never dispatches
+        file_input: Default::default(),
     }
 }
 

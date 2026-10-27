@@ -175,7 +175,7 @@ pub fn drafter_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(false),
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: SAVE_TOOL_TOOL.to_string(),
@@ -206,7 +206,7 @@ pub fn drafter_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(false),
- file_input: Default::default(),
+            file_input: Default::default(),
         },
         ToolDef {
             name: SAVE_AGENT_TOOL.to_string(),
@@ -234,7 +234,7 @@ pub fn drafter_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(false),
- file_input: Default::default(),
+            file_input: Default::default(),
         },
     ]
 }

@@ -119,7 +119,7 @@ pub fn exit_tool_def() -> crate::tools::ToolDef {
         output_schema: None,
         output_example: Some(json!({"passed": true, "verdict": false, "reason": "…"})),
         read_only: Some(true),
- file_input: Default::default(),
+        file_input: Default::default(),
     }
 }
 

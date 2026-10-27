@@ -92,7 +92,7 @@ impl ModelRouter {
     }
 
     pub(crate) async fn attach_images(&self, choice: &ModelChoice, req: &mut ChatRequest) {
-        if !choice.takes_images() {
+        if !choice.any_model_takes_images() {
             return;
         }
         if let Some(source) = &self.image_source {
@@ -322,6 +322,7 @@ impl ModelRouter {
         let failover: Arc<dyn DecisionProvider> = Arc::new(FailoverDecider {
             role: role.to_string(),
             primary,
+            primary_images: choice.takes_images(),
             fallbacks,
         });
         Ok((failover, choice, role.to_string()))
@@ -335,7 +336,7 @@ impl ModelRouter {
         let (decider, choice, role) = self.resolve_decider(name)?;
         req.model = choice.model.clone();
         check_context_window(&role, &choice.model, choice.context_window, &req)?;
-        if choice.takes_images() {
+        if choice.any_model_takes_images() {
             if let Some(source) = &self.image_source {
                 let refs = source.refs_in(&req.text());
                 crate::image_input::load_into(source.as_ref(), &refs, &mut req.images).await;
@@ -775,6 +776,43 @@ mod tests {
         assert!(fell_back
             .system
             .contains("doesn't take images: blob:shot.png"));
+    }
+
+    #[tokio::test]
+    async fn a_fallback_that_takes_images_gets_them_when_the_primary_takes_none() {
+        let primary = seen(false);
+        let backup = seen(true);
+        let shots = Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        });
+        let mut judge = choice(
+            "local",
+            "small",
+            vec![FallbackChoice {
+                provider: "cloud".into(),
+                model: "m".into(),
+                temperature: None,
+                context_window: None,
+                images: None,
+            }],
+        );
+        judge.images = Some(false);
+        let router = ModelRouter::with_providers(
+            HashMap::from([
+                (
+                    "local".to_string(),
+                    primary.clone() as Arc<dyn ChatProvider>,
+                ),
+                ("cloud".to_string(), backup.clone() as Arc<dyn ChatProvider>),
+            ]),
+            dive_config::ModelRoles::from([("judge", judge)]),
+        )
+        .with_image_source(shots);
+        router.chat_named("judge", shot_request()).await.unwrap();
+        let first = primary.requests.lock().unwrap()[0].clone();
+        assert!(first.images.is_empty());
+        assert!(first.system.contains("doesn't take images: blob:shot.png"));
+        assert_eq!(backup.requests.lock().unwrap()[0].images.len(), 1);
     }
 
     #[tokio::test]
@@ -1300,6 +1338,40 @@ mod tests {
             .unwrap();
         assert!(!primary.seen.lock().unwrap()[0].images.is_empty());
         assert!(local.seen.lock().unwrap()[0].images.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_decider_fallback_that_takes_images_gets_them_when_the_primary_takes_none() {
+        let primary = ScriptedDecider::new("local", false);
+        let cloud = ScriptedDecider::new("ts", true);
+        let mut decider = choice(
+            "local",
+            "small",
+            vec![FallbackChoice {
+                provider: "typesafe".into(),
+                model: "jev-1.14.0".into(),
+                temperature: None,
+                context_window: None,
+                images: None,
+            }],
+        );
+        decider.images = Some(false);
+        let router = decision_router(
+            decider,
+            vec![("local", primary.clone()), ("typesafe", cloud.clone())],
+        )
+        .with_image_source(Arc::new(Shots {
+            loads: std::sync::Mutex::new(0),
+        }));
+        router
+            .decide_named(
+                None,
+                decision_request(serde_json::json!({"page": "blob:shot.png"})),
+            )
+            .await
+            .unwrap();
+        assert!(primary.seen.lock().unwrap()[0].images.is_empty());
+        assert!(!cloud.seen.lock().unwrap()[0].images.is_empty());
     }
 
     #[tokio::test]

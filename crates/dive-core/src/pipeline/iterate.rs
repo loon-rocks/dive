@@ -101,7 +101,7 @@ pub fn map_tool_def() -> crate::tools::ToolDef {
             "failed_count": 1,
             "failed": [{"index": 2, "item": {"…": "…"}, "error": "tool error: …"}]
         })),
-        read_only: None, // effect depends entirely on what the body calls,
+        read_only: None, // effect depends entirely on what the body calls
         file_input: Default::default(),
     }
 }
@@ -133,7 +133,7 @@ pub fn reduce_tool_def() -> crate::tools::ToolDef {
         }),
         output_schema: None,
         output_example: Some(json!({"count": 3, "result": {"…": "…"}})),
-        read_only: None, // effect depends entirely on what the body calls,
+        read_only: None, // effect depends entirely on what the body calls
         file_input: Default::default(),
     }
 }
