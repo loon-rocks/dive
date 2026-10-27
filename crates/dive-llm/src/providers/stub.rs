@@ -9,6 +9,7 @@ pub struct Seen {
     pub authorization: Option<String>,
     pub path: String,
     pub body: Value,
+    pub raw: Vec<u8>,
 }
 
 pub async fn stub(responses: Vec<(u16, String)>) -> (String, Arc<Mutex<Vec<Seen>>>) {
@@ -65,6 +66,7 @@ pub async fn stub(responses: Vec<(u16, String)>) -> (String, Arc<Mutex<Vec<Seen>
                 authorization,
                 path,
                 body: serde_json::from_slice(&content).unwrap_or(Value::Null),
+                raw: content.clone(),
             });
             let reply = format!(
                 "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",

@@ -169,7 +169,11 @@ pub async fn check(
             _ => over.check_agent_file(yaml).await.err().unwrap_or_default(),
         },
         ArtifactKind::Plan => match network::resolved_plan(origin, yaml) {
-            Ok(doc) => super::tools::plan_problems(&over, &doc),
+            Ok(doc) => {
+                let mut problems = super::tools::plan_problems(&over, &doc);
+                problems.extend(over.file_problems(&doc).await);
+                problems
+            }
             Err(problem) => vec![problem],
         },
     }
@@ -1323,6 +1327,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 json!({"name": "changelog_section", "kind": "tool", "problems": []}),
             ),
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: TRY_ARTIFACT.to_string(),
@@ -1351,6 +1356,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(false),
+ file_input: Default::default(),
         },
         ToolDef {
             name: SAVE_ARTIFACT.to_string(),
@@ -1369,6 +1375,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(false),
+ file_input: Default::default(),
         },
         ToolDef {
             name: LIST_ARTIFACTS.to_string(),
@@ -1387,6 +1394,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: SHOW_ARTIFACT.to_string(),
@@ -1405,6 +1413,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: LOAD_ARTIFACT.to_string(),
@@ -1430,6 +1439,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: DISCARD_ARTIFACT.to_string(),
@@ -1448,6 +1458,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: SET_SKETCH.to_string(),
@@ -1512,6 +1523,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: Some(json!({"nodes": 4, "edges": 3, "drafted": []})),
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: TEST_NETWORK.to_string(),
@@ -1539,6 +1551,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 json!({"passed": true, "ran": ["release_desk", "plan__release_digest"], "answer": "…"}),
             ),
             read_only: Some(false),
+ file_input: Default::default(),
         },
         ToolDef {
             name: FAIL_TEST.to_string(),
@@ -1557,6 +1570,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: SAVE_NETWORK.to_string(),
@@ -1579,6 +1593,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(false),
+ file_input: Default::default(),
         },
         ToolDef {
             name: SET_INTERVIEW.to_string(),
@@ -1617,6 +1632,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: Some(json!({"confidence": 55, "shown": true})),
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: PROPOSE_DESIGNS.to_string(),
@@ -1650,6 +1666,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
         ToolDef {
             name: DISCARD_NETWORK.to_string(),
@@ -1661,6 +1678,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+ file_input: Default::default(),
         },
     ]
 }

@@ -806,6 +806,7 @@ impl Pipeline {
                 output_schema: Some(plan_doc.result_schema()),
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             })
             .collect()
     }

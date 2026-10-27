@@ -255,6 +255,7 @@ async fn ask_decision_model(
         model: String::new(),
         state: gate.state.clone().unwrap_or(Value::Null),
         questions: BTreeMap::from([(GATE_QUESTION.to_string(), question)]),
+        images: Default::default(),
     };
     let response = CallSite::as_role(role, router.decide_named(gate.model.as_deref(), request))
         .await

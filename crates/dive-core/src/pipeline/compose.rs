@@ -53,6 +53,7 @@ pub fn compose_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         },
         ToolDef {
             name: CHECK_PLAN_TOOL.to_string(),
@@ -87,6 +88,7 @@ pub fn compose_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         },
         ToolDef {
             name: FIND_TOOLS_TOOL.to_string(),
@@ -113,6 +115,7 @@ pub fn compose_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         },
         ToolDef {
             name: QUESTION_FORM_TOOL.to_string(),
@@ -141,6 +144,7 @@ pub fn compose_tool_defs() -> Vec<ToolDef> {
             })),
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         },
     ]
 }
@@ -311,6 +315,7 @@ impl Pipeline {
         problems.extend(mistyped_inputs(&json!(doc.steps), &defs, &declared));
         let shapes = self.shapes().await;
         problems.extend(unknown_fields(&doc, &defs, &shapes));
+        problems.extend(file_problems(&doc, &defs, &shapes, self.router.roles()));
         let plan = authoring::to_json(&doc).map_err(|e| e.to_string())?;
         Ok(json!({
             "valid": problems.is_empty(),
@@ -480,6 +485,222 @@ fn unknown_fields(
                 problems.push(problem);
             }
         }
+    }
+    problems
+}
+
+impl Pipeline {
+    pub async fn file_problems(&self, doc: &super::doc::PlanDoc) -> Vec<String> {
+        let defs = self.planner_tool_defs().await;
+        let shapes = self.shapes().await;
+        file_problems(doc, &defs, &shapes, self.router.roles())
+    }
+}
+
+fn output_schema_of(
+    tool: &str,
+    defs: &[ToolDef],
+    shapes: &std::collections::HashMap<String, crate::store::ToolShape>,
+) -> Option<Value> {
+    let def = defs.iter().find(|def| def.name == tool);
+    let shaped_by_caller = def.is_some_and(|def| {
+        ["output_schema", "shape"]
+            .iter()
+            .any(|key| def.input_schema["properties"].get(key).is_some())
+    });
+    if shaped_by_caller {
+        return None;
+    }
+    def.and_then(|def| def.output_schema.clone())
+        .or_else(|| shapes.get(tool).map(|shape| shape.schema.clone()))
+}
+
+fn is_blob(schema: &Value) -> bool {
+    schema.get("format").and_then(Value::as_str) == Some("blob")
+}
+
+fn resolves_to_file(schema: &Value, segments: &[&str]) -> Option<bool> {
+    let mut current = schema;
+    for segment in segments {
+        current = if segment.parse::<usize>().is_ok() {
+            current.get("items")?
+        } else {
+            current.get("properties")?.get(*segment)?
+        };
+    }
+    let named = segments.len() >= 3
+        && segments[segments.len() - 1] == "ref"
+        && segments[segments.len() - 2].parse::<usize>().is_ok()
+        && ["files", "images"].contains(&segments[segments.len() - 3]);
+    Some(named || is_blob(current))
+}
+
+struct FileRefs<'a> {
+    tools: std::collections::BTreeMap<String, String>,
+    defs: &'a [ToolDef],
+    shapes: &'a std::collections::HashMap<String, crate::store::ToolShape>,
+}
+
+impl FileRefs<'_> {
+    fn resolve(&self, path: &str) -> Option<bool> {
+        let segments: Vec<&str> = path.split('.').collect();
+        let (root, rest) = segments.split_first()?;
+        let tool = self.tools.get(*root)?;
+        let schema = output_schema_of(tool, self.defs, self.shapes)?;
+        resolves_to_file(&schema, rest)
+    }
+
+    fn files_in(&self, value: &Value) -> Vec<String> {
+        let mut texts = Vec::new();
+        strings(value, &mut texts);
+        let mut found = Vec::new();
+        for text in texts {
+            for path in crate::template::referenced_paths(text).unwrap_or_default() {
+                if self.resolve(&path) == Some(true) && !found.contains(&path) {
+                    found.push(path);
+                }
+            }
+        }
+        found
+    }
+
+    fn whole_path(text: &str) -> Option<String> {
+        let inner = text.trim().strip_prefix("{{")?.strip_suffix("}}")?.trim();
+        (!inner.contains("{{") && !inner.contains("}}") && !inner.starts_with(['#', '^', '/']))
+            .then(|| inner.to_string())
+    }
+}
+
+fn literal_model(value: Option<&Value>, default: &str) -> Option<String> {
+    match value {
+        None => Some(default.to_string()),
+        Some(Value::String(role)) if !role.contains("{{") => Some(role.clone()),
+        Some(_) => None,
+    }
+}
+
+fn takes_images(roles: &dive_config::ModelRoles, role: &str) -> bool {
+    roles
+        .resolve(role)
+        .is_none_or(dive_config::ModelChoice::takes_images)
+}
+
+fn file_problems(
+    doc: &super::doc::PlanDoc,
+    defs: &[ToolDef],
+    shapes: &std::collections::HashMap<String, crate::store::ToolShape>,
+    roles: &dive_config::ModelRoles,
+) -> Vec<String> {
+    let steps = json!(doc.steps);
+    let mut tools = std::collections::BTreeMap::new();
+    step_tools(&steps, &mut tools);
+    let refs = FileRefs {
+        tools,
+        defs,
+        shapes,
+    };
+    let mut problems = Vec::new();
+    let unseen = |id: &str, role: &str, paths: Vec<String>, problems: &mut Vec<String>| {
+        if takes_images(roles, role) {
+            return;
+        }
+        for path in paths {
+            let problem = format!(
+                "step {id}: `{{{{{path}}}}}` is a file, but model role '{role}' takes no images (images = false), so its model gets only the ref; use a role that takes images"
+            );
+            if !problems.contains(&problem) {
+                problems.push(problem);
+            }
+        }
+    };
+    let mut stack = vec![&steps];
+    while let Some(value) = stack.pop() {
+        match value {
+            Value::Array(items) => stack.extend(items),
+            Value::Object(map) => {
+                stack.extend(map.values());
+                let tool = map
+                    .get("tool_name")
+                    .or_else(|| map.get("toolName"))
+                    .and_then(Value::as_str);
+                let (Some(tool), Some(input)) = (tool, map.get("input").and_then(Value::as_object))
+                else {
+                    continue;
+                };
+                let id = map.get("id").and_then(Value::as_str).unwrap_or("?");
+                if ["exit", "route", "filter"].contains(&tool) {
+                    if let (Some(question), Some(role)) = (
+                        input.get("infer"),
+                        literal_model(input.get("model"), "judge"),
+                    ) {
+                        unseen(id, &role, refs.files_in(question), &mut problems);
+                    }
+                    if let Some(gate) = input.get("decide") {
+                        if let Some(role) = literal_model(gate.get("model"), "decider") {
+                            unseen(id, &role, refs.files_in(gate), &mut problems);
+                        }
+                    }
+                    continue;
+                }
+                if tool == "agent" {
+                    if let Some(role) = literal_model(input.get("model"), "chat") {
+                        unseen(
+                            id,
+                            &role,
+                            refs.files_in(&Value::Object(input.clone())),
+                            &mut problems,
+                        );
+                    }
+                    continue;
+                }
+                let Some(def) = defs.iter().find(|def| def.name == tool) else {
+                    continue;
+                };
+                match &def.file_input {
+                    crate::tools::FileInput::Model(default) => {
+                        if let Some(role) = literal_model(input.get("model"), default) {
+                            unseen(
+                                id,
+                                &role,
+                                refs.files_in(&Value::Object(input.clone())),
+                                &mut problems,
+                            );
+                        }
+                    }
+                    crate::tools::FileInput::Paths => {
+                        let properties = def.input_schema.get("properties");
+                        for (key, value) in input {
+                            let Some(path) = value.as_str().and_then(FileRefs::whole_path) else {
+                                continue;
+                            };
+                            let property = properties.and_then(|properties| properties.get(key));
+                            let takes_files = property.is_some_and(|property| {
+                                is_blob(property) || property.get("items").is_some_and(is_blob)
+                            });
+                            match refs.resolve(&path) {
+                                Some(true) if !takes_files => problems.push(format!(
+                                    "step {id}: `{{{{{path}}}}}` is a file, but {tool}'s input `{key}` isn't `format: blob`, so the command gets the ref text, not a path; declare it `{{type: string, format: blob}}`"
+                                )),
+                                Some(false) if takes_files => problems.push(format!(
+                                    "step {id}: {tool}'s input `{key}` takes a file (`format: blob`), but `{{{{{path}}}}}` isn't a file ref"
+                                )),
+                                _ => {}
+                            }
+                        }
+                    }
+                    crate::tools::FileInput::Passed => {}
+                }
+            }
+            _ => {}
+        }
+    }
+    if let super::Finish::Solver(solver) = &doc.finish {
+        unseen(
+            "finish",
+            "solver",
+            refs.files_in(&json!(solver.data)),
+            &mut problems,
+        );
     }
     problems
 }
@@ -770,6 +991,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }];
         let steps = json!([
             {"id": "a", "tool_name": "t__changed", "input": {"base": "x", "head": "y"}},
@@ -790,6 +1012,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }];
         let steps = json!([
             {"id": "a", "tool_name": "ask", "input": {"prompt": "x", "output_schema": {}}},
@@ -811,6 +1034,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }];
         let declared = json!({"pr": {"type": "integer"}, "n": {"type": "integer"}});
         let steps = json!([
@@ -865,6 +1089,7 @@ mod tests {
             ),
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }];
         let problems = unknown_fields(&doc, &defs, &Default::default());
         assert_eq!(problems.len(), 1, "{problems:?}");
@@ -882,6 +1107,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }];
         let shapes = std::collections::HashMap::from([(
             "builtin__infer".to_string(),
@@ -893,6 +1119,106 @@ mod tests {
             },
         )]);
         assert!(unknown_fields(&doc, &defs, &shapes).is_empty());
+    }
+
+    fn file_defs() -> Vec<ToolDef> {
+        let def = |name: &str, input: Value, file_input: crate::tools::FileInput| ToolDef {
+            name: name.to_string(),
+            description: String::new(),
+            input_schema: input,
+            output_schema: None,
+            output_example: None,
+            read_only: None,
+            file_input,
+        };
+        vec![
+            def(
+                "web__screenshot",
+                json!({"type": "object", "properties": {"url": {"type": "string"}}}),
+                crate::tools::FileInput::Passed,
+            ),
+            def(
+                "user__thumb",
+                json!({"type": "object", "properties": {"image": {"type": "string", "format": "blob"}, "label": {"type": "string"}}}),
+                crate::tools::FileInput::Paths,
+            ),
+            def(
+                "builtin__infer",
+                json!({"type": "object", "properties": {"instruction": {}, "model": {}}}),
+                crate::tools::FileInput::Model("chat".to_string()),
+            ),
+        ]
+    }
+
+    fn file_shapes() -> std::collections::HashMap<String, crate::store::ToolShape> {
+        std::collections::HashMap::from([(
+            "web__screenshot".to_string(),
+            crate::store::ToolShape {
+                tool: "web__screenshot".to_string(),
+                schema: json!({"type": "object", "properties": {
+                    "title": {"type": "string"},
+                    "files": {"type": "array", "items": {"type": "object", "properties": {"ref": {"type": "string"}, "mime": {"type": "string"}}}},
+                }}),
+                example: json!({}),
+                seen_count: 1,
+            },
+        )])
+    }
+
+    fn text_only_judge() -> dive_config::ModelRoles {
+        let choice = |images: Option<bool>| dive_config::ModelChoice {
+            kind: None,
+            provider: "p".to_string(),
+            model: "m".to_string(),
+            temperature: None,
+            description: None,
+            fallbacks: Vec::new(),
+            context_window: None,
+            images,
+        };
+        dive_config::ModelRoles::from([("default", choice(None)), ("judge", choice(Some(false)))])
+    }
+
+    fn file_plan(steps: &str) -> super::super::doc::PlanDoc {
+        let yaml = format!(
+            "version: 2\nidentifier: p\nname: p\ndescription: d\nsteps:\n  - id: shot\n    tool_name: web__screenshot\n    input: {{url: \"https://example.com\"}}\n{steps}finish: silent\n"
+        );
+        parse_plan_source(&yaml, "plan").unwrap()
+    }
+
+    #[test]
+    fn a_file_sent_to_a_role_that_takes_no_images_is_a_problem() {
+        let doc = file_plan("  - id: gate\n    tool_name: exit\n    input:\n      infer: \"Pricing table? {{shot.files.0.ref}}\"\n      status: success\n");
+        assert_eq!(
+            file_problems(&doc, &file_defs(), &file_shapes(), &text_only_judge()),
+            ["step gate: `{{shot.files.0.ref}}` is a file, but model role 'judge' takes no images (images = false), so its model gets only the ref; use a role that takes images"]
+        );
+    }
+
+    #[test]
+    fn a_file_sent_to_a_role_that_takes_images_is_fine() {
+        let doc = file_plan("  - id: look\n    tool_name: builtin__infer\n    input: {instruction: \"Describe {{shot.files.0.ref}}\"}\n  - id: gate\n    tool_name: exit\n    input:\n      infer: \"Pricing table? {{shot.files.0.ref}}\"\n      model: chat\n      status: success\n");
+        assert!(file_problems(&doc, &file_defs(), &file_shapes(), &text_only_judge()).is_empty());
+    }
+
+    #[test]
+    fn an_exec_input_must_be_a_blob_to_take_a_file_and_a_blob_input_must_get_one() {
+        let doc = file_plan("  - id: small\n    tool_name: user__thumb\n    input: {image: \"{{shot.title}}\", label: \"{{shot.files.0.ref}}\"}\n");
+        assert_eq!(
+            file_problems(&doc, &file_defs(), &file_shapes(), &text_only_judge()),
+            [
+                "step small: user__thumb's input `image` takes a file (`format: blob`), but `{{shot.title}}` isn't a file ref",
+                "step small: `{{shot.files.0.ref}}` is a file, but user__thumb's input `label` isn't `format: blob`, so the command gets the ref text, not a path; declare it `{type: string, format: blob}`",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_path_whose_shape_is_unknown_is_not_checked() {
+        let doc = file_plan("  - id: gate\n    tool_name: exit\n    input:\n      infer: \"Pricing table? {{shot.files.0.ref}}\"\n      status: success\n");
+        assert!(
+            file_problems(&doc, &file_defs(), &Default::default(), &text_only_judge()).is_empty()
+        );
     }
 
     #[test]

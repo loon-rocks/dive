@@ -108,6 +108,7 @@ pub fn ask_tool_def() -> crate::tools::ToolDef {
             "reason": "unavailable"
         })),
         read_only: None,
+        file_input: Default::default(),
     }
 }
 

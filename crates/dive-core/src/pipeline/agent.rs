@@ -134,6 +134,7 @@ pub fn agent_tool_def() -> crate::tools::ToolDef {
             "final": true
         })),
         read_only: None,
+        file_input: Default::default(),
     }
 }
 
@@ -172,6 +173,7 @@ pub async fn resolve_tools(
             output_schema: Some(doc.result_schema()),
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         });
     }
 
@@ -603,6 +605,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "linear__get_issue".into(),
@@ -611,6 +614,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "user__git_log".into(),
@@ -619,6 +623,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
         ]));
 
@@ -642,6 +647,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "linear__list_teams".into(),
@@ -650,6 +656,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "linear__get_issue".into(),
@@ -658,6 +665,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
         ]));
 
@@ -681,6 +689,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "linear__list_teams".into(),
@@ -689,6 +698,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
         ]));
 
@@ -709,6 +719,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "user__git_log".into(),
@@ -717,6 +728,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
         ]));
 
@@ -733,6 +745,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }]));
 
         let err = resolve_tools(&["nonexistent__*".to_string()], &*registry, &[])
@@ -758,6 +771,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }]));
 
         // Both patterns match the same tool
@@ -782,6 +796,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "linear__get_issue".into(),
@@ -790,6 +805,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "linear__add_comment".into(),
@@ -798,6 +814,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
         ]));
 
@@ -827,6 +844,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
             ToolDef {
                 name: "plan_and_execute".into(),
@@ -835,6 +853,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             },
         ]));
 
@@ -1063,6 +1082,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }]));
         // One good pattern, one typo: must still fail, naming the typo.
         let err = resolve_tools(

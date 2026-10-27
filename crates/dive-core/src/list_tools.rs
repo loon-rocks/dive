@@ -89,6 +89,7 @@ pub fn list_tool_defs() -> Vec<ToolDef> {
         output_schema: Some(output_schema),
         output_example: None,
         read_only: Some(true),
+        file_input: Default::default(),
     };
     vec![
         def(
@@ -493,6 +494,7 @@ impl ListTools {
                     criteria,
                 },
             )]),
+            images: Default::default(),
         };
         let response = CallSite::as_role(role, self.router.decide_named(Some(role), request))
             .await

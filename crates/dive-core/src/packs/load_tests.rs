@@ -321,6 +321,7 @@ fn pipeline_over(
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     ));

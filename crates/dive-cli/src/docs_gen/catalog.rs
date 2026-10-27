@@ -908,6 +908,7 @@ fn mcp_server_tools() -> Section {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         })
         .collect();
     def_section(

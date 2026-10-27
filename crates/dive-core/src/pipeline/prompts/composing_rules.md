@@ -31,7 +31,8 @@ Write the whole plan as one YAML document:
 7. `builtin__reshape` only copies and renames fields. It cannot compute, group, count, sort, deduplicate, parse or combine lists. The list tools do those in code: `builtin__flatten` joins a `map`'s per-item lists into one, `builtin__dedupe` drops repeats `by` a field, `builtin__sort` orders `by` a field, `builtin__take` keeps the first `n`; each returns `{items}`. To order a list by how well each item fits a question, use `builtin__rank` (one decision-model call: `items`, the question and its context as `state`, `instructions`, optional `top_k`), never `builtin__infer`. Never use it to pass data along: later steps can reference any earlier step directly.
 8. Do not use `agent` when the tools listed can do the work in fixed steps. If an open-ended subtask truly needs it, give it an explicit `tools` list.
 9. Finish with `finish: { output: … }`. No solver, no file writes unless the goal asks for one.
-10. Use the fewest steps that do the job: no validation, logging, normalization, or summary-of-a-summary steps. Every step's result must be used by a later step or by `finish.output`; a step nothing reads is a mistake.
+10. A tool that returns files lists them under `files`, each with a `ref` such as `blob:sha256-….png`. Pass a file on as its ref: `{{shot.files.0.ref}}` as the whole value of a tool input that takes a file, or inside an `infer` instruction or a gate's question for a model to look at. Put a step that looks at an image on a model role that takes images; the Model roles section marks the ones that don't.
+11. Use the fewest steps that do the job: no validation, logging, normalization, or summary-of-a-summary steps. Every step's result must be used by a later step or by `finish.output`; a step nothing reads is a mistake.
 
 ## Pairing each item with its result
 

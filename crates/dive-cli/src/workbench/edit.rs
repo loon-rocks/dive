@@ -573,6 +573,7 @@ solver:
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         }
     }
 
@@ -757,6 +758,7 @@ solver:
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         };
         let tools = vec![search_def(), fetch];
         let (step, has_id) = step_at(&doc, &StepTarget::Top { id: "E0".into() }).unwrap();

@@ -50,10 +50,15 @@ impl ChatMessage {
 }
 
 pub fn user_text(content: &str, images: &[String]) -> String {
-    if images.is_empty() {
+    let unnamed: Vec<&str> = images
+        .iter()
+        .map(String::as_str)
+        .filter(|image| !content.contains(image))
+        .collect();
+    if unnamed.is_empty() {
         return content.to_string();
     }
-    let listed = images.join(", ");
+    let listed = unnamed.join(", ");
     if content.is_empty() {
         format!("Attached images: {listed}")
     } else {

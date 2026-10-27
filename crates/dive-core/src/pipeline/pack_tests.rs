@@ -58,6 +58,7 @@ impl ToolRegistry for Tools {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             })
             .collect())
     }
@@ -158,6 +159,7 @@ fn pipeline() -> (Pipeline, Arc<Tools>, Arc<Recorder>) {
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     ));

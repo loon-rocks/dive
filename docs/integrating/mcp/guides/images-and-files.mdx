@@ -52,12 +52,26 @@ Deleting a thread removes the files no other thread refers to, except in S3 stor
 
 ## What the model sees
 
-The chat model sees images, not just their references. Two kinds of image are sent to it as images on every turn, alongside its text:
+Every model that reads a file reference sees the image, not just the reference: a conversation agent and its subagents, an `agent` step, `builtin__infer`, an `infer` gate, the solver, a prompt tool, and a decision model behind a `decide` gate, `builtin__decide`, `builtin__rank` or a decision tool. Dive finds the references in what the model reads (the messages, tool results, a step's input, an instruction) and sends each image with the request:
 
 - **Attached images:** images attached to a message you send. The model also gets their references, so it can pass them to `builtin__generate_image` to edit them.
 - **Tool images:** images in a tool's result, wherever a reference to one appears.
+- **Images a plan passes on:** a reference rendered into a step's input or an instruction, such as `"Is there a pricing table on this page? {{shot.files.0.ref}}"`. A reference counts whether it's the whole value or part of longer text.
 
-Only PNG, JPEG, GIF and WebP files are sent this way. Every image stays in the conversation and is sent again on each turn. A model that doesn't accept images fails the turn with the provider's error.
+Only PNG, JPEG, GIF and WebP files are sent this way; other files stay references. Every image stays in the conversation and is sent again on each turn.
+
+A model role takes images unless it says otherwise. For a text-only model, set `images = false` on its role, or on one of its fallbacks:
+
+```toml config.toml
+[models.judge]
+provider = "local"
+model = "qwen3:8b"
+images = false
+```
+
+Requests to that model carry a note naming the images it wasn't sent, instead of the images. Plan validation reports a step that sends a file to such a role, wherever the tool's output schema or recorded shape shows the value is a file.
+
+Decision models get images through TypeSafe, which needs a Jev model that accepts images. Dive sends PNG and JPEG as they are, converts GIF and WebP to PNG, and scales each image to between 280 and 1568 pixels a side.
 
 ## Show a file in a reply
 
@@ -104,7 +118,7 @@ input_schema:
     image: { type: string, format: blob }
 ```
 
-Files the command writes to the directory in `$DIVE_OUT` are stored when it exits successfully and listed under `files` in its result, each with a `ref`, just like a server's. `builtin__generate_image` returns the images it draws as references too, under `images`; see [Image models](/getting-started/models#image-models).
+Files the command writes to the directory in `$DIVE_OUT` are stored when it exits successfully and listed under `files` in its result, each with a `ref`, just like a server's. Each call gets its own empty directory, and Dive deletes it once the call ends, so only regular files at its top level are kept, and a file's extension sets its type. Plan validation reports a step that passes a file reference to an exec input that isn't `format: blob`, which would reach the command as text. `builtin__generate_image` returns the images it draws as references too, under `images`; see [Image models](/getting-started/models#image-models).
 
 ## Where files are kept
 

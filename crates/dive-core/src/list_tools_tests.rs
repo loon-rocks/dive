@@ -78,6 +78,7 @@ fn tools(with_decider: bool) -> (ListTools, Arc<WeightDecider>) {
         description: None,
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     let mut roles = vec![("default".to_string(), choice("mock", "m"))];
     if with_decider {

@@ -156,6 +156,7 @@ async fn run_goal(root: PathBuf, goal: Goal, max_turns: usize) -> anyhow::Result
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             );
         }

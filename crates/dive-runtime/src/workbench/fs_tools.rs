@@ -340,6 +340,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "truncated": false,
             })),
             read_only: Some(true),
+            file_input: Default::default(),
         },
         ToolDef {
             name: GREP.to_string(),
@@ -366,6 +367,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "truncated": false,
             })),
             read_only: Some(true),
+            file_input: Default::default(),
         },
         ToolDef {
             name: GLOB.to_string(),
@@ -388,6 +390,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "truncated": false,
             })),
             read_only: Some(true),
+            file_input: Default::default(),
         },
     ];
     for def in &mut defs {

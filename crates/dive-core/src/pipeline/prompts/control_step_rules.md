@@ -3,6 +3,7 @@
 - When the plan is a check or assertion (a CI gate, a validation, drift detection), make the verdict explicit: end with gated `exit` steps — status "error" asserting the failure condition, status "success" when there is nothing to flag — instead of leaving pass/fail to the final answer's prose.
 - An `infer` gate (on `exit`, `route`, or `filter`) uses the `judge` model role by default; add `model` (any configured model role) alongside `infer` to pin that one verdict to a cheaper or stronger model.
 - A `decide` gate asks a decision model instead of an LLM: an object with `question`, optional `state` (the data to judge, e.g. state: {{E2.text}}), and optional `min_confidence` (default 0.5). It fires when the model's probability of yes reaches `min_confidence`, and the result carries that `probability`. Use it only when a decision model is configured (a `decider` role); otherwise use `infer`. Keep the data in `state`, not in `question`.
+- A file ref such as {{E0.files.0.ref}} in an `infer` question, or in a `decide` gate's `state` or `question`, is read as the image itself when the gate's model role takes images.
 
 ### Asking the user
 - Use the `ask` tool ONLY for a value the plan cannot obtain any other way: a choice between options only the user can make, a confirmation before an irreversible action, a missing detail no tool exposes. If a tool can fetch it, call the tool; if a model can judge it, use `infer` or `agent`. Every `ask` costs a human's attention, which is the most expensive resource the plan spends.

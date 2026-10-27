@@ -647,6 +647,7 @@ description = "fast and cheap"
             description: None,
             fallbacks: Vec::new(),
             context_window: None,
+            images: None,
         };
         let with_planner = ModelRoles::from([
             ("default", choice("default-model")),

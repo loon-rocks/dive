@@ -34,6 +34,7 @@ fn def(name: &str, description: &str, input_schema: Value) -> ToolDef {
         output_schema: None,
         output_example: None,
         read_only: None,
+        file_input: Default::default(),
     }
 }
 

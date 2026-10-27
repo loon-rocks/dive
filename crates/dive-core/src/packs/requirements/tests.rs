@@ -105,6 +105,7 @@ fn def(name: &str, schema: Value) -> ToolDef {
         output_schema: None,
         output_example: None,
         read_only: None,
+        file_input: Default::default(),
     }
 }
 

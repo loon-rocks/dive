@@ -58,6 +58,7 @@ impl AgentToolbox {
             output_schema: None,
             output_example: None,
             read_only: None,
+            file_input: Default::default(),
         }
     }
 }
@@ -74,6 +75,7 @@ impl ToolRegistry for AgentToolbox {
                 output_schema: Some(doc.result_schema()),
                 output_example: None,
                 read_only: None,
+                file_input: Default::default(),
             });
         }
         defs.push(self.plan_and_execute_def());
@@ -177,6 +179,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             }])
         }
         async fn invoke(&self, name: &str, input: Value) -> Result<ToolOutcome, ToolError> {
@@ -209,6 +212,7 @@ mod tests {
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             )]),
         ));

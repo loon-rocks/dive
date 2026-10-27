@@ -1,3 +1,4 @@
+use super::typesafe_images::{prepare, Prepared, MAX_REQUEST_BYTES};
 use crate::decision::{
     Answer, DecisionProvider, DecisionRequest, DecisionResponse, LikelihoodCriteria, Question,
 };
@@ -9,6 +10,8 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub const DEFAULT_BASE_URL: &str = "https://api.typesafe.ai";
+
+pub const IMAGES_HEADER: &str = "TypeSafe-Danger-Zone-Images";
 
 pub struct SystemOneProvider {
     client: reqwest::Client,
@@ -42,13 +45,84 @@ impl SystemOneProvider {
         }
         Ok(response)
     }
+
+    async fn post_with_images(
+        &self,
+        body: &[u8],
+        images: &[(String, Prepared)],
+    ) -> Result<reqwest::Response, LlmError> {
+        let mut form = reqwest::multipart::Form::new().part(
+            "request",
+            reqwest::multipart::Part::bytes(body.to_vec())
+                .mime_str("application/json")
+                .map_err(LlmError::Http)?,
+        );
+        for (name, image) in images {
+            form = form.part(
+                name.clone(),
+                reqwest::multipart::Part::bytes(image.bytes.clone())
+                    .file_name(format!("{name}.{}", image.extension))
+                    .mime_str(image.mime)
+                    .map_err(LlmError::Http)?,
+            );
+        }
+        let mut request = self
+            .client
+            .post(format!("{}/v1/systemone", self.base_url))
+            .header(IMAGES_HEADER, "true")
+            .multipart(form);
+        if let Some(key) = &self.api_key {
+            request = request.bearer_auth(key);
+        }
+        let response = request.send().await?;
+        if !response.status().is_success() {
+            return Err(crate::retry::api_error(response).await);
+        }
+        Ok(response)
+    }
+
+    async fn send(&self, req: &DecisionRequest) -> Result<reqwest::Response, LlmError> {
+        let mut body = WireRequest::from(req);
+        let text = req.text();
+        let mut images: Vec<(String, Prepared)> = Vec::new();
+        for (reference, image) in &req.images {
+            if !text.contains(reference.as_str()) {
+                continue;
+            }
+            let name = format!("a{}", images.len());
+            body.assets.insert(
+                reference.clone(),
+                WireAsset {
+                    kind: "image",
+                    part: name.clone(),
+                },
+            );
+            images.push((name, prepare(reference, image)?));
+        }
+        if images.is_empty() {
+            let body = WireRequest::from(req);
+            return crate::retry::with_retries(|| self.post_once(&body)).await;
+        }
+        let json = serde_json::to_vec(&body).map_err(|e| LlmError::Parse(e.to_string()))?;
+        let total = json.len()
+            + images
+                .iter()
+                .map(|(_, image)| image.bytes.len())
+                .sum::<usize>();
+        if total > MAX_REQUEST_BYTES {
+            return Err(LlmError::Unsupported(format!(
+                "a decision request with {} images is {total} bytes, and TypeSafe takes at most {MAX_REQUEST_BYTES}",
+                images.len()
+            )));
+        }
+        crate::retry::with_retries(|| self.post_with_images(&json, &images)).await
+    }
 }
 
 #[async_trait]
 impl DecisionProvider for SystemOneProvider {
     async fn decide(&self, req: DecisionRequest) -> Result<DecisionResponse, LlmError> {
-        let body = WireRequest::from(&req);
-        let response = crate::retry::with_retries(|| self.post_once(&body)).await?;
+        let response = self.send(&req).await?;
         let text = response.text().await?;
         let wire: WireResponse = serde_json::from_str(&text)
             .map_err(|e| LlmError::Parse(format!("systemone response: {e}: {text}")))?;
@@ -61,6 +135,15 @@ struct WireRequest<'a> {
     model: &'a str,
     state: Value,
     questions: BTreeMap<&'a str, WireQuestion<'a>>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    assets: BTreeMap<String, WireAsset>,
+}
+
+#[derive(Serialize)]
+struct WireAsset {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    part: String,
 }
 
 #[derive(Serialize)]
@@ -121,6 +204,7 @@ impl<'a> From<&'a DecisionRequest> for WireRequest<'a> {
             model: &req.model,
             state,
             questions,
+            assets: BTreeMap::new(),
         }
     }
 }
@@ -239,6 +323,7 @@ mod tests {
                     },
                 ),
             ]),
+            images: Default::default(),
         }
     }
 
@@ -304,6 +389,76 @@ mod tests {
         }
         assert_eq!(response.usage.input_tokens, 389);
         assert_eq!(response.usage.output_tokens, 61);
+    }
+
+    const SHOT: &str =
+        "blob:sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.png";
+
+    fn with_shot(mut req: DecisionRequest, mentioned: bool) -> DecisionRequest {
+        if mentioned {
+            req.state = json!({"page": SHOT});
+        }
+        req.images.insert(
+            SHOT.to_string(),
+            crate::ImageData {
+                mime: "image/png".into(),
+                bytes: super::super::typesafe_images::tests::encoded(
+                    600,
+                    400,
+                    image::ImageFormat::Png,
+                ),
+            },
+        );
+        req
+    }
+
+    #[tokio::test]
+    async fn images_go_as_multipart_assets_with_the_images_header() {
+        let (base, seen) = stub(vec![(200, answered())]).await;
+        let provider = SystemOneProvider::new(Some(base), Some("secret".into()));
+        provider.decide(with_shot(request(), true)).await.unwrap();
+        let seen = seen.lock().unwrap()[0].clone();
+        let header = |name: &str| {
+            seen.headers
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+        };
+        assert_eq!(
+            header("typesafe-danger-zone-images").as_deref(),
+            Some("true")
+        );
+        assert!(header("content-type")
+            .unwrap()
+            .starts_with("multipart/form-data"));
+        let raw = String::from_utf8_lossy(&seen.raw);
+        let request_part = raw
+            .split("name=\"request\"")
+            .nth(1)
+            .and_then(|rest| rest.split("\r\n\r\n").nth(1))
+            .and_then(|rest| rest.split("\r\n--").next())
+            .unwrap();
+        let body: Value = serde_json::from_str(request_part).unwrap();
+        assert_eq!(body["state"], json!({"page": SHOT}));
+        assert_eq!(
+            body["assets"],
+            json!({SHOT: {"type": "image", "part": "a0"}})
+        );
+        assert!(raw.contains("name=\"a0\"; filename=\"a0.png\""), "{raw}");
+        assert!(raw.contains("Content-Type: image/png"), "{raw}");
+    }
+
+    #[tokio::test]
+    async fn an_image_the_request_never_mentions_is_not_sent() {
+        let (base, seen) = stub(vec![(200, answered())]).await;
+        let provider = SystemOneProvider::new(Some(base), None);
+        provider.decide(with_shot(request(), false)).await.unwrap();
+        let seen = seen.lock().unwrap()[0].clone();
+        assert!(!seen
+            .headers
+            .iter()
+            .any(|(key, _)| key == "typesafe-danger-zone-images"));
+        assert!(seen.body.get("assets").is_none());
     }
 
     #[tokio::test]

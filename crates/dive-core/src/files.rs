@@ -155,6 +155,37 @@ pub trait BlobStore: Send + Sync {
     }
 }
 
+pub const MODEL_IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+pub fn model_image_refs_in(text: &str) -> Vec<BlobRef> {
+    refs_in_text(text)
+        .into_iter()
+        .filter(|blob| MODEL_IMAGE_TYPES.contains(&blob.mime()))
+        .collect()
+}
+
+pub struct FileImages(pub std::sync::Arc<dyn BlobStore>);
+
+#[async_trait]
+impl dive_llm::ImageSource for FileImages {
+    fn refs_in(&self, text: &str) -> Vec<String> {
+        model_image_refs_in(text)
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    async fn load(&self, reference: &str) -> Result<dive_llm::ImageData, String> {
+        let blob = BlobRef::parse(reference)
+            .ok_or_else(|| format!("not a file reference: {reference}"))?;
+        let bytes = self.0.get(&blob).await.map_err(|e| e.to_string())?;
+        Ok(dive_llm::ImageData {
+            mime: blob.mime().to_string(),
+            bytes,
+        })
+    }
+}
+
 pub fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
     if stored.is_empty() {
         return result;

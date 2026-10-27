@@ -593,6 +593,14 @@ pub struct ModelChoice {
     pub fallbacks: Vec<FallbackChoice>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<bool>,
+}
+
+impl ModelChoice {
+    pub fn takes_images(&self) -> bool {
+        self.images.unwrap_or(true)
+    }
 }
 
 /// One failover candidate for a [`ModelChoice`]. Deliberately narrower than
@@ -608,6 +616,14 @@ pub struct FallbackChoice {
     pub temperature: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<bool>,
+}
+
+impl FallbackChoice {
+    pub fn takes_images(&self) -> bool {
+        self.images.unwrap_or(true)
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]

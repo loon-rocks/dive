@@ -96,6 +96,7 @@ mod tests {
             output_schema: None,
             output_example: None,
             read_only,
+            file_input: Default::default(),
         }
     }
 

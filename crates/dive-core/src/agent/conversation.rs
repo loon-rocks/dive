@@ -725,6 +725,7 @@ impl ConversationTools {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         }
     }
 
@@ -763,6 +764,7 @@ impl ConversationTools {
             output_schema: None,
             output_example: None,
             read_only: Some(true),
+            file_input: Default::default(),
         }
     }
 }
@@ -908,6 +910,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             }])
         }
         async fn invoke(&self, _: &str, input: Value) -> Result<ToolOutcome, ToolError> {
@@ -978,6 +981,7 @@ mod tests {
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             )]),
         ));
@@ -1048,6 +1052,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             })
             .collect())
         }

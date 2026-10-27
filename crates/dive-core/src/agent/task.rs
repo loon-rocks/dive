@@ -369,6 +369,7 @@ mod tests {
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]);
         (ModelRouter::with_providers(providers, roles), provider)

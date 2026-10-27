@@ -55,6 +55,7 @@ fn router() -> Arc<ModelRouter> {
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     ))
@@ -835,6 +836,7 @@ async fn caller_schema_without_type_gets_object_defaulted() {
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     ));
@@ -1067,6 +1069,7 @@ fn schema_router(chat_value: Value, repair_value: Value) -> Arc<ModelRouter> {
         description: None,
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     Arc::new(ModelRouter::with_providers(
         providers,
@@ -1207,6 +1210,7 @@ fn named_model_router() -> Arc<ModelRouter> {
         description: description.map(str::to_string),
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     Arc::new(ModelRouter::with_providers(
         providers,
@@ -1654,6 +1658,7 @@ fn decision_router(with_decider: bool) -> (Arc<ModelRouter>, Arc<EchoDecider>) {
         description: description.map(str::to_string),
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
     providers.insert("mock".into(), Arc::new(UnusedChat));
@@ -2079,6 +2084,7 @@ fn truncating_router() -> (Arc<ModelRouter>, Arc<Truncating>, Arc<Truncating>) {
         description: None,
         fallbacks: Vec::new(),
         context_window: None,
+        images: None,
     };
     let router = Arc::new(ModelRouter::with_providers(
         providers,
@@ -2246,6 +2252,7 @@ fn image_registry() -> (
                 description: None,
                 fallbacks: Vec::new(),
                 context_window: None,
+                images: None,
             },
         )]),
     )

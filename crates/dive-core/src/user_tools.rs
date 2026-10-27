@@ -1236,6 +1236,7 @@ impl UserToolRegistry {
             model: String::new(),
             state,
             questions,
+            images: Default::default(),
         };
         let response = CallSite::as_role(role, self.router.decide_named(model, request))
             .await
@@ -1650,6 +1651,16 @@ impl ToolRegistry for UserToolRegistry {
                         | ToolKind::Decision { .. } => Some(true),
                         ToolKind::Exec { .. } | ToolKind::Image { .. } => None,
                     }),
+                    file_input: match &doc.kind {
+                        ToolKind::Exec { .. } => crate::tools::FileInput::Paths,
+                        ToolKind::Prompt { model, .. } => crate::tools::FileInput::Model(
+                            model.clone().unwrap_or_else(|| "chat".to_string()),
+                        ),
+                        ToolKind::Decision { model, .. } => crate::tools::FileInput::Model(
+                            model.clone().unwrap_or_else(|| "decider".to_string()),
+                        ),
+                        _ => crate::tools::FileInput::Passed,
+                    },
                 }
             })
             .collect())

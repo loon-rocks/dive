@@ -18,3 +18,4 @@ schemars.workspace = true
 tracing.workspace = true
 eventsource-stream = "0.2"
 base64 = "0.22"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }

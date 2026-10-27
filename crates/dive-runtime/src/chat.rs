@@ -739,6 +739,7 @@ mod tests {
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             )]),
         );
@@ -885,6 +886,7 @@ mod tests {
                 output_schema: None,
                 output_example: None,
                 read_only: Some(true),
+                file_input: Default::default(),
             }])
         }
 
@@ -943,6 +945,7 @@ mod tests {
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             )]),
         );
@@ -1051,6 +1054,7 @@ mod tests {
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             )]),
         );
@@ -1486,6 +1490,7 @@ mod tests {
                     description: None,
                     fallbacks: Vec::new(),
                     context_window: None,
+                    images: None,
                 },
             )]),
         );

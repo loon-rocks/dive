@@ -10,6 +10,18 @@ pub struct DecisionRequest {
     pub model: String,
     pub state: Value,
     pub questions: BTreeMap<String, Question>,
+    #[serde(skip)]
+    pub images: BTreeMap<String, crate::image::ImageData>,
+}
+
+impl DecisionRequest {
+    pub fn text(&self) -> String {
+        format!(
+            "{}\n{}",
+            self.state,
+            serde_json::to_string(&self.questions).unwrap_or_default()
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
