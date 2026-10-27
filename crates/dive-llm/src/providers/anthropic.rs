@@ -99,7 +99,8 @@ impl AnthropicProvider {
             json!(req.max_tokens.unwrap_or(default_max_tokens)),
         );
 
-        let mut messages = to_anthropic_messages(&req.messages, &references, &req.images);
+        let images = super::image_fit::fit_all(&req.images, &super::image_fit::CHAT);
+        let mut messages = to_anthropic_messages(&req.messages, &references, &images);
         if caching && (messages.len() > 1 || !req.tools.is_empty()) {
             // Breakpoint two: a rolling marker on the tail of the
             // conversation. On a multi-round loop this is the one that pays —
