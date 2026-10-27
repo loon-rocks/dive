@@ -1,5 +1,6 @@
 //! MCP server lifecycle: lazy connection, tool discovery, invocation.
 
+use crate::stderr::StderrTail;
 use dive_config::McpServerConfig;
 use dive_core::files::BlobStore;
 use dive_core::{ServerIdentity, ToolDef, ToolError, ToolOutcome, ToolRegistry, ToolServer};
@@ -275,13 +276,15 @@ impl ServerHandle {
             });
             // Keep the server's stderr off the user's terminal — rmcp's
             // spawn overrides whatever the Command itself sets.
-            let (transport, _stderr) = TokioChildProcess::builder(configured)
-                .stderr(std::process::Stdio::null())
+            let (transport, stderr) = TokioChildProcess::builder(configured)
+                .stderr(std::process::Stdio::piped())
                 .spawn()
                 .map_err(|e| ToolError::Transport(format!("spawn '{command}': {e}")))?;
-            info.serve(transport)
-                .await
-                .map_err(|e| ToolError::Transport(e.to_string()))?
+            let tail = StderrTail::watch(stderr);
+            match info.serve(transport).await {
+                Ok(client) => client,
+                Err(e) => return Err(ToolError::Transport(tail.explain(e.to_string()).await)),
+            }
         } else if let Some(url) = &self.config.url {
             let mut headers = HashMap::new();
             for (key, value) in &self.config.headers {
@@ -449,6 +452,33 @@ mod tests {
         let message = error.to_string();
         assert!(
             message.contains("GITHUB_TOKEN") && message.contains("mcp.github"),
+            "{message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_server_that_exits_before_initializing_reports_its_stderr() {
+        let config = McpServerConfig {
+            description: None,
+            command: Some("sh".into()),
+            args: vec![
+                "-c".into(),
+                "echo 'env: node: No such file or directory' >&2; exit 127".into(),
+            ],
+            env: Default::default(),
+            url: None,
+            headers: Default::default(),
+            include_tools: None,
+            exclude_tools: vec![],
+            tool_overrides: Default::default(),
+            files: Default::default(),
+            missing_env: Vec::new(),
+        };
+        let manager = McpManager::new([("broken".to_string(), config)].into_iter().collect());
+        let error = manager.connect("broken").await.expect_err("must fail");
+        let message = error.to_string();
+        assert!(
+            message.contains("server stderr: env: node: No such file or directory"),
             "{message}"
         );
     }

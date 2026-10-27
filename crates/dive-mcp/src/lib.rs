@@ -3,5 +3,6 @@
 
 mod files;
 mod manager;
+mod stderr;
 
 pub use manager::{McpManager, NAMESPACE_SEPARATOR};
