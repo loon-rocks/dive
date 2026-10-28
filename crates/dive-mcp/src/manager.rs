@@ -90,6 +90,10 @@ impl McpManager {
         self.servers.get(server)?.config.url.as_deref()
     }
 
+    pub fn app_of(&self, server: &str) -> Option<&dive_config::McpOAuth> {
+        self.servers.get(server)?.config.oauth.as_ref()
+    }
+
     pub async fn disconnect(&self, server: &str) {
         if let Some(handle) = self.servers.get(server) {
             handle.close().await;
@@ -346,7 +350,7 @@ impl ServerHandle {
             let sign_ins = self.sign_ins.read().unwrap().clone();
             let authorized = match sign_ins {
                 Some(sign_ins) if !self.sends_authorization() => sign_ins
-                    .client(url)
+                    .client(url, self.config.oauth.as_ref())
                     .await
                     .map_err(|e| ToolError::Transport(e.to_string()))?,
                 _ => None,
@@ -520,6 +524,7 @@ mod tests {
             exclude_tools: vec![],
             tool_overrides: Default::default(),
             files: Default::default(),
+            oauth: None,
             missing_env: vec![dive_config::MissingEnv {
                 field: "env.GITHUB_PERSONAL_ACCESS_TOKEN".into(),
                 var: "GITHUB_TOKEN".into(),
@@ -550,6 +555,7 @@ mod tests {
             exclude_tools: vec![],
             tool_overrides: Default::default(),
             files: Default::default(),
+            oauth: None,
             missing_env: Vec::new(),
         };
         let manager = McpManager::new([("broken".to_string(), config)].into_iter().collect());
@@ -594,6 +600,7 @@ mod tests {
             exclude_tools: vec!["b".into()],
             tool_overrides: Default::default(),
             files: Default::default(),
+            oauth: None,
             missing_env: Vec::new(),
         };
         let handle = ServerHandle {
@@ -639,6 +646,7 @@ mod tests {
             exclude_tools: Vec::new(),
             tool_overrides: Default::default(),
             files: Default::default(),
+            oauth: None,
             missing_env: Vec::new(),
         }
     }

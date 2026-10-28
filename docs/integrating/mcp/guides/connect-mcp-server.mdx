@@ -75,6 +75,43 @@ Sign-ins follow projects the way secrets do:
 
 A server whose `headers` set `Authorization` keeps using that header and never signs in.
 
+### Servers that need an OAuth app
+
+Dive gets a client ID one of two ways. If the authorization server lets apps register themselves, Dive registers. If it accepts a URL as the client ID instead, Dive uses `https://loon.rocks/dive/oauth-client.json`, which describes Dive and its `http://127.0.0.1/callback` redirect. Either way there's nothing to set up.
+
+Some authorization servers, GitHub's among them, do neither. Signing in to one stops with:
+
+```text
+github doesn't let apps register themselves: create an OAuth app with the callback URL http://127.0.0.1/callback, then add its client_id and client_secret under [mcp.github.oauth]
+```
+
+Create an OAuth app in the provider's developer settings with the callback URL `http://127.0.0.1/callback`. Dive picks a free port each time it signs in, and providers that follow the loopback rules for native apps accept any port on that address. Then give Dive the app's details, keeping the secret out of the file:
+
+```toml
+[mcp.github]
+url = "https://api.githubcopilot.com/mcp/"
+
+[mcp.github.oauth]
+client_id = "Ov23liAbC9xYz12345"
+client_secret = "${GITHUB_OAUTH_SECRET}"
+scopes = ["repo", "read:org"]
+```
+
+```bash
+dive secret set GITHUB_OAUTH_SECRET
+dive mcp login github
+```
+
+`scopes` is optional. Without it, Dive asks for everything the server lists.
+
+### When an agent hits a server that needs sign-in
+
+A tool call to a server that isn't signed in fails with the same message, and its result names the server under `needs_sign_in`, which the agent sees and a front end can act on:
+
+```json
+{"error": "mcp server 'linear' needs sign-in: run `dive mcp login linear`", "needs_sign_in": "linear"}
+```
+
 ## Check it worked
 
 List the server's tools, then call one through Dive:

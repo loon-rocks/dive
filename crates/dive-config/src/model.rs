@@ -871,11 +871,23 @@ pub struct McpServerConfig {
     pub tool_overrides: BTreeMap<String, ToolOverride>,
     #[serde(default, skip_serializing_if = "is_default_files_mode")]
     pub files: FilesMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<McpOAuth>,
     /// Unset `${VAR}` references in this entry, recorded at load. A server
     /// with any refuses to connect and says so — a missing token must not
     /// silently become an empty header or child environment variable.
     #[serde(skip)]
     pub missing_env: Vec<MissingEnv>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpOAuth {
+    pub client_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_secret: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
 }
 
 fn is_default_files_mode(mode: &FilesMode) -> bool {

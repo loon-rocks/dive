@@ -4,7 +4,7 @@
 //! (dive-store), user-defined tools, and plan tools.
 
 use async_trait::async_trait;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// A tool as seen by the model: namespaced name, description, and schemas.
 #[derive(Debug, Clone)]
@@ -96,6 +96,17 @@ pub enum ToolError {
     Transport(String),
     #[error("{}", sign_in_message(server, *expired))]
     NeedsSignIn { server: String, expired: bool },
+}
+
+impl ToolError {
+    pub fn result(&self) -> Value {
+        match self {
+            ToolError::NeedsSignIn { server, .. } => {
+                json!({ "error": self.to_string(), "needs_sign_in": server })
+            }
+            _ => json!({ "error": self.to_string() }),
+        }
+    }
 }
 
 fn sign_in_message(server: &str, expired: bool) -> String {
@@ -381,5 +392,24 @@ mod tests {
 
         let outcome = reg.invoke("a", Value::Null).await.unwrap();
         assert_eq!(outcome.result, Value::String("a".to_string()));
+    }
+
+    #[test]
+    fn a_sign_in_failure_names_its_server_in_the_tool_result() {
+        let needs = ToolError::NeedsSignIn {
+            server: "linear".to_string(),
+            expired: false,
+        };
+        assert_eq!(
+            needs.result(),
+            json!({
+                "error": "mcp server 'linear' needs sign-in: run `dive mcp login linear`",
+                "needs_sign_in": "linear",
+            })
+        );
+        assert_eq!(
+            ToolError::Transport("down".to_string()).result(),
+            json!({ "error": "tool transport failed: down" })
+        );
     }
 }

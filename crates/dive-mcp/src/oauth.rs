@@ -1,9 +1,10 @@
 use anyhow::{anyhow, bail, Context, Result};
+use dive_config::McpOAuth;
 use dive_core::secrets::{SignInStore, StoreError};
 use rmcp::service::{ClientInitializeError, ServiceError};
 use rmcp::transport::auth::{
     AuthClient, AuthError, AuthorizationManager, AuthorizationSession, CredentialStore,
-    StoredCredentials,
+    OAuthClientConfig, StoredCredentials,
 };
 use rmcp::transport::streamable_http_client::StreamableHttpError;
 use rmcp::transport::DynamicTransportError;
@@ -18,6 +19,25 @@ use tokio::net::{TcpListener, TcpStream};
 pub const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(300);
 
 const CLIENT_NAME: &str = "Dive";
+
+pub const APP_CALLBACK: &str = "http://127.0.0.1/callback";
+
+pub const CLIENT_METADATA_URL: &str = "https://loon.rocks/dive/oauth-client.json";
+
+#[derive(Debug, thiserror::Error)]
+#[error("{server} doesn't let apps register themselves: create an OAuth app with the callback URL {APP_CALLBACK}, then add its client_id and client_secret under [mcp.{server}.oauth]")]
+pub struct NeedsApp {
+    pub server: String,
+}
+
+fn app_config(app: &McpOAuth, redirect: &str) -> OAuthClientConfig {
+    let config = OAuthClientConfig::new(app.client_id.clone(), redirect.to_string())
+        .with_scopes(app.scopes.clone());
+    match &app.client_secret {
+        Some(secret) => config.with_client_secret(secret.clone()),
+        None => config,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -79,6 +99,7 @@ impl SignIns {
         &self,
         server: &str,
         url: &str,
+        app: Option<&McpOAuth>,
         scope: SignInScope,
         open: impl FnOnce(&str),
         cancelled: impl Future<Output = ()>,
@@ -97,13 +118,45 @@ impl SignIns {
         let mut manager = AuthorizationManager::new(url).await.map_err(failed)?;
         manager.set_credential_store(self.stored(url, project.clone(), true));
         let metadata = manager.discover_metadata().await.map_err(failed)?;
+        let registers = metadata.registration_endpoint.is_some()
+            || metadata
+                .additional_fields
+                .get("client_id_metadata_document_supported")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
         manager.set_metadata(metadata);
-        let scopes = manager.select_scopes(None, &[]);
+        let scopes = match app {
+            Some(app) if !app.scopes.is_empty() => app.scopes.clone(),
+            _ => manager.select_scopes(None, &[]),
+        };
         let scopes: Vec<&str> = scopes.iter().map(String::as_str).collect();
-        let session =
-            AuthorizationSession::new(manager, &scopes, &redirect, Some(CLIENT_NAME), None)
-                .await
-                .map_err(failed)?;
+        let session = match app {
+            Some(app) => {
+                manager
+                    .configure_client(app_config(app, &redirect))
+                    .map_err(failed)?;
+                let address = manager
+                    .get_authorization_url(&scopes)
+                    .await
+                    .map_err(failed)?;
+                AuthorizationSession::for_scope_upgrade(manager, address, &redirect)
+            }
+            None if !registers => {
+                return Err(NeedsApp {
+                    server: server.to_string(),
+                }
+                .into())
+            }
+            None => AuthorizationSession::new(
+                manager,
+                &scopes,
+                &redirect,
+                Some(CLIENT_NAME),
+                Some(CLIENT_METADATA_URL),
+            )
+            .await
+            .map_err(failed)?,
+        };
         open(session.get_authorization_url());
 
         let (stream, answer) = tokio::select! {
@@ -158,6 +211,7 @@ impl SignIns {
     pub(crate) async fn client(
         &self,
         url: &str,
+        app: Option<&McpOAuth>,
     ) -> Result<Option<AuthClient<reqwest::Client>>, AuthError> {
         let project = match self.in_use(url) {
             Ok(Some((SignInScope::Project, _))) => self.project.clone(),
@@ -172,6 +226,9 @@ impl SignIns {
         manager.set_credential_store(self.stored(url, project, false));
         if !manager.initialize_from_store().await? {
             return Ok(None);
+        }
+        if let Some(app) = app {
+            manager.configure_client(app_config(app, APP_CALLBACK))?;
         }
         Ok(Some(AuthClient::new(reqwest::Client::default(), manager)))
     }
@@ -608,5 +665,116 @@ mod tests {
     #[test]
     fn pages_escape_what_the_provider_sent() {
         assert!(page("<b>", "a & \"b\"").contains("&lt;b&gt;</title>"));
+    }
+
+    async fn authorization_server() -> String {
+        authorization_server_with(serde_json::json!({})).await
+    }
+
+    async fn authorization_server_with(extra: serde_json::Value) -> String {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let mut metadata = serde_json::json!({
+            "issuer": base,
+            "authorization_endpoint": format!("{base}/authorize"),
+            "token_endpoint": format!("{base}/token"),
+            "response_types_supported": ["code"],
+            "code_challenge_methods_supported": ["S256"],
+        });
+        metadata
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        let metadata = metadata.to_string();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let target = request_target(&mut stream).await.unwrap_or_default();
+                let response = if target.contains("oauth-authorization-server") {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{metadata}",
+                        metadata.len()
+                    )
+                } else {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                };
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        });
+        format!("{base}/mcp")
+    }
+
+    #[tokio::test]
+    async fn a_server_that_takes_no_registrations_needs_an_app() {
+        let url = authorization_server().await;
+        let sign_ins = SignIns::new(Arc::new(MemorySignIns::new()), None);
+        let error = sign_ins
+            .sign_in(
+                "github",
+                &url,
+                None,
+                SignInScope::Global,
+                |_| {},
+                std::future::pending(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.downcast_ref::<NeedsApp>().is_some(), "{error:#}");
+        assert!(error.to_string().contains("[mcp.github.oauth]"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_configured_app_signs_in_with_its_own_client_and_scopes() {
+        let url = authorization_server().await;
+        let sign_ins = SignIns::new(Arc::new(MemorySignIns::new()), None);
+        let app = McpOAuth {
+            client_id: "Ov23liApp".to_string(),
+            client_secret: Some("shh".to_string()),
+            scopes: vec!["repo".to_string(), "read:org".to_string()],
+        };
+        let mut opened = None;
+        let error = sign_ins
+            .sign_in(
+                "github",
+                &url,
+                Some(&app),
+                SignInScope::Global,
+                |address| opened = Some(address.to_string()),
+                std::future::ready(()),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "sign-in cancelled");
+        let opened = url::Url::parse(&opened.unwrap()).unwrap();
+        let query: HashMap<String, String> = opened.query_pairs().into_owned().collect();
+        assert_eq!(query["client_id"], "Ov23liApp");
+        assert_eq!(query["scope"], "repo read:org");
+        assert!(query["redirect_uri"].starts_with("http://127.0.0.1:"));
+        assert!(!query.contains_key("client_secret"));
+    }
+
+    #[tokio::test]
+    async fn a_server_that_takes_url_client_ids_signs_in_as_dive_without_an_app() {
+        let url = authorization_server_with(
+            serde_json::json!({ "client_id_metadata_document_supported": true }),
+        )
+        .await;
+        let sign_ins = SignIns::new(Arc::new(MemorySignIns::new()), None);
+        let mut opened = None;
+        let error = sign_ins
+            .sign_in(
+                "launchnotes",
+                &url,
+                None,
+                SignInScope::Global,
+                |address| opened = Some(address.to_string()),
+                std::future::ready(()),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "sign-in cancelled");
+        let opened = url::Url::parse(&opened.unwrap()).unwrap();
+        let query: HashMap<String, String> = opened.query_pairs().into_owned().collect();
+        assert_eq!(query["client_id"], CLIENT_METADATA_URL);
     }
 }

@@ -1,0 +1,10 @@
+version = 6
+
+[mcp.github]
+url = "https://api.githubcopilot.com/mcp/"
+description = "Repositories, issues and pull requests"
+
+[mcp.github.oauth]
+client_id = "Ov23liExampleClient"
+client_secret = "${GITHUB_OAUTH_SECRET}"
+scopes = ["repo", "read:org"]

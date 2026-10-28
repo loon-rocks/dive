@@ -157,6 +157,23 @@ properties:
           enum: [path, url, base64, off]
           default: path
           description: "How a file reference (`blob:sha256-…`) in a tool call's arguments reaches the server: `path` as a local file path, `url` as a link the server can fetch, `base64` as the file's contents, `off` as the reference text unchanged."
+        oauth:
+          type: object
+          description: "The OAuth app Dive signs in with, as `[mcp.<name>.oauth]`, for servers whose authorization server doesn't let apps register themselves. Register the app with the callback URL `http://127.0.0.1/callback`."
+          properties:
+            client_id:
+              type: string
+              description: The app's client ID.
+            client_secret:
+              type: string
+              description: The app's client secret. Keep it out of the file with a `${NAME}` reference.
+            scopes:
+              type: array
+              items:
+                type: string
+              description: The access to ask for. Without it, Dive asks for what the server lists.
+          required: [client_id]
+          additionalProperties: false
         tool_overrides:
           type: object
           description: Per-tool corrections, as `[mcp.<name>.tool_overrides.<tool>]`.

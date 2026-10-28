@@ -40,6 +40,22 @@
   Available options: `path`, `url`, `base64`, `off`
 </ParamField>
 
+<ParamField body="mcp.<name>.oauth" type="object">
+  The OAuth app Dive signs in with, as `[mcp.<name>.oauth]`, for servers whose authorization server doesn't let apps register themselves. Register the app with the callback URL `http://127.0.0.1/callback`.
+</ParamField>
+
+<ParamField body="mcp.<name>.oauth.client_id" type="string" required>
+  The app's client ID.
+</ParamField>
+
+<ParamField body="mcp.<name>.oauth.client_secret" type="string">
+  The app's client secret. Keep it out of the file with a `${NAME}` reference.
+</ParamField>
+
+<ParamField body="mcp.<name>.oauth.scopes" type="string[]">
+  The access to ask for. Without it, Dive asks for what the server lists.
+</ParamField>
+
 <ParamField body="mcp.<name>.tool_overrides" type="object">
   Per-tool corrections, as `[mcp.<name>.tool_overrides.<tool>]`.
 </ParamField>

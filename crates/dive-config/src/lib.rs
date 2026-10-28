@@ -22,11 +22,11 @@ pub use load::{
 };
 pub use model::{
     builtin_description, describe_kinds, describe_missing_env, Config, FallbackChoice,
-    FilesBackend, FilesConfig, FilesMode, McpServerConfig, MissingEnv, ModelChoice, ModelKind,
-    ModelPrice, ModelRoles, PlanPaths, PriceTier, ProjectConfig, PromptConfig, ProviderConfig,
-    ProviderKind, Rates, Role, Settings, StorageBackend, StorageConfig, TelemetryConfig,
-    TelemetryProtocol, TokenCounts, ToolOverride, ToolPaths, TraceConfig, UserConfig,
-    WorkbenchConfig, DEFAULT_ROLE,
+    FilesBackend, FilesConfig, FilesMode, McpOAuth, McpServerConfig, MissingEnv, ModelChoice,
+    ModelKind, ModelPrice, ModelRoles, PlanPaths, PriceTier, ProjectConfig, PromptConfig,
+    ProviderConfig, ProviderKind, Rates, Role, Settings, StorageBackend, StorageConfig,
+    TelemetryConfig, TelemetryProtocol, TokenCounts, ToolOverride, ToolPaths, TraceConfig,
+    UserConfig, WorkbenchConfig, DEFAULT_ROLE,
 };
 
 pub const SCHEMA: &str = include_str!("schema.yaml");
