@@ -616,6 +616,9 @@ impl ChatSession {
             Err(error) => {
                 self.events
                     .run_finished(&serde_json::json!({"error": error.to_string()}), true);
+                if self.keep_failed(&error, user).await {
+                    self.fresh_thread = false;
+                }
                 if self.fresh_thread {
                     if let Some(meta) = self.thread.take() {
                         let _ = self.store.delete_thread(&meta.id).await;
@@ -630,6 +633,33 @@ impl ChatSession {
             self.events.usage_summary(&usage);
         }
         outcome
+    }
+}
+
+impl ChatSession {
+    async fn keep_failed(
+        &mut self,
+        error: &anyhow::Error,
+        user: Option<dive_llm::types::ChatMessage>,
+    ) -> bool {
+        let (Some(failure), Some(meta)) = (
+            error.downcast_ref::<dive_core::agent::conversation::ConversationError>(),
+            &self.thread,
+        ) else {
+            return false;
+        };
+        let turn = dive_core::agent::conversation::failed_turn(failure, &self.active, user);
+        match persist_turn(self.store.as_ref(), meta, &self.active, &turn).await {
+            Ok(()) => {
+                self.active = turn.active.clone();
+                self.history.extend(turn.entries);
+                true
+            }
+            Err(problem) => {
+                tracing::warn!(error = %problem, "the failed turn couldn't be saved to the thread");
+                false
+            }
+        }
     }
 }
 
@@ -827,14 +857,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_failed_first_turn_deletes_the_thread_it_created() {
+    async fn a_failed_first_turn_keeps_the_thread_with_its_message_and_the_error() {
         let runtime = runtime(Vec::new());
         let store = runtime.store().unwrap();
         let mut chat = session(&runtime, &store, None).await;
 
         assert!(chat.send("hi").await.is_err());
-        assert!(chat.thread().is_none());
-        assert!(store.list_threads().await.unwrap().is_empty());
+        let id = chat.thread().unwrap().id.clone();
+        let authors: Vec<String> = chat
+            .history()
+            .iter()
+            .map(|entry| entry.author.clone())
+            .collect();
+        assert_eq!(authors, ["user", "error:front"]);
+        assert_eq!(store.list_threads().await.unwrap().len(), 1);
+        assert_eq!(store.get_thread(&id).await.unwrap().unwrap().id, id);
     }
 
     #[tokio::test]
@@ -849,6 +886,21 @@ mod tests {
         assert_eq!(resumed.history().len(), 2);
         assert!(resumed.send("again").await.is_err());
         assert!(store.get_thread(&id).await.unwrap().is_some());
+
+        let reopened = session(&runtime, &store, Some(Some(id.clone()))).await;
+        let kept: Vec<(String, String)> = reopened
+            .history()
+            .iter()
+            .filter_map(|entry| match &entry.body {
+                dive_core::store::EntryBody::Message {
+                    message: dive_llm::types::ChatMessage::User { content, .. },
+                } => Some((entry.author.clone(), content.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(kept[1], ("user".to_string(), "again".to_string()));
+        assert_eq!(kept[2].0, "error:front");
+        assert!(kept[2].1.contains("script exhausted"), "{}", kept[2].1);
     }
 
     #[tokio::test]

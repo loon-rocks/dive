@@ -103,7 +103,7 @@ impl Workbench {
                 source, partial, ..
             }) => {
                 if keep_partial_history(&source) {
-                    history.extend(partial);
+                    history.extend(partial.entries);
                 }
                 Err(turn_failure_message(source))
             }

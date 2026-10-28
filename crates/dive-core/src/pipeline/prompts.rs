@@ -89,7 +89,7 @@ pub fn describe_tools(tools: &[ToolDef], shapes: &HashMap<String, ToolShape>) ->
         if entry.get("outputSchema").is_none() && entry.get("outputExample").is_none() {
             if let Some(shape) = shapes.get(&tool.name) {
                 entry["observedOutputShape"] = shape.schema.clone();
-                entry["observedOutputExample"] = shape.example.clone();
+                entry["observedOutputExample"] = crate::files::without_refs(shape.example.clone());
             }
         }
         out.push_str(&serde_json::to_string(&entry).unwrap_or_default());

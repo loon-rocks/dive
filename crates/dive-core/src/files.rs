@@ -239,6 +239,28 @@ fn collect_refs(value: &Value, found: &mut Vec<BlobRef>) {
     }
 }
 
+pub fn without_refs(value: Value) -> Value {
+    match value {
+        Value::String(text) => {
+            let mut text = text;
+            for blob in refs_in_text(&text) {
+                text = text.replace(
+                    &blob.to_string(),
+                    &format!("{BLOB_PREFIX}<hash>.{}", blob.extension()),
+                );
+            }
+            Value::String(text)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(without_refs).collect()),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, item)| (key, without_refs(item)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 pub fn substitute_refs(value: Value, replacements: &HashMap<BlobRef, Value>) -> Value {
     match value {
         Value::String(text) => match BlobRef::parse(&text) {
@@ -265,6 +287,17 @@ pub fn substitute_refs(value: Value, replacements: &HashMap<BlobRef, Value>) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_ref_is_replaced_with_a_placeholder_that_names_no_file() {
+        let blob = BlobRef::new("ab".repeat(32), "image/png").to_string();
+        let example = json!({"files": [{"ref": blob}], "text": format!("saved {blob}.")});
+        let cleaned = without_refs(example);
+        assert_eq!(cleaned["files"][0]["ref"], "blob:sha256-<hash>.png");
+        assert_eq!(cleaned["text"], "saved blob:sha256-<hash>.png.");
+        assert!(refs_in(&cleaned).is_empty());
+        assert!(refs_in_text(&cleaned.to_string()).is_empty());
+    }
+
     use super::*;
     use serde_json::json;
 
