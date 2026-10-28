@@ -714,6 +714,42 @@ pub enum McpCommand {
         #[arg(long, value_name = "PATH")]
         dir: Option<PathBuf>,
     },
+    /// Sign in to a server that uses OAuth, in your browser
+    #[command(
+        after_long_help = "Opens the server's sign-in page in your browser and waits up to 5 minutes for you to approve. The page's address is printed too, for when no browser opens. Only servers with a `url` sign in.\n\nA server defined in this project's .dive/config.toml signs in for this project; one defined in the global config signs in for every project. --project or --global picks the other. A project's own sign-in is used instead of the global one, and no project sees another's. Sign-ins are kept in the OS credential store, shared with Loon Dive, and refresh on their own.\n\nExamples:\n  dive mcp login linear\n  dive mcp login linear --project"
+    )]
+    Login {
+        #[arg(help = "The server name, as configured under `[mcp.<name>]`")]
+        server: String,
+        #[arg(
+            long,
+            conflicts_with = "global",
+            help = "Sign in for this project only"
+        )]
+        project: bool,
+        #[arg(long, help = "Sign in for every project")]
+        global: bool,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
+    /// Remove a saved sign-in
+    #[command(
+        after_long_help = "Removes the sign-in this project uses: its own if it has one, else the global one, which every project without its own sign-in shares. --project or --global picks one explicitly.\n\nExamples:\n  dive mcp logout linear\n  dive mcp logout linear --global"
+    )]
+    Logout {
+        #[arg(help = "The server name, as configured under `[mcp.<name>]`")]
+        server: String,
+        #[arg(
+            long,
+            conflicts_with = "global",
+            help = "Remove this project's sign-in"
+        )]
+        project: bool,
+        #[arg(long, help = "Remove the global sign-in")]
+        global: bool,
+        #[arg(long, help = "Print a JSON envelope instead of text")]
+        json: bool,
+    },
     /// Pre-warm the observed-shape cache by invoking read-only tools
     #[command(after_long_help = "Examples:\n  dive mcp probe\n  dive mcp probe linear")]
     Probe {

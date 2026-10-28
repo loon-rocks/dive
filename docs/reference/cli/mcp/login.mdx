@@ -1,0 +1,53 @@
+---
+title: "dive mcp login"
+sidebarTitle: "login"
+description: "Sign in to a server that uses OAuth, in your browser"
+playground: "none"
+keywords: ["dive mcp login"]
+---
+
+Opens the server's sign-in page in your browser and waits up to 5 minutes for you to approve. The page's address is printed too, for when no browser opens. Only servers with a `url` sign in.
+
+A server defined in this project's .dive/config.toml signs in for this project; one defined in the global config signs in for every project. --project or --global picks the other. A project's own sign-in is used instead of the global one, and no project sees another's. Sign-ins are kept in the OS credential store, shared with Loon Dive, and refresh on their own.
+
+## Arguments
+
+<ParamField path="SERVER" type="string" required>
+  The server name, as configured under `[mcp.<name>]`
+</ParamField>
+
+## Options
+
+<ParamField query="--project" type="boolean">
+  Sign in for this project only
+</ParamField>
+
+<ParamField query="--global" type="boolean">
+  Sign in for every project
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive mcp login [OPTIONS] <SERVER>
+```
+
+```bash Example 1
+dive mcp login linear
+```
+
+```bash Example 2
+dive mcp login linear --project
+```
+
+</RequestExample>

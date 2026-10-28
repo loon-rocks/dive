@@ -1,4 +1,7 @@
-use super::{store_account, store_resolve_in, Resolved, SecretSource, SecretStore, StoreError};
+use super::{
+    sign_in_account, store_account, store_resolve_in, Resolved, SecretSource, SecretStore,
+    SignInStore, StoreError, SIGN_IN_SERVICE,
+};
 
 pub const SERVICE: &str = "dive";
 pub const LEGACY_SERVICE: &str = "graph";
@@ -142,5 +145,42 @@ impl SecretSource for CredentialStore {
 
     fn resolve_in(&self, name: &str, project: Option<&str>) -> Option<Resolved> {
         store_resolve_in(self, name, project)
+    }
+}
+
+impl CredentialStore {
+    fn sign_in_entry(
+        &self,
+        url: &str,
+        project: Option<&str>,
+    ) -> Result<keyring::Entry, StoreError> {
+        let account = sign_in_account(url, project)?;
+        SecretStore::status(self)?;
+        keyring::Entry::new(SIGN_IN_SERVICE, &account).map_err(describe)
+    }
+}
+
+impl SignInStore for CredentialStore {
+    fn available(&self) -> Result<(), StoreError> {
+        SecretStore::status(self)
+    }
+
+    fn load(&self, url: &str, project: Option<&str>) -> Result<Option<String>, StoreError> {
+        Self::password(self.sign_in_entry(url, project)?)
+    }
+
+    fn save(&self, url: &str, project: Option<&str>, value: &str) -> Result<(), StoreError> {
+        let entry = self.sign_in_entry(url, project)?;
+        match entry.set_password(value) {
+            Ok(()) => Ok(()),
+            Err(error) => match entry.delete_credential() {
+                Ok(()) => entry.set_password(value).map_err(describe),
+                Err(_) => Err(describe(error)),
+            },
+        }
+    }
+
+    fn remove(&self, url: &str, project: Option<&str>) -> Result<bool, StoreError> {
+        Self::delete(self.sign_in_entry(url, project)?)
     }
 }

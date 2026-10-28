@@ -1,7 +1,7 @@
 ---
 title: "Connect an MCP server"
 description: "Add an MCP server's tools to your catalog and check they work."
-keywords: ["MCP", "mcp servers", "stdio", "http"]
+keywords: ["MCP", "mcp servers", "stdio", "http", "oauth", "sign in", "login"]
 ---
 
 import ConfigMcp from "/snippets/generated/config/mcp.mdx";
@@ -48,6 +48,32 @@ You need the server's launch command or its URL. If it needs a token, put the to
     ```
   </Step>
 </Steps>
+
+## Sign in to a server that uses OAuth
+
+Many hosted servers ask you to sign in instead of handing out a token. Add them with just a `url`; when one answers that it needs a sign-in, `dive mcp test` and any tool call say so:
+
+```text
+mcp server 'linear' needs sign-in: run `dive mcp login linear`
+```
+
+Sign in from your browser:
+
+```bash
+dive mcp login linear
+```
+
+Dive opens the server's sign-in page, registers itself with the server's authorization server, and waits up to 5 minutes for you to approve. If no browser opens, visit the address it prints. When you approve, the browser returns to a temporary address on `127.0.0.1`, and Dive saves the sign-in in the OS credential store, the same place `dive secret set` uses. It refreshes on its own; you sign in again only if the server stops accepting it.
+
+Sign-ins follow projects the way secrets do:
+
+- A server defined in a project's `.dive/config.toml` signs in for that project. One defined in the global config signs in for every project.
+- `--project` signs a globally defined server in for this project alone, for example to use a different account here. That project's sign-in is used instead of the global one.
+- No project ever sees another project's sign-in.
+
+`dive mcp list` shows which sign-in each server uses. `dive mcp logout linear` removes the one this project uses: its own if it has one, which falls back to the global sign-in, else the global one, which signs out every project that shares it.
+
+A server whose `headers` set `Authorization` keeps using that header and never signs in.
 
 ## Check it worked
 

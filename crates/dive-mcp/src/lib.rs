@@ -3,6 +3,8 @@
 
 mod files;
 mod manager;
+pub mod oauth;
 mod stderr;
 
 pub use manager::{McpManager, NAMESPACE_SEPARATOR};
+pub use oauth::{SignIn, SignInScope, SignIns};

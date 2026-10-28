@@ -115,7 +115,7 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
 /// Log to stderr; default WARN, raised by -v flags, overridable via DIVE_LOG.
 fn init_tracing(verbosity: u8) {
     let default = match verbosity {
-        0 => "warn",
+        0 => "warn,rmcp::transport::worker=off",
         1 => "info",
         2 => "debug",
         _ => "trace",

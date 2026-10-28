@@ -76,6 +76,8 @@
       "reference/cli/mcp/tools",
       "reference/cli/mcp/test",
       "reference/cli/mcp/serve",
+      "reference/cli/mcp/login",
+      "reference/cli/mcp/logout",
       "reference/cli/mcp/probe"
     ],
     "root": "reference/cli/mcp"
