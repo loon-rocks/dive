@@ -7,4 +7,4 @@ pub mod oauth;
 mod stderr;
 
 pub use manager::{McpManager, NAMESPACE_SEPARATOR};
-pub use oauth::{SignIn, SignInScope, SignIns};
+pub use oauth::{NeedsApp, SignIn, SignInScope, SignIns, APP_CALLBACK};

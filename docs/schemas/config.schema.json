@@ -95,6 +95,31 @@
             },
             "type": "array"
           },
+          "oauth": {
+            "additionalProperties": false,
+            "description": "The OAuth app Dive signs in with, as `[mcp.<name>.oauth]`, for servers whose authorization server doesn't let apps register themselves. Register the app with the callback URL `http://127.0.0.1/callback`.",
+            "properties": {
+              "client_id": {
+                "description": "The app's client ID.",
+                "type": "string"
+              },
+              "client_secret": {
+                "description": "The app's client secret. Keep it out of the file with a `${NAME}` reference.",
+                "type": "string"
+              },
+              "scopes": {
+                "description": "The access to ask for. Without it, Dive asks for what the server lists.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "client_id"
+            ],
+            "type": "object"
+          },
           "tool_overrides": {
             "additionalProperties": {
               "properties": {

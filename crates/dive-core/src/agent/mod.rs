@@ -264,7 +264,7 @@ impl Agent {
                         .invoke(&call.name, call.arguments.clone())
                         .await
                         .unwrap_or_else(|e| ToolOutcome {
-                            result: json!({ "error": e.to_string() }),
+                            result: e.result(),
                             is_error: true,
                         });
                     self.events

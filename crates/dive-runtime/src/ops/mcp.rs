@@ -128,7 +128,7 @@ pub async fn sign_in(
     };
     let sign_ins = sign_ins_of(manager).for_project(project);
     let signed = sign_ins
-        .sign_in(server, &url, scope, open, cancelled)
+        .sign_in(server, &url, manager.app_of(server), scope, open, cancelled)
         .await?;
     manager.disconnect(server).await;
     Ok(signed)
