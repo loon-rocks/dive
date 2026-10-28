@@ -236,10 +236,12 @@ async fn parse_and_validate_structured_output(
 
     // Attempt repair
     let error_msg = errors.join("; ");
-    let repaired = router
-        .repair_structured(&json_value, schema, &error_msg)
-        .await
-        .map_err(|e| format!("output repair failed: {e}"))?;
+    let repaired = crate::usage::CallSite::repairing(
+        &error_msg,
+        router.repair_structured(&json_value, schema, &error_msg),
+    )
+    .await
+    .map_err(|e| format!("output repair failed: {e}"))?;
 
     // Re-validate repaired output
     let remaining: Vec<String> = validator

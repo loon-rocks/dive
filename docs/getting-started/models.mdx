@@ -74,7 +74,7 @@ A provider is a connection to a model API, written as `[providers.<name>]`:
 | `planner` | Drafting plans |
 | `outliner` | Listing a goal's inputs and steps before the planner drafts |
 | `solver` | Writing the answer for a plan that finishes with `solver` |
-| `repair` | One retry when a model's structured output doesn't parse. Output cut off at the model's output limit is never repaired: the call fails with an error naming the limit |
+| `repair` | One retry when a model's structured output doesn't parse. When a prompt tool's output is missing required fields, the same model is first asked again with the original messages, so it can fill them in from what it saw; the `repair` role then fixes whatever is still wrong, from the output and the schema alone. Output cut off at the model's output limit is never repaired: the call fails with an error naming the limit |
 | `judge` | `infer` conditions on `exit`, `route` and `filter` |
 | `decider` | `decide` conditions and tool search. Needs a decision model |
 | `image` | `builtin__generate_image`. Needs an image model |

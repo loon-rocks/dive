@@ -1284,7 +1284,7 @@ impl UserToolRegistry {
             ..Default::default()
         };
         let role = model.unwrap_or(Role::Chat.as_str());
-        let response = CallSite::as_role(role, self.router.chat_named(role, request))
+        let response = CallSite::as_role(role, self.router.chat_named(role, request.clone()))
             .await
             .map_err(|e| ToolError::Transport(e.to_string()))?;
         let result = match response.structured {
@@ -1297,12 +1297,37 @@ impl UserToolRegistry {
         // rely on every declared field existing (a missing key is a hard
         // template error downstream).
         let result = match &schema {
-            Some(schema) => self.enforce_schema(result, schema, return_mismatch).await?,
+            Some(schema) => {
+                self.enforce_schema(result, schema, return_mismatch, Some((role, &request)))
+                    .await?
+            }
             None => result,
         };
         Ok(ToolOutcome {
             result,
             is_error: false,
+        })
+    }
+
+    async fn ask_again(
+        &self,
+        role: &str,
+        request: &ChatRequest,
+        value: &Value,
+        error: &str,
+    ) -> Result<Value, dive_llm::LlmError> {
+        let mut again = request.clone();
+        again.messages.push(ChatMessage::Assistant {
+            content: Some(value.to_string()),
+            tool_calls: Vec::new(),
+            thinking: Vec::new(),
+        });
+        again.messages.push(ChatMessage::user(format!(
+            "That JSON doesn't match the output schema: {error}\n\nReturn the whole document again, with every required field filled from the messages above."
+        )));
+        let response = CallSite::repairing(error, self.router.chat_named(role, again)).await?;
+        response.structured.ok_or_else(|| {
+            dive_llm::LlmError::SchemaMismatch("the model produced no structured output".into())
         })
     }
 
@@ -1314,6 +1339,7 @@ impl UserToolRegistry {
         value: Value,
         schema: &Value,
         return_mismatch: bool,
+        asked: Option<(&str, &ChatRequest)>,
     ) -> Result<Value, ToolError> {
         let validator = jsonschema::validator_for(schema)
             .map_err(|e| ToolError::Transport(format!("invalid output_schema: {e}")))?;
@@ -1327,11 +1353,39 @@ impl UserToolRegistry {
         if problems(&value).is_none() {
             return Ok(value);
         }
-        let value = coerce_to_schema(value, schema);
-        let Some(error) = problems(&value) else {
+        let mut value = coerce_to_schema(value, schema);
+        let Some(mut error) = problems(&value) else {
             return Ok(value);
         };
-        let repaired = match self.router.repair_structured(&value, schema, &error).await {
+        let missing = validator.iter_errors(&value).any(|e| {
+            matches!(
+                e.kind,
+                jsonschema::error::ValidationErrorKind::Required { .. }
+            )
+        });
+        if let Some((role, request)) = asked.filter(|_| missing) {
+            match self.ask_again(role, request, &value, &error).await {
+                Ok(again) => {
+                    let again = coerce_to_schema(again, schema);
+                    match problems(&again) {
+                        None => return Ok(again),
+                        Some(still) => {
+                            value = again;
+                            error = still;
+                        }
+                    }
+                }
+                Err(problem) => {
+                    tracing::warn!(error = %problem, "asking the model again for its missing fields failed")
+                }
+            }
+        }
+        let repairing = CallSite::repairing(
+            &error,
+            self.router.repair_structured(&value, schema, &error),
+        )
+        .await;
+        let repaired = match repairing {
             Ok(repaired) => repaired,
             Err(_) if return_mismatch => return Ok(value),
             Err(e) => return Err(ToolError::Transport(format!("output repair failed: {e}"))),
