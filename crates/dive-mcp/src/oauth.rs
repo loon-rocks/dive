@@ -39,6 +39,16 @@ struct Saved {
     credentials: StoredCredentials,
 }
 
+impl Saved {
+    fn sign_in(self, scope: SignInScope) -> SignIn {
+        SignIn {
+            scope,
+            signed_in_at: self.signed_in_at,
+            access: self.credentials.granted_scopes,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct SignIns {
     store: Arc<dyn SignInStore>,
@@ -50,10 +60,6 @@ impl SignIns {
         Self { store, project }
     }
 
-    pub fn project(&self) -> Option<&str> {
-        self.project.as_deref()
-    }
-
     pub fn for_project(&self, project: Option<String>) -> Self {
         Self {
             store: self.store.clone(),
@@ -62,18 +68,7 @@ impl SignIns {
     }
 
     pub fn status(&self, url: &str) -> Result<Option<SignIn>, StoreError> {
-        let Some((scope, saved)) = self.in_use(url)? else {
-            return Ok(None);
-        };
-        Ok(Some(SignIn {
-            scope,
-            signed_in_at: saved.signed_in_at,
-            access: saved.credentials.granted_scopes,
-        }))
-    }
-
-    pub fn saved_in(&self, url: &str, scope: SignInScope) -> Result<bool, StoreError> {
-        Ok(self.read(url, self.target(scope)?)?.is_some())
+        Ok(self.in_use(url)?.map(|(scope, saved)| saved.sign_in(scope)))
     }
 
     pub fn sign_out(&self, url: &str, scope: SignInScope) -> Result<bool, StoreError> {
@@ -100,12 +95,7 @@ impl SignIns {
 
         let failed = |error: AuthError| anyhow!("couldn't sign in to {server}: {error}");
         let mut manager = AuthorizationManager::new(url).await.map_err(failed)?;
-        manager.set_credential_store(Stored {
-            store: self.store.clone(),
-            url: url.to_string(),
-            project: project.clone(),
-            fresh: true,
-        });
+        manager.set_credential_store(self.stored(url, project.clone(), true));
         let metadata = manager.discover_metadata().await.map_err(failed)?;
         manager.set_metadata(metadata);
         let scopes = manager.select_scopes(None, &[]);
@@ -159,14 +149,10 @@ impl SignIns {
             "Dive has it from here. You can close this tab.",
         )
         .await;
-        let saved = self
+        Ok(self
             .read(url, project.as_deref())?
-            .context("the sign-in finished but nothing was saved")?;
-        Ok(SignIn {
-            scope,
-            signed_in_at: saved.signed_in_at,
-            access: saved.credentials.granted_scopes,
-        })
+            .context("the sign-in finished but nothing was saved")?
+            .sign_in(scope))
     }
 
     pub(crate) async fn client(
@@ -183,12 +169,7 @@ impl SignIns {
             }
         };
         let mut manager = AuthorizationManager::new(url).await?;
-        manager.set_credential_store(Stored {
-            store: self.store.clone(),
-            url: url.to_string(),
-            project,
-            fresh: false,
-        });
+        manager.set_credential_store(self.stored(url, project, false));
         if !manager.initialize_from_store().await? {
             return Ok(None);
         }
@@ -204,6 +185,15 @@ impl SignIns {
         Ok(self
             .read(url, None)?
             .map(|saved| (SignInScope::Global, saved)))
+    }
+
+    fn stored(&self, url: &str, project: Option<String>, fresh: bool) -> Stored {
+        Stored {
+            store: self.store.clone(),
+            url: url.to_string(),
+            project,
+            fresh,
+        }
     }
 
     fn read(&self, url: &str, project: Option<&str>) -> Result<Option<Saved>, StoreError> {

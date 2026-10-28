@@ -91,14 +91,8 @@ impl McpManager {
     }
 
     pub async fn disconnect(&self, server: &str) {
-        let Some(handle) = self.servers.get(server) else {
-            return;
-        };
-        let connection = handle.connection.lock().await.take();
-        if let Some(connection) = connection {
-            if let Err(e) = connection.client.cancel().await {
-                tracing::debug!(server, error = %e, "mcp disconnect");
-            }
+        if let Some(handle) = self.servers.get(server) {
+            handle.close().await;
         }
     }
 
@@ -127,12 +121,7 @@ impl McpManager {
     /// attached to the user's terminal.
     pub async fn shutdown(&self) {
         for handle in self.servers.values() {
-            let connection = handle.connection.lock().await.take();
-            if let Some(connection) = connection {
-                if let Err(e) = connection.client.cancel().await {
-                    tracing::debug!(server = handle.name, error = %e, "mcp shutdown");
-                }
-            }
+            handle.close().await;
         }
     }
 }
@@ -183,6 +172,15 @@ impl ToolRegistry for McpManager {
 }
 
 impl ServerHandle {
+    async fn close(&self) {
+        let connection = self.connection.lock().await.take();
+        if let Some(connection) = connection {
+            if let Err(e) = connection.client.cancel().await {
+                tracing::debug!(server = self.name, error = %e, "mcp shutdown");
+            }
+        }
+    }
+
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
         let mut guard = self.connection.lock().await;
         if guard.is_none() {
