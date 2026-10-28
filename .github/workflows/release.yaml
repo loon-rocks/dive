@@ -99,6 +99,11 @@ jobs:
       - name: Publish the docs for this release
         run: git push origin "HEAD:refs/heads/docs-live"
 
+      - name: Rebuild the docs site
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: gh api repos/loon-rocks/site/dispatches -f event_type=docs-live
+
   # Container image for CI (and docker run): the linux binary plus git/jq/gh.
   # Tagged vX.Y.Z, X.Y, and latest. Runs after the release exists on tag
   # pushes, standalone on workflow_dispatch backfills.
