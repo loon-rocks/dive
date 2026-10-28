@@ -25,6 +25,8 @@ pub const TRANSFER_BACK: &str = "transfer_back";
 
 pub const CONTEXT_AUTHOR_PREFIX: &str = "context:";
 
+pub const ERROR_AUTHOR_PREFIX: &str = "error:";
+
 pub const MAX_HANDOFFS_PER_TURN: usize = 4;
 
 pub type ContextHook = Arc<dyn Fn(&str) -> Vec<String> + Send + Sync>;
@@ -62,8 +64,14 @@ pub enum ConversationError {
         agent: String,
         #[source]
         source: AgentError,
-        partial: Vec<NewEntry>,
+        partial: Box<Partial>,
     },
+}
+
+#[derive(Debug, Default)]
+pub struct Partial {
+    pub entries: Vec<NewEntry>,
+    pub spans: Vec<crate::trace::Span>,
 }
 
 #[derive(Debug)]
@@ -134,7 +142,22 @@ impl Conversation {
             Err(error) => traced.close(true, Some(&json!({ "error": error.to_string() }))),
         }
         let spans = traced.spans();
-        result.map(|turn| ConversationTurn { spans, ..turn })
+        match result {
+            Ok(turn) => Ok(ConversationTurn { spans, ..turn }),
+            Err(ConversationError::Turn {
+                agent,
+                source,
+                mut partial,
+            }) => {
+                partial.spans = spans;
+                Err(ConversationError::Turn {
+                    agent,
+                    source,
+                    partial,
+                })
+            }
+            Err(other) => Err(other),
+        }
     }
 
     async fn turn(
@@ -193,7 +216,10 @@ impl Conversation {
             let outcome = result.map_err(|source| ConversationError::Turn {
                 agent: active.clone(),
                 source,
-                partial: entries.clone(),
+                partial: Box::new(Partial {
+                    entries: entries.clone(),
+                    spans: Vec::new(),
+                }),
             })?;
             tool_calls_made += outcome.tool_calls_made;
             for tool in outcome.tools_used {
@@ -480,6 +506,62 @@ fn place_runs(entries: &mut Vec<NewEntry>, start: usize, runs: Vec<NewEntry>) {
     entries.extend(unmatched);
 }
 
+pub fn failed_turn(
+    error: &ConversationError,
+    active: &str,
+    user: Option<ChatMessage>,
+) -> ConversationTurn {
+    let (agent, mut entries, spans) = match error {
+        ConversationError::Turn { agent, partial, .. } => (
+            agent.clone(),
+            partial.entries.clone(),
+            partial.spans.clone(),
+        ),
+        _ => (
+            active.to_string(),
+            user.map(|user| NewEntry::message(USER_AUTHOR, user))
+                .into_iter()
+                .collect(),
+            Vec::new(),
+        ),
+    };
+    while let Some(unanswered) = unanswered_calls(&entries) {
+        entries.truncate(unanswered);
+    }
+    entries.push(NewEntry::message(
+        &format!("{ERROR_AUTHOR_PREFIX}{agent}"),
+        ChatMessage::user(error.to_string()),
+    ));
+    ConversationTurn {
+        text: String::new(),
+        active: agent,
+        entries,
+        tool_calls_made: 0,
+        tools_used: Vec::new(),
+        spans,
+    }
+}
+
+fn unanswered_calls(entries: &[NewEntry]) -> Option<usize> {
+    let (at, calls) =
+        entries
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(at, entry)| match &entry.body {
+                EntryBody::Message {
+                    message: ChatMessage::Assistant { tool_calls, .. },
+                } if !tool_calls.is_empty() => Some((at, tool_calls)),
+                _ => None,
+            })?;
+    let answered = |id: &str| {
+        entries[at + 1..].iter().any(|entry| {
+            matches!(&entry.body, EntryBody::Message { message: ChatMessage::ToolResult { tool_call_id, .. } } if tool_call_id == id)
+        })
+    };
+    (!calls.iter().all(|call| answered(&call.id))).then_some(at)
+}
+
 pub fn view<'a>(agent: &str, entries: impl Iterator<Item = &'a NewEntry>) -> Vec<ChatMessage> {
     let mut messages = Vec::new();
     let mut note: Vec<String> = Vec::new();
@@ -518,6 +600,17 @@ pub fn view<'a>(agent: &str, entries: impl Iterator<Item = &'a NewEntry>) -> Vec
                 .is_some_and(|owner| owner == agent) =>
             {
                 note.push(content.clone())
+            }
+            EntryBody::Message {
+                message: ChatMessage::User { content, .. },
+            } if entry
+                .author
+                .strip_prefix(ERROR_AUTHOR_PREFIX)
+                .is_some_and(|owner| owner == agent) =>
+            {
+                note.push(format!(
+                    "[Your previous turn stopped with this error, so it has no reply; the steps above it ran] {content}"
+                ))
             }
             EntryBody::Message {
                 message:
@@ -1348,10 +1441,74 @@ mod tests {
         else {
             panic!("the turn should fail");
         };
-        assert_eq!(partial.len(), 4);
+        assert_eq!(partial.entries.len(), 4);
         assert!(partial
+            .entries
             .iter()
             .all(|entry| entry.ms.is_none() && entry.usage.is_none()));
+    }
+
+    #[tokio::test]
+    async fn a_failed_turn_is_kept_with_its_error_and_the_agent_reads_it_next_turn() {
+        let mut empty = text("");
+        empty.stop_reason = StopReason::MaxTokens;
+        let (conversation, provider) = conversation(vec![
+            call("c1", "t__echo", json!({"x": 1})),
+            empty,
+            text("I see the earlier error."),
+        ]);
+        let error = conversation.run_turn(&[], "front", "go").await.unwrap_err();
+        let failed = failed_turn(&error, "front", None);
+        let authors: Vec<&str> = failed
+            .entries
+            .iter()
+            .map(|entry| entry.author.as_str())
+            .collect();
+        assert_eq!(authors.first(), Some(&USER_AUTHOR));
+        assert_eq!(authors.last(), Some(&"error:front"));
+        assert_eq!(failed.active, "front");
+        conversation
+            .run_turn(&failed.entries, "front", "what happened?")
+            .await
+            .unwrap();
+        let requests = provider.requests.lock().unwrap();
+        let last = user_text(requests.last().unwrap());
+        assert!(
+            last.contains("[Your previous turn stopped with this error")
+                && last.contains(&error.to_string()),
+            "{last}"
+        );
+    }
+
+    #[test]
+    fn a_failed_turn_drops_a_tool_call_that_never_got_its_result() {
+        let calls = ChatMessage::Assistant {
+            content: None,
+            tool_calls: vec![ToolCall {
+                id: "c1".into(),
+                name: "t__echo".into(),
+                arguments: json!({}),
+            }],
+            thinking: Vec::new(),
+        };
+        let error = ConversationError::Turn {
+            agent: "front".into(),
+            source: AgentError::MaxIterations(1),
+            partial: Box::new(Partial {
+                entries: vec![
+                    NewEntry::message(USER_AUTHOR, ChatMessage::user("go")),
+                    NewEntry::message("front", calls),
+                ],
+                spans: Vec::new(),
+            }),
+        };
+        let failed = failed_turn(&error, "front", None);
+        let authors: Vec<&str> = failed
+            .entries
+            .iter()
+            .map(|entry| entry.author.as_str())
+            .collect();
+        assert_eq!(authors, [USER_AUTHOR, "error:front"]);
     }
 
     #[tokio::test]

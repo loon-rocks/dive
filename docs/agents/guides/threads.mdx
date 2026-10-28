@@ -44,6 +44,8 @@ chat> The latest stable version of Rust is **1.99.0**, released October 1, 2026.
   ↳ chat ran researcher (8 messages)
 ```
 
+When a turn fails, for example on a provider error, the thread keeps what the turn did before the error: your message, the tool calls that finished and their results. It then records the error itself, authored `error:<agent>`. The agent reads that error at the start of its next turn, so it knows why it stopped and what already ran. A tool call that never got its result is dropped, because a model can't be sent one.
+
 ## Continue it
 
 Pass the thread's id with `--thread`, after the message:

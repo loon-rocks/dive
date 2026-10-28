@@ -539,7 +539,7 @@ impl WorkbenchTools {
                 .unwrap_or_default()
                 .into_iter()
                 .find(|shape| shape.tool == name)
-                .map(|shape| json!({"schema": shape.schema, "example": shape.example})),
+                .map(|shape| json!({"schema": shape.schema, "example": dive_core::files::without_refs(shape.example)})),
             None => None,
         };
         if let Some(identifier) = pipeline
