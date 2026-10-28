@@ -1,11 +1,13 @@
 mod memory;
 pub mod references;
+mod sign_ins;
 mod store;
 
 pub use dive_config::secrets::{
     is_project_id, is_secret_name, EnvSource, InProject, Origin, Resolved, SecretSource,
 };
 pub use memory::MemorySecrets;
+pub use sign_ins::{sign_in_account, MemorySignIns, SignInStore, SIGN_IN_SERVICE};
 pub use store::{CredentialStore, SERVICE, STORE_ENV};
 
 use std::sync::Arc;

@@ -1,0 +1,51 @@
+---
+title: "dive mcp logout"
+sidebarTitle: "logout"
+description: "Remove a saved sign-in"
+playground: "none"
+keywords: ["dive mcp logout"]
+---
+
+Removes the sign-in this project uses: its own if it has one, else the global one, which every project without its own sign-in shares. --project or --global picks one explicitly.
+
+## Arguments
+
+<ParamField path="SERVER" type="string" required>
+  The server name, as configured under `[mcp.<name>]`
+</ParamField>
+
+## Options
+
+<ParamField query="--project" type="boolean">
+  Remove this project's sign-in
+</ParamField>
+
+<ParamField query="--global" type="boolean">
+  Remove the global sign-in
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive mcp logout [OPTIONS] <SERVER>
+```
+
+```bash Example 1
+dive mcp logout linear
+```
+
+```bash Example 2
+dive mcp logout linear --global
+```
+
+</RequestExample>

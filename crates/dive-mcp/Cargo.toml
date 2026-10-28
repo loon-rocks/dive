@@ -22,7 +22,9 @@ rmcp = { version = "2.2", default-features = false, features = [
     "transport-child-process",
     "transport-streamable-http-client-reqwest",
     "reqwest",
+    "auth",
 ] }
+reqwest = { version = "0.13", default-features = false }
 
 [dev-dependencies]
 toml.workspace = true

@@ -56,11 +56,18 @@ impl Runtime {
         });
         Ok(Self::with_packs(loaded.config, packs, options)?
             .in_project(workspace.project())
-            .in_root(root))
+            .in_root(root)
+            .signing_in_for(workspace))
     }
 
     pub fn in_root(mut self, root: Option<std::path::PathBuf>) -> Self {
         self.root = root;
+        self
+    }
+
+    pub fn signing_in_for(self, workspace: &Workspace) -> Self {
+        self.registry
+            .use_sign_ins(system_sign_ins(crate::secrets::project_id(workspace)));
         self
     }
 
@@ -109,8 +116,11 @@ impl Runtime {
         let router = router
             .with_meter(usage.clone())
             .with_image_source(Arc::new(dive_core::files::FileImages(files.clone())));
-        let registry =
-            Arc::new(McpManager::new(loaded.config.mcp.clone()).with_files(files.clone()));
+        let registry = Arc::new(
+            McpManager::new(loaded.config.mcp.clone())
+                .with_files(files.clone())
+                .with_sign_ins(system_sign_ins(None)),
+        );
         let drafted = Arc::new(
             dive_core::pipeline::Drafted::new(
                 loaded
@@ -895,6 +905,13 @@ pub fn global_config_dir() -> PathBuf {
 
 pub fn is_global_dir(dir: &Path) -> bool {
     dive_config::is_global_dir(dir)
+}
+
+pub fn system_sign_ins(project: Option<String>) -> dive_mcp::SignIns {
+    dive_mcp::SignIns::new(
+        Arc::new(dive_core::secrets::CredentialStore::system()),
+        project,
+    )
 }
 
 #[derive(Debug, Clone, Default)]

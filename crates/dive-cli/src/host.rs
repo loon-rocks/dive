@@ -23,8 +23,10 @@ pub fn load_config() -> Result<dive_config::LoadedConfig> {
 pub fn runtime() -> Result<Runtime> {
     let loaded = load_config()?;
     let packs = runtime::load_packs(&loaded)?;
+    let workspace = Workspace::current();
     Ok(Runtime::with_packs(loaded.config, packs, options())?
-        .in_project(Workspace::current().project()))
+        .in_project(workspace.project())
+        .signing_in_for(&workspace))
 }
 
 pub fn open_store(config: &dive_config::Config) -> Result<Arc<dyn dive_core::Store>> {

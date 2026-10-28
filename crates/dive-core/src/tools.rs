@@ -94,6 +94,16 @@ pub enum ToolError {
     Unknown(String),
     #[error("tool transport failed: {0}")]
     Transport(String),
+    #[error("{}", sign_in_message(server, *expired))]
+    NeedsSignIn { server: String, expired: bool },
+}
+
+fn sign_in_message(server: &str, expired: bool) -> String {
+    if expired {
+        format!("mcp server '{server}' no longer accepts the saved sign-in: run `dive mcp login {server}` to sign in again")
+    } else {
+        format!("mcp server '{server}' needs sign-in: run `dive mcp login {server}`")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

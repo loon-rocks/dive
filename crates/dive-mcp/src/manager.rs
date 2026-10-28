@@ -1,5 +1,6 @@
 //! MCP server lifecycle: lazy connection, tool discovery, invocation.
 
+use crate::oauth::{SignIns, WantsSignIn};
 use crate::stderr::StderrTail;
 use dive_config::McpServerConfig;
 use dive_core::files::BlobStore;
@@ -23,17 +24,22 @@ type Client = RunningService<RoleClient, ClientInfo>;
 
 pub struct McpManager {
     servers: BTreeMap<String, ServerHandle>,
+    sign_ins: SharedSignIns,
 }
+
+type SharedSignIns = Arc<std::sync::RwLock<Option<SignIns>>>;
 
 struct ServerHandle {
     name: String,
     config: McpServerConfig,
     connection: Mutex<Option<Connection>>,
     files: Option<Arc<dyn BlobStore>>,
+    sign_ins: SharedSignIns,
 }
 
 struct Connection {
     client: Client,
+    signed_in: bool,
     tools: Vec<ToolDef>,
     description: Option<String>,
     reported: Option<(String, String)>,
@@ -41,7 +47,9 @@ struct Connection {
 
 impl McpManager {
     pub fn new(servers: BTreeMap<String, McpServerConfig>) -> Self {
+        let sign_ins = SharedSignIns::default();
         Self {
+            sign_ins: sign_ins.clone(),
             servers: servers
                 .into_iter()
                 .map(|(name, config)| {
@@ -50,6 +58,7 @@ impl McpManager {
                         config,
                         connection: Mutex::new(None),
                         files: None,
+                        sign_ins: sign_ins.clone(),
                     };
                     (name, handle)
                 })
@@ -62,6 +71,29 @@ impl McpManager {
             handle.files = Some(files.clone());
         }
         self
+    }
+
+    pub fn with_sign_ins(self, sign_ins: SignIns) -> Self {
+        self.use_sign_ins(sign_ins);
+        self
+    }
+
+    pub fn use_sign_ins(&self, sign_ins: SignIns) {
+        *self.sign_ins.write().unwrap() = Some(sign_ins);
+    }
+
+    pub fn sign_ins(&self) -> Option<SignIns> {
+        self.sign_ins.read().unwrap().clone()
+    }
+
+    pub fn url_of(&self, server: &str) -> Option<&str> {
+        self.servers.get(server)?.config.url.as_deref()
+    }
+
+    pub async fn disconnect(&self, server: &str) {
+        if let Some(handle) = self.servers.get(server) {
+            handle.close().await;
+        }
     }
 
     pub fn server_names(&self) -> Vec<&str> {
@@ -89,12 +121,7 @@ impl McpManager {
     /// attached to the user's terminal.
     pub async fn shutdown(&self) {
         for handle in self.servers.values() {
-            let connection = handle.connection.lock().await.take();
-            if let Some(connection) = connection {
-                if let Err(e) = connection.client.cancel().await {
-                    tracing::debug!(server = handle.name, error = %e, "mcp shutdown");
-                }
-            }
+            handle.close().await;
         }
     }
 }
@@ -145,6 +172,15 @@ impl ToolRegistry for McpManager {
 }
 
 impl ServerHandle {
+    async fn close(&self) {
+        let connection = self.connection.lock().await.take();
+        if let Some(connection) = connection {
+            if let Err(e) = connection.client.cancel().await {
+                tracing::debug!(server = self.name, error = %e, "mcp shutdown");
+            }
+        }
+    }
+
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
         let mut guard = self.connection.lock().await;
         if guard.is_none() {
@@ -202,11 +238,19 @@ impl ServerHandle {
         if let Some(arguments) = arguments {
             params = params.with_arguments(arguments);
         }
-        let result = connection
-            .client
-            .call_tool(params)
-            .await
-            .map_err(|e| ToolError::Transport(e.to_string()))?;
+        let result = match connection.client.call_tool(params).await {
+            Ok(result) => result,
+            Err(error) if error.wants_sign_in() => {
+                let expired = connection.signed_in;
+                drop(guard);
+                self.connection.lock().await.take();
+                return Err(ToolError::NeedsSignIn {
+                    server: self.name.clone(),
+                    expired,
+                });
+            }
+            Err(error) => return Err(ToolError::Transport(error.to_string())),
+        };
 
         let extracted = extract_result(
             result.structured_content.clone(),
@@ -263,6 +307,7 @@ impl ServerHandle {
             )));
         }
         let info = client_info();
+        let mut signed_in = false;
         let client: Client = if let Some(command) = &self.config.command {
             let cmd = tokio::process::Command::new(command);
             let configured = cmd.configure(|cmd| {
@@ -298,10 +343,35 @@ impl ServerHandle {
             }
             let config =
                 StreamableHttpClientTransportConfig::with_uri(url.clone()).custom_headers(headers);
-            let transport = StreamableHttpClientTransport::from_config(config);
-            info.serve(transport)
-                .await
-                .map_err(|e| ToolError::Transport(e.to_string()))?
+            let sign_ins = self.sign_ins.read().unwrap().clone();
+            let authorized = match sign_ins {
+                Some(sign_ins) if !self.sends_authorization() => sign_ins
+                    .client(url)
+                    .await
+                    .map_err(|e| ToolError::Transport(e.to_string()))?,
+                _ => None,
+            };
+            signed_in = authorized.is_some();
+            let served = match authorized {
+                Some(client) => {
+                    info.serve(StreamableHttpClientTransport::with_client(client, config))
+                        .await
+                }
+                None => {
+                    info.serve(StreamableHttpClientTransport::from_config(config))
+                        .await
+                }
+            };
+            match served {
+                Ok(client) => client,
+                Err(error) if error.wants_sign_in() => {
+                    return Err(ToolError::NeedsSignIn {
+                        server: self.name.clone(),
+                        expired: signed_in,
+                    })
+                }
+                Err(error) => return Err(ToolError::Transport(error.to_string())),
+            }
         } else {
             return Err(ToolError::Transport(format!(
                 "mcp server '{}' has neither command nor url",
@@ -354,10 +424,18 @@ impl ServerHandle {
         });
         Ok(Connection {
             client,
+            signed_in,
             tools,
             description,
             reported,
         })
+    }
+
+    fn sends_authorization(&self) -> bool {
+        self.config
+            .headers
+            .keys()
+            .any(|name| name.eq_ignore_ascii_case("authorization"))
     }
 
     fn exposes(&self, tool: &str) -> bool {
@@ -523,9 +601,72 @@ mod tests {
             config,
             connection: Mutex::new(None),
             files: None,
+            sign_ins: Default::default(),
         };
         assert!(handle.exposes("a"));
         assert!(!handle.exposes("b"), "exclude wins over include");
         assert!(!handle.exposes("c"), "not in include list");
+    }
+
+    async fn refusing_server(www_authenticate: &'static str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let mut request = [0u8; 4096];
+                let _ = stream.read(&mut request).await;
+                let response = format!(
+                    "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: {www_authenticate}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        });
+        format!("http://127.0.0.1:{port}/mcp")
+    }
+
+    fn http_server(url: String) -> McpServerConfig {
+        McpServerConfig {
+            description: None,
+            command: None,
+            args: Vec::new(),
+            env: Default::default(),
+            url: Some(url),
+            headers: Default::default(),
+            include_tools: None,
+            exclude_tools: Vec::new(),
+            tool_overrides: Default::default(),
+            files: Default::default(),
+            missing_env: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_server_that_answers_401_needs_sign_in() {
+        let url = refusing_server(
+            "Bearer resource_metadata=\"http://127.0.0.1/.well-known/oauth-protected-resource\"",
+        )
+        .await;
+        let manager = McpManager::new(
+            [("linear".to_string(), http_server(url))]
+                .into_iter()
+                .collect(),
+        )
+        .with_sign_ins(SignIns::new(
+            Arc::new(dive_core::secrets::MemorySignIns::new()),
+            Some("acme".to_string()),
+        ));
+        let error = manager.connect("linear").await.unwrap_err();
+        assert!(
+            matches!(&error, ToolError::NeedsSignIn { server, expired: false } if server == "linear"),
+            "{error:?}"
+        );
+        assert_eq!(
+            error.to_string(),
+            "mcp server 'linear' needs sign-in: run `dive mcp login linear`"
+        );
+        manager.shutdown().await;
     }
 }
