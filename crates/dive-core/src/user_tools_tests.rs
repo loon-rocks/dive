@@ -1108,6 +1108,67 @@ async fn prompt_output_missing_field_is_repaired() {
 }
 
 #[tokio::test]
+async fn a_missing_field_is_asked_of_the_same_model_again_with_its_messages() {
+    struct Twice(std::sync::Mutex<Vec<ChatRequest>>);
+    #[async_trait]
+    impl ChatProvider for Twice {
+        async fn chat(&self, req: ChatRequest) -> Result<ChatResponse, LlmError> {
+            let mut seen = self.0.lock().unwrap();
+            seen.push(req);
+            let structured = if seen.len() == 1 {
+                json!({"category": "bug"})
+            } else {
+                json!({"category": "bug", "severity": "high"})
+            };
+            Ok(ChatResponse {
+                thinking: Vec::new(),
+                content: None,
+                tool_calls: vec![],
+                structured: Some(structured),
+                stop_reason: StopReason::EndTurn,
+                usage: Usage::default(),
+            })
+        }
+        async fn chat_stream(&self, _req: ChatRequest) -> Result<EventStream, LlmError> {
+            unimplemented!()
+        }
+    }
+    let chat = Arc::new(Twice(std::sync::Mutex::new(Vec::new())));
+    let mut providers: HashMap<String, Arc<dyn ChatProvider>> = HashMap::new();
+    providers.insert("chat".into(), chat.clone());
+    let choice = ModelChoice {
+        kind: None,
+        provider: "chat".into(),
+        model: "m".into(),
+        temperature: None,
+        description: None,
+        fallbacks: Vec::new(),
+        context_window: None,
+        images: None,
+    };
+    let router = Arc::new(ModelRouter::with_providers(
+        providers,
+        ModelRoles::from([("default", choice)]),
+    ));
+    let registry = UserToolRegistry::new(vec![strict_prompt_tool()], router);
+    let outcome = registry
+        .invoke("user__strict", json!({"x": 7}))
+        .await
+        .unwrap();
+    assert_eq!(outcome.result["severity"], "high");
+    let seen = chat.0.lock().unwrap();
+    assert_eq!(seen.len(), 2);
+    let again = &seen[1].messages;
+    assert_eq!(again.len(), 3);
+    assert!(
+        matches!(&again[0], dive_llm::types::ChatMessage::User { content, .. } if content == "judge 7")
+    );
+    assert!(
+        matches!(&again[2], dive_llm::types::ChatMessage::User { content, .. } if content.contains("severity"))
+    );
+}
+
+#[tokio::test]
 async fn prompt_output_unrepairable_is_an_error() {
     let router = schema_router(
         json!({"category": "bug"}), // invalid

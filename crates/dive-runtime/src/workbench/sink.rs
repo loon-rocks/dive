@@ -312,6 +312,7 @@ mod tests {
             cost_usd: None,
             input: None,
             output: None,
+            repair_reason: None,
         });
         sink.tool_finished("workbench__set_sketch", Duration::from_millis(30), false);
         match rx.try_recv().expect("a model call") {

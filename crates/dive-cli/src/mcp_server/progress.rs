@@ -232,6 +232,7 @@ mod tests {
             cost_usd: None,
             input: None,
             output: None,
+            repair_reason: None,
         }
     }
 

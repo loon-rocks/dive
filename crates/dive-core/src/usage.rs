@@ -20,6 +20,8 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
+const REPAIR_REASON_CHARS: usize = 2000;
+
 tokio::task_local! {
     /// Who is making the current inference. Unset outside a scoped site.
     static CALL_SITE: CallSite;
@@ -35,6 +37,7 @@ pub struct CallSite {
     pub path: Option<String>,
     /// Plan-call nesting, outermost first. Empty at the top level.
     pub plan_stack: Vec<String>,
+    pub repairing: Option<String>,
 }
 
 impl CallSite {
@@ -59,6 +62,13 @@ impl CallSite {
     /// is attributed here.
     pub async fn scope<F: std::future::Future>(self, future: F) -> F::Output {
         CALL_SITE.scope(self, future).await
+    }
+
+    pub async fn repairing<F: std::future::Future>(reason: &str, future: F) -> F::Output {
+        let mut site = Self::current();
+        site.role = "repair".to_string();
+        site.repairing = Some(reason.chars().take(REPAIR_REASON_CHARS).collect());
+        CALL_SITE.scope(site, future).await
     }
 
     pub async fn as_role<F: std::future::Future>(role: &str, future: F) -> F::Output {
@@ -264,6 +274,7 @@ impl UsageMeter for UsageLedger {
             elapsed: call.elapsed,
             input: call.input,
             output: call.output,
+            repair_reason: site.repairing.clone(),
         };
         crate::trace::model(event.span());
         self.calls.lock().unwrap().push(CallRecord {
@@ -298,6 +309,7 @@ pub struct ModelCallEvent {
     pub cost_usd: Option<f64>,
     pub input: Option<serde_json::Value>,
     pub output: Option<serde_json::Value>,
+    pub repair_reason: Option<String>,
 }
 
 impl ModelCallEvent {
@@ -343,6 +355,9 @@ impl ModelCallEvent {
         }
         if let Some(cost) = self.cost_usd {
             attributes.insert("dive.cost_usd".to_string(), cost.into());
+        }
+        if let Some(reason) = &self.repair_reason {
+            attributes.insert("dive.repair.reason".to_string(), reason.clone().into());
         }
         crate::trace::ModelSpan {
             name: format!("{} {}", self.kind.as_str(), self.model),
@@ -507,6 +522,28 @@ mod tests {
         assert_eq!(event.input.as_ref().unwrap()["system"], "s");
         assert_eq!(event.output.as_ref().unwrap()["content"], "c");
         assert!(!UsageLedger::unpriced().captures_content());
+    }
+
+    #[tokio::test]
+    async fn a_repair_call_is_labelled_repair_with_the_reason_it_ran() {
+        let ledger = Arc::new(priced_ledger());
+        let sink = Arc::new(Captured::default());
+        ledger.attach_events(sink.clone());
+        CallSite::role("default")
+            .at("result")
+            .scope(CallSite::repairing(
+                "\"severity\" is a required property",
+                async { ledger.record(call("sonnet", tokens(10, 1))) },
+            ))
+            .await;
+        let events = sink.0.lock().unwrap();
+        let span = events[0].span();
+        assert_eq!(events[0].role, "repair");
+        assert_eq!(events[0].site, "result");
+        assert_eq!(
+            span.attributes.get("dive.repair.reason"),
+            Some(&serde_json::json!("\"severity\" is a required property"))
+        );
     }
 
     fn tokens(input: u64, output: u64) -> Usage {

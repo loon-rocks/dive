@@ -841,6 +841,7 @@ mod tests {
             cost_usd: Some(0.5),
             input,
             output: None,
+            repair_reason: None,
         }
     }
 
