@@ -5,11 +5,63 @@ use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+pub const MAX_INLINE_TEXT: usize = 100 * 1024;
+
 #[async_trait]
 pub trait ImageSource: Send + Sync {
     fn refs_in(&self, text: &str) -> Vec<String>;
 
+    fn text_refs_in(&self, _text: &str) -> Vec<String> {
+        Vec::new()
+    }
+
     async fn load(&self, reference: &str) -> Result<ImageData, String>;
+}
+
+pub async fn inline_text(source: &dyn ImageSource, req: &mut ChatRequest) {
+    let mut seen: Vec<String> = Vec::new();
+    for message in &mut req.messages {
+        let ChatMessage::User { content, .. } = message else {
+            continue;
+        };
+        for reference in source.text_refs_in(content) {
+            if seen.contains(&reference) {
+                continue;
+            }
+            match source.load(&reference).await {
+                Ok(file) => {
+                    content.push_str("\n\n");
+                    content.push_str(&text_block(&reference, &file));
+                }
+                Err(error) => {
+                    tracing::warn!(file = %reference, %error, "couldn't load a text file for the model")
+                }
+            }
+            seen.push(reference);
+        }
+    }
+}
+
+pub fn cut_at(text: &str, max: usize) -> &str {
+    let mut end = text.len().min(max);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+fn text_block(reference: &str, file: &ImageData) -> String {
+    let text = String::from_utf8_lossy(&file.bytes);
+    let kept = cut_at(&text, MAX_INLINE_TEXT);
+    let mut block = format!(
+        "[file {reference} · {} · {} bytes]\n{kept}",
+        file.mime,
+        file.bytes.len(),
+    );
+    if kept.len() < text.len() {
+        block.push_str("\n[the rest is cut off after 100 KB; read it with builtin__read_file]");
+    }
+    block
 }
 
 pub fn message_refs(source: &dyn ImageSource, messages: &[ChatMessage]) -> Vec<String> {
@@ -172,6 +224,78 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::sync::Mutex;
+
+    struct Texts;
+
+    #[async_trait]
+    impl ImageSource for Texts {
+        fn refs_in(&self, _text: &str) -> Vec<String> {
+            Vec::new()
+        }
+
+        fn text_refs_in(&self, text: &str) -> Vec<String> {
+            text.split_whitespace()
+                .filter(|word| word.starts_with("blob:") && !word.ends_with(".png"))
+                .map(str::to_string)
+                .collect()
+        }
+
+        async fn load(&self, reference: &str) -> Result<ImageData, String> {
+            let text = if reference.contains("long") {
+                "é".repeat(MAX_INLINE_TEXT)
+            } else {
+                "body { color: red; }".to_string()
+            };
+            Ok(ImageData {
+                mime: "text/css".to_string(),
+                bytes: text.into_bytes().into(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_text_ref_in_a_user_message_is_inlined_once_and_tool_results_keep_only_the_ref() {
+        let mut req = ChatRequest {
+            messages: vec![
+                ChatMessage::user("compare blob:sha256-a.css"),
+                ChatMessage::ToolResult {
+                    tool_call_id: "t".into(),
+                    content: json!({"ref": "blob:sha256-a.css"}),
+                    is_error: false,
+                },
+                ChatMessage::user("again blob:sha256-a.css"),
+            ],
+            ..Default::default()
+        };
+        inline_text(&Texts, &mut req).await;
+        let ChatMessage::User { content, .. } = &req.messages[0] else {
+            panic!()
+        };
+        assert!(content
+            .ends_with("[file blob:sha256-a.css · text/css · 20 bytes]\nbody { color: red; }"));
+        let ChatMessage::ToolResult { content, .. } = &req.messages[1] else {
+            panic!()
+        };
+        assert_eq!(content, &json!({"ref": "blob:sha256-a.css"}));
+        let ChatMessage::User { content, .. } = &req.messages[2] else {
+            panic!()
+        };
+        assert_eq!(content, "again blob:sha256-a.css");
+    }
+
+    #[tokio::test]
+    async fn a_long_text_file_is_cut_at_100_kb_with_a_note() {
+        let mut req = ChatRequest {
+            messages: vec![ChatMessage::user("read blob:sha256-long.css")],
+            ..Default::default()
+        };
+        inline_text(&Texts, &mut req).await;
+        let ChatMessage::User { content, .. } = &req.messages[0] else {
+            panic!()
+        };
+        assert!(content.ends_with("read it with builtin__read_file]"));
+        assert!(content.len() < MAX_INLINE_TEXT + 200);
+    }
 
     struct Refs {
         loaded: Mutex<Vec<String>>,

@@ -1,10 +1,10 @@
 ---
-title: "Work with images and files"
-description: "Keep the images and audio MCP tools return, and pass them to other tools by reference."
+title: "Work with files"
+description: "Keep the files MCP tools return, of any type, save text as files, and pass them to models and other tools by reference."
 keywords: ["mcp", "images", "screenshots", "files", "storage.files", "s3", "blob"]
 ---
 
-When an MCP tool returns an image or audio, such as a browser screenshot, Dive stores the file and gives the agent a short reference to it instead of the bytes. The agent can pass that reference to another tool, and Dive hands the tool the file in the form it expects.
+When an MCP tool returns a file, such as a browser screenshot or a CSV export, Dive stores it and gives the agent a short reference to it instead of the bytes. The agent can pass that reference to another tool, and Dive hands the tool the file in the form it expects.
 
 <RequestExample>
 
@@ -27,7 +27,7 @@ secret_access_key = "${DIVE_S3_SECRET}"
 
 ## What a tool's result looks like
 
-Dive stores every image and audio item in a tool's result: inline `image` and `audio` content, embedded resources with binary contents, and `resource_link` items whose MIME type is an image or audio, which Dive reads from the server. The result lists them under `files`, next to whatever text or structured content the tool returned:
+Dive stores every file in a tool's result: inline `image` and `audio` content, embedded resources with binary or text contents, and `resource_link` items of any type, which Dive reads from the server, up to 50 MB each. The result lists them under `files`, next to whatever text or structured content the tool returned:
 
 ```json
 {
@@ -46,6 +46,8 @@ Dive stores every image and audio item in a tool's result: inline `image` and `a
 
 When the tool's result isn't an object, or already has its own `files` key, Dive puts it under `result` instead, as `{"result": …, "files": […]}`.
 
+A reference's extension carries the file's type: any lowercase extension of up to 16 letters and digits, such as `.png`, `.css` or `.parquet`. A type Dive doesn't recognize keeps its extension and reads as `application/octet-stream`.
+
 A reference names the file by its SHA-256 hash, so the same image stored twice is kept once. It stays the same wherever the file is kept, and threads and plan results that mention it keep working if you move file storage to another backend and copy the files across.
 
 Deleting a thread removes the files no other thread refers to, except in S3 storage, where other machines may share the bucket. Files kept in S3 or in memory are copied to a local cache when a tool needs a path. The cache holds up to 512 MB and drops the least recently used files past that.
@@ -58,7 +60,9 @@ Every model that reads a file reference sees the image, not just the reference: 
 - **Tool images:** images in a tool's result, wherever a reference to one appears.
 - **Images a plan passes on:** a reference rendered into a step's input or an instruction, such as `"Is there a pricing table on this page? {{shot.files.0.ref}}"`. A reference counts whether it's the whole value or part of longer text.
 
-Only PNG, JPEG, GIF and WebP files are sent this way; other files stay references. Every image stays in the conversation and is sent again on each turn.
+PNG, JPEG, GIF and WebP files are sent this way, and so are PDFs, as documents, to Anthropic models; providers without PDF input leave them out with a warning in the log. Every image stays in the conversation and is sent again on each turn.
+
+A text file, such as JSON, CSS, HTML, Markdown or CSV, is read as text when its reference appears in a message or instruction a model reads: an `infer` question, an `agent` step's task, a prompt tool's prompt or a message you send. Its content follows the text, headed by `[file <ref> · <type> · <size>]`, up to 100 KB; past that it's cut off with a note to read the rest with [`builtin__read_file`](/tools/reference/builtin/read_file). A text file's reference in a tool result is not expanded, so an agent that keeps references in its context doesn't carry every file's content; it reads one with `builtin__read_file` when it needs it.
 
 A model role takes images unless it says otherwise. For a text-only model, set `images = false` on its role, or on one of its fallbacks:
 
@@ -86,6 +90,22 @@ The pricing page highlights the Team plan:
 ```
 
 The desktop app draws the image in the message. In a terminal the markdown shows as written. The agent chooses which files to show, so a screenshot it only used to read the page stays in the tool's result.
+
+## Save and read text
+
+[`builtin__save_file`](/tools/reference/builtin/save_file) stores text or JSON a plan or agent already has, and returns its reference. [`builtin__read_file`](/tools/reference/builtin/read_file) returns a text file's content, and its JSON when it parses:
+
+```yaml plan.yaml
+- id: backup
+  tool_name: builtin__save_file
+  input:
+    name: "{{input.project_id}}-css.json"
+    content: "{{project.customCss}}"
+- id: restore
+  tool_name: builtin__read_file
+  input:
+    ref: "{{backup.ref}}"
+```
 
 ## Pass a file to another tool
 

@@ -9,7 +9,9 @@
     "tools/reference/builtin/dedupe",
     "tools/reference/builtin/sort",
     "tools/reference/builtin/take",
-    "tools/reference/builtin/rank"
+    "tools/reference/builtin/rank",
+    "tools/reference/builtin/save_file",
+    "tools/reference/builtin/read_file"
   ],
   "root": "tools/reference/builtin-tools"
 }

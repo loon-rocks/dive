@@ -145,7 +145,9 @@ fn infer_reshape_and_the_list_tools_are_always_loaded_by_default() {
             "builtin__dedupe",
             "builtin__sort",
             "builtin__take",
-            "builtin__rank"
+            "builtin__rank",
+            "builtin__save_file",
+            "builtin__read_file"
         ]
     );
 }

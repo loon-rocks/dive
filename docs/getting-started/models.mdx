@@ -147,7 +147,7 @@ provider = "gemini"
 model = "gemini-nano-banana-2.1"
 ```
 
-`builtin__generate_image` appears in the tool catalog once an image role is configured. Agents use it like any other tool by listing it, and plans call it as a step. It takes a `prompt`, optional `images` to edit, `aspect_ratio`, `size`, `count` and `path`, and returns each image as a file ref such as `blob:sha256-….png`. Once you add a second image role, such as a custom role with `type = "image"`, the call's `model` input lets agents choose between them by description. See [Work with images and files](/integrating/mcp/guides/images-and-files) for where the files are stored.
+`builtin__generate_image` appears in the tool catalog once an image role is configured. Agents use it like any other tool by listing it, and plans call it as a step. It takes a `prompt`, optional `images` to edit, `aspect_ratio`, `size`, `count` and `path`, and returns each image as a file ref such as `blob:sha256-….png`. Once you add a second image role, such as a custom role with `type = "image"`, the call's `model` input lets agents choose between them by description. See [Work with files](/integrating/mcp/guides/images-and-files) for where the files are stored.
 
 ## What a run cost
 

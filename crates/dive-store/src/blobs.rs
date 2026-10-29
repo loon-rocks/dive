@@ -215,9 +215,9 @@ fn dimensions(mime: &str, bytes: &[u8]) -> (Option<u32>, Option<u32>) {
 
 #[async_trait]
 impl BlobStore for ObjectFiles {
-    async fn put(&self, bytes: Vec<u8>, mime: &str) -> Result<StoredFile, FileError> {
+    async fn put_as(&self, bytes: Vec<u8>, extension: &str) -> Result<StoredFile, FileError> {
         let hash = format!("{:x}", Sha256::digest(&bytes));
-        let blob = BlobRef::new(hash, mime);
+        let blob = BlobRef::with_extension(hash, extension);
         let key = self.key(&blob);
         let (width, height) = dimensions(blob.mime(), &bytes);
         let size = bytes.len() as u64;
@@ -232,6 +232,7 @@ impl BlobStore for ObjectFiles {
             Err(e) => return Err(failed(&format!("checking {blob}"), e)),
         }
         Ok(StoredFile {
+            name: None,
             mime: blob.mime().to_string(),
             blob,
             bytes: size,

@@ -23,6 +23,15 @@ const TYPES: &[(&str, &str)] = &[
     ("pdf", "application/pdf"),
     ("json", "application/json"),
     ("txt", "text/plain"),
+    ("html", "text/html"),
+    ("css", "text/css"),
+    ("csv", "text/csv"),
+    ("md", "text/markdown"),
+    ("yaml", "application/yaml"),
+    ("xml", "application/xml"),
+    ("js", "text/javascript"),
+    ("zip", "application/zip"),
+    ("mp4", "video/mp4"),
     ("bin", "application/octet-stream"),
 ];
 
@@ -37,7 +46,12 @@ pub fn extension_for(mime: &str) -> &'static str {
     TYPES
         .iter()
         .find(|(_, known)| known.eq_ignore_ascii_case(mime))
-        .map_or("bin", |(extension, _)| extension)
+        .map(|(extension, _)| *extension)
+        .or_else(|| {
+            mime_guess::get_mime_extensions_str(&mime.to_ascii_lowercase())
+                .and_then(|extensions| extensions.first().copied())
+        })
+        .unwrap_or("bin")
 }
 
 pub fn mime_for(extension: &str) -> &'static str {
@@ -50,7 +64,16 @@ pub fn mime_for(extension: &str) -> &'static str {
     TYPES
         .iter()
         .find(|(known, _)| *known == extension)
-        .map_or("application/octet-stream", |(_, mime)| mime)
+        .map(|(_, mime)| *mime)
+        .or_else(|| mime_guess::from_ext(extension).first_raw())
+        .unwrap_or("application/octet-stream")
+}
+
+pub fn valid_extension(extension: &str) -> bool {
+    (1..=16).contains(&extension.len())
+        && extension
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -62,9 +85,18 @@ pub struct BlobRef {
 
 impl BlobRef {
     pub fn new(hash: impl Into<String>, mime: &str) -> Self {
+        Self::with_extension(hash, extension_for(mime))
+    }
+
+    pub fn with_extension(hash: impl Into<String>, extension: &str) -> Self {
+        let extension = extension.to_ascii_lowercase();
         Self {
             hash: hash.into(),
-            extension: extension_for(mime).to_string(),
+            extension: if valid_extension(&extension) {
+                extension
+            } else {
+                "bin".to_string()
+            },
         }
     }
 
@@ -72,8 +104,7 @@ impl BlobRef {
         let rest = text.strip_prefix(BLOB_PREFIX)?;
         let (hash, extension) = rest.split_once('.')?;
         let hex = hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit());
-        let known = TYPES.iter().any(|(known, _)| *known == extension);
-        (hex && known).then(|| Self {
+        (hex && valid_extension(extension)).then(|| Self {
             hash: hash.to_ascii_lowercase(),
             extension: extension.to_string(),
         })
@@ -118,6 +149,8 @@ impl From<BlobRef> for String {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(rename = "ref")]
     pub blob: BlobRef,
     pub mime: String,
@@ -140,7 +173,11 @@ pub struct FileError(pub String);
 
 #[async_trait]
 pub trait BlobStore: Send + Sync {
-    async fn put(&self, bytes: Vec<u8>, mime: &str) -> Result<StoredFile, FileError>;
+    async fn put(&self, bytes: Vec<u8>, mime: &str) -> Result<StoredFile, FileError> {
+        self.put_as(bytes, extension_for(mime)).await
+    }
+
+    async fn put_as(&self, bytes: Vec<u8>, extension: &str) -> Result<StoredFile, FileError>;
 
     async fn get(&self, blob: &BlobRef) -> Result<Vec<u8>, FileError>;
 
@@ -157,10 +194,39 @@ pub trait BlobStore: Send + Sync {
 
 pub const MODEL_IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
+pub const PDF_TYPE: &str = "application/pdf";
+
+const TEXT_TYPES: &[&str] = &[
+    "application/json",
+    "application/xml",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+    "application/javascript",
+    "application/x-javascript",
+    "application/x-sh",
+    "application/sql",
+    "image/svg+xml",
+];
+
+pub fn is_text(mime: &str) -> bool {
+    mime.starts_with("text/")
+        || mime.ends_with("+json")
+        || mime.ends_with("+xml")
+        || TEXT_TYPES.contains(&mime)
+}
+
 pub fn model_image_refs_in(text: &str) -> Vec<BlobRef> {
     refs_in_text(text)
         .into_iter()
-        .filter(|blob| MODEL_IMAGE_TYPES.contains(&blob.mime()))
+        .filter(|blob| MODEL_IMAGE_TYPES.contains(&blob.mime()) || blob.mime() == PDF_TYPE)
+        .collect()
+}
+
+pub fn text_refs_in(text: &str) -> Vec<BlobRef> {
+    refs_in_text(text)
+        .into_iter()
+        .filter(|blob| is_text(blob.mime()))
         .collect()
 }
 
@@ -173,6 +239,10 @@ impl dive_llm::ImageSource for FileImages {
             .iter()
             .map(ToString::to_string)
             .collect()
+    }
+
+    fn text_refs_in(&self, text: &str) -> Vec<String> {
+        text_refs_in(text).iter().map(ToString::to_string).collect()
     }
 
     async fn load(&self, reference: &str) -> Result<dive_llm::ImageData, String> {
@@ -323,12 +393,34 @@ mod tests {
         for text in [
             "blob:sha256-abc.png",
             &format!("blob:sha256-{HASH}"),
-            &format!("blob:sha256-{HASH}.exe"),
+            &format!("blob:sha256-{HASH}.PNG"),
+            &format!("blob:sha256-{HASH}.{}", "a".repeat(17)),
+            &format!("blob:sha256-{HASH}.tar/gz"),
             &format!("see blob:sha256-{HASH}.png"),
             &format!("blob:sha256-{}.png", "z".repeat(64)),
         ] {
             assert_eq!(BlobRef::parse(text), None, "{text}");
         }
+    }
+
+    #[test]
+    fn any_short_lowercase_extension_is_a_ref_and_keeps_its_type() {
+        for (extension, mime) in [
+            ("css", "text/css"),
+            ("zip", "application/zip"),
+            ("parquet", "application/octet-stream"),
+            ("exe", "application/octet-stream"),
+        ] {
+            let text = format!("blob:sha256-{HASH}.{extension}");
+            let blob = BlobRef::parse(&text).unwrap_or_else(|| panic!("{text}"));
+            assert_eq!(blob.extension(), extension);
+            assert_ne!(blob.mime(), "", "{text}");
+            if mime != "application/octet-stream" {
+                assert_eq!(blob.mime(), mime);
+            }
+        }
+        assert_eq!(BlobRef::with_extension(HASH, "CSS").extension(), "css");
+        assert_eq!(BlobRef::with_extension(HASH, "../x").extension(), "bin");
     }
 
     #[test]
@@ -338,6 +430,8 @@ mod tests {
         assert_eq!(extension_for("IMAGE/PNG"), "png");
         assert_eq!(extension_for("audio/wav; codecs=1"), "wav");
         assert_eq!(extension_for("application/x-unknown"), "bin");
+        assert_eq!(extension_for("text/html"), "html");
+        assert_eq!(mime_for("css"), "text/css");
         assert_eq!(mime_for("jpg"), "image/jpeg");
         assert_eq!(mime_for("nope"), "application/octet-stream");
     }

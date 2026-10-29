@@ -304,7 +304,10 @@ fn builtin_tools() -> Section {
         ));
         pages.push(json!(path));
     }
-    for def in dive_core::list_tools::list_tool_defs() {
+    for def in dive_core::list_tools::list_tool_defs()
+        .into_iter()
+        .chain(dive_core::file_tools::file_tool_defs())
+    {
         let name = short_name(&def.name);
         let path = format!("{BUILTIN_DIR}/{name}");
         let words = content(&format!("builtin-tools/{name}"), &def.description);

@@ -1008,6 +1008,7 @@ dependencies = [
  "jsonschema",
  "keyring",
  "keyring-core",
+ "mime_guess",
  "schemars 0.8.22",
  "semver",
  "serde",

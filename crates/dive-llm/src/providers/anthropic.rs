@@ -430,8 +430,13 @@ fn references_in(req: &ChatRequest, defer: bool) -> BTreeMap<&str, Vec<&str>> {
 }
 
 fn image_block(image: &crate::image::ImageData) -> Value {
+    let kind = if image.mime == "application/pdf" {
+        "document"
+    } else {
+        "image"
+    };
     json!({
-        "type": "image",
+        "type": kind,
         "source": {"type": "base64", "media_type": image.mime, "data": base64(&image.bytes)},
     })
 }
@@ -1022,6 +1027,26 @@ mod tests {
         let rendered = to_anthropic_messages(&messages, &BTreeMap::new(), &BTreeMap::new());
         assert_eq!(rendered.len(), 2);
         assert_eq!(rendered[1]["content"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_pdf_is_sent_as_a_document_block() {
+        let report = "blob:sha256-ccc.pdf".to_string();
+        let files = BTreeMap::from([(
+            report.clone(),
+            crate::image::ImageData {
+                mime: "application/pdf".into(),
+                bytes: b"%PDF".to_vec().into(),
+            },
+        )]);
+        let messages = vec![ChatMessage::User {
+            content: "summarize this".into(),
+            images: vec![report],
+        }];
+        let rendered = to_anthropic_messages(&messages, &BTreeMap::new(), &files);
+        let user = rendered[0]["content"].as_array().unwrap();
+        assert_eq!(user[0]["type"], "document");
+        assert_eq!(user[0]["source"]["media_type"], "application/pdf");
     }
 
     #[test]

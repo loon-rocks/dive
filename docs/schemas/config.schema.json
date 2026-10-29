@@ -564,7 +564,9 @@
             "builtin__dedupe",
             "builtin__sort",
             "builtin__take",
-            "builtin__rank"
+            "builtin__rank",
+            "builtin__save_file",
+            "builtin__read_file"
           ],
           "description": "Tools offered up front, never deferred behind a search. Plan drafting always offers them, and an agent gets the ones its `tools` list matches.",
           "items": {

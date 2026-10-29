@@ -6466,7 +6466,7 @@ struct OneImage;
 
 #[async_trait]
 impl crate::files::BlobStore for OneImage {
-    async fn put(
+    async fn put_as(
         &self,
         _: Vec<u8>,
         _: &str,

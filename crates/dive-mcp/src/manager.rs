@@ -273,11 +273,20 @@ impl ServerHandle {
                         .read_resource(ReadResourceRequestParams::new(link.uri.clone()))
                         .await
                     {
-                        Ok(read) => found.extend(
-                            read.contents
-                                .iter()
-                                .filter_map(crate::files::resource_binary),
-                        ),
+                        Ok(read) => {
+                            for file in read.contents.iter().filter_map(crate::files::resource_file)
+                            {
+                                if file.decoded_len() > crate::files::MAX_LINKED_BYTES {
+                                    tracing::warn!(
+                                        server = self.name,
+                                        uri = link.uri,
+                                        "skipping a linked file over 50 MB"
+                                    );
+                                } else {
+                                    found.push(file);
+                                }
+                            }
+                        }
                         Err(e) => tracing::warn!(
                             server = self.name,
                             uri = link.uri,

@@ -92,10 +92,11 @@ impl ModelRouter {
     }
 
     pub(crate) async fn attach_images(&self, choice: &ModelChoice, req: &mut ChatRequest) {
-        if !choice.any_model_takes_images() {
+        let Some(source) = &self.image_source else {
             return;
-        }
-        if let Some(source) = &self.image_source {
+        };
+        crate::image_input::inline_text(source.as_ref(), req).await;
+        if choice.any_model_takes_images() {
             crate::image_input::attach(source.as_ref(), req).await;
         }
     }

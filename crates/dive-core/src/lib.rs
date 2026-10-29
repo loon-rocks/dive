@@ -4,6 +4,7 @@
 //! and dive-store respectively.
 
 pub mod agent;
+pub mod file_tools;
 pub mod files;
 pub mod format;
 pub mod list_tools;

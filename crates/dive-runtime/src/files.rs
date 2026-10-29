@@ -8,7 +8,7 @@ struct Unavailable(String);
 
 #[async_trait]
 impl BlobStore for Unavailable {
-    async fn put(&self, _bytes: Vec<u8>, _mime: &str) -> Result<StoredFile, FileError> {
+    async fn put_as(&self, _bytes: Vec<u8>, _extension: &str) -> Result<StoredFile, FileError> {
         Err(FileError(self.0.clone()))
     }
 

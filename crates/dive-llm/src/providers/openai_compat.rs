@@ -86,7 +86,7 @@ impl OpenAiCompatProvider {
             }
         }
         let mut messages = vec![json!({"role": "system", "content": system})];
-        let images = super::image_fit::fit_all(&req.images, &super::image_fit::CHAT);
+        let images = super::image_fit::fit_all(&only_images(&req.images), &super::image_fit::CHAT);
         messages.extend(to_openai_messages(&req.messages, &images));
         body.insert("messages".into(), json!(messages));
         if stream {
@@ -300,6 +300,22 @@ fn offered_tools(req: &ChatRequest) -> Vec<&ToolSpec> {
     offered
 }
 
+fn only_images(
+    files: &std::collections::BTreeMap<String, crate::image::ImageData>,
+) -> std::collections::BTreeMap<String, crate::image::ImageData> {
+    files
+        .iter()
+        .filter(|(reference, file)| {
+            let image = file.mime.starts_with("image/");
+            if !image {
+                tracing::warn!(file = %reference, mime = %file.mime, "this provider takes only images; file left out");
+            }
+            image
+        })
+        .map(|(reference, file)| (reference.clone(), file.clone()))
+        .collect()
+}
+
 fn image_part(image: &crate::image::ImageData) -> Value {
     json!({
         "type": "image_url",
@@ -477,6 +493,20 @@ fn parse_json_content(text: &str) -> Result<Value, LlmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_images_reach_this_wire_format() {
+        let file = |mime: &str| crate::image::ImageData {
+            mime: mime.into(),
+            bytes: b"x".to_vec().into(),
+        };
+        let files = std::collections::BTreeMap::from([
+            ("blob:sha256-a.png".to_string(), file("image/png")),
+            ("blob:sha256-b.pdf".to_string(), file("application/pdf")),
+        ]);
+        let kept: Vec<String> = only_images(&files).into_keys().collect();
+        assert_eq!(kept, ["blob:sha256-a.png"]);
+    }
 
     #[test]
     fn images_go_in_user_parts_and_tool_images_follow_the_tool_messages() {

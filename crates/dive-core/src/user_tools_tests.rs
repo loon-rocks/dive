@@ -2218,12 +2218,21 @@ impl crate::files::BlobStore for MemoryFiles {
         let size = bytes.len() as u64;
         self.blobs.lock().unwrap().insert(blob.to_string(), bytes);
         Ok(crate::files::StoredFile {
+            name: None,
             blob,
             mime: mime.to_string(),
             bytes: size,
             width: None,
             height: None,
         })
+    }
+
+    async fn put_as(
+        &self,
+        bytes: Vec<u8>,
+        extension: &str,
+    ) -> Result<crate::files::StoredFile, crate::files::FileError> {
+        self.put(bytes, crate::files::mime_for(extension)).await
     }
 
     async fn get(&self, blob: &crate::files::BlobRef) -> Result<Vec<u8>, crate::files::FileError> {

@@ -228,12 +228,9 @@ impl Agent {
             ..Default::default()
         };
         if let Some(files) = &self.files {
-            dive_llm::image_input::attach_since(
-                &crate::files::FileImages(Arc::clone(files)),
-                &mut request,
-                *scanned,
-            )
-            .await;
+            let source = crate::files::FileImages(Arc::clone(files));
+            dive_llm::image_input::inline_text(&source, &mut request).await;
+            dive_llm::image_input::attach_since(&source, &mut request, *scanned).await;
             images.clone_from(&request.images);
             *scanned = request.messages.len();
         }
@@ -379,7 +376,7 @@ mod tests {
 
     #[async_trait]
     impl crate::files::BlobStore for OneFile {
-        async fn put(
+        async fn put_as(
             &self,
             _: Vec<u8>,
             _: &str,

@@ -961,6 +961,8 @@ impl Default for ToolPaths {
                 "builtin__sort",
                 "builtin__take",
                 "builtin__rank",
+                "builtin__save_file",
+                "builtin__read_file",
             ]
             .map(String::from)
             .to_vec(),

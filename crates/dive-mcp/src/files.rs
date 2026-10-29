@@ -15,9 +15,7 @@ pub(crate) struct Link {
     pub uri: String,
 }
 
-fn is_media(mime: &str) -> bool {
-    mime.starts_with("image/") || mime.starts_with("audio/")
-}
+pub(crate) const MAX_LINKED_BYTES: usize = 50 * 1024 * 1024;
 
 pub(crate) fn binaries(content: &[ContentBlock]) -> (Vec<Binary>, Vec<Link>) {
     let mut found = Vec::new();
@@ -32,35 +30,41 @@ pub(crate) fn binaries(content: &[ContentBlock]) -> (Vec<Binary>, Vec<Link>) {
                 data: audio.data.clone(),
                 mime: audio.mime_type.clone(),
             }),
-            ContentBlock::Resource(embedded) => {
-                if let Some(binary) = resource_binary(&embedded.resource) {
-                    found.push(binary);
-                }
-            }
-            ContentBlock::ResourceLink(link) => {
-                if link.mime_type.as_deref().is_some_and(is_media) {
-                    links.push(Link {
-                        uri: link.uri.clone(),
-                    });
-                }
-            }
+            ContentBlock::Resource(embedded) => found.extend(resource_file(&embedded.resource)),
+            ContentBlock::ResourceLink(link) => links.push(Link {
+                uri: link.uri.clone(),
+            }),
             _ => {}
         }
     }
     (found, links)
 }
 
-pub(crate) fn resource_binary(contents: &ResourceContents) -> Option<Binary> {
-    match contents {
+pub(crate) fn resource_file(contents: &ResourceContents) -> Option<Binary> {
+    Some(match contents {
         ResourceContents::BlobResourceContents {
             blob, mime_type, ..
-        } => Some(Binary {
+        } => Binary {
             data: blob.clone(),
             mime: mime_type
                 .clone()
                 .unwrap_or_else(|| "application/octet-stream".to_string()),
-        }),
-        _ => None,
+        },
+        ResourceContents::TextResourceContents {
+            text, mime_type, ..
+        } => Binary {
+            data: STANDARD.encode(text),
+            mime: mime_type
+                .clone()
+                .unwrap_or_else(|| "text/plain".to_string()),
+        },
+        _ => return None,
+    })
+}
+
+impl Binary {
+    pub(crate) fn decoded_len(&self) -> usize {
+        self.data.trim().len() / 4 * 3
     }
 }
 
@@ -146,12 +150,17 @@ mod tests {
             let size = bytes.len() as u64;
             self.put.lock().unwrap().push((bytes, mime.to_string()));
             Ok(StoredFile {
+                name: None,
                 blob: BlobRef::new(HASH, mime),
                 mime: mime.to_string(),
                 bytes: size,
                 width: None,
                 height: None,
             })
+        }
+
+        async fn put_as(&self, bytes: Vec<u8>, extension: &str) -> Result<StoredFile, FileError> {
+            self.put(bytes, dive_core::files::mime_for(extension)).await
         }
 
         async fn get(&self, _blob: &BlobRef) -> Result<Vec<u8>, FileError> {
@@ -237,6 +246,7 @@ mod tests {
     fn results_that_are_not_objects_or_already_say_files_are_wrapped() {
         let stored = || {
             vec![StoredFile {
+                name: None,
                 blob: blob(),
                 mime: "image/png".into(),
                 bytes: 3,
@@ -253,18 +263,44 @@ mod tests {
     }
 
     #[test]
-    fn only_media_resource_links_are_fetched() {
-        let link = |mime: Option<&str>| {
-            let mut resource = rmcp::model::Resource::new("file:///shot.png", "shot");
+    fn resource_links_of_every_type_are_fetched() {
+        let link = |uri: &str, mime: Option<&str>| {
+            let mut resource = rmcp::model::Resource::new(uri, "file");
             resource.mime_type = mime.map(str::to_string);
             ContentBlock::resource_link(resource)
         };
         let (_, links) = binaries(&[
-            link(Some("image/png")),
-            link(Some("text/plain")),
-            link(None),
+            link("file:///shot.png", Some("image/png")),
+            link("file:///rows.csv", Some("text/csv")),
+            link("file:///blob", None),
         ]);
-        assert_eq!(links.len(), 1);
-        assert_eq!(links[0].uri, "file:///shot.png");
+        let uris: Vec<&str> = links.iter().map(|link| link.uri.as_str()).collect();
+        assert_eq!(
+            uris,
+            ["file:///shot.png", "file:///rows.csv", "file:///blob"]
+        );
+    }
+
+    #[tokio::test]
+    async fn embedded_text_resources_are_stored_with_their_type() {
+        let files = Fake::default();
+        let text = |mime: Option<&str>| {
+            ContentBlock::resource(ResourceContents::TextResourceContents {
+                uri: "mem://1".into(),
+                mime_type: mime.map(str::to_string),
+                text: "a,b\n1,2\n".into(),
+                meta: None,
+            })
+        };
+        let (found, _) = binaries(&[text(Some("text/csv")), text(None)]);
+        store(&files, found).await;
+        let put = files.put.lock().unwrap().clone();
+        assert_eq!(
+            put,
+            vec![
+                (b"a,b\n1,2\n".to_vec(), "text/csv".to_string()),
+                (b"a,b\n1,2\n".to_vec(), "text/plain".to_string()),
+            ]
+        );
     }
 }

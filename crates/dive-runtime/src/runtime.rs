@@ -206,6 +206,7 @@ impl Runtime {
                 UserToolRegistry::new(docs.user, self.router.clone()).with_secrets(self.secrets()),
             )),
             Arc::new(dive_core::list_tools::ListTools::new(self.router.clone())),
+            Arc::new(dive_core::file_tools::FileTools::new(self.files.clone())),
         ];
         for (source, tools) in docs.packs {
             sources.push(Arc::new(
@@ -291,7 +292,10 @@ impl Runtime {
                 dive_core::packs::catalog_name(&source.name, dive_core::packs::ItemKind::Tool, "");
             named(&prefix, tools);
         }
-        for def in dive_core::list_tools::list_tool_defs() {
+        for def in dive_core::list_tools::list_tool_defs()
+            .into_iter()
+            .chain(dive_core::file_tools::file_tool_defs())
+        {
             input_schemas.insert(def.name.clone(), def.input_schema);
             builtin_tools.insert(def.name);
         }
