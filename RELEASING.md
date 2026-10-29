@@ -126,21 +126,24 @@ Which commits go where:
 Both renderings — `CHANGELOG.md` via `cliff.toml`, `docs/changelog.mdx` via
 the `cliff_context` tool — read the bumps from the tag message's
 `file versions:` line (`config 2 (from 1), plan 1, tool 1, store 1 (new)`),
-which `release.sh` writes. The tag stays the source of truth: a regeneration
-produces the same entries.
+which `release.sh` writes. A bump with no `(kind)!` commit names the commit
+that set the constant instead (`store 4 (from 3 by cbf83c3c5732)`), and that
+commit moves from the Dive entry into the kind's. The tag stays the source of
+truth: a regeneration produces the same entries.
 
 The seven scopes are therefore reserved: they mean "this commit bumps that
 file kind's version", nothing else. `check-commit-subject.sh` rejects a
 reserved scope without `!` (an ordinary change to the crate that reads those
 files takes another scope: `dive-config`, `plans`, `tools`, `agents`, `packs`, `storage`, or
-none), and `release.sh` checks the other direction before cutting: a moved
-constant needs a `(kind)!` commit whose `BREAKING CHANGE:` footer names the
-new version, and a `(kind)!` commit needs a moved constant.
+none), and `release.sh` checks the other direction before cutting: a
+`(kind)!` commit needs a moved constant, and a moved constant with no
+`(kind)!` commit is credited to the commit that set it. The `BREAKING CHANGE:` footer is optional; when a commit has one, it
+must name the new version.
 
 Breaking commits are exactly what git-cliff reports as breaking: a `!` before
 the colon, or a `BREAKING CHANGE:` footer. Either sets the commit's
-`breaking` flag; the footer text (or, without one, nothing) is what prints
-after the subject. `protect_breaking_commits` keeps a skip parser from ever
+`breaking` flag; the footer text, when there is one, is what prints after the
+subject. `protect_breaking_commits` keeps a skip parser from ever
 hiding one.
 
 ## Version bumps
@@ -168,12 +171,13 @@ only at a major release. A bump ships as one PR containing all of:
    Pack manifests and lockfiles keep theirs under
    `crates/dive-config/tests/fixtures/pack/v<N>/` and `lock/v<N>/`.
    Fixtures for every version in the window must keep loading.
-4. A breaking commit scoped to the file kind (`feat(config)!: …`) whose
-   footer names the new version — `BREAKING CHANGE: config version 2 (Dive
-   config migrate)` — which is what gives it the changelog's own `Config v2`
-   entry. That entry is the record of what changed; the file-versions page
-   states the contract and never lists versions. The release script refuses
-   to cut without the commit.
+4. A breaking commit scoped to the file kind (`feat(config)!: …`), which is
+   what gives it the changelog's own `Config v2` entry. Without one, the
+   entry lists the commit that raised the constant. A footer is optional;
+   one that adds detail names the new version — `BREAKING CHANGE: config
+   version 2 (Dive config migrate)`. That entry is the record of what
+   changed; the file-versions page states the contract and never lists
+   versions.
 
 The `format_drift` check (`.dive/plans/format_drift.yaml`, run by
 `dive-checks.yaml`) fails a PR that changes a model file's schema without

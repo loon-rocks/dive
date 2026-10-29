@@ -48,13 +48,16 @@ args:
            | map({name: .[0].group, subjects: map({subject: (subject | mdx)})}));
       def bumps: (.message // "" | capture("file versions:(?<v>[^\n]*)")? // {v: ""} | .v
                   | split(",") | map(strip)
-                  | map(capture("^(?<kind>[a-z]+) (?<version>[0-9]+) \\((?<how>from [0-9]+|new)\\)$")? // empty)
+                  | map(capture("^(?<kind>[a-z]+) (?<version>[0-9]+) \\((?<how>from [0-9]+|new)( by (?<by>[0-9a-f]+))?\\)$")? // empty)
                   | map(select(.kind as $k | file_kinds | index($k)))
                   | sort_by(.kind as $k | file_kinds | index($k)));
       def ident: sub("^v"; "V") | gsub("[.-]"; "_");
+      def owned($by): $by != null and (.id | startswith($by));
       [ .[] | . as $release | (bumps) as $bumps | ($bumps | map(.kind)) as $bumped
         | (.commits | map(select(.group != null))) as $commits
-        | ($commits | map(select((.breaking and .scope != null and (.scope as $s | $bumped | index($s)) != null) | not))) as $binary
+        | ($bumps | map(.by) | map(select(. != null))) as $owners
+        | ($commits | map(select((.breaking and .scope != null and (.scope as $s | $bumped | index($s)) != null) | not))
+                    | map(select(.id[0:12] as $id | $owners | index($id) | not))) as $binary
         | (if .timestamp then (.timestamp | gmtime | strftime("%B %e, %Y") | gsub("  "; " ")) else null end) as $date
         | [ {
               version: .version,
@@ -68,7 +71,7 @@ args:
               groups: ($binary | groups)
             } ]
           + [ $bumps[] as $bump
-              | ($commits | map(select(.breaking and .scope == $bump.kind))) as $own
+              | ($commits | map(select((.breaking and .scope == $bump.kind) or owned($bump.by)))) as $own
               | {
                   version: ($bump.kind + "-v" + $bump.version),
                   label: (($bump.kind | .[0:1] | ascii_upcase) + ($bump.kind | .[1:]) + " v" + $bump.version),

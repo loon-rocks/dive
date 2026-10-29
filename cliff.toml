@@ -15,12 +15,16 @@ body = """
 {%- endif -%}
 {%- set_global bumped = [] -%}
 {%- set_global notes = [] -%}
+{%- set_global owned = [] -%}
 {%- if versions -%}
 {%- for part in versions | split(pat=",") -%}
 {%- set part = part | trim -%}
 {%- if part is containing("(from ") or part is containing("(new)") -%}
 {%- set_global bumped = bumped | concat(with=part | split(pat=" ") | first) -%}
 {%- set_global notes = notes | concat(with=part) -%}
+{%- if part is containing(" by ") -%}
+{%- set_global owned = owned | concat(with=part | split(pat=" by ") | last | trim_end_matches(pat=")")) -%}
+{%- endif -%}
 {%- endif -%}
 {%- endfor -%}
 {%- endif -%}
@@ -32,6 +36,7 @@ body = """
 {%- set_global bucket = [] -%}
 {%- for commit in commits -%}
 {%- if commit.breaking and commit.scope and commit.scope in bumped -%}
+{%- elif commit.id | truncate(length=12, end="") in owned -%}
 {%- else -%}
 {%- set_global bucket = bucket | concat(with=commit) -%}
 {%- endif -%}
@@ -54,9 +59,13 @@ body = """
 {%- for kind in file_kinds -%}
 {%- if kind in bumped -%}
 {%- set_global note = "" -%}
+{%- set_global by = "" -%}
 {%- for part in notes -%}
 {%- if part is starting_with(kind ~ " ") -%}
 {%- set_global note = part | replace(from=kind ~ " ", to="") | split(pat=" ") | first -%}
+{%- if part is containing(" by ") -%}
+{%- set_global by = part | split(pat=" by ") | last | trim_end_matches(pat=")") -%}
+{%- endif -%}
 {%- endif -%}
 {%- endfor %}
 
@@ -65,13 +74,25 @@ body = """
 {%- for commit in commits -%}
 {%- if commit.breaking and commit.scope and commit.scope == kind -%}
 {%- set_global bucket = bucket | concat(with=commit) -%}
+{%- elif by and commit.id is starting_with(by) -%}
+{%- set_global bucket = bucket | concat(with=commit) -%}
 {%- endif -%}
 {%- endfor -%}
 {%- if bucket | length > 0 %}
+{%- set breaking = bucket | filter(attribute="breaking", value=true) -%}
+{%- if breaking | length > 0 %}
 
 ### Breaking
-{% for commit in bucket %}
+{% for commit in breaking %}
 - {{ commit.message | split(pat="\n") | first | trim }}{% if commit.breaking_description and commit.breaking_description != commit.message %} — {{ commit.breaking_description | split(pat="\n") | first | trim }}{% endif %}
+{%- endfor %}
+{%- endif -%}
+{%- for group, group_commits in bucket | filter(attribute="breaking", value=false) | group_by(attribute="group") %}
+
+### {{ group }}
+{% for commit in group_commits %}
+- {{ commit.message | split(pat="\n") | first | trim }}
+{%- endfor %}
 {%- endfor %}
 {%- else %}
 

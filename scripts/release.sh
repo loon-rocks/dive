@@ -40,20 +40,32 @@ require_dive() {
 # "<name> <version>" per line. A ref that predates a kind's constant reads
 # as "-": that kind had no version yet, and its first release announces it
 # as new rather than as a bump.
+format_specs=(
+  "config crates/dive-config/src/format.rs CONFIG_FORMAT"
+  "plan crates/dive-core/src/format.rs PLAN_FORMAT"
+  "tool crates/dive-core/src/format.rs TOOL_FORMAT"
+  "agent crates/dive-core/src/format.rs AGENT_FORMAT"
+  "store crates/dive-store/src/file.rs STORE_FORMAT"
+  "pack crates/dive-config/src/pack.rs PACK_FORMAT"
+  "lock crates/dive-config/src/pack.rs LOCK_FORMAT"
+)
+
 format_table() {
   local ref=$1
-  for spec in \
-    "config crates/dive-config/src/format.rs CONFIG_FORMAT" \
-    "plan crates/dive-core/src/format.rs PLAN_FORMAT" \
-    "tool crates/dive-core/src/format.rs TOOL_FORMAT" \
-    "agent crates/dive-core/src/format.rs AGENT_FORMAT" \
-    "store crates/dive-store/src/file.rs STORE_FORMAT" \
-    "pack crates/dive-config/src/pack.rs PACK_FORMAT" \
-    "lock crates/dive-config/src/pack.rs LOCK_FORMAT"; do
+  for spec in "${format_specs[@]}"; do
     set -- $spec
     source=$(git show "$ref:$2" 2>/dev/null || true)
     version=$(printf '%s\n' "$source" | sed -n "s/^pub const $3: u32 = \([0-9]*\);.*/\1/p" | head -1)
     echo "$1 ${version:--}"
+  done
+}
+
+bumping_commit() {
+  local kind=$1 version=$2 since=$3
+  for spec in "${format_specs[@]}"; do
+    set -- $spec
+    [ "$1" = "$kind" ] || continue
+    git log --format=%H -S "pub const $3: u32 = $version;" "$since..HEAD" -- "$2" | tail -1
   done
 }
 
@@ -77,8 +89,7 @@ resolve_release() {
   # kind's own changelog entry, so the scope and the constant must agree both
   # ways: a moved constant needs a commit that documents it, and a
   # reserved-scope commit needs a moved constant (or it is a misfiled crate
-  # change — pick another scope). The footer has to name the new version, since
-  # that line is what the changelog prints next to the subject. A kind that had
+  # change — pick another scope). A kind that had
   # no constant at the last tag is announced as new instead, with no commit
   # required — its first entry says so.
   file_versions=""
@@ -91,11 +102,16 @@ resolve_release() {
     elif [ "$was" = "-" ]; then
       file_versions="${file_versions:+$file_versions, }$kind $now (new)"
     elif [ "$now" != "$was" ]; then
-      [ "$scoped" -gt 0 ] || { echo "$kind version moved $was→$now but no breaking commit is scoped ($kind) — the changelog cannot document it" >&2; exit 1; }
+      if [ "$scoped" -eq 0 ]; then
+        by=$(bumping_commit "$kind" "$now" "$last_tag")
+        [ -n "$by" ] || { echo "$kind version moved ${was}→${now} but no commit since $last_tag sets it and none is scoped ($kind)!" >&2; exit 1; }
+        file_versions="${file_versions:+$file_versions, }$kind $now (from $was by ${by:0:12})"
+        continue
+      fi
       jq -e --arg k "$kind" --arg n "$now" \
-        '[.[] | .commits[]? | select(.breaking == true and .scope == $k)] | all(.breaking_description | test("\($k) version \($n)\\b"))' \
+        '[.[] | .commits[]? | select(.breaking == true and .scope == $k and .breaking_description != .message)] | all(.breaking_description | test("\($k) version \($n)\\b"))' \
         <<<"$unreleased" >/dev/null \
-        || { echo "every ($kind)! commit needs a footer 'BREAKING CHANGE: $kind version $now …' (see RELEASING.md > Version bumps)" >&2; exit 1; }
+        || { echo "a ($kind)! commit's BREAKING CHANGE footer must name the new version: 'BREAKING CHANGE: $kind version $now …' (see RELEASING.md > Version bumps)" >&2; exit 1; }
       file_versions="${file_versions:+$file_versions, }$kind $now (from $was)"
     else
       [ "$scoped" -eq 0 ] || { echo "a commit is scoped ($kind)! but the $kind version did not move — reserved scopes mean a version bump" >&2; exit 1; }
