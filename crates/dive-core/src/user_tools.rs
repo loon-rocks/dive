@@ -30,6 +30,7 @@ pub const BUILTIN_TOOL_PREFIX: &str = "builtin__";
 pub const PACK_DIR_ENV: &str = "DIVE_PACK_DIR";
 pub const LEGACY_PACK_DIR_ENV: &str = "GRAPH_PACK_DIR";
 pub const OUT_DIR_ENV: &str = "DIVE_OUT";
+pub const PROJECT_DIR_ENV: &str = "DIVE_PROJECT_DIR";
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 // Note: no deny_unknown_fields — serde can't combine it with #[serde(flatten)].
@@ -700,6 +701,7 @@ pub struct UserToolRegistry {
     pack_dir: Option<PathBuf>,
     files: Option<Arc<dyn BlobStore>>,
     workspace: Option<PathBuf>,
+    scratch: Option<PathBuf>,
 }
 
 impl UserToolRegistry {
@@ -712,6 +714,7 @@ impl UserToolRegistry {
             pack_dir: None,
             files: None,
             workspace: None,
+            scratch: None,
         }
     }
 
@@ -722,6 +725,11 @@ impl UserToolRegistry {
 
     pub fn with_files(mut self, files: Arc<dyn BlobStore>) -> Self {
         self.files = Some(files);
+        self
+    }
+
+    pub fn with_scratch(mut self, dir: &Path) -> Self {
+        self.scratch = Some(dir.to_path_buf());
         self
     }
 
@@ -745,6 +753,7 @@ impl UserToolRegistry {
             pack_dir: None,
             files: None,
             workspace: None,
+            scratch: None,
         }
     }
 
@@ -757,6 +766,7 @@ impl UserToolRegistry {
             pack_dir: None,
             files: None,
             workspace: None,
+            scratch: None,
         }
     }
 
@@ -905,11 +915,15 @@ impl UserToolRegistry {
                 output,
                 files,
             } => {
+                let scratch = self
+                    .scratch
+                    .as_deref()
+                    .filter(|_| cwd.is_none() && doc.read_only != Some(true));
                 self.run_exec(
                     command,
                     args,
                     env,
-                    cwd.as_deref(),
+                    cwd.as_deref().or(scratch),
                     *timeout_secs,
                     *output,
                     scope.clone(),
@@ -1076,6 +1090,14 @@ impl UserToolRegistry {
         }
         if let Some(cwd) = cwd {
             cmd.current_dir(cwd);
+            if self.scratch.as_deref() == Some(cwd) {
+                let project = self
+                    .workspace
+                    .clone()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_default();
+                cmd.env(PROJECT_DIR_ENV, project);
+            }
         }
         if let Some(dir) = &out_dir {
             cmd.env(OUT_DIR_ENV, dir.path());

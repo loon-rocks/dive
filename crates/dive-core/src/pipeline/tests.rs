@@ -6602,3 +6602,27 @@ async fn a_gate_on_a_role_without_images_gets_the_note_instead() {
     assert!(requests[0].images.is_empty());
     assert!(format!("{:?}", requests[0].messages).contains("doesn't take images"));
 }
+
+#[tokio::test]
+async fn a_test_run_writes_in_a_scratch_directory_and_says_what_it_wrote() {
+    let tool = "name: snapshotter\ndescription: Writes a snapshot under .dive\nkind: exec\ncommand: sh\nargs: ['-c', 'mkdir -p .dive/snapshots && printf x > .dive/snapshots/a.json && printf \"{\\\"project\\\":\\\"%s\\\"}\" \"$DIVE_PROJECT_DIR\"']\n";
+    let (pipeline, _dir, _human) =
+        drafting_pipeline(vec![AskOutcome::Answered(json!({"run": true}))]);
+    let before = std::env::current_dir().unwrap();
+    let tried = pipeline
+        .call_native(
+            "builtin__try_tool",
+            json!({"yaml": tool, "input": {}, "purpose": "Check it writes a snapshot."}),
+        )
+        .await;
+    assert_eq!(tried.result["ran"], json!(true), "{}", tried.result);
+    assert_eq!(
+        tried.result["test_writes"]["files"],
+        json!([".dive/snapshots/a.json"])
+    );
+    assert_eq!(
+        tried.result["result"]["project"],
+        before.display().to_string()
+    );
+    assert!(!before.join(".dive/snapshots/a.json").exists());
+}

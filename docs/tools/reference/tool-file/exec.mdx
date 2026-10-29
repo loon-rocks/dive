@@ -25,7 +25,7 @@ These fields go alongside the [common fields](/tools/reference/tool-file#common-
 </ParamField>
 
 <ParamField body="cwd" type="string">
-  Working directory for the process.
+  Working directory for the process. Without one, the command runs in the project directory, except in a test run before the tool is saved, where a tool that isn't `read_only` runs in an empty scratch directory that's removed afterwards, with the project's path in `DIVE_PROJECT_DIR`.
 </ParamField>
 
 <ParamField body="timeout_secs" type="integer" default="60">

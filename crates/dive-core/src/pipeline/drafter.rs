@@ -143,6 +143,23 @@ impl ToolRegistry for DraftedTools {
     }
 }
 
+fn scratch_writes(dir: &Path) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        for entry in std::fs::read_dir(&next).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if let Ok(relative) = path.strip_prefix(dir) {
+                found.push(relative.display().to_string());
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
 pub fn drafter_tool_defs() -> Vec<ToolDef> {
     vec![
         ToolDef {
@@ -431,14 +448,26 @@ impl Pipeline {
         }
         let name = format!("{USER_TOOL_PREFIX}{}", doc.name);
         let hidden = stored_values(&doc, self.drafted.secrets.as_ref(), &Default::default());
-        let registry = UserToolRegistry::new(vec![doc], self.router.clone())
-            .with_secrets(self.drafted.secrets.clone());
+        let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let mut registry = UserToolRegistry::new(vec![doc], self.router.clone())
+            .with_secrets(self.drafted.secrets.clone())
+            .with_scratch(scratch.path());
+        if let Some(space) = &self.files {
+            registry = registry.with_files(space.store.clone());
+        }
         let outcome = registry
             .invoke(&name, sample)
             .await
             .map_err(|error| redacted_text(&error.to_string(), &hidden))?;
         let result = redacted(outcome.result, &hidden);
         let mut report = json!({"ran": true, "is_error": outcome.is_error, "result": result});
+        let written = scratch_writes(scratch.path());
+        if !written.is_empty() {
+            report["test_writes"] = json!({
+                "files": written,
+                "note": "a test run works in a scratch directory, so these files were written there and are gone; the project wasn't touched. A tool that should hand files back declares them under `files`.",
+            });
+        }
         if unasked && !remembered {
             report["approval"] = json!("automatic");
         }
