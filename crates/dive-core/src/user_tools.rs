@@ -70,6 +70,8 @@ pub enum ToolKind {
         /// How to interpret stdout: `json` parses it, `text` wraps it.
         #[serde(default)]
         output: ExecOutput,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        files: crate::files::FileDecls,
     },
     Prompt {
         /// Template rendered with the `input` root.
@@ -364,7 +366,15 @@ pub(crate) const TOOL_KEYS: &[&str] = &[
     "kind",
 ];
 
-pub(crate) const EXEC_KEYS: &[&str] = &["command", "args", "env", "cwd", "timeout_secs", "output"];
+pub(crate) const EXEC_KEYS: &[&str] = &[
+    "command",
+    "args",
+    "env",
+    "cwd",
+    "timeout_secs",
+    "output",
+    "files",
+];
 
 pub(crate) const PROMPT_KEYS: &[&str] = &[
     "prompt",
@@ -450,6 +460,54 @@ pub fn parse_tool_source(raw: &str) -> Result<UserToolDoc, String> {
     serde_yaml::from_value(value).map_err(|e| e.to_string())
 }
 
+fn check_exec_files(args: &[String], files: &crate::files::FileDecls) -> Result<(), String> {
+    if files.is_empty() {
+        return Ok(());
+    }
+    let mut used: Vec<String> = Vec::new();
+    for arg in args {
+        let roots = crate::template::referenced_roots(arg).map_err(|e| format!("args: {e}"))?;
+        if let Some(root) = roots
+            .iter()
+            .find(|root| *root != "input" && *root != crate::files::named::FILES_ROOT)
+        {
+            return Err(format!(
+                "args: templates in user tools may only reference {{{{input.*}}}} and {{{{files.*}}}}, found {{{{{root}}}}}"
+            ));
+        }
+        used.extend(crate::template::referenced_paths(arg).unwrap_or_default());
+    }
+    for (key, decl) in files {
+        if decl.name.contains(['/', '\\']) {
+            return Err(format!(
+                "file `{key}` is named \"{}\"; a declared file is a name, not a path",
+                decl.name
+            ));
+        }
+        let path = format!("files.{key}.path");
+        let dir = format!("files.{key}.dir");
+        if decl.is_glob() && used.contains(&path) {
+            return Err(format!(
+                "file `{key}` is a pattern ({}), so it has no single path; pass {{{{{dir}}}}} in args",
+                decl.name
+            ));
+        }
+        if !used.iter().any(|used| *used == path || *used == dir) {
+            return Err(format!(
+                "declares the file `{key}` but never passes {{{{{}}}}} in args, so the command can't write it there",
+                if decl.is_glob() { &dir } else { &path }
+            ));
+        }
+    }
+    if let Some(path) = used.iter().find(|path| {
+        path.split('.').next() == Some(crate::files::named::FILES_ROOT)
+            && !files.contains_key(path.split('.').nth(1).unwrap_or_default())
+    }) {
+        return Err(format!("args: `{{{{{path}}}}}` names no declared file"));
+    }
+    Ok(())
+}
+
 pub fn validate_tool(doc: &UserToolDoc) -> Result<(), String> {
     if doc.name.is_empty()
         || !doc
@@ -475,12 +533,20 @@ pub fn validate_tool(doc: &UserToolDoc) -> Result<(), String> {
         Ok(())
     };
     match &doc.kind {
-        ToolKind::Exec { command, args, .. } => {
+        ToolKind::Exec {
+            command,
+            args,
+            files,
+            ..
+        } => {
             if command.is_empty() {
                 return Err("exec tool needs a command".to_string());
             }
-            for arg in args {
-                check_template(arg, "args")?;
+            check_exec_files(args, files)?;
+            if files.is_empty() {
+                for arg in args {
+                    check_template(arg, "args")?;
+                }
             }
         }
         ToolKind::Prompt { prompt, .. } => check_template(prompt, "prompt")?,
@@ -825,9 +891,9 @@ impl UserToolRegistry {
             },
             _ => input,
         };
-        let mut roots = Map::new();
-        roots.insert("input".to_string(), input);
-        let roots = Roots::new(&roots);
+        let mut scope = Map::new();
+        scope.insert("input".to_string(), input);
+        let roots = Roots::new(&scope);
 
         match &doc.kind {
             ToolKind::Exec {
@@ -837,6 +903,7 @@ impl UserToolRegistry {
                 cwd,
                 timeout_secs,
                 output,
+                files,
             } => {
                 self.run_exec(
                     command,
@@ -845,7 +912,8 @@ impl UserToolRegistry {
                     cwd.as_deref(),
                     *timeout_secs,
                     *output,
-                    &roots,
+                    scope.clone(),
+                    files,
                 )
                 .await
             }
@@ -949,28 +1017,15 @@ impl UserToolRegistry {
         Ok(input)
     }
 
-    async fn collect_out(&self, dir: &Path) -> Result<Vec<crate::files::StoredFile>, String> {
-        let Some(files) = &self.files else {
-            return Ok(Vec::new());
-        };
-        let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
-            .map_err(|e| format!("reading {OUT_DIR_ENV}: {e}"))?
-            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-            .filter(|path| path.is_file())
-            .collect();
-        paths.sort();
-        let mut stored = Vec::new();
-        for path in paths {
-            let bytes =
-                std::fs::read(&path).map_err(|e| format!("reading {}: {e}", path.display()))?;
-            let mime = crate::files::mime_for(
-                path.extension()
-                    .and_then(|extension| extension.to_str())
-                    .unwrap_or_default(),
-            );
-            stored.push(files.put(bytes, mime).await.map_err(|e| e.to_string())?);
+    async fn collect_out(
+        &self,
+        dir: &Path,
+        decls: &crate::files::FileDecls,
+    ) -> Result<Vec<Value>, String> {
+        match &self.files {
+            Some(files) => crate::files::named::collect_dir(dir, decls, files.as_ref(), true).await,
+            None => Ok(Vec::new()),
         }
-        Ok(stored)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -982,11 +1037,29 @@ impl UserToolRegistry {
         cwd: Option<&Path>,
         timeout_secs: Option<u64>,
         output: ExecOutput,
-        roots: &Roots<'_>,
+        mut scope: Map<String, Value>,
+        decls: &crate::files::FileDecls,
     ) -> Result<ToolOutcome, ToolError> {
+        let out_dir = match &self.files {
+            Some(_) => Some(tempfile::tempdir().map_err(|e| ToolError::Transport(e.to_string()))?),
+            None if decls.is_empty() => None,
+            None => {
+                return Ok(ToolOutcome {
+                    result: json!({"error": "this tool declares files, but Dive has no file storage to keep them in"}),
+                    is_error: true,
+                })
+            }
+        };
+        if let Some(dir) = &out_dir {
+            scope.insert(
+                crate::files::named::FILES_ROOT.to_string(),
+                crate::files::named::files_root(decls, dir.path()),
+            );
+        }
+        let roots = Roots::new(&scope);
         let rendered_args: Vec<String> = args
             .iter()
-            .map(|arg| render_str(arg, roots))
+            .map(|arg| render_str(arg, &roots))
             .collect::<Result<_, _>>()
             .map_err(|e| ToolError::Transport(e.to_string()))?;
 
@@ -1004,10 +1077,6 @@ impl UserToolRegistry {
         if let Some(cwd) = cwd {
             cmd.current_dir(cwd);
         }
-        let out_dir = match &self.files {
-            Some(_) => Some(tempfile::tempdir().map_err(|e| ToolError::Transport(e.to_string()))?),
-            None => None,
-        };
         if let Some(dir) = &out_dir {
             cmd.env(OUT_DIR_ENV, dir.path());
         }
@@ -1045,7 +1114,7 @@ impl UserToolRegistry {
             });
         }
         let stored = match &out_dir {
-            Some(dir) => match self.collect_out(dir.path()).await {
+            Some(dir) => match self.collect_out(dir.path(), decls).await {
                 Ok(stored) => stored,
                 Err(error) => {
                     return Ok(ToolOutcome {
@@ -1057,7 +1126,7 @@ impl UserToolRegistry {
             None => Vec::new(),
         };
         let outcome = |result: Value| ToolOutcome {
-            result: crate::files::attach(result, stored.clone()),
+            result: crate::files::attach_entries(result, stored.clone()),
             is_error: false,
         };
         match output {
@@ -1697,7 +1766,21 @@ impl ToolRegistry for UserToolRegistry {
                     name: format!("{}{}", self.prefix, doc.name),
                     description: doc.description.clone(),
                     input_schema,
-                    output_schema: doc.output_schema.clone(),
+                    output_schema: match (&doc.output_schema, &doc.kind) {
+                        (Some(schema), ToolKind::Exec { files, .. }) if !files.is_empty() => {
+                            let mut schema = schema.clone();
+                            if let Some(properties) =
+                                schema.get_mut("properties").and_then(Value::as_object_mut)
+                            {
+                                properties.insert(
+                                    "files".to_string(),
+                                    crate::files::named::files_schema(files),
+                                );
+                            }
+                            Some(schema)
+                        }
+                        _ => doc.output_schema.clone(),
+                    },
                     output_example: None,
                     read_only: doc.read_only.or(match &doc.kind {
                         ToolKind::Prompt { .. }

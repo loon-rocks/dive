@@ -152,15 +152,20 @@ If Dive can't read a referenced file, the tool isn't called and the agent gets a
 
 ## Files in your own tools
 
-An [exec tool](/tools/reference/tool-file/exec) takes files the same way. Give an input property `format: blob`, or an array whose `items` have it, and a reference passed there reaches the command as a local path:
+An [exec tool](/tools/reference/tool-file/exec) takes files the same way. Give an input property `format: blob`, or an array whose `items` have it, and a reference passed there reaches the command as a local path.
+
+The files the command writes are declared under `files`, like a plan step's: pass `{{files.<name>.path}}` in `args`, and the file comes back under the result's `files` with its `name`:
 
 ```yaml tools/thumbnail.yaml
-version: 3
+version: 4
 name: thumbnail
 description: Shrinks an image to 256 pixels wide and returns the copy.
 kind: exec
-command: sh
-args: ["-c", "sips -Z 256 \"$0\" --out \"$DIVE_OUT/thumb.png\" >/dev/null && echo '{}'", "{{input.image}}"]
+command: sips
+args: ["-Z", "256", "{{input.image}}", "--out", "{{files.thumb.path}}"]
+output: text
+files:
+  thumb: { name: thumb.png }
 input_schema:
   type: object
   required: [image]
@@ -168,7 +173,9 @@ input_schema:
     image: { type: string, format: blob }
 ```
 
-Files the command writes to the directory in `$DIVE_OUT` are stored when it exits successfully and listed under `files` in its result, each with a `ref`, just like a server's. Each call gets its own empty directory, and Dive deletes it once the call ends, so only regular files at its top level are kept, and a file's extension sets its type. Plan validation reports a step that passes a file reference to an exec input that isn't `format: blob`, which would reach the command as text. `builtin__generate_image` returns the images it draws as references too, under `images`; see [Image models](/getting-started/models#image-models).
+A plan reads it as `{{shrink.files.thumb.ref}}`. For an unknown number of files, declare a pattern such as `page-*.png` and pass `{{files.pages.dir}}`; the matching files come back as a list, in natural order. Each call gets its own empty directory, which Dive removes once the call ends. A declared file the command didn't write is a tool error unless the declaration says `optional: true`, and loading the tool fails when a declared file never appears in `args`.
+
+Tools written before version 4 can still write to the directory in `$DIVE_OUT`; whatever lands there is listed under `files` without a name. Plan validation reports a step that passes a file reference to an exec input that isn't `format: blob`, which would reach the command as text. `builtin__generate_image` returns the images it draws as references too, under `images`; see [Image models](/getting-started/models#image-models).
 
 ## Where files are kept
 

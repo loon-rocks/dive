@@ -1,0 +1,13 @@
+version: 4
+name: render_pages
+description: Renders each page of a PDF as a PNG and returns the pages as files.
+kind: exec
+command: pdftoppm
+args: ["-png", "{{input.pdf}}", "{{files.pages.dir}}/page"]
+files:
+  pages: { name: "page-*.png" }
+input_schema:
+  type: object
+  required: [pdf]
+  properties:
+    pdf: { type: string, format: blob }

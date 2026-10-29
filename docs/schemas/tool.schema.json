@@ -3,7 +3,7 @@
   "description": "One user tool, in `./.dive/tools/` or `~/.config/dive/tools/`, called as `user__<name>`. A file in a tools directory's `builtin/` subdirectory replaces the built-in tool it names instead.",
   "oneOf": [
     {
-      "description": "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files the command writes to the directory in `$DIVE_OUT` are stored and listed under `files` in the result, each with a `ref`.",
+      "description": "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files it writes go out through `files`: declare each by name, pass `{{files.<name>.path}}` in `args`, and the file comes back under the result's `files` with its `name` and a `ref`.",
       "examples": [
         {
           "args": [
@@ -38,7 +38,7 @@
       ],
       "properties": {
         "args": {
-          "description": "Arguments, as templates over `{{input.*}}`.",
+          "description": "Arguments, as templates over `{{input.*}}` and, for declared files, `{{files.<name>.path}}` and `{{files.<name>.dir}}`.",
           "items": {
             "type": "string"
           },
@@ -79,6 +79,27 @@
             ]
           },
           "description": "Extra environment variables. Each value is a string, or `{value, description}` to say what a secret is and where to get it. Values expand `${VAR}` from Dive's environment or, when it's unset or empty there, from the OS credential store (the project's value first, then the global one). `${VAR:-default}` falls back to the default when neither has a value; a `${VAR}` with no default is a secret the tool needs. A tool from an installed pack also gets `DIVE_PACK_DIR`, the absolute path of the pack's installed directory, so it can run scripts and binaries the pack ships.",
+          "type": "object"
+        },
+        "files": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "description": "The file name with its extension, such as `report.pdf`, or a pattern with `*` or `?`, such as `page-*.png`, for several files.",
+                "type": "string"
+              },
+              "optional": {
+                "description": "When true, a missing file, or a pattern with no match, isn't an error.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "description": "Files the command writes, by name. Each call gets an empty directory; pass `{{files.<name>.path}}`, or `{{files.<name>.dir}}` for a pattern, in `args`. After a successful run each file is listed under the result's `files` with its `name`, and a pattern's files come back as a list. A declared file the command didn't write is a tool error unless it's `optional`.",
           "type": "object"
         },
         "kind": {

@@ -2499,3 +2499,90 @@ fn a_saved_image_takes_the_extension_of_its_type() {
         );
     }
 }
+
+#[tokio::test]
+async fn an_exec_tool_returns_its_declared_files_by_name_and_a_pattern_as_a_list() {
+    let tool = doc(r#"
+name: render
+description: write a report and its pages
+kind: exec
+command: sh
+args: ["-c", "printf report > \"$0\" && for n in 1 2 10; do printf p$n > \"$1/page-$n.png\"; done && printf x > \"$1/notes.txt\" && echo '{}'", "{{files.report.path}}", "{{files.pages.dir}}"]
+files:
+  report: { name: report.pdf }
+  pages: { name: "page-*.png" }
+"#);
+    let files = Arc::new(MemoryFiles::default());
+    let registry = registry(vec![tool]).with_files(files);
+    let outcome = registry.invoke("user__render", json!({})).await.unwrap();
+    assert!(!outcome.is_error, "{}", outcome.result);
+    let listed = outcome.result["files"].as_array().unwrap();
+    let named = |name: &str| -> Vec<&Value> {
+        listed
+            .iter()
+            .filter(|file| file["name"].as_str() == Some(name))
+            .collect()
+    };
+    assert_eq!(named("report").len(), 1);
+    assert_eq!(named("report")[0]["mime"], "application/pdf");
+    let pages = named("pages");
+    let sizes: Vec<u64> = pages
+        .iter()
+        .map(|page| page["bytes"].as_u64().unwrap())
+        .collect();
+    assert_eq!(sizes, [2, 2, 3]);
+    assert!(pages.iter().all(|page| page["many"] == true));
+    assert_eq!(listed.len(), 5, "the undeclared notes.txt is still listed");
+}
+
+#[tokio::test]
+async fn an_exec_tool_that_skips_a_declared_file_fails() {
+    let tool = doc(r#"
+name: render
+description: forgets its report
+kind: exec
+command: sh
+args: ["-c", "echo '{}'", "{{files.report.path}}"]
+files:
+  report: { name: report.pdf }
+"#);
+    let registry = registry(vec![tool]).with_files(Arc::new(MemoryFiles::default()));
+    let outcome = registry.invoke("user__render", json!({})).await.unwrap();
+    assert!(outcome.is_error);
+    assert_eq!(
+        outcome.result["error"],
+        "the tool didn't write the declared file \"report\" (report.pdf)"
+    );
+}
+
+#[test]
+fn an_exec_tool_must_pass_each_declared_file_and_a_pattern_by_directory() {
+    let tool = |args: &str, files: &str| {
+        parse_tool_source(&format!(
+            "name: t\ndescription: d\nkind: exec\ncommand: sh\nargs: {args}\nfiles:\n{files}\n"
+        ))
+        .and_then(|doc| validate_tool(&doc))
+    };
+    let unused = tool("[\"x\"]", "  report: { name: report.pdf }").unwrap_err();
+    assert!(
+        unused.contains("never passes {{files.report.path}}"),
+        "{unused}"
+    );
+    let glob = tool(
+        "[\"{{files.pages.path}}\"]",
+        "  pages: { name: \"page-*.png\" }",
+    )
+    .unwrap_err();
+    assert!(glob.contains("pass {{files.pages.dir}}"), "{glob}");
+    let stray = tool(
+        "[\"{{files.report.path}}\", \"{{files.other.path}}\"]",
+        "  report: { name: report.pdf }",
+    )
+    .unwrap_err();
+    assert!(stray.contains("names no declared file"), "{stray}");
+    assert!(tool(
+        "[\"{{files.report.path}}\"]",
+        "  report: { name: report.pdf }"
+    )
+    .is_ok());
+}

@@ -261,10 +261,20 @@ impl dive_llm::ImageSource for FileImages {
 }
 
 pub fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
+    attach_entries(
+        result,
+        stored
+            .iter()
+            .filter_map(|file| serde_json::to_value(file).ok())
+            .collect(),
+    )
+}
+
+pub fn attach_entries(result: Value, stored: Vec<Value>) -> Value {
     if stored.is_empty() {
         return result;
     }
-    let listed = serde_json::to_value(stored).unwrap_or_else(|_| Value::Array(Vec::new()));
+    let listed = Value::Array(stored);
     match result {
         Value::Object(mut map) if !map.contains_key("files") => {
             map.insert("files".to_string(), listed);

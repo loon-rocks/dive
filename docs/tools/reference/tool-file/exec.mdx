@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["exec", "tool file", "YAML"]
 ---
 
-Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files the command writes to the directory in `$DIVE_OUT` are stored and listed under `files` in the result, each with a `ref`.
+Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files it writes go out through `files`: declare each by name, pass `{{files.<name>.path}}` in `args`, and the file comes back under the result's `files` with its `name` and a `ref`.
 
 These fields go alongside the [common fields](/tools/reference/tool-file#common-fields), with `kind: exec`.
 
@@ -17,7 +17,7 @@ These fields go alongside the [common fields](/tools/reference/tool-file#common-
 </ParamField>
 
 <ParamField body="args" type="string[]">
-  Arguments, as templates over `{{input.*}}`.
+  Arguments, as templates over `{{input.*}}` and, for declared files, `{{files.<name>.path}}` and `{{files.<name>.dir}}`.
 </ParamField>
 
 <ParamField body="env" type="map<string, string | object>">
@@ -36,6 +36,18 @@ These fields go alongside the [common fields](/tools/reference/tool-file#common-
   `json` parses stdout as JSON; `text` returns it as `{text}`.
 
   Available options: `json`, `text`
+</ParamField>
+
+<ParamField body="files" type="object">
+  Files the command writes, by name. Each call gets an empty directory; pass `{{files.<name>.path}}`, or `{{files.<name>.dir}}` for a pattern, in `args`. After a successful run each file is listed under the result's `files` with its `name`, and a pattern's files come back as a list. A declared file the command didn't write is a tool error unless it's `optional`.
+</ParamField>
+
+<ParamField body="files.<name>.name" type="string" required>
+  The file name with its extension, such as `report.pdf`, or a pattern with `*` or `?`, such as `page-*.png`, for several files.
+</ParamField>
+
+<ParamField body="files.<name>.optional" type="boolean">
+  When true, a missing file, or a pattern with no match, isn't an error.
 </ParamField>
 
 <RequestExample>

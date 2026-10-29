@@ -34,7 +34,7 @@ properties:
     description: Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.
 oneOf:
   - title: exec
-    description: "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files the command writes to the directory in `$DIVE_OUT` are stored and listed under `files` in the result, each with a `ref`."
+    description: "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files it writes go out through `files`: declare each by name, pass `{{files.<name>.path}}` in `args`, and the file comes back under the result's `files` with its `name` and a `ref`."
     properties:
       kind:
         const: exec
@@ -45,7 +45,7 @@ oneOf:
         type: array
         items:
           type: string
-        description: Arguments, as templates over `{{input.*}}`.
+        description: Arguments, as templates over `{{input.*}}` and, for declared files, `{{files.<name>.path}}` and `{{files.<name>.dir}}`.
       env:
         type: object
         additionalProperties:
@@ -75,6 +75,20 @@ oneOf:
         enum: [json, text]
         default: json
         description: "`json` parses stdout as JSON; `text` returns it as `{text}`."
+      files:
+        type: object
+        description: "Files the command writes, by name. Each call gets an empty directory; pass `{{files.<name>.path}}`, or `{{files.<name>.dir}}` for a pattern, in `args`. After a successful run each file is listed under the result's `files` with its `name`, and a pattern's files come back as a list. A declared file the command didn't write is a tool error unless it's `optional`."
+        additionalProperties:
+          type: object
+          required: [name]
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+              description: The file name with its extension, such as `report.pdf`, or a pattern with `*` or `?`, such as `page-*.png`, for several files.
+            optional:
+              type: boolean
+              description: When true, a missing file, or a pattern with no match, isn't an error.
     required: [command]
     examples:
       - version: 3

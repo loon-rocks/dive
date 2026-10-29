@@ -402,7 +402,7 @@
     "release_version": "v0.17.0",
     "config_file_version": "6",
     "plan_file_version": "3",
-    "tool_file_version": "3",
+    "tool_file_version": "4",
     "agent_file_version": "2",
     "data_directory_version": "4",
     "pack_file_version": "2",
