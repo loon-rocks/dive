@@ -5,9 +5,10 @@ use crate::stderr::StderrTail;
 use dive_config::McpServerConfig;
 use dive_core::files::BlobStore;
 use dive_core::{ServerIdentity, ToolDef, ToolError, ToolOutcome, ToolRegistry, ToolServer};
+#[allow(deprecated)]
 use rmcp::model::{
-    CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation,
-    ReadResourceRequestParams,
+    CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation, ListRootsResult,
+    ReadResourceRequestParams, Root,
 };
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
@@ -20,14 +21,17 @@ use tokio::sync::Mutex;
 /// Separator between server name and tool name in the planner-visible name.
 pub const NAMESPACE_SEPARATOR: &str = "__";
 
-type Client = RunningService<RoleClient, ClientInfo>;
+type Client = RunningService<RoleClient, DiveClient>;
 
 pub struct McpManager {
     servers: BTreeMap<String, ServerHandle>,
     sign_ins: SharedSignIns,
+    root: SharedRoot,
 }
 
 type SharedSignIns = Arc<std::sync::RwLock<Option<SignIns>>>;
+
+type SharedRoot = Arc<std::sync::RwLock<Option<std::path::PathBuf>>>;
 
 struct ServerHandle {
     name: String,
@@ -35,6 +39,7 @@ struct ServerHandle {
     connection: Mutex<Option<Connection>>,
     files: Option<Arc<dyn BlobStore>>,
     sign_ins: SharedSignIns,
+    root: SharedRoot,
 }
 
 struct Connection {
@@ -48,8 +53,10 @@ struct Connection {
 impl McpManager {
     pub fn new(servers: BTreeMap<String, McpServerConfig>) -> Self {
         let sign_ins = SharedSignIns::default();
+        let root = SharedRoot::default();
         Self {
             sign_ins: sign_ins.clone(),
+            root: root.clone(),
             servers: servers
                 .into_iter()
                 .map(|(name, config)| {
@@ -59,6 +66,7 @@ impl McpManager {
                         connection: Mutex::new(None),
                         files: None,
                         sign_ins: sign_ins.clone(),
+                        root: root.clone(),
                     };
                     (name, handle)
                 })
@@ -80,6 +88,10 @@ impl McpManager {
 
     pub fn use_sign_ins(&self, sign_ins: SignIns) {
         *self.sign_ins.write().unwrap() = Some(sign_ins);
+    }
+
+    pub fn use_root(&self, root: std::path::PathBuf) {
+        *self.root.write().unwrap() = Some(root);
     }
 
     pub fn sign_ins(&self) -> Option<SignIns> {
@@ -319,7 +331,13 @@ impl ServerHandle {
                 ),
             )));
         }
-        let info = client_info();
+        let info = DiveClient {
+            root: if self.config.command.is_some() {
+                self.root.read().unwrap().clone()
+            } else {
+                None
+            },
+        };
         let mut signed_in = false;
         let client: Client = if let Some(command) = &self.config.command {
             let cmd = tokio::process::Command::new(command);
@@ -489,11 +507,40 @@ fn describe_server(configured: Option<&str>, reported: Option<&Implementation>) 
     })
 }
 
-fn client_info() -> ClientInfo {
-    ClientInfo::new(
-        ClientCapabilities::default(),
-        Implementation::new("dive", env!("CARGO_PKG_VERSION")),
-    )
+struct DiveClient {
+    root: Option<std::path::PathBuf>,
+}
+
+#[allow(deprecated)]
+impl rmcp::ClientHandler for DiveClient {
+    fn get_info(&self) -> ClientInfo {
+        let mut capabilities = ClientCapabilities::default();
+        if self.root.is_some() {
+            capabilities.roots = Some(rmcp::model::RootsCapabilities::default());
+        }
+        ClientInfo::new(
+            capabilities,
+            Implementation::new("dive", env!("CARGO_PKG_VERSION")),
+        )
+    }
+
+    async fn list_roots(
+        &self,
+        _context: rmcp::service::RequestContext<RoleClient>,
+    ) -> Result<ListRootsResult, rmcp::ErrorData> {
+        Ok(ListRootsResult::new(self.roots()))
+    }
+}
+
+#[allow(deprecated)]
+impl DiveClient {
+    fn roots(&self) -> Vec<Root> {
+        self.root
+            .iter()
+            .filter_map(|root| url::Url::from_directory_path(root).ok())
+            .map(|uri| Root::new(uri.to_string()).with_name("project"))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -618,10 +665,34 @@ mod tests {
             connection: Mutex::new(None),
             files: None,
             sign_ins: Default::default(),
+            root: Default::default(),
         };
         assert!(handle.exposes("a"));
         assert!(!handle.exposes("b"), "exclude wins over include");
         assert!(!handle.exposes("c"), "not in include list");
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn the_project_is_the_one_root_and_only_a_client_with_a_project_offers_roots() {
+        use rmcp::ClientHandler;
+        let dir = std::env::temp_dir();
+        let client = DiveClient {
+            root: Some(dir.clone()),
+        };
+        assert!(client.get_info().capabilities.roots.is_some());
+        let roots = client.roots();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(
+            url::Url::parse(&roots[0].uri)
+                .unwrap()
+                .to_file_path()
+                .unwrap(),
+            dir
+        );
+        let bare = DiveClient { root: None };
+        assert!(bare.get_info().capabilities.roots.is_none());
+        assert!(bare.roots().is_empty());
     }
 
     async fn refusing_server(www_authenticate: &'static str) -> String {

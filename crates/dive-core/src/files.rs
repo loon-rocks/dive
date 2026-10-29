@@ -4,6 +4,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[cfg(test)]
+pub(crate) mod memory;
+pub mod named;
+
 pub const BLOB_PREFIX: &str = "blob:sha256-";
 
 const TYPES: &[(&str, &str)] = &[
@@ -268,6 +272,85 @@ pub fn attach(result: Value, stored: Vec<StoredFile>) -> Value {
         }
         other => serde_json::json!({ "result": other, "files": listed }),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FileDecl {
+    #[schemars(
+        description = "The file's name with its extension, such as snapshot.json, or a pattern with * or ? such as page-*.png for several files"
+    )]
+    pub name: String,
+    #[schemars(
+        description = "When true, a missing file, or a pattern with no match, isn't an error"
+    )]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub optional: bool,
+}
+
+pub type FileDecls = std::collections::BTreeMap<String, FileDecl>;
+
+impl FileDecl {
+    pub fn is_glob(&self) -> bool {
+        self.name.contains(['*', '?'])
+    }
+
+    pub fn matches(&self, file_name: &str) -> bool {
+        glob_match(&self.name, file_name)
+    }
+}
+
+pub fn glob_match(pattern: &str, text: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    let (mut p, mut t) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while t < text.len() {
+        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pattern.len() && pattern[p] == '*' {
+            star = Some((p, t));
+            p += 1;
+        } else if let Some((star_p, star_t)) = star {
+            p = star_p + 1;
+            t = star_t + 1;
+            star = Some((star_p, star_t + 1));
+        } else {
+            return false;
+        }
+    }
+    pattern[p..].iter().all(|c| *c == '*')
+}
+
+pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let chunks = |text: &str| -> Vec<(bool, String)> {
+        let mut out: Vec<(bool, String)> = Vec::new();
+        for c in text.chars() {
+            let digit = c.is_ascii_digit();
+            match out.last_mut() {
+                Some((last, chunk)) if *last == digit => chunk.push(c),
+                _ => out.push((digit, c.to_string())),
+            }
+        }
+        out
+    };
+    let (a, b) = (chunks(a), chunks(b));
+    for ((a_digit, a), (b_digit, b)) in a.iter().zip(&b) {
+        let order = if *a_digit && *b_digit {
+            let (a_trim, b_trim) = (a.trim_start_matches('0'), b.trim_start_matches('0'));
+            a_trim
+                .len()
+                .cmp(&b_trim.len())
+                .then_with(|| a_trim.cmp(b_trim))
+        } else {
+            a.cmp(b)
+        };
+        if order.is_ne() {
+            return order;
+        }
+    }
+    a.len().cmp(&b.len())
 }
 
 pub fn refs_in_text(text: &str) -> Vec<BlobRef> {

@@ -208,6 +208,7 @@ mod tests {
             tool_name: "$pack__widget__x".into(),
             input: Map::new(),
             reasoning: None,
+            files: None,
         }];
         let problems = resolve_plan_steps(&mut plan, "example");
         assert_eq!(problems.len(), 1);

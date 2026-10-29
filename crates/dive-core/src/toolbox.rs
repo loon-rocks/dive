@@ -238,6 +238,7 @@ mod tests {
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
+            files: None,
         });
         (AgentToolbox::new(base.clone(), pipeline, vec![doc]), base)
     }

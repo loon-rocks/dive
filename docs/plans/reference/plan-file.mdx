@@ -61,6 +61,18 @@ Unknown keys are a load error. For completion in your editor, start the file wit
   Why the step exists, for people reading the plan.
 </ParamField>
 
+<ParamField body="steps.[].files" type="object">
+  Files the step's tool writes to disk, by name. Dive makes a directory for each call; pass `{{files.<name>.path}}`, or `{{files.<name>.dir}}` for a pattern, to the tool's own output option. After the call each file is stored and listed under the result's `files` with its `name`: `{{<id>.files.<name>.ref}}`, or a list for a pattern.
+</ParamField>
+
+<ParamField body="steps.[].files.<name>.name" type="string" required>
+  The file name with its extension, such as `snapshot.json`, or a pattern with `*` or `?`, such as `page-*.png`, for several files.
+</ParamField>
+
+<ParamField body="steps.[].files.<name>.optional" type="boolean">
+  When true, a missing file, or a pattern with no match, isn't an error.
+</ParamField>
+
 <ParamField body="output_schema" type="object">
   JSON Schema for the result of an output plan. Its `properties` must match the keys of `finish.output`.
 </ParamField>

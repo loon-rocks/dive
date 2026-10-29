@@ -278,7 +278,8 @@ pub fn check_finish_key(doc: &serde_yaml::Value) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) const STEP_KEYS: &[&str] = &["id", "tool_name", "toolName", "input", "reasoning"];
+pub(crate) const STEP_KEYS: &[&str] =
+    &["id", "tool_name", "toolName", "input", "reasoning", "files"];
 
 /// Reject a key on any step, at any depth, that the step grammar does not
 /// know. Files are read strictly; the planner's structured output is not
@@ -311,7 +312,7 @@ fn check_one_step_keys(step: &serde_yaml::Value, at: &str) -> Result<(), String>
         .find(|key| !STEP_KEYS.contains(key))
     {
         return Err(format!(
-            "{at}: unknown field `{unknown}`, expected one of `id`, `tool_name`, `input`, `reasoning`"
+            "{at}: unknown field `{unknown}`, expected one of `id`, `tool_name`, `input`, `reasoning`, `files`"
         ));
     }
     let tool = step
@@ -426,8 +427,12 @@ pub fn validate_doc(doc: &PlanDoc) -> Result<(), String> {
                 &mut problems,
             ),
             _ => {
+                let mut available = seen.clone();
+                if step.files.is_some() {
+                    available.push(crate::files::named::FILES_ROOT);
+                }
                 for value in step.input.values() {
-                    check_value_templates(value, &seen, &step.id)?;
+                    check_value_templates(value, &available, &step.id)?;
                 }
             }
         }

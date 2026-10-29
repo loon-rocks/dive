@@ -174,6 +174,7 @@ impl PackSession {
             tool_name: tool.clone(),
             input: step_input,
             reasoning: None,
+            files: None,
         };
         let pipeline = self
             .runtime
@@ -263,6 +264,7 @@ fn agent_tool_problems(doc: &AgentDoc, catalog: &ToolCatalog, caller: &Origin) -
         tool_name: AGENT_TOOL.to_string(),
         input,
         reasoning: None,
+        files: None,
     }];
     resolve_step_tools(&plan, catalog)
         .into_iter()

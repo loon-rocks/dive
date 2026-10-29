@@ -106,6 +106,10 @@ impl ToolRegistry for MockRegistry {
     }
 }
 
+pub(super) fn pipeline_for(registry: Arc<dyn ToolRegistry>) -> Pipeline {
+    pipeline(Vec::new(), registry, 1).0
+}
+
 fn pipeline(
     responses: Vec<ChatResponse>,
     registry: Arc<dyn ToolRegistry>,
@@ -174,6 +178,7 @@ fn pipeline_with_named(
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
+            files: None,
         },
         provider,
     )

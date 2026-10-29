@@ -1,0 +1,27 @@
+version: 3
+identifier: named_files
+name: Named files
+description: Saves a page's evaluated data and its screenshot under names a later step reads.
+input_schema:
+  type: object
+  required: [url]
+  properties:
+    url: { type: string }
+steps:
+  - id: shot
+    tool_name: playwright__browser_take_screenshot
+    files:
+      page: { name: page.png }
+      extras: { name: "part-*.png", optional: true }
+    input:
+      fullPage: true
+      filename: "{{files.page.path}}"
+      directory: "{{files.extras.dir}}"
+  - id: describe
+    tool_name: builtin__infer
+    input:
+      instruction: "Describe this page: {{shot.files.page.ref}}"
+finish:
+  output:
+    page: "{{shot.files.page.ref}}"
+    description: "{{describe.text}}"

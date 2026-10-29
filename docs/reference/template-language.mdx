@@ -26,7 +26,11 @@ A variable is a dotted path from a root. Number segments index into arrays, and 
 {{fetch_issues.values.length}}
 ```
 
-Spaces inside the braces are ignored. A step id can't be `input`, `item`, `index`, `accumulator` or `length`.
+A word segment on a list of entries that carry a `name`, such as a result's `files`, picks the entry with that name: `{{shot.files.snapshot.ref}}` reads the same entry as `{{shot.files.0.ref}}` when `snapshot` is listed first. Entries marked `many: true`, the files a pattern collected, come back as a list: `{{pages.files.pages}}`, and `{{pages.files.pages.0.ref}}` for one.
+
+A step that declares `files` also has the root `files` in its own input: `{{files.<name>.path}}` and `{{files.<name>.dir}}`. See [Files a step writes](/integrating/mcp/guides/images-and-files#files-a-step-writes).
+
+Spaces inside the braces are ignored. A step id can't be `input`, `item`, `index`, `accumulator` or `length`, and in a plan where a step declares `files`, no step can be named `files`.
 
 A `route` step's result is read through the route's own id: `{{triage.branch}}` names the branch that ran and `{{triage.result}}` holds what it returned. Steps inside a branch are visible only to later steps in the same branch.
 

@@ -410,6 +410,163 @@ fn step_tools(value: &Value, out: &mut std::collections::BTreeMap<String, String
     }
 }
 
+fn declared_files(steps: &Value) -> std::collections::BTreeMap<String, crate::files::FileDecls> {
+    let mut declared = std::collections::BTreeMap::new();
+    let mut stack = vec![steps];
+    while let Some(value) = stack.pop() {
+        match value {
+            Value::Array(items) => stack.extend(items),
+            Value::Object(map) => {
+                stack.extend(map.values());
+                let id = map.get("id").and_then(Value::as_str);
+                let files = map
+                    .get("files")
+                    .and_then(|files| serde_json::from_value(files.clone()).ok());
+                if let (Some(id), Some(files)) = (id, files) {
+                    declared.insert(id.to_string(), files);
+                }
+            }
+            _ => {}
+        }
+    }
+    declared
+}
+
+fn named_file_problems(doc: &super::doc::PlanDoc, defs: &[ToolDef]) -> Vec<String> {
+    let steps = json!(doc.steps);
+    let declared = declared_files(&steps);
+    let mut tools = std::collections::BTreeMap::new();
+    step_tools(&steps, &mut tools);
+    let mut problems = Vec::new();
+    let mut add = |problem: String| {
+        if !problems.contains(&problem) {
+            problems.push(problem);
+        }
+    };
+    if !declared.is_empty() && tools.contains_key(crate::files::named::FILES_ROOT) {
+        add(format!(
+            "a step is named `{}`, which a step that declares files reads as its own files; rename that step",
+            crate::files::named::FILES_ROOT
+        ));
+    }
+    let mut stack = vec![&steps];
+    while let Some(value) = stack.pop() {
+        match value {
+            Value::Array(items) => stack.extend(items),
+            Value::Object(map) => {
+                stack.extend(map.values());
+                let Some((id, decls)) = map
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .and_then(|id| declared.get_key_value(id))
+                else {
+                    continue;
+                };
+                let tool = tools.get(id).map(String::as_str).unwrap_or_default();
+                if defs
+                    .iter()
+                    .any(|def| def.name == tool && def.file_input == crate::tools::FileInput::Paths)
+                {
+                    add(format!(
+                        "step {id}: {tool} is an exec tool, so it declares its files itself; move `files:` into the tool file"
+                    ));
+                }
+                let mut texts = Vec::new();
+                if let Some(input) = map.get("input") {
+                    strings(input, &mut texts);
+                }
+                let used: Vec<String> = texts
+                    .into_iter()
+                    .filter_map(|text| crate::template::referenced_paths(text).ok())
+                    .flatten()
+                    .filter(|path| path.starts_with("files."))
+                    .collect();
+                for (key, decl) in decls {
+                    if decl.name.contains(['/', '\\']) {
+                        add(format!(
+                            "step {id}: file `{key}` is named \"{}\"; a declared file is a name, not a path",
+                            decl.name
+                        ));
+                    }
+                    let path = format!("files.{key}.path");
+                    let dir = format!("files.{key}.dir");
+                    if !used.iter().any(|used| *used == path || *used == dir) {
+                        add(format!(
+                            "step {id}: declares the file `{key}` but never passes {{{{{}}}}} to its tool, so the tool can't write it there",
+                            if decl.is_glob() { &dir } else { &path }
+                        ));
+                    }
+                    if decl.is_glob() && used.contains(&path) {
+                        add(format!(
+                            "step {id}: `{key}` is a pattern ({}), so it has no single path; pass {{{{{dir}}}}} and let the tool name the files",
+                            decl.name
+                        ));
+                    }
+                }
+                let keys: Vec<&String> = decls.keys().collect();
+                for (index, a) in keys.iter().enumerate() {
+                    for b in &keys[index + 1..] {
+                        let (a_name, b_name) = (&decls[*a].name, &decls[*b].name);
+                        if crate::files::glob_match(a_name, b_name)
+                            || crate::files::glob_match(b_name, a_name)
+                        {
+                            add(format!(
+                                "step {id}: files `{a}` ({a_name}) and `{b}` ({b_name}) can match the same file; make the names distinct"
+                            ));
+                        }
+                    }
+                }
+                for path in &used {
+                    let key = path.split('.').nth(1).unwrap_or_default();
+                    if !decls.contains_key(key) {
+                        add(format!(
+                            "step {id}: `{{{{{path}}}}}` names no declared file (declared: {})",
+                            keys.iter()
+                                .map(|key| key.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut texts = Vec::new();
+    strings(&steps, &mut texts);
+    let finish = json!(doc.finish);
+    strings(&finish, &mut texts);
+    for path in texts
+        .into_iter()
+        .filter_map(|text| crate::template::referenced_paths(text).ok())
+        .flatten()
+    {
+        let segments: Vec<&str> = path.split('.').collect();
+        let [root, "files", key, rest @ ..] = segments.as_slice() else {
+            continue;
+        };
+        let Some(decls) = declared.get(*root) else {
+            continue;
+        };
+        if key.parse::<usize>().is_ok() || *key == "length" {
+            continue;
+        }
+        match decls.get(*key) {
+            None => add(format!(
+                "`{{{{{path}}}}}`: step {root} declares no file `{key}` (declared: {})",
+                decls.keys().map(String::as_str).collect::<Vec<_>>().join(", ")
+            )),
+            Some(decl) if decl.is_glob() && rest.first().is_some_and(|next| next.parse::<usize>().is_err() && *next != "length") => add(format!(
+                "`{{{{{path}}}}}`: `{key}` is a pattern ({}), so it's a list; pick one with {root}.files.{key}.0.{}",
+                decl.name,
+                rest.join(".")
+            )),
+            Some(_) => {}
+        }
+    }
+    problems
+}
+
 fn unknown_fields(
     doc: &super::doc::PlanDoc,
     defs: &[ToolDef],
@@ -418,6 +575,7 @@ fn unknown_fields(
     let steps = json!(doc.steps);
     let mut tools = std::collections::BTreeMap::new();
     step_tools(&steps, &mut tools);
+    let declared = declared_files(&steps);
     let mut texts = Vec::new();
     strings(&steps, &mut texts);
     let finish = json!(doc.finish);
@@ -432,6 +590,9 @@ fn unknown_fields(
             let (Some(root), Some(field)) = (segments.next(), segments.next()) else {
                 continue;
             };
+            if field == "files" && declared.contains_key(root) {
+                continue;
+            }
             let Some(tool) = tools.get(root) else {
                 continue;
             };
@@ -493,6 +654,7 @@ impl Pipeline {
         problems.extend(mistyped_inputs(&steps, &defs, &declared));
         let shapes = self.shapes().await;
         problems.extend(unknown_fields(doc, &defs, &shapes));
+        problems.extend(named_file_problems(doc, &defs));
         problems.extend(file_problems(doc, &defs, &shapes, self.router.roles()));
         problems
     }
@@ -538,6 +700,7 @@ fn resolves_to_file(schema: &Value, segments: &[&str]) -> Option<bool> {
 
 struct FileRefs<'a> {
     tools: std::collections::BTreeMap<String, String>,
+    declared: std::collections::BTreeMap<String, crate::files::FileDecls>,
     defs: &'a [ToolDef],
     shapes: &'a std::collections::HashMap<String, crate::store::ToolShape>,
 }
@@ -546,6 +709,9 @@ impl FileRefs<'_> {
     fn resolve(&self, path: &str) -> Option<bool> {
         let segments: Vec<&str> = path.split('.').collect();
         let (root, rest) = segments.split_first()?;
+        if self.declared.contains_key(*root) && rest.first() == Some(&"files") {
+            return Some(rest.last() == Some(&"ref"));
+        }
         let tool = self.tools.get(*root)?;
         let schema = output_schema_of(tool, self.defs, self.shapes)?;
         resolves_to_file(&schema, rest)
@@ -597,6 +763,7 @@ fn file_problems(
     step_tools(&steps, &mut tools);
     let refs = FileRefs {
         tools,
+        declared: declared_files(&steps),
         defs,
         shapes,
     };

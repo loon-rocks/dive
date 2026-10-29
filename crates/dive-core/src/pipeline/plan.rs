@@ -26,6 +26,11 @@ pub struct Step {
     // `authoring::to_yaml`.
     #[serde(default)]
     pub reasoning: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(
+        description = "Files the step's tool writes to disk, by name: {snapshot: {name: snapshot.json}}. Pass {{files.snapshot.path}} (or {{files.<name>.dir}} for a pattern like page-*.png) to the tool's output option; later steps read {{<step>.files.snapshot.ref}}."
+    )]
+    pub files: Option<crate::files::FileDecls>,
 }
 
 pub type Plan = Vec<Step>;

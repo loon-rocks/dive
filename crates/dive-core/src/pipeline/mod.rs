@@ -25,6 +25,8 @@ pub mod gate;
 pub mod interlocutor;
 pub mod iterate;
 mod named_agents;
+#[cfg(test)]
+mod named_files_tests;
 mod native_tools;
 #[cfg(test)]
 mod pack_tests;
@@ -123,6 +125,7 @@ pub struct Pipeline {
     pub drafted: Arc<drafter::Drafted>,
     pub packs: Arc<crate::packs::PackSet>,
     pub origin: crate::packs::Origin,
+    pub files: Option<crate::files::named::FileSpace>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -966,7 +969,21 @@ impl Pipeline {
                 }
             }
 
-            let roots = Roots::new(&state.results);
+            let named = match self.named_files(step.files.as_ref()) {
+                Ok(named) => named,
+                Err(message) => {
+                    return ExecutionEnd::Failed {
+                        step: step.id.clone(),
+                        tool: step.tool_name.clone(),
+                        message,
+                    }
+                }
+            };
+            let scope = match &named {
+                Some(named) => std::borrow::Cow::Owned(named.scope(&state.results)),
+                None => std::borrow::Cow::Borrowed(&state.results),
+            };
+            let roots = Roots::new(&scope);
             let rendered = match render_input(&Value::Object(step.input.clone()), &roots) {
                 Ok(value) => value,
                 Err(e @ RenderError::EmptyData { .. }) => {
@@ -1049,6 +1066,19 @@ impl Pipeline {
                 .await
             {
                 Ok(result) => {
+                    let result = match &named {
+                        Some(named) => match named.collect(result).await {
+                            Ok(result) => result,
+                            Err(message) => {
+                                return ExecutionEnd::Failed {
+                                    step: step.id.clone(),
+                                    tool: step.tool_name.clone(),
+                                    message,
+                                }
+                            }
+                        },
+                        None => result,
+                    };
                     state.results.insert(step.id.clone(), result);
                     state.push_bus(&step.id, BusKind::Info, "ok");
                 }
@@ -1068,6 +1098,19 @@ impl Pipeline {
             }
         }
         ExecutionEnd::Completed
+    }
+
+    pub(crate) fn named_files(
+        &self,
+        decls: Option<&crate::files::FileDecls>,
+    ) -> Result<Option<crate::files::named::NamedFiles>, String> {
+        let Some(decls) = decls else {
+            return Ok(None);
+        };
+        let space = self.files.as_ref().ok_or(
+            "this step declares files, but Dive has no file storage and project directory to collect them in",
+        )?;
+        space.prepare(decls).map(Some)
     }
 
     /// Route one rendered tool call — a `plan__*` step, `plan_and_execute`,

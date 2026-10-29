@@ -43,6 +43,7 @@ pub fn blank_step(id: &str) -> Step {
         tool_name: String::new(),
         input: Map::new(),
         reasoning: None,
+        files: None,
     }
 }
 
@@ -71,6 +72,7 @@ pub fn step_at(doc: &PlanDoc, target: &StepTarget) -> Option<(Step, bool)> {
                         tool_name: call.tool_name,
                         input: call.input,
                         reasoning: call.reasoning,
+                        files: None,
                     },
                     false,
                 )),
@@ -184,6 +186,7 @@ pub fn reload_step_form(form: &Form, label: &str, tools: &[ToolDef]) -> Form {
         tool_name: text("tool").unwrap_or_default(),
         input,
         reasoning: text("reasoning").filter(|r| !r.trim().is_empty()),
+        files: None,
     };
     let mut rebuilt = step_form(label, &step, has_id, tools);
     rebuilt.set_focus(form.focused);
@@ -397,6 +400,7 @@ impl PendingEdit {
                     tool_name: self.text("tool").unwrap_or_default(),
                     input: self.input_object()?,
                     reasoning: self.text("reasoning"),
+                    files: None,
                 };
                 let index = (*index).min(doc.steps.len());
                 let id = step.id.clone();

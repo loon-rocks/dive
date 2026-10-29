@@ -364,6 +364,7 @@ fn pipeline_over(
             drafted: Default::default(),
             packs: Arc::new(set),
             origin: Default::default(),
+            files: None,
         },
         provider,
     )

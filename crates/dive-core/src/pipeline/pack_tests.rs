@@ -189,6 +189,7 @@ fn pipeline() -> (Pipeline, Arc<Tools>, Arc<Recorder>) {
         drafted: Default::default(),
         packs: Arc::new(packs()),
         origin: Origin::Outside,
+        files: None,
     };
     (pipeline, tools, provider)
 }

@@ -56,6 +56,20 @@ properties:
         reasoning:
           type: string
           description: Why the step exists, for people reading the plan.
+        files:
+          type: object
+          description: "Files the step's tool writes to disk, by name. Dive makes a directory for each call; pass `{{files.<name>.path}}`, or `{{files.<name>.dir}}` for a pattern, to the tool's own output option. After the call each file is stored and listed under the result's `files` with its `name`: `{{<id>.files.<name>.ref}}`, or a list for a pattern."
+          additionalProperties:
+            type: object
+            required: [name]
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+                description: The file name with its extension, such as `snapshot.json`, or a pattern with `*` or `?`, such as `page-*.png`, for several files.
+              optional:
+                type: boolean
+                description: When true, a missing file, or a pattern with no match, isn't an error.
   output_schema:
     type: object
     description: JSON Schema for the result of an output plan. Its `properties` must match the keys of `finish.output`.

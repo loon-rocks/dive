@@ -439,6 +439,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         drafted: Default::default(),
         packs: Arc::new(pack_set),
         origin: Default::default(),
+        files: None,
     });
 
     let attachment = Arc::new(

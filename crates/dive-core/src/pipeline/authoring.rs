@@ -104,8 +104,12 @@ pub fn validate_steps_in(plan: &Plan, roots: &[&str]) -> Vec<String> {
             ),
             _ => {
                 // Template parse + reference-ordering check on every string input.
+                let mut available = seen.clone();
+                if step.files.is_some() {
+                    available.push(crate::files::named::FILES_ROOT);
+                }
                 for value in step.input.values() {
-                    super::check_templates(value, &seen, &step.id, &mut problems);
+                    super::check_templates(value, &available, &step.id, &mut problems);
                 }
             }
         }
@@ -1622,6 +1626,7 @@ solver:
                 tool_name: "t__new".to_string(),
                 input: Map::new(),
                 reasoning: None,
+                files: None,
             }],
             solver_data: Some(SolverData::default()),
         };

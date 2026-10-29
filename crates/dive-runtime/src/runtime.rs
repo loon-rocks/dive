@@ -57,7 +57,13 @@ impl Runtime {
         Ok(Self::with_packs(loaded.config, packs, options)?
             .in_project(workspace.project())
             .in_root(root)
-            .signing_in_for(workspace))
+            .signing_in_for(workspace)
+            .rooted())
+    }
+
+    fn rooted(self) -> Self {
+        self.registry.use_root(self.workspace_dir());
+        self
     }
 
     pub fn in_root(mut self, root: Option<std::path::PathBuf>) -> Self {
@@ -219,6 +225,20 @@ impl Runtime {
         }
         let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
         Ok(Arc::new(RecordingRegistry::new(base, store.clone())))
+    }
+
+    pub fn workspace_dir(&self) -> std::path::PathBuf {
+        self.root
+            .clone()
+            .or_else(|| self.project.as_ref().map(std::path::PathBuf::from))
+            .unwrap_or_else(|| dive_config::expand_tilde(std::path::Path::new("~/.config/dive")))
+    }
+
+    fn files_dir(&self) -> std::path::PathBuf {
+        match (&self.root, &self.project) {
+            (None, None) => self.workspace_dir().join("files"),
+            _ => self.workspace_dir().join(".dive").join("files"),
+        }
     }
 
     fn with_files(&self, registry: UserToolRegistry) -> UserToolRegistry {
@@ -519,6 +539,10 @@ impl Runtime {
             drafted: self.drafted.clone(),
             packs: Arc::new(self.packs.pack_set()),
             origin: Default::default(),
+            files: Some(dive_core::files::named::FileSpace {
+                store: self.files.clone(),
+                dir: self.files_dir(),
+            }),
         }))
     }
 

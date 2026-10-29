@@ -230,8 +230,12 @@ pub fn validate_body(
                         problems,
                     );
                 } else {
+                    let mut available = body_seen.clone();
+                    if step.files.is_some() {
+                        available.push(crate::files::named::FILES_ROOT);
+                    }
                     for value in step.input.values() {
-                        super::check_templates(value, &body_seen, &step.id, problems);
+                        super::check_templates(value, &available, &step.id, problems);
                     }
                 }
                 body_seen.push(step.id.as_str());
@@ -646,9 +650,16 @@ impl Pipeline {
                             }
                         }
                     } else {
+                        let named = self.named_files(body_step.files.as_ref()).map_err(|m| {
+                            BodyError::fail(BodyFail::Tool(m), steps_executed, bus.clone())
+                        })?;
+                        let step_scope = match &named {
+                            Some(named) => std::borrow::Cow::Owned(named.scope(&scope)),
+                            None => std::borrow::Cow::Borrowed(&scope),
+                        };
                         let rendered = render_input(
                             &Value::Object(body_step.input.clone()),
-                            &Roots::new(&scope),
+                            &Roots::new(&step_scope),
                         )
                         .map_err(|e| {
                             BodyError::fail(BodyFail::Render(e), steps_executed, bus.clone())
@@ -668,7 +679,8 @@ impl Pipeline {
                                 }
                             }
                         } else {
-                            self.dispatch(&path, &body_step.tool_name, rendered, &scope)
+                            let value = self
+                                .dispatch(&path, &body_step.tool_name, rendered, &scope)
                                 .await
                                 .map_err(|e| {
                                     let fail = match e {
@@ -681,7 +693,20 @@ impl Pipeline {
                                         )),
                                     };
                                     BodyError::fail(fail, steps_executed, bus.clone())
-                                })?
+                                })?;
+                            match &named {
+                                Some(named) => named.collect(value).await.map_err(|m| {
+                                    BodyError::fail(
+                                        BodyFail::Tool(format!(
+                                            "{label} step {} ({}): {m}",
+                                            body_step.id, body_step.tool_name
+                                        )),
+                                        steps_executed,
+                                        bus.clone(),
+                                    )
+                                })?,
+                                None => value,
+                            }
                         }
                     };
                     steps_executed += 1;

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 pub use dive_config::FORMATS_DOC;
 
-pub const PLAN_FORMAT: u32 = 2;
+pub const PLAN_FORMAT: u32 = 3;
 
 pub const PLAN_FORMAT_OLDEST: u32 = 1;
 
@@ -20,7 +20,11 @@ pub const FORMAT_KEY: &str = "version";
 
 pub type Migration = fn(&mut Value) -> Result<Vec<String>, String>;
 
-const PLAN_MIGRATIONS: &[Migration] = &[plan_v2];
+const PLAN_MIGRATIONS: &[Migration] = &[plan_v2, step_files_added];
+
+fn step_files_added(_value: &mut Value) -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
 
 fn plan_v2(value: &mut Value) -> Result<Vec<String>, String> {
     let mut notes = decide_step_becomes_route(value)?;

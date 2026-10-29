@@ -156,6 +156,27 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "files": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "description": "The file name with its extension, such as `snapshot.json`, or a pattern with `*` or `?`, such as `page-*.png`, for several files.",
+                  "type": "string"
+                },
+                "optional": {
+                  "description": "When true, a missing file, or a pattern with no match, isn't an error.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            },
+            "description": "Files the step's tool writes to disk, by name. Dive makes a directory for each call; pass `{{files.<name>.path}}`, or `{{files.<name>.dir}}` for a pattern, to the tool's own output option. After the call each file is stored and listed under the result's `files` with its `name`: `{{<id>.files.<name>.ref}}`, or a list for a pattern.",
+            "type": "object"
+          },
           "id": {
             "description": "Unique across the plan, including steps inside bodies. Later steps read the result as `{{<id>.<field>}}`. Can't be `input`, `item`, `index`, `accumulator` or `length`.",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",

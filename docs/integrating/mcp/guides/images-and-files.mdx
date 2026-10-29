@@ -107,6 +107,34 @@ The desktop app draws the image in the message. In a terminal the markdown shows
     ref: "{{backup.ref}}"
 ```
 
+## Files a step writes
+
+Some tools write a file to disk and return only a path or a link as text, such as Playwright's `browser_evaluate` and `browser_take_screenshot` with a `filename`. A plan step declares those files under `files`, and Dive picks them up after the call:
+
+```yaml plan.yaml
+- id: shot
+  tool_name: playwright__browser_evaluate
+  files:
+    snapshot: { name: snapshot.json }
+  input:
+    function: "() => document.title"
+    filename: "{{files.snapshot.path}}"
+- id: read
+  tool_name: builtin__read_file
+  input:
+    ref: "{{shot.files.snapshot.ref}}"
+```
+
+1. Before the call, Dive makes a directory for it under `.dive/files/tmp/` in the project (`~/.config/dive/files/tmp/` in the global workspace) and fills the step's `files` root: `{{files.<name>.path}}` is the file's path in that directory, and `{{files.<name>.dir}}` the directory. Each call gets its own, so a `map` running items in parallel never mixes them up.
+2. Pass the path to the tool's own option for where to write, here Playwright's `filename`.
+3. After the call, each declared file is stored and listed under the result's `files` with its `name`: `{{shot.files.snapshot.ref}}`. If the tool also returned the same file, the two are one entry. The directory is then removed.
+
+A name with `*` or `?`, such as `page-*.png`, collects every file in the directory that matches, in natural order (`page-10.png` after `page-9.png`), as a list: `{{pages.files.pages}}`, or `{{pages.files.pages.0.ref}}` for the first. Pass `{{files.<name>.dir}}` for a pattern, so the tool names the files itself.
+
+A declared file the tool didn't write, or a pattern with no match, fails the step, unless the declaration says `optional: true`. Plan validation reports a declaration whose path or directory the step never passes, `.path` on a pattern, two declarations that can match the same file, and a name no step declared.
+
+Dive tells MCP servers that the project directory is their workspace, through the MCP roots list, so a server that only writes inside its workspace, like Playwright, accepts these paths. Servers on another machine can't write to them; they need to return the file in their result.
+
 ## Pass a file to another tool
 
 Any argument whose whole value is a reference is replaced before Dive calls the tool. A reference inside longer text is left as it is. Each server's `files` setting decides what the tool receives:

@@ -1188,6 +1188,7 @@ pub(super) mod tests {
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
+            files: None,
         })
     }
 
@@ -2152,6 +2153,7 @@ steps:
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
+            files: None,
         });
         (pipeline, provider)
     }

@@ -160,6 +160,34 @@ fn walk(start: &Value, segs: &[Seg], root: &str) -> Result<Value, RenderError> {
                         reason: format!("{at} is null"),
                     })
                 }
+                Value::Array(items) if items.iter().any(|item| item.get("name").is_some()) => {
+                    let named: Vec<&Value> = items
+                        .iter()
+                        .filter(|item| item.get("name").and_then(Value::as_str) == Some(key))
+                        .collect();
+                    let Some(first) = named.first() else {
+                        let names: Vec<&str> = items
+                            .iter()
+                            .filter_map(|item| item.get("name").and_then(Value::as_str))
+                            .collect();
+                        return Err(RenderError::BadPath {
+                            path: full_path(&traversed, &segs[i..]),
+                            reason: format!(
+                                "no entry named '{key}' at {at} (named: {})",
+                                names.join(", ")
+                            ),
+                        });
+                    };
+                    if named
+                        .iter()
+                        .any(|item| item.get("many") == Some(&Value::Bool(true)))
+                    {
+                        let group = Value::Array(named.into_iter().cloned().collect());
+                        return walk(&group, &segs[i + 1..], &format!("{at}.{key}"));
+                    }
+                    current = first;
+                    traversed.push(key.clone());
+                }
                 other => {
                     return Err(RenderError::BadPath {
                         path: full_path(&traversed, &segs[i..]),

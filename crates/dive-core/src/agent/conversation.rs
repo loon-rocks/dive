@@ -1104,6 +1104,7 @@ mod tests {
             drafted: Default::default(),
             packs: Default::default(),
             origin: Default::default(),
+            files: None,
         });
         let conversation = Conversation {
             agents,
