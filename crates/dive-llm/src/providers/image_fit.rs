@@ -29,7 +29,7 @@ pub const TYPESAFE: Limits = Limits {
 };
 
 pub const CHAT: Limits = Limits {
-    max_side: 8000,
+    max_side: 2576,
     crowded: Some((20, 2000)),
     min_side: 1,
     max_bytes: 5 * 1024 * 1024 / 4 * 3,
@@ -340,7 +340,20 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert_eq!(prepared.mime, "image/png");
-        assert_eq!(size(&prepared), (886, 8000));
+        assert_eq!(size(&prepared), (285, 2576));
+    }
+
+    #[test]
+    fn a_screenshot_beside_other_images_stays_under_the_many_image_side() {
+        let prepared = fit(
+            "blob:page.png",
+            &data(encoded(1192, 15085, ImageFormat::Png)),
+            &CHAT,
+            3,
+        )
+        .unwrap();
+        let (width, height) = size(&prepared);
+        assert!(width.max(height) <= 2576, "{width}x{height}");
     }
 
     #[test]
