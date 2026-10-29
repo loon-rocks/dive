@@ -418,12 +418,24 @@ impl AttachmentHost for NetworkAttachment {
         ])))
     }
 
-    fn restore(&self, history: &[NewEntry]) {
+    async fn restore(&self, history: &[NewEntry]) {
         let pipeline = self.pipeline.clone();
         let items =
             move |kind: ArtifactKind, name: &str| artifact::existing(kind, name, &pipeline).ok();
         let mut network = super::replay::network(history, &self.opened(), &items);
         network.secrets = Some(self.pipeline.drafted.secrets.clone());
+        let drafts: Vec<_> = network
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                let yaml = node.yaml.clone()?;
+                Some((node.kind, node.name.clone(), node.origin.clone(), yaml))
+            })
+            .collect();
+        for (kind, name, origin, yaml) in drafts {
+            let problems = artifact::check(&self.pipeline, &network, kind, &origin, &yaml).await;
+            network.set_problems(kind, &name, problems);
+        }
         self.draft.lock().unwrap().network = network;
     }
 

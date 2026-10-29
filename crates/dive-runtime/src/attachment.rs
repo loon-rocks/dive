@@ -42,7 +42,7 @@ pub trait AttachmentHost: Send + Sync {
         None
     }
 
-    fn restore(&self, history: &[NewEntry]);
+    async fn restore(&self, history: &[NewEntry]);
 
     fn view(&self) -> Value;
 
@@ -140,7 +140,7 @@ mod tests {
             catalog
         }
 
-        fn restore(&self, _history: &[NewEntry]) {}
+        async fn restore(&self, _history: &[NewEntry]) {}
 
         fn view(&self) -> Value {
             json!({})
@@ -183,7 +183,7 @@ mod tests {
             catalog
         }
 
-        fn restore(&self, _history: &[NewEntry]) {}
+        async fn restore(&self, _history: &[NewEntry]) {}
 
         fn view(&self) -> Value {
             json!({})

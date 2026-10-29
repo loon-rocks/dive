@@ -487,8 +487,7 @@ impl WorkbenchTools {
             .get("overwrite_draft")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let mut problems = plan_problems(&self.pipeline, &doc);
-        problems.extend(self.pipeline.file_problems(&doc).await);
+        let problems = self.pipeline.plan_problems(&doc).await;
         let summary = json!({
             "identifier": doc.identifier,
             "name": doc.name,

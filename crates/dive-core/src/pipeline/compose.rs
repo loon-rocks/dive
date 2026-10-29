@@ -297,25 +297,12 @@ impl Pipeline {
                 ))
             }
         };
-        let mut problems: Vec<String> =
-            authoring::plan_problems(&doc, &self.plans, self.live_catalog().as_ref())
-                .into_iter()
-                .filter(|problem| !problem.starts_with("note:"))
-                .collect();
-        problems.extend(composing_problems(&json!(doc.steps)));
-        problems.extend(unused_steps(&doc));
-        let defs = self.planner_tool_defs().await;
-        problems.extend(missing_inputs(&json!(doc.steps), &defs));
-        let declared = doc
-            .input_schema
-            .as_ref()
-            .and_then(|schema| schema.get("properties"))
-            .cloned()
-            .unwrap_or(Value::Null);
-        problems.extend(mistyped_inputs(&json!(doc.steps), &defs, &declared));
-        let shapes = self.shapes().await;
-        problems.extend(unknown_fields(&doc, &defs, &shapes));
-        problems.extend(file_problems(&doc, &defs, &shapes, self.router.roles()));
+        let problems: Vec<String> = self
+            .plan_problems(&doc)
+            .await
+            .into_iter()
+            .filter(|problem| !problem.starts_with("note:"))
+            .collect();
         let plan = authoring::to_json(&doc).map_err(|e| e.to_string())?;
         Ok(json!({
             "valid": problems.is_empty(),
@@ -490,10 +477,24 @@ fn unknown_fields(
 }
 
 impl Pipeline {
-    pub async fn file_problems(&self, doc: &super::doc::PlanDoc) -> Vec<String> {
+    pub async fn plan_problems(&self, doc: &super::doc::PlanDoc) -> Vec<String> {
+        let mut problems = authoring::plan_problems(doc, &self.plans, self.live_catalog().as_ref());
+        let steps = json!(doc.steps);
+        problems.extend(composing_problems(&steps));
+        problems.extend(unused_steps(doc));
         let defs = self.planner_tool_defs().await;
+        problems.extend(missing_inputs(&steps, &defs));
+        let declared = doc
+            .input_schema
+            .as_ref()
+            .and_then(|schema| schema.get("properties"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        problems.extend(mistyped_inputs(&steps, &defs, &declared));
         let shapes = self.shapes().await;
-        file_problems(doc, &defs, &shapes, self.router.roles())
+        problems.extend(unknown_fields(doc, &defs, &shapes));
+        problems.extend(file_problems(doc, &defs, &shapes, self.router.roles()));
+        problems
     }
 }
 

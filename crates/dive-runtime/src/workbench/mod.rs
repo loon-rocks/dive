@@ -141,7 +141,7 @@ impl Workbench {
                 {
                     attachment.recall(recorded);
                 }
-                attachment.restore(&history);
+                attachment.restore(&history).await;
                 (Some(meta), history)
             }
             _ => (None, Vec::new()),

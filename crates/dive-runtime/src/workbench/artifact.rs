@@ -169,11 +169,7 @@ pub async fn check(
             _ => over.check_agent_file(yaml).await.err().unwrap_or_default(),
         },
         ArtifactKind::Plan => match network::resolved_plan(origin, yaml) {
-            Ok(doc) => {
-                let mut problems = super::tools::plan_problems(&over, &doc);
-                problems.extend(over.file_problems(&doc).await);
-                problems
-            }
+            Ok(doc) => over.plan_problems(&doc).await,
             Err(problem) => vec![problem],
         },
     }
@@ -1728,6 +1724,37 @@ pub fn tool_defs() -> Vec<ToolDef> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn an_opened_plan_reports_a_path_into_a_field_its_tool_never_returns() {
+        use dive_core::store::Store;
+        let store = Arc::new(dive_store::MemoryStore::new());
+        store
+            .record_tool_shape(
+                "playwright__browser_evaluate",
+                &json!({"type": "object", "properties": {"text": {"type": "string"}}}),
+                &json!({"text": "### Result"}),
+            )
+            .await
+            .unwrap();
+        let mut pipeline = (*super::super::tools::tests::test_pipeline(Vec::new())).clone();
+        pipeline.store = Some(store);
+        let yaml = "version: 2\nidentifier: snapshot\nname: Snapshot\ndescription: Backs up surfaces.\ninput_schema:\n  type: object\n  properties:\n    surfaces: {type: array}\nsteps:\n- id: saved\n  tool_name: map\n  input:\n    over: '{{input.surfaces}}'\n    do:\n    - id: file\n      tool_name: playwright__browser_evaluate\n      input:\n        function: () => ({{item}})\n    - id: row\n      tool_name: builtin__reshape\n      input:\n        shape:\n          ref: '{{file.files.0.ref}}'\nfinish:\n  output:\n    files: '{{saved.results}}'\n";
+        let problems = check(
+            &pipeline,
+            &Network::default(),
+            ArtifactKind::Plan,
+            &Origin::File,
+            yaml,
+        )
+        .await;
+        assert!(
+            problems.iter().any(|problem| problem.contains(
+                "playwright__browser_evaluate's output has no `files`; its fields are text"
+            )),
+            "{problems:?}"
+        );
+    }
 
     #[test]
     fn a_long_test_result_reaches_the_model_as_its_shape_and_a_sample() {

@@ -303,7 +303,7 @@ impl ChatStart {
             network.recall(recorded);
         }
         for host in &hosts {
-            host.restore(&session.history);
+            host.restore(&session.history).await;
         }
         for (kind, name) in seed.opening {
             network

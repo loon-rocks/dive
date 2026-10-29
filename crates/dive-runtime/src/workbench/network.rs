@@ -612,6 +612,12 @@ impl Network {
             .find(|node| node.kind == kind && node.name == name)
     }
 
+    pub fn set_problems(&mut self, kind: ArtifactKind, name: &str, problems: Vec<String>) {
+        if let Some(node) = self.node_mut(kind, name) {
+            node.problems = problems;
+        }
+    }
+
     fn node_mut(&mut self, kind: ArtifactKind, name: &str) -> Option<&mut Node> {
         self.nodes
             .iter_mut()

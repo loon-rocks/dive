@@ -566,7 +566,7 @@ impl AttachmentHost for EvidenceAttachment {
         catalog
     }
 
-    fn restore(&self, _history: &[NewEntry]) {}
+    async fn restore(&self, _history: &[NewEntry]) {}
 
     fn view(&self) -> Value {
         serde_json::to_value(self.evidence()).unwrap_or_default()
