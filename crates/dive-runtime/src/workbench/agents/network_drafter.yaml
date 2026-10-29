@@ -54,6 +54,9 @@ system_prompt: |
 
   {{rules.design}}
 
+  # Files
+  {{rules.files}}
+
   # 4. Push back
   When the user asks for something wasteful, push back once: call workbench__propose_designs with their design and your better one (nodes, model, a rough number of calls per request) and your pushback as `reply`, asking which they want; it ends your turn. If they keep theirs, build what they chose and don't raise it again.
 

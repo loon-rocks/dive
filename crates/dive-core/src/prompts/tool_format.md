@@ -27,7 +27,7 @@ Templates in a tool reference only its input: `{{input.city}}`, `{{input.repo}}`
 - `timeout_secs`: default 60.
 - `output`: `json` (the default) parses stdout as JSON; `text` wraps stdout as `{"text": …}`. Prefer JSON: ask the command for JSON (`gh … --json`, `curl` against a JSON API, `jq -c`).
 - Files in: an input property with `format: blob` (or an array whose `items` have it) takes a file ref such as `blob:sha256-….png`, and the command receives it as a local path. Declare every input that takes a file this way; any other input gets the ref as plain text.
-- Files out: write each file into the directory named by `$DIVE_OUT`, with the extension of its type (`.png`, `.jpg`, `.pdf`). When the command exits 0, Dive stores them and adds `files` to the result, each with a `ref`, `mime` and `bytes`; with `output: json`, stdout may then be empty. Never print a file's bytes or base64 to stdout.
+- Files out: declare each file the command writes under `files` at the top level of the tool, `files: {report: {name: report.pdf}}`, and pass `{{files.report.path}}` in `args`; for several, declare a pattern such as `page-*.png` and pass `{{files.pages.dir}}`. When the command exits 0, each file is listed under the result's `files` with its `name`, `ref`, `mime` and `bytes`; with `output: json`, stdout may then be empty. Never print a file's bytes or base64 to stdout.
 A non-zero exit, a timeout, or `json` output that doesn't parse comes back as a tool error with stderr.
 
 `prompt` makes one model call:

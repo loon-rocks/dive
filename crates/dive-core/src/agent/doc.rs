@@ -322,6 +322,7 @@ pub fn global_fragments() -> BTreeMap<&'static str, &'static str> {
         ("tool_format", crate::prompts::TOOL_FORMAT),
         ("agent_format", crate::prompts::AGENT_FORMAT),
         ("design", crate::prompts::DESIGN_RULES),
+        ("files", crate::prompts::FILE_HANDLING),
     ])
 }
 

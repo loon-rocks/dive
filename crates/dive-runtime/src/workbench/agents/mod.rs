@@ -350,8 +350,16 @@ steps:
             let rendered =
                 dive_core::agent::doc::render_system_prompt(&doc, &fragments, &session).unwrap();
             assert!(rendered.contains(design), "{name}");
+            assert!(
+                rendered.contains(dive_core::prompts::FILE_HANDLING),
+                "{name} learns how refs are made"
+            );
             assert!(reads_design_rules(&doc), "{name}");
         }
+        let editor = workbench.get("plan_editor").unwrap();
+        let rendered =
+            dive_core::agent::doc::render_system_prompt(&editor, &fragments, &session).unwrap();
+        assert!(rendered.contains(dive_core::prompts::FILE_HANDLING));
         assert!(!reads_design_rules(&set.get("chat").unwrap()));
         assert!(!reads_design_rules(&set.get("front_desk").unwrap()));
     }

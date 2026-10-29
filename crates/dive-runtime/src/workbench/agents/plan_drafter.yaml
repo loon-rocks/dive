@@ -47,6 +47,9 @@ system_prompt: |
   # Design principles
   {{rules.design}}
 
+  # Files
+  {{rules.files}}
+
   # Writing plans
   {{rules.composing}}
 

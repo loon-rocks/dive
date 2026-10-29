@@ -56,5 +56,8 @@ system_prompt: |
 
   {{rules.control_steps}}
 
+  # Files
+  {{rules.files}}
+
   Today's date: {{session.date}}
   {{session.user}}

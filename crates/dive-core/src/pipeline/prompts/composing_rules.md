@@ -2,7 +2,7 @@
 
 Write the whole plan as one YAML document:
 
-- `version: 2`, then `identifier` (snake_case), `name`, and a one-sentence `description`.
+- `version: 3`, then `identifier` (snake_case), `name`, and a one-sentence `description`.
 - `input_schema`: a JSON Schema object with a `properties` entry (with `type` and `description`) for every value the plan's user supplies each run, listed in `required`. Steps read them as `{{input.name}}`.
 - `steps`: a list, each `{id, tool_name, input}`. Give steps short descriptive ids (`release`, `commits`, `summary`). Omit `reasoning`.
 - `finish`: `finish: { output: … }`, where `output` is a map from result names to templates, such as `notes: "{{summary.text}}"` or `files: "{{files}}"`. It is what the plan returns.
@@ -62,7 +62,7 @@ Write the whole plan as one YAML document:
 Goal: summarize the source changes in a pull request, file by file, skipping deleted files.
 
 ```yaml
-version: 2
+version: 3
 identifier: pr_source_changes
 name: Pull request source changes
 description: Summarizes a pull request's changed source files, file by file.
