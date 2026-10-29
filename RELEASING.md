@@ -22,8 +22,8 @@ the next PR needs it), regenerates `CHANGELOG.md`, and rebuilds the
 docs changelog page — Dive dogfooding itself: the `changelog_entry` plan
 infers the release's summary (and a migration prompt when consumers must
 act) into `docs/snippets/changelog/dive/<version>/`, and the `compose_changelog`
-plan renders `docs/changelog.mdx`, which imports those snippets (Mintlify
-snippets are never published as standalone pages), so each piece of prose
+plan renders `docs/changelog.mdx`, which imports those snippets (snippets
+are never published as standalone pages), so each piece of prose
 exists in exactly one file. Nothing is committed: the tree is left holding
 exactly the release's files for you to read and edit.
 
@@ -39,8 +39,8 @@ headings; the commit groups the page renders below them are `####`.
 **Publish** commits the tree exactly as reviewed as `chore(release): vX.Y.Z`,
 tags `vX.Y.Z`, and pushes. It regenerates nothing: what you reviewed is what
 ships. The docs site goes live with the release too: once the GitHub
-release exists, the release workflow moves the `docs-live` branch, which
-Mintlify deploys from, to the tag. Docs merged to `main` between releases
+release exists, the release workflow moves the `docs-live` branch to the
+tag and triggers a rebuild of the loon.rocks site, which builds from it. Docs merged to `main` between releases
 stay unpublished until then. Editing a snippet's text needs no further step, because the page
 imports the snippet. Adding, removing, or moving a snippet file changes the
 page's imports, so after that re-run

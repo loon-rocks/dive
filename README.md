@@ -62,6 +62,16 @@ The `docs/` directory is the canonical reference for plan format, template
 language, tool definitions, and CLI surface. Start with
 `docs/getting-started/concepts.mdx`.
 
+The docs are published at [loon.rocks/docs](https://loon.rocks/docs) by the
+[site](https://github.com/loon-rocks/site) repo, which builds them from this
+repo's `docs-live` branch. Each release moves `docs-live` to the new tag and
+triggers a site rebuild (the `docs` job in `.github/workflows/release.yaml`),
+so docs merged to `main` go live with the next release. `docs/docs.json`
+supplies the navigation, redirects and `{{variables}}`; pages under
+`docs/snippets/` and `docs/shared/` are only imported, never published on
+their own. The site's README covers how pages are compiled and how to
+preview unreleased docs.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
