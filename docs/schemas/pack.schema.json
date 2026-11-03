@@ -5,7 +5,7 @@
   "examples": [
     {
       "description": "Read and comment on pull requests, releases and git history.",
-      "homepage": "https://github.com/tylerdavis/graph-packs/tree/main/github",
+      "homepage": "https://github.com/loon-rocks/packs/tree/main/github",
       "license": "MIT",
       "name": "github",
       "requires": {

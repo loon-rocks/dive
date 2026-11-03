@@ -89,13 +89,13 @@ fn target(reference: &str, tag: bool, sha: &str) -> Target {
 #[test]
 fn sources_resolve_to_urls() {
     let official = (
-        "github.com/tylerdavis/graph-packs".to_string(),
+        "github.com/loon-rocks/packs".to_string(),
         "example".to_string(),
     );
     assert_eq!(source_of("example", None), official);
     assert_eq!(
         remote_url(&source_of("example", None).0),
-        "https://github.com/tylerdavis/graph-packs"
+        "https://github.com/loon-rocks/packs"
     );
     assert_eq!(
         source_of("example", Some("tools/example")).1,

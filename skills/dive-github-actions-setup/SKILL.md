@@ -61,7 +61,7 @@ repair  = { provider = "anthropic", model = "claude-haiku-4-5" }
 # No [storage] section: CI sets DIVE_STORAGE=memory.
 ```
 
-Then run `dive pack add github` from the repo root. It copies the [github pack](https://github.com/tylerdavis/graph-packs/tree/main/github) into `.dive/packs/github/`, adds its `[packs.github]` entry to `config.toml` and pins the release in `.dive/packs.lock`; commit all three, so CI runs the same tools without installing anything. Its tools are called as `github__tool__<name>`: `git_changed_files`, `git_diff`, `gh_pr_meta`, `gh_pr_comment`, `gh_pr_thread_sync` and more.
+Then run `dive pack add github` from the repo root. It copies the [github pack](https://github.com/loon-rocks/packs/tree/main/github) into `.dive/packs/github/`, adds its `[packs.github]` entry to `config.toml` and pins the release in `.dive/packs.lock`; commit all three, so CI runs the same tools without installing anything. Its tools are called as `github__tool__<name>`: `git_changed_files`, `git_diff`, `gh_pr_meta`, `gh_pr_comment`, `gh_pr_thread_sync` and more.
 
 Then author one plan per check under `.dive/plans/`. Adapt from the live references — [`docs_drift.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/docs_drift.yaml) (gate) and [`dive_review_9000.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/dive_review_9000.yaml) (reporter; a wrapper composing [`dive_review_core.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/dive_review_core.yaml), the locally runnable review engine, with [`dive_review_thread_audit.yaml`](https://github.com/loon-rocks/dive/blob/main/.dive/plans/dive_review_thread_audit.yaml) for thread lifecycle) — rather than writing from scratch. A minimal gate skeleton:
 

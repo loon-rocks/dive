@@ -167,7 +167,7 @@ fn pack_entries_read_every_field() {
     let path = fixture_dir(CONFIG_FORMAT).join("packs.toml");
     let loaded = load_from(std::slice::from_ref(&path)).unwrap();
     let example = &loaded.config.packs["example"];
-    assert_eq!(example.git, "github.com/acme/graph-packs");
+    assert_eq!(example.git, "github.com/acme/packs");
     assert_eq!(example.path, "example");
     assert_eq!(loaded.config.packs["bare"].path, "");
     assert_eq!(example.reference.as_deref(), Some("v2"));

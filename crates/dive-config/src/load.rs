@@ -1139,7 +1139,7 @@ fallbacks = [
         let loaded = load_from(&[path]).unwrap();
         assert_eq!(
             loaded.config.packs["github"].git,
-            "github.com/tylerdavis/graph-packs"
+            "github.com/loon-rocks/packs"
         );
         assert_eq!(loaded.config.packs["github"].path, "github");
         assert_eq!(loaded.config.tools.paths.len(), 2);
@@ -1296,7 +1296,7 @@ ref = "v1"
 include = ["plan__*"]
 
 [packs.shared]
-git = "github.com/acme/graph-pack-shared"
+git = "github.com/acme/pack-shared"
 "#,
         );
         let project = write(
@@ -1326,7 +1326,7 @@ git = "github.com/fork/dive-pack-example"
         assert!(example.include.is_empty());
         assert_eq!(
             loaded.config.packs["shared"].git,
-            "github.com/acme/graph-pack-shared"
+            "github.com/acme/pack-shared"
         );
     }
 
@@ -1392,7 +1392,7 @@ git = "github.com/fork/dive-pack-example"
         let project = write(
             dir.path(),
             "project.toml",
-            "[packs.linear]\ngit = \"github.com/acme/graph-pack-linear\"\n",
+            "[packs.linear]\ngit = \"github.com/acme/pack-linear\"\n",
         );
         let err = format!("{:#}", load_from(&[global, project.clone()]).unwrap_err());
         assert!(err.contains("[packs.linear]"), "{err}");
@@ -1407,7 +1407,7 @@ git = "github.com/fork/dive-pack-example"
             let path = write(
                 dir.path(),
                 "config.toml",
-                &format!("[packs.x]\ngit = \"github.com/acme/graph-packs\"\npath = \"{bad}\"\n"),
+                &format!("[packs.x]\ngit = \"github.com/acme/packs\"\npath = \"{bad}\"\n"),
             );
             let err = format!("{:#}", load_from(&[path]).unwrap_err());
             assert!(err.contains("[packs.x]"), "{err}");
@@ -1416,7 +1416,7 @@ git = "github.com/fork/dive-pack-example"
         let path = write(
             dir.path(),
             "config.toml",
-            "[packs.x]\ngit = \"github.com/acme/graph-packs\"\npath = \"tools/x\"\n",
+            "[packs.x]\ngit = \"github.com/acme/packs\"\npath = \"tools/x\"\n",
         );
         assert_eq!(
             load_from(&[path]).unwrap().config.packs["x"].path,

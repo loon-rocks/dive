@@ -13,7 +13,7 @@ fn write(dir: &Path, path: &str, content: &str) {
 
 fn entry() -> PackEntry {
     PackEntry {
-        git: "github.com/acme/graph-packs".to_string(),
+        git: "github.com/acme/packs".to_string(),
         path: "example".to_string(),
         reference: Some("v1".to_string()),
         include: Vec::new(),
@@ -34,7 +34,7 @@ fn install(layer_dir: &Path, name: &str, tag: &str, lock: bool) -> String {
         let path = layer_dir.join("packs.lock");
         let mut text = std::fs::read_to_string(&path).unwrap_or_else(|_| "version = 1\n".into());
         text.push_str(&format!(
-            "\n[packs.{name}]\ngit = \"github.com/acme/graph-packs\"\npath = \"example\"\ntag = \"example/{tag}\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"
+            "\n[packs.{name}]\ngit = \"github.com/acme/packs\"\npath = \"example\"\ntag = \"example/{tag}\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"
         ));
         std::fs::write(path, text).unwrap();
     }

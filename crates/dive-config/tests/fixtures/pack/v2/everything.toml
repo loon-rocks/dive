@@ -2,7 +2,7 @@ version = 2
 name = "example"
 description = "Every key a version 1 manifest accepts."
 license = "MIT"
-homepage = "https://github.com/acme/graph-pack-example"
+homepage = "https://github.com/acme/pack-example"
 
 [requires]
 dive = ">=0.17"

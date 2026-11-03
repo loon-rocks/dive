@@ -4,11 +4,11 @@ version = 6
 always_loaded = ["builtin__infer"]
 
 [packs.github]
-git = "github.com/tylerdavis/graph-packs"
+git = "github.com/loon-rocks/packs"
 path = "github"
 ref = "v1"
 
 [packs.slack]
-git = "github.com/tylerdavis/graph-packs"
+git = "github.com/loon-rocks/packs"
 path = "slack"
 ref = "v1"

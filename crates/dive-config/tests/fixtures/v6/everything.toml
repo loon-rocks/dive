@@ -83,7 +83,7 @@ paths = ["./.graph/plans", "~/.config/graph/plans"]
 paths = ["./.graph/tools", "~/.config/graph/tools"]
 
 [packs.slack]
-git = "github.com/tylerdavis/graph-packs"
+git = "github.com/loon-rocks/packs"
 path = "slack"
 ref = "v1"
 

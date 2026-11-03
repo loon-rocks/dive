@@ -803,7 +803,7 @@ pub enum PackCommand {
     Add {
         #[arg(
             value_name = "NAME|URL",
-            help = "A bare name (the <name> directory of github.com/tylerdavis/graph-packs) or a git URL; a name already in [packs] installs that entry"
+            help = "A bare name (the <name> directory of github.com/loon-rocks/packs) or a git URL; a name already in [packs] installs that entry"
         )]
         source: String,
         #[arg(
@@ -884,7 +884,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Scaffold a pack in a directory of a packs repository: manifest, one tool, plan and agent, README, CHANGELOG and MIGRATING.md",
-        after_long_help = "Writes the files from a scaffold built into Dive, so it works offline, into <PATH>/<NAME>/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `dive pack test` over every pack, and a `.gitignore` for `.dive/` when it has none. The scaffold passes `dive pack check` and `dive pack test` as written.\n\nExamples:\n  dive pack new files\n  dive pack new files ../graph-packs"
+        after_long_help = "Writes the files from a scaffold built into Dive, so it works offline, into <PATH>/<NAME>/, which is created when missing and refused when it holds anything. A packs repository holds one pack per directory, each released as `<NAME>/vX.Y.Z` tags. When the repository has no `.github/workflows/packs.yaml`, it also gets one that runs `dive pack test` over every pack, and a `.gitignore` for `.dive/` when it has none. The scaffold passes `dive pack check` and `dive pack test` as written.\n\nExamples:\n  dive pack new files\n  dive pack new files ../packs"
     )]
     New {
         #[arg(
@@ -962,7 +962,7 @@ pub enum PackCommand {
     },
     #[command(
         about = "Compare the public interface with the previous release tag and create the next annotated tag, without pushing",
-        after_long_help = "A pack's releases are the tags `<DIR>/vX.Y.Z`, where <DIR> is the pack's directory relative to the repository root (plain `vX.Y.Z` for a pack at the root). Refuses uncommitted changes inside the pack's directory, then compares every public item's name, input schema and output schema with the pack's newest release tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `dive pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.\n\nExamples:\n  dive pack release minor files\n  dive pack release major ../graph-packs/files"
+        after_long_help = "A pack's releases are the tags `<DIR>/vX.Y.Z`, where <DIR> is the pack's directory relative to the repository root (plain `vX.Y.Z` for a pack at the root). Refuses uncommitted changes inside the pack's directory, then compares every public item's name, input schema and output schema with the pack's newest release tag. A removed or renamed item, a new required input, or a removed or retyped input or output property needs a major; a new item, optional input or output property needs at least a minor. A major also needs `plans/migrations/migrate_v<N>.yaml` or a `## v<N-1> to v<N>` section in MIGRATING.md. Then it runs `dive pack test` and creates the annotated tag. The first release skips the comparison and is v1.0.0 for major, v0.1.0 for minor and v0.0.1 for patch. Push the tag yourself.\n\nExamples:\n  dive pack release minor files\n  dive pack release major ../packs/files"
     )]
     Release {
         #[arg(value_name = "BUMP", help = "Which part of the version to raise")]
