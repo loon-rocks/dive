@@ -1,7 +1,7 @@
 version = 1
 
 [packs.github]
-git = "github.com/tylerdavis/graph-packs"
+git = "github.com/loon-rocks/packs"
 path = "github"
 tag = "github/v1.0.0"
 sha = "e018c6ed6b11c21ba9c0819c566229c7faac1694"

@@ -39,7 +39,7 @@ input = 1.00
 output = 5.00
 
 [packs.github]
-git = "github.com/tylerdavis/graph-packs"
+git = "github.com/loon-rocks/packs"
 path = "github"
 ref = "v1"
 
