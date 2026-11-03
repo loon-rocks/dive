@@ -190,7 +190,7 @@ prepare() {
   fi
 
   perl -0pi -e 's{\n      - name: Bridge the pre-rename image\n        run: \|\n[^\n]*\n[^\n]*\n}{\n}g; s{\n  GRAPH_[A-Z]+: [^\n]*}{}g' .github/workflows/dive-checks.yaml
-  sed -i.bak -E "s#ghcr.io/(tylerdavis/graph|loon-rocks/dive):v[0-9][0-9.]*#ghcr.io/loon-rocks/dive:v$new#g" .github/workflows/dive-checks.yaml && rm .github/workflows/dive-checks.yaml.bak
+  sed -i.bak -E "s#ghcr.io/loon-rocks/dive:v[0-9][0-9.]*#ghcr.io/loon-rocks/dive:v$new#g" .github/workflows/dive-checks.yaml && rm .github/workflows/dive-checks.yaml.bak
   pins=$(grep -oE "ghcr.io/[a-z-]+/[a-z-]+:v[0-9][0-9.]*" .github/workflows/dive-checks.yaml | sort -u)
   [ "$pins" = "ghcr.io/loon-rocks/dive:v$new" ] || { echo "checks image pin bump failed: $pins" >&2; exit 1; }
   ! grep -q "pre-rename" .github/workflows/dive-checks.yaml || { echo "checks still carry the pre-rename bridge" >&2; exit 1; }

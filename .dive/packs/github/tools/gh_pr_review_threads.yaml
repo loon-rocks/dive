@@ -90,7 +90,7 @@ input_schema:
       type: string
       description: >
         Payload tag prefix to look for — the same marker the findings were
-        posted with via gh_pr_thread_sync (e.g. "graph:pr_review:finding").
+        posted with via gh_pr_thread_sync (e.g. "dive:pr_review:finding").
         Only threads whose first comment embeds `<!-- <marker> {json} -->`
         are returned.
 output_schema:

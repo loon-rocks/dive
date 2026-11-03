@@ -14,7 +14,7 @@ dive pack add github
 
 ```text
 ✓ ./.dive/packs/github
-  note: installed github v1.0.0 from github/ in github.com/tylerdavis/graph-packs (project layer, ref v1)
+  note: installed github v1.0.0 from github/ in github.com/loon-rocks/packs (project layer, ref v1)
 ```
 
 Commit `.dive/packs/github/`, `.dive/packs.lock` and `.dive/config.toml`. The pack's tools are now in the catalog:
@@ -26,7 +26,7 @@ dive tool show github__tool__git_log
 To install from your own repository, pass its URL and the pack's directory:
 
 ```bash
-dive pack add github.com/acme/graph-packs --path deploys
+dive pack add github.com/acme/packs --path deploys
 ```
 
 ## See what's installed

@@ -23,7 +23,7 @@
       },
       "packs": {
         "github": {
-          "git": "github.com/tylerdavis/graph-packs",
+          "git": "github.com/loon-rocks/packs",
           "path": "github",
           "ref": "v1"
         }

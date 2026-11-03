@@ -67,7 +67,7 @@ examples:
     name: github
     description: Read and comment on pull requests, releases and git history.
     license: MIT
-    homepage: https://github.com/tylerdavis/graph-packs/tree/main/github
+    homepage: https://github.com/loon-rocks/packs/tree/main/github
     requires:
       dive: ">=0.15"
       os: [macos, linux]

@@ -24,7 +24,7 @@ fn layers(root: &Path) -> Vec<PathBuf> {
         &project,
         "config.toml",
         &format!(
-            "version = 4\n[tools]\npaths = [\"{}\"]\n[mcp.linear]\nurl = \"https://mcp.linear.app/mcp\"\nheaders = {{ Authorization = \"Bearer ${{DIVE_T_LINEAR}}\" }}\n[packs.web]\ngit = \"github.com/acme/graph-packs\"\npath = \"web\"\nref = \"v1\"\n",
+            "version = 4\n[tools]\npaths = [\"{}\"]\n[mcp.linear]\nurl = \"https://mcp.linear.app/mcp\"\nheaders = {{ Authorization = \"Bearer ${{DIVE_T_LINEAR}}\" }}\n[packs.web]\ngit = \"github.com/acme/packs\"\npath = \"web\"\nref = \"v1\"\n",
             project.join("tools").display()
         ),
     );
@@ -48,7 +48,7 @@ fn layers(root: &Path) -> Vec<PathBuf> {
     write(
         &project,
         "packs.lock",
-        &format!("version = 1\n\n[packs.web]\ngit = \"github.com/acme/graph-packs\"\npath = \"web\"\ntag = \"web/v1\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"),
+        &format!("version = 1\n\n[packs.web]\ngit = \"github.com/acme/packs\"\npath = \"web\"\ntag = \"web/v1\"\nsha = \"a8303d2a8303d2a8303d2a8303d2a8303d2a8303\"\nhash = \"{hash}\"\n"),
     );
     vec![global.join("config.toml"), project.join("config.toml")]
 }
