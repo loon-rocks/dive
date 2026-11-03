@@ -52,6 +52,6 @@ input_schema:
       description: >
         Stable identifier embedded in the body as a hidden tag; the next
         run with the same marker edits that comment. Use one marker per
-        plan (e.g. "graph:pr_review:summary") when several plans comment
+        plan (e.g. "dive:pr_review:summary") when several plans comment
         on the same PR. Omit to edit the token identity's most recent
         comment instead.

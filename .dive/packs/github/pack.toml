@@ -1,10 +1,10 @@
-version = 1
+version = 2
 name = "github"
 description = "Read and comment on pull requests, releases and git history."
 license = "MIT"
-homepage = "https://github.com/tylerdavis/graph-packs/tree/main/github"
+homepage = "https://github.com/loon-rocks/packs/tree/main/github"
 
 [requires]
-graph = ">=0.15"
+dive = ">=0.17"
 os = ["macos", "linux"]
 binaries = ["bash", "git", "gh", "jq"]

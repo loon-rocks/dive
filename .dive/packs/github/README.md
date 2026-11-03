@@ -1,18 +1,19 @@
 # github
 
-A [graph](https://github.com/tylerdavis/graph) pack for reading and commenting on pull requests, releases and git history. Its tools run `git`, `gh` and `jq`, so plans can review a pull request, write release notes or summarize what changed between two refs.
+A [Dive](https://github.com/loon-rocks/dive) pack for reading and commenting on pull requests, releases and git history. Its tools run `git`, `gh` and `jq`, so plans can review a pull request, write release notes or summarize what changed between two refs.
 
 ## Install
 
 ```bash
-graph pack add github
+dive pack add github
 ```
 
-That installs the pack into the project's `.graph/packs/github`. Add `--global` to install it for every project.
+That installs the pack into the project's `.dive/packs/github`. Add `--global` to install it for every project.
 
 ## Requirements
 
 - macOS or Linux.
+- Dive v0.17 or later.
 - `bash`, `git`, `gh` and `jq` on your `PATH`.
 - `GH_TOKEN`, or `gh auth login`, for the `gh_*` tools.
 - A checkout whose `origin` points at the repository.
@@ -36,15 +37,11 @@ That installs the pack into the project's `.graph/packs/github`. Add `--global` 
 
 `gh_pr_comment`, `gh_pr_inline_comments` and `gh_pr_thread_sync` post to GitHub; every other tool is read-only.
 
-## Upgrading from graph v0.15
-
-These tools shipped inside graph up to v0.15 as `builtin__gh_*` and `builtin__git_*`, enabled with `[tools].packs = ["github"]`. From graph v0.16, install this pack with `graph pack add github` and call `github__tool__<name>` wherever your plans and agents called `builtin__<name>`.
-
 ## Develop
 
 | Command | What it does |
 |---|---|
-| `graph pack check` | loads the pack the way an install would and reports every problem |
-| `graph pack run tool__git_log --input base=HEAD~5 --input head=HEAD` | runs one of the pack's tools |
-| `graph pack test` | runs `check`, then each migration over its sample files |
-| `graph pack release <major\|minor\|patch>` | compares the public interface with the previous tag and creates the next tag |
+| `dive pack check` | loads the pack the way an install would and reports every problem |
+| `dive pack run tool__git_log --input base=HEAD~5 --input head=HEAD` | runs one of the pack's tools |
+| `dive pack test` | runs `check`, then each migration over its sample files |
+| `dive pack release <major\|minor\|patch>` | compares the public interface with the previous tag and creates the next tag |

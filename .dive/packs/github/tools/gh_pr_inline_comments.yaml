@@ -61,7 +61,7 @@ input_schema:
       description: >
         Stable identifier embedded in every comment as a hidden tag; the
         next run with the same marker deletes those comments before
-        posting. Use one marker per plan, e.g. "graph:pr_review".
+        posting. Use one marker per plan, e.g. "dive:pr_review".
     comments:
       type: array
       description: >
