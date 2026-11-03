@@ -2,6 +2,76 @@
 
 All notable changes to Dive. Generated from conventional commits by git-cliff.
 
+## Dive v0.18.0 — 2026-11-03
+
+### Breaking
+
+- every call a turn makes is kept as a trace span with its thread, and telemetry exports call content only when asked — telemetry.capture_content defaults to false, with no
+
+### Added
+
+- dive-runtime exposes storage settings ops: view, save, probe and usage for [storage], [storage.files] and the data folder (#239)
+- the chat model sees attached images and images tools return (#241)
+- explicit attachments, and the drafting agents are ordinary built-ins (#242)
+- an architect role for network_drafter and network_editor (#244)
+- every unset chat role uses default (#245)
+- pre_load on an agent's tools entries (#248)
+- network_editor sketches every edit before building, with a problem, change and success restate and each item marked edit, new or as is (#251)
+- edit evidence can focus on one step or model call inside its caller, or cover a whole turn, and network_editor starts from the focus (#255)
+- test-run approvals say what the run checks and what it can touch; safe tests run without asking (#256)
+- network test approvals use the test-run detail; unasked tests are announced to the host (#257)
+- role images in settings ops, models.dev input modalities, and held-back images on model calls (#260)
+- MCP servers that use OAuth sign in from the browser with `dive mcp login`, for one project or every project, and say they need sign-in instead of failing to connect (#265)
+- MCP servers that can't register Dive automatically sign in through a hosted client ID or an OAuth app from [mcp.<name>.oauth], and a tool call that needs sign-in names its server in the result (#266)
+- files of every type become refs with their own extension, MCP text resources and links of any type are kept, builtin__save_file and builtin__read_file turn text into a ref and back, and models read text files and PDFs named in what they read
+- every agent that builds tools, plans or agents learns the one way files become refs: tool results, declared files, builtin__save_file and generated images
+
+### Documentation
+
+- say the docs are published by the loon.rocks site from docs-live, not Mintlify
+
+### Fixed
+
+- the global workspace saves tools, plans and agents to ~/.config/dive (#243)
+- workbench tools an agent names are loaded from the start again (#246)
+- attach tools an agent names are loaded from the start, and builders can open their item (#247)
+- a new plan drafted in an edit session joins the edit as a node, so agents drafted beside it can call it and one save writes both (#250)
+- infer offers every chat role the model roles list names, solver included, and describe_tool gives a plan's output and sees plans drafted in the thread (#252)
+- network_editor sees how a call ran, every nested plan and tool with the branch each gate took, in the evidence and in each test's steps (#253)
+- images follow-ups from review of #258 (#259)
+- a stdio MCP server that fails to start reports the last lines of its stderr (#261)
+- images too large for a chat model are shrunk to fit (#262)
+- a failed turn keeps what it did and its error in the thread (#263)
+- missing structured fields are asked of the same model again, and repair calls say why they ran (#264)
+- the workbench runs every plan check on drafted, opened and resumed plans, so a path into a field its tool never returns is reported
+- a drafted tool's test run writes in a scratch directory instead of the project, keeps the files it declares, and says what it wrote
+- images sent to chat models are held to 2576 pixels a side, so a tall screenshot beside other images no longer fails with a many-image size error
+- bare pack names install from loon-rocks/packs, the official packs' new home (#268)
+
+## Config v6 — 2026-11-03
+
+### Breaking
+
+- every model that reads a file ref sees the image, roles can say they take no images, and builders learn to return and pass files (#258)
+
+## Plan v3 — 2026-11-03
+
+### Breaking
+
+- plan steps declare the files their tools write under `files`, by name or pattern, get a call directory as {{files.<name>.path}} and read them back as {{step.files.<name>.ref}}, and MCP servers get the project as their root
+
+## Tool v4 — 2026-11-03
+
+### Breaking
+
+- exec tools declare the files their command writes under `files`, by name or pattern, pass {{files.<name>.path}} in args, and return them by name
+
+## Store v4 — 2026-11-03
+
+### Added
+
+- stored files live under files/ in the bucket and the data directory (#240)
+
 ## Dive v0.17.0 — 2026-10-24
 
 ### Added
@@ -73,8 +143,8 @@ All notable changes to Dive. Generated from conventional commits by git-cliff.
 ### Breaking
 
 - secrets can be stored for one project with graph secret set --project, keyed by a generated [project] id (config version 5) (#194)
-- prices take prompt-length tiers priced per call, and can be filled and refreshed from the models.dev catalogue (#223)
-- images and audio that MCP tools return are kept as files and passed to other tools by reference, stored on disk, in memory or in S3 (#225)
+- prices take prompt-length tiers priced per call, and can be filled and refreshed from the models.dev catalogue (#223) — config version 6 (graph config migrate)
+- images and audio that MCP tools return are kept as files and passed to other tools by reference, stored on disk, in memory or in S3 (#225) — config version 7 (graph config migrate)
 
 ## Plan v2 — 2026-10-24
 

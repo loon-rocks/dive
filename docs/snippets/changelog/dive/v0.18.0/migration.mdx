@@ -1,0 +1,27 @@
+````markdown
+Dive v0.18.0 bumps four file-format versions: Config v5→v6, Plan v2→v3, Tool v3→v4, and Store v3→v4. These are hard format changes — existing config, plan, tool, and store files must be migrated to stay valid.
+
+Do the following in this repository:
+
+1. Run `dive config check` first to see what the current config reports.
+
+2. Migrate the config file:
+   - Run `dive config migrate` (project-level config).
+   - If a global config exists (e.g. under `~/.config/dive`), also run `dive config migrate --global`.
+
+3. Find every plan file in this repository (look for YAML files with Dive plan markers — grep for `version: 2` or plan-shaped keys like `steps:`, `tool:`, `with:` in `.yml`/`.yaml` files, and any directory conventionally used for Dive plans). For each one, run:
+   `dive plan migrate <name>`
+
+4. Find every user-authored tool file (grep for exec-tool shaped YAML with `command:`, `args:`, or `version: 3` tool markers). For each one, run:
+   `dive tool migrate <path>`
+
+5. After migrating, verify every plan with `dive plan validate` and fix any reported errors. Do not hand-author the schema rewrite yourself — trust the `migrate` commands to apply the actual field/shape changes correctly.
+
+6. Check this repository's CI workflows (e.g. `.github/workflows/*.yml` or similar) for any step that pins a Dive container image like `ghcr.io/loon-rocks/dive:vX.Y.Z`. If found, update that pin to `ghcr.io/loon-rocks/dive:v0.18.0` in the same PR as the migrated plan/tool/config files — an older pinned image will refuse the newer file formats by version name and break CI.
+
+7. For the specifics of what changed in each format (the exact schema/field changes), read the "Config v6", "Plan v3", and "Tool v4" entries in this release's CHANGELOG.md, right next to the "Dive v0.18.0" entry — their Breaking sections name the schema changes (e.g. plan steps and exec tools now declare a `files` key for command/tool output files, referenced via `{{files.<name>.path}}` and read back via `{{step.files.<name>.ref}}`; models/roles now handle image refs differently). Do not guess beyond what those entries and the migrate commands tell you.
+
+8. Be conservative: only modify files that the migrate commands actually touch or that CI pins indicate need updating. Do not restructure unrelated plan/tool content.
+
+9. Report back exactly which config file(s), plan files, tool files, and CI workflow files you changed, and list anything you deliberately left alone (e.g. plans/tools that didn't need changes, or workflows without version pins).
+````

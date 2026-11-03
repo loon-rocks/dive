@@ -1,0 +1,41 @@
+### Files, image models and storage
+
+Dive now has one way for files to move through a network. A file of any type becomes a ref with its own extension, whether it comes from a tool result, a file a tool declares, `builtin__save_file` or a generated image. `builtin__read_file` turns a ref back into its blob. MCP text resources and links of any type are kept as refs too.
+
+#### Plans and tools declare their files
+
+Plan steps and exec tools declare the files their commands write under a new `files` key, by name or by pattern. A command gets its call directory as `{{files.<name>.path}}`, and later steps read the result back as `{{step.files.<name>.ref}}`. MCP servers get the project as their root.
+
+#### Models see images and read files
+
+Chat models see attached images and the images tools return, on every turn. Models also read the text files and PDFs named in what they read. A role can set `images = false` for a text-only model, and Dive reads from models.dev which models take images. A model that takes no images gets a note beside the message that names the image instead, so earlier turns stay the same and the prompt cache holds. Images too large for a model are shrunk to fit, keeping their shape, and held to 2576 pixels a side.
+
+#### Storage
+
+Stored files live under `files/`, in an S3 bucket's prefix and in the data directory, with the download cache in `cache/files`. `dive-runtime` exposes settings operations to view, save, probe and measure `[storage]`, `[storage.files]` and the data folder.
+
+### MCP OAuth
+
+MCP servers that use OAuth sign in from the browser with `dive mcp login <server>`, for one project or for every project. Tokens are kept in the OS credential store and refresh on their own. A project's own sign-in wins over the global one, and no project sees another's. `dive mcp logout` removes a sign-in, and `dive mcp list` shows each server's.
+
+Servers whose authorization server takes no app registrations, like GitHub's, sign in with an OAuth app set in `[mcp.<name>.oauth]`. Servers that accept a URL as the client ID sign in as Dive with no app at all.
+
+A server that needs sign-in now says so instead of failing to connect, and a tool call that fails for that reason names the server in its result, so an agent or front end knows where to send you.
+
+### Tracing
+
+Every conversation turn is now an OpenTelemetry-shaped trace. The turn is the root span, and every model call, tool call, plan, plan step and subagent under it is a span at any depth, with its parent, timing, status and `gen_ai` attributes. Spans stream to sinks as they open and close and are saved with the thread. A new `[trace]` table sets whether spans keep their content and how much of it.
+
+Telemetry no longer exports prompts, responses or tool input and output by default. Set `telemetry.capture_content = true` to keep exporting them.
+
+### But wait.  There's more...
+
+- `network_editor` sketches every edit before building it, restating the problem, the change and what success looks like, and marks each item as edit, new or as is. Its evidence can focus on one step or model call, or cover a whole turn.
+- Test-run approvals say what the run checks and what it can touch. Read-only tests that use no network and no secrets run without asking, and the host is told they ran.
+- `network_drafter` and `network_editor` use a new `architect` role, and every chat role without a model of its own uses `default`.
+- An agent's `tools` entry can set `pre_load` to load that tool from the start.
+- A drafted tool's test run writes in a scratch directory instead of the project.
+- A failed turn keeps what it did and its error in the thread, and a structured output missing required fields is asked of the same model again.
+- A stdio MCP server that fails to start reports the last lines of its stderr.
+- The global workspace saves tools, plans and agents to `~/.config/dive`.
+- Bare pack names install from the official packs' new home, [loon-rocks/packs](https://github.com/loon-rocks/packs).
