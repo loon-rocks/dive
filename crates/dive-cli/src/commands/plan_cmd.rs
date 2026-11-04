@@ -109,9 +109,14 @@ fn list() -> Result<Outcome> {
     let text = listed
         .plans
         .iter()
-        .map(|plan| match &plan.pack {
-            Some(source) => format!("{}\t{}\t{}\n", plan.identifier, plan.name, source),
-            None => format!("{}\t{}\n", plan.identifier, plan.name),
+        .map(|plan| {
+            let scope = plan.pack.as_deref().unwrap_or(plan.scope.label());
+            format!(
+                "{}\t{}\t{scope}{}\n",
+                plan.identifier,
+                plan.name,
+                super::listing::missing_column(&plan.missing)
+            )
         })
         .collect::<String>();
     Ok(Outcome::raw(text, body))
@@ -122,7 +127,17 @@ fn show(name: &str) -> Result<Outcome> {
     let detail = ops::plan::show(&runtime, name)?;
     let mut body = plan_edit::doc_as_json(&detail.doc)?;
     body["source"] = serde_json::json!(detail.source);
-    Ok(Outcome::raw(detail.yaml, body).with_note(format!("source: {}", detail.source)))
+    let missing = runtime
+        .list_context_or_default()
+        .missing(&dive_core::requirements::Item::Plan(
+            detail.doc.identifier.clone(),
+        ));
+    body["missing"] = serde_json::to_value(&missing)?;
+    let note = match super::listing::missing_note(&missing) {
+        Some(paths) => format!("source: {}\n{paths}", detail.source),
+        None => format!("source: {}", detail.source),
+    };
+    Ok(Outcome::raw(detail.yaml, body).with_note(note))
 }
 
 pub fn validate(name_or_path: &str) -> Result<Outcome> {
@@ -219,6 +234,14 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     if let Err(error) = callable_from_outside(&catalog.packs, name) {
         annotate(&error.to_string());
         return Err(error);
+    }
+    let requirements = runtime.requirements_over(&loaded.docs, &runtime.agent_set(), &catalog);
+    if let Some(refusal) =
+        requirements.refusal(&dive_core::requirements::Item::Plan(name.to_string()))
+    {
+        let message = refusal.to_string();
+        annotate(&message);
+        bail!(message);
     }
     let mut check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &catalog);
     check.errors.append(&mut check.notes);

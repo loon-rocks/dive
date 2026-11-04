@@ -8,6 +8,7 @@ pub mod ops;
 pub mod packs;
 pub mod run_trace;
 pub mod runtime;
+pub mod scope;
 pub mod secrets;
 pub mod telemetry;
 pub mod workbench;

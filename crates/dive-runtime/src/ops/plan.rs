@@ -1,4 +1,5 @@
 use crate::runtime::Runtime;
+use crate::scope::{ListContext, Scope};
 use anyhow::{bail, Result};
 use dive_core::format::Migrated;
 use dive_core::packs::Origin;
@@ -16,6 +17,8 @@ pub struct PlanSummary {
     pub steps: usize,
     pub path: Option<String>,
     pub source: String,
+    pub scope: Scope,
+    pub missing: Vec<dive_core::requirements::Missing>,
     #[serde(skip)]
     pub pack: Option<String>,
 }
@@ -27,17 +30,9 @@ pub struct SkippedPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HiddenPlan {
-    pub identifier: String,
-    pub missing_servers: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PlanList {
     pub plans: Vec<PlanSummary>,
     pub skipped: Vec<SkippedPlan>,
-    pub hidden: Vec<HiddenPlan>,
 }
 
 impl PlanList {
@@ -48,6 +43,22 @@ impl PlanList {
 
 impl From<&LoadedPlans> for PlanList {
     fn from(loaded: &LoadedPlans) -> Self {
+        Self::summarize(loaded, &ListContext::default())
+    }
+}
+
+fn plan_scope(doc: &PlanDoc, context: &ListContext) -> Scope {
+    if doc.pack.is_some() {
+        return Scope::Pack;
+    }
+    match &doc.path {
+        Some(path) => context.scope_of_path(path),
+        None => Scope::Builtin,
+    }
+}
+
+impl PlanList {
+    pub fn summarize(loaded: &LoadedPlans, context: &ListContext) -> Self {
         Self {
             plans: loaded
                 .docs
@@ -59,6 +70,9 @@ impl From<&LoadedPlans> for PlanList {
                     steps: doc.steps.len(),
                     path: doc.path.as_ref().map(|p| p.display().to_string()),
                     source: doc.source_label(),
+                    scope: plan_scope(doc, context),
+                    missing: context
+                        .missing(&dive_core::requirements::Item::Plan(doc.identifier.clone())),
                     pack: doc.pack.as_ref().map(|source| source.describe()),
                 })
                 .collect(),
@@ -68,14 +82,6 @@ impl From<&LoadedPlans> for PlanList {
                 .map(|error| SkippedPlan {
                     path: error.path().to_string(),
                     reason: error.to_string(),
-                })
-                .collect(),
-            hidden: loaded
-                .hidden
-                .iter()
-                .map(|hidden| HiddenPlan {
-                    identifier: hidden.identifier.clone(),
-                    missing_servers: hidden.missing_servers.clone(),
                 })
                 .collect(),
         }
@@ -104,7 +110,7 @@ pub fn list(runtime: &Runtime) -> PlanList {
     loaded
         .docs
         .retain(|doc| packs.shows(&Origin::Outside, &doc.identifier));
-    PlanList::from(&loaded)
+    PlanList::summarize(&loaded, &runtime.list_context_or_default())
 }
 
 pub fn show(runtime: &Runtime, name_or_path: &str) -> Result<PlanDetail> {
@@ -132,9 +138,6 @@ pub fn resolve(runtime: &Runtime, name_or_path: &str) -> Result<(PlanDoc, Loaded
 }
 
 pub fn missing(loaded: &LoadedPlans, name: &str) -> String {
-    if let Some(reason) = loaded.hidden_reason(name) {
-        return reason;
-    }
     match loaded.skip_reason(name) {
         Some(reason) => format!("plan '{name}' failed to load — {reason}"),
         None => format!("no plan named '{name}' (see `dive plan list`)"),
@@ -195,7 +198,6 @@ mod tests {
     use crate::runtime::RuntimeOptions;
     use dive_core::pipeline::doc::DocError;
     use dive_llm::ModelRouter;
-    use serde_json::json;
     use std::collections::HashMap;
 
     fn runtime(plans: &Path) -> Runtime {
@@ -208,6 +210,37 @@ mod tests {
             capture_content: false,
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
+    }
+
+    const NEEDS_GITHUB: &str = "identifier: needs_github\nname: Needs GitHub\ndescription: d\nrequires_servers: [github]\nsteps:\n  - id: E1\n    tool_name: builtin__reshape\n    input: { value: x, template: x }\n";
+
+    #[test]
+    fn a_plan_whose_required_server_is_not_configured_is_listed_with_the_server_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("needs_github.yaml"), NEEDS_GITHUB).unwrap();
+        let listed = list(&runtime(dir.path()));
+        let plan = listed
+            .plans
+            .iter()
+            .find(|plan| plan.identifier == "needs_github")
+            .unwrap();
+        assert_eq!(
+            plan.missing[0].item,
+            dive_core::requirements::Item::Server("github".to_string())
+        );
+    }
+
+    #[test]
+    fn a_plan_whose_references_resolve_is_listed_with_nothing_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("demo.yaml"), DEMO).unwrap();
+        let listed = list(&runtime(dir.path()));
+        let plan = listed
+            .plans
+            .iter()
+            .find(|plan| plan.identifier == "demo")
+            .unwrap();
+        assert!(plan.missing.is_empty(), "{:?}", plan.missing);
     }
 
     const DEMO: &str = "identifier: demo\nname: Demo\ndescription: demo plan\nsteps:\n  - id: E1\n    tool_name: builtin__reshape\n    input: { value: x, template: x }\n";
@@ -237,8 +270,10 @@ mod tests {
             [
                 "description",
                 "identifier",
+                "missing",
                 "name",
                 "path",
+                "scope",
                 "source",
                 "steps"
             ]
@@ -250,25 +285,14 @@ mod tests {
     }
 
     #[test]
-    fn hidden_plans_serialize_their_missing_servers_in_camel_case() {
+    fn missing_names_a_plan_that_failed_to_load_or_does_not_exist() {
         let loaded = LoadedPlans {
             docs: Vec::new(),
             skipped: vec![DocError::Invalid {
                 path: "/plans/broken.yaml".to_string(),
                 message: "plan has no steps".to_string(),
             }],
-            hidden: vec![dive_core::pipeline::doc::HiddenPlan {
-                identifier: "needs_linear".to_string(),
-                missing_servers: vec!["linear".to_string()],
-            }],
         };
-        let value = serde_json::to_value(PlanList::from(&loaded)).unwrap();
-        assert_eq!(value["hidden"][0]["missingServers"], json!(["linear"]));
-        assert_eq!(value["skipped"][0]["path"], json!("/plans/broken.yaml"));
-        assert_eq!(
-            missing(&loaded, "needs_linear"),
-            loaded.hidden_reason("needs_linear").unwrap()
-        );
         assert_eq!(
             missing(&loaded, "broken"),
             format!("plan 'broken' failed to load — {}", loaded.skipped[0])

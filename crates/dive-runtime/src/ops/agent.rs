@@ -14,6 +14,8 @@ pub struct AgentSummary {
     pub subagents: Vec<String>,
     pub handoffs: Vec<String>,
     pub subagent_io: String,
+    pub scope: crate::scope::Scope,
+    pub missing: Vec<dive_core::requirements::Missing>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -62,7 +64,20 @@ fn listed(
     (agents, errors)
 }
 
-pub fn list(builtin_sources: &[&str], dirs: &[PathBuf], packs: &[AgentDoc]) -> AgentList {
+fn agent_scope(doc: &AgentDoc, context: &crate::scope::ListContext) -> crate::scope::Scope {
+    match &doc.source {
+        dive_core::agent::doc::AgentSource::Builtin => crate::scope::Scope::Builtin,
+        dive_core::agent::doc::AgentSource::File(path) => context.scope_of_path(path),
+        dive_core::agent::doc::AgentSource::Pack { .. } => crate::scope::Scope::Pack,
+    }
+}
+
+pub fn list(
+    builtin_sources: &[&str],
+    dirs: &[PathBuf],
+    packs: &[AgentDoc],
+    context: &crate::scope::ListContext,
+) -> AgentList {
     let (listed, load_errors) = listed(builtin_sources, dirs, packs);
     let agents: Vec<AgentSummary> = listed
         .iter()
@@ -74,6 +89,8 @@ pub fn list(builtin_sources: &[&str], dirs: &[PathBuf], packs: &[AgentDoc]) -> A
             subagents: doc.subagents.clone(),
             handoffs: doc.handoffs.clone(),
             subagent_io: subagent_io(doc).to_string(),
+            scope: agent_scope(doc, context),
+            missing: context.missing(&dive_core::requirements::Item::Agent(doc.name.clone())),
         })
         .collect();
     AgentList {
@@ -175,7 +192,12 @@ mod tests {
             "search_bot.yaml",
             "name: search_bot\ndescription: searches\nmodel: chat\ntools: []\ninput_schema: {type: object}\nsystem_prompt: hi\n",
         );
-        let listed = list(&[HELPER], &[dir.path().to_path_buf()], &[]);
+        let listed = list(
+            &[HELPER],
+            &[dir.path().to_path_buf()],
+            &[],
+            &crate::scope::ListContext::default(),
+        );
         assert_eq!(listed.count, listed.agents.len());
         let bot = listed
             .agents
@@ -200,8 +222,10 @@ mod tests {
             [
                 "description",
                 "handoffs",
+                "missing",
                 "model",
                 "name",
+                "scope",
                 "source",
                 "subagentIo",
                 "subagents"
