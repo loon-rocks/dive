@@ -118,7 +118,6 @@ on:
 permissions:
   contents: read
   pull-requests: write   # reporters only — drop for gate-only setups
-  packages: read         # pull the release image while it's private
 
 concurrency:
   group: dive-checks-${{ github.event.pull_request.number }}
@@ -143,9 +142,6 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/loon-rocks/dive:vX.Y.Z   # pin from Step 1
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -164,7 +160,7 @@ For reporters that should post under their own name/avatar instead of **github-a
 
 ### Step 5: Secrets
 
-Add `ANTHROPIC_API_KEY` (or the provider key the config references): Repository Settings → Secrets and variables → Actions → New repository secret. While the Dive image is private, the pulling account also needs `read:packages` on `ghcr.io/loon-rocks/dive` — the workflow's `GITHUB_TOKEN` covers this once the user has access to the Dive repo.
+Add `ANTHROPIC_API_KEY` (or the provider key the config references): Repository Settings → Secrets and variables → Actions → New repository secret.
 
 ### Step 6: Verify before merging
 
