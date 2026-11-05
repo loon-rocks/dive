@@ -21,6 +21,15 @@ pub const SAVE_TOOL_TOOL: &str = "builtin__save_tool";
 
 pub const SAVE_AGENT_TOOL: &str = "builtin__save_agent";
 
+pub const DRAFTING_DISABLED: &str = "drafting_disabled";
+
+pub fn drafting_disabled() -> Value {
+    json!({
+        "error": DRAFTING_DISABLED,
+        "problems": ["this Dive runs in serve mode, where tools and agents can't be saved"],
+    })
+}
+
 const WORKBENCH_AGENTS: [&str; 6] = [
     "front_desk",
     "network_editor",
@@ -41,6 +50,7 @@ pub struct Drafted {
     pub tool_dirs: Vec<PathBuf>,
     pub agent_dirs: Vec<PathBuf>,
     pub workspace: Option<PathBuf>,
+    pub drafting_disabled: bool,
     pub pack_sources: Vec<crate::packs::PackSource>,
     pub secrets: Arc<dyn SecretSource>,
 }
@@ -57,6 +67,7 @@ impl Default for Drafted {
             tool_dirs: Vec::new(),
             agent_dirs: Vec::new(),
             workspace: std::env::current_dir().ok(),
+            drafting_disabled: false,
             pack_sources: Vec::new(),
             secrets: Arc::new(crate::secrets::system()),
         }
@@ -84,6 +95,11 @@ impl Drafted {
 
     pub fn with_workspace(mut self, root: PathBuf) -> Self {
         self.workspace = Some(root);
+        self
+    }
+
+    pub fn without_drafting(mut self) -> Self {
+        self.drafting_disabled = true;
         self
     }
 
@@ -591,6 +607,9 @@ impl Pipeline {
         confirm: bool,
         existing: Option<&Path>,
     ) -> Value {
+        if self.drafted.drafting_disabled {
+            return drafting_disabled();
+        }
         let doc = match parse_tool(yaml) {
             Ok(doc) => doc,
             Err(problems) => return refused("the tool file is not valid", problems),
@@ -714,6 +733,9 @@ impl Pipeline {
         confirm: bool,
         existing: Option<&Path>,
     ) -> Value {
+        if self.drafted.drafting_disabled {
+            return drafting_disabled();
+        }
         let doc = match self.check_agent_file(yaml).await {
             Ok(doc) => doc,
             Err(problems) => return refused("the agent file has problems", problems),

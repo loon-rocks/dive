@@ -18,7 +18,7 @@ pub use format::{
 };
 pub use load::{
     ensure_project_id, expand_tilde, global_config_path, is_global_dir, load, load_from,
-    project_config_path, project_id, without_project_paths, LoadedConfig,
+    load_from_without_legacy, project_config_path, project_id, without_project_paths, LoadedConfig,
 };
 pub use model::{
     builtin_description, describe_kinds, describe_missing_env, Config, FallbackChoice,

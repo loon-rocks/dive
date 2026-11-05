@@ -44,7 +44,10 @@ pub use ask::{ask_tool_def, AskResult, WhenUnanswered, ASK_TOOL};
 pub use authoring::{EditAccepted, EditRejected, WriteError};
 pub use catalog::{CatalogCheck, ToolCatalog};
 pub use compose::{draft_input, COMPOSE_PLAN};
-pub use drafter::{drafter_tool_defs, stamped, write_file, Drafted, DraftedTools};
+pub use drafter::{
+    drafter_tool_defs, drafting_disabled, stamped, write_file, Drafted, DraftedTools,
+    DRAFTING_DISABLED,
+};
 pub use exit::{ExitStatus, PlanExit, EXIT_TOOL};
 pub use filter::FILTER_TOOL;
 pub use gate::{ErrorDecision, ExecutionGate, GateContext, GateDecision, StepPath};

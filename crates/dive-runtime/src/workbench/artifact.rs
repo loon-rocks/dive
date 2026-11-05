@@ -1150,6 +1150,9 @@ pub async fn save_network(
         untested,
         confirm,
     } = request;
+    if pipeline.drafted.drafting_disabled {
+        return Err(dive_core::pipeline::DRAFTING_DISABLED.to_string());
+    }
     let scoped = scoped_dir(scope, root);
     let network = draft.lock().unwrap().network.clone();
     if network.in_save_order().is_empty() {

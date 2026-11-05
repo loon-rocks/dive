@@ -44,6 +44,7 @@ pub struct Runtime {
     identity: std::sync::OnceLock<dive_core::run::Identity>,
     workspace: Workspace,
     workspace_root: PathBuf,
+    mode: Mode,
 }
 
 impl Runtime {
@@ -52,12 +53,20 @@ impl Runtime {
     }
 
     pub fn open(workspace: &Workspace, options: RuntimeOptions) -> Result<Self> {
-        let loaded = load_config(workspace)?;
+        Self::open_as(workspace, options, Mode::Local)
+    }
+
+    pub fn open_as(workspace: &Workspace, options: RuntimeOptions, mode: Mode) -> Result<Self> {
+        let loaded = match mode {
+            Mode::Local => load_config(workspace)?,
+            Mode::Serve => load_serve_config(workspace)?,
+        };
         let packs = load_packs(&loaded)?;
         let root = (!workspace.is_global()).then(|| {
             std::path::absolute(workspace.root()).unwrap_or_else(|_| workspace.root().to_path_buf())
         });
         Ok(Self::with_packs(loaded.config, packs, options)?
+            .with_mode(mode)
             .on_workspace(workspace)
             .in_project(workspace.project())
             .in_root(root)
@@ -88,6 +97,31 @@ impl Runtime {
         self
     }
 
+    pub fn with_mode(mut self, mode: Mode) -> Self {
+        self.mode = mode;
+        self.drafted = Arc::new(self.build_drafted());
+        self
+    }
+
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+
+    pub fn serve_run(
+        &self,
+        user: &str,
+        tenant: &str,
+        token: Option<dive_core::run::RunToken>,
+        events: Arc<dyn EventSink>,
+    ) -> std::result::Result<Arc<dive_core::run::Run>, crate::identity::IdentityError> {
+        let identity = crate::identity::serve(&self.config.identity, user, tenant)?;
+        let run = dive_core::run::Run::new(identity, events);
+        Ok(Arc::new(match token {
+            Some(token) => run.with_token(token),
+            None => run,
+        }))
+    }
+
     pub fn workspace(&self) -> &Workspace {
         &self.workspace
     }
@@ -97,7 +131,28 @@ impl Runtime {
     }
 
     pub fn agent_dirs(&self) -> Vec<PathBuf> {
-        self.workspace.agent_dirs()
+        match self.mode {
+            Mode::Local => self.workspace.agent_dirs(),
+            Mode::Serve => dive_core::agent::doc::agent_dirs(
+                Some(&self.workspace.root().join(dive_config::legacy::PROJECT_DIR)),
+                None,
+            ),
+        }
+    }
+
+    fn layer_paths(&self, paths: &[PathBuf]) -> Vec<PathBuf> {
+        paths
+            .iter()
+            .filter(|path| self.mode == Mode::Local || self.in_workspace(path))
+            .map(|path| self.rebased(path))
+            .collect()
+    }
+
+    fn in_workspace(&self, path: &Path) -> bool {
+        let path = dive_config::expand_tilde(path);
+        path.is_relative()
+            || path.starts_with(self.workspace.root())
+            || path.starts_with(&self.workspace_root)
     }
 
     fn rebased(&self, path: &Path) -> PathBuf {
@@ -113,20 +168,27 @@ impl Runtime {
     fn build_drafted(&self) -> dive_core::pipeline::Drafted {
         let tool_dirs = self.tool_dirs();
         let agent_dirs = self.agent_dirs();
-        dive_core::pipeline::Drafted::new(tool_dirs.first().cloned(), agent_dirs.first().cloned())
-            .with_tool_dirs(tool_dirs)
-            .with_agent_dirs(agent_dirs)
-            .with_workspace(self.workspace_root.clone())
-            .with_pack_sources(
-                self.packs
-                    .tool_docs()
-                    .into_iter()
-                    .map(|(source, _)| source)
-                    .collect(),
-            )
-            .with_secrets(Arc::new(dive_core::secrets::in_project(
-                self.config.project.id.clone(),
-            )))
+        let drafted = dive_core::pipeline::Drafted::new(
+            tool_dirs.first().cloned(),
+            agent_dirs.first().cloned(),
+        )
+        .with_tool_dirs(tool_dirs)
+        .with_agent_dirs(agent_dirs)
+        .with_workspace(self.workspace_root.clone())
+        .with_pack_sources(
+            self.packs
+                .tool_docs()
+                .into_iter()
+                .map(|(source, _)| source)
+                .collect(),
+        )
+        .with_secrets(Arc::new(dive_core::secrets::in_project(
+            self.config.project.id.clone(),
+        )));
+        match self.mode {
+            Mode::Local => drafted,
+            Mode::Serve => drafted.without_drafting(),
+        }
     }
 
     pub fn in_project(mut self, project: Option<String>) -> Self {
@@ -196,6 +258,7 @@ impl Runtime {
             identity: std::sync::OnceLock::new(),
             workspace_root: absolute_root(&workspace),
             workspace,
+            mode: Mode::Local,
         };
         runtime.drafted = Arc::new(runtime.build_drafted());
         Ok(runtime)
@@ -280,7 +343,10 @@ impl Runtime {
             ));
         }
         let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
-        Ok(Arc::new(RecordingRegistry::new(base, store.clone())))
+        Ok(match self.mode {
+            Mode::Local => Arc::new(RecordingRegistry::new(base, store.clone())),
+            Mode::Serve => base,
+        })
     }
 
     pub fn workspace_dir(&self) -> std::path::PathBuf {
@@ -315,12 +381,7 @@ impl Runtime {
 
     /// The directories user tools load from (`[tools].paths`, expanded).
     fn tool_dirs(&self) -> Vec<std::path::PathBuf> {
-        self.config
-            .tools
-            .paths
-            .iter()
-            .map(|p| self.rebased(p))
-            .collect()
+        self.layer_paths(&self.config.tools.paths)
     }
 
     pub fn tool_docs(&self) -> Result<dive_core::user_tools::ToolDocs> {
@@ -420,7 +481,7 @@ impl Runtime {
     /// `[plans].paths` entry. None when nothing is configured, which makes
     /// "where would this go?" a caller-visible error rather than a guess.
     pub fn plans_dir(&self) -> Option<std::path::PathBuf> {
-        self.config.plans.paths.first().map(|p| self.rebased(p))
+        self.plan_dirs().into_iter().next()
     }
 
     /// The file holding the plan with this identifier, anywhere in the
@@ -470,12 +531,7 @@ impl Runtime {
     /// configured. Files that fail to load stay in `skipped` and are warned
     /// about here — a broken plan never takes the command down.
     pub fn plan_dirs(&self) -> Vec<PathBuf> {
-        self.config
-            .plans
-            .paths
-            .iter()
-            .map(|p| self.rebased(p))
-            .collect()
+        self.layer_paths(&self.config.plans.paths)
     }
 
     pub fn plan_docs(&self) -> LoadedPlans {
@@ -571,7 +627,7 @@ impl Runtime {
             events,
             plans: Arc::new(plans),
             call_stack: Vec::new(),
-            store: Some(store.clone()),
+            store: (self.mode == Mode::Local).then(|| store.clone()),
             gate,
             interlocutor,
             catalog: Some(Arc::new(catalog)),
@@ -895,6 +951,14 @@ pub fn load_config(workspace: &Workspace) -> Result<dive_config::LoadedConfig> {
     Ok(loaded)
 }
 
+pub fn load_serve_config(workspace: &Workspace) -> Result<dive_config::LoadedConfig> {
+    let path = workspace
+        .root()
+        .join(dive_config::legacy::PROJECT_DIR)
+        .join("config.toml");
+    dive_config::load_from_without_legacy(&[path], &dive_core::secrets::system())
+}
+
 pub fn config_notices(loaded: &dive_config::LoadedConfig) -> Vec<String> {
     let global = dive_config::expand_tilde(&dive_config::global_config_path());
     let mut notices = Vec::new();
@@ -998,6 +1062,13 @@ pub fn system_sign_ins(project: Option<String>) -> dive_mcp::SignIns {
         Arc::new(dive_core::secrets::CredentialStore::system()),
         project,
     )
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Mode {
+    #[default]
+    Local,
+    Serve,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -1113,6 +1184,118 @@ mod tests {
         let other = opened_on(beta.path());
         assert!(other.agent_set().get("beta_item").is_some());
         assert!(other.agent_set().get("alpha_item").is_none());
+    }
+
+    fn serving(dir: &Path) -> Runtime {
+        let options = RuntimeOptions {
+            storage_backend: Some("memory".to_string()),
+            ..Default::default()
+        };
+        Runtime::open_as(&Workspace::new(dir), options, Mode::Serve).unwrap()
+    }
+
+    fn with_tool(dir: &Path, name: &str, body: &str) {
+        std::fs::write(
+            dir.join(".dive").join("tools").join(format!("{name}.yaml")),
+            format!("name: {name}\ndescription: d\nkind: exec\n{body}"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn serve_mode_reads_the_project_layer_alone() {
+        let project = project_with("alpha_item");
+        let runtime = serving(project.path());
+        let global_agents = global_config_dir().join("agents");
+        assert_eq!(
+            runtime.agent_dirs(),
+            [project.path().join(".dive").join("agents")]
+        );
+        assert!(opened_on(project.path())
+            .agent_dirs()
+            .contains(&global_agents));
+        for dir in runtime.plan_dirs().iter().chain(&runtime.tool_dirs()) {
+            assert!(dir.starts_with(project.path()), "{}", dir.display());
+        }
+        assert!(runtime.agent_set().get("alpha_item").is_some());
+        assert!(runtime.agent_set().iter().all(|doc| match &doc.source {
+            dive_core::agent::doc::AgentSource::File(path) => path.starts_with(project.path()),
+            _ => true,
+        }));
+        let plans: Vec<String> = runtime
+            .plan_docs()
+            .docs
+            .into_iter()
+            .filter(|doc| doc.path.is_some())
+            .map(|doc| doc.identifier)
+            .collect();
+        assert_eq!(plans, ["alpha_item"]);
+    }
+
+    #[tokio::test]
+    async fn serve_mode_refuses_drafting_tools_and_agents() {
+        let project = project_with("alpha_item");
+        let runtime = serving(project.path());
+        let store = runtime.store().unwrap();
+        let toolbox = runtime
+            .toolbox(&store, Arc::new(dive_core::NullSink))
+            .await
+            .unwrap();
+        let tool = "name: drafted\ndescription: d\nkind: exec\ncommand: \"true\"\n";
+        let outcome = toolbox
+            .invoke(
+                "builtin__save_tool",
+                serde_json::json!({"yaml": tool, "untested": true}),
+            )
+            .await
+            .unwrap();
+        assert!(outcome.is_error);
+        assert_eq!(outcome.result["error"], "drafting_disabled");
+        let agent = "name: drafted\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: x\n";
+        let outcome = toolbox
+            .invoke("builtin__save_agent", serde_json::json!({"yaml": agent}))
+            .await
+            .unwrap();
+        assert_eq!(outcome.result["error"], "drafting_disabled");
+        let pipeline = runtime
+            .pipeline(&store, Arc::new(dive_core::NullSink))
+            .await
+            .unwrap();
+        assert_eq!(
+            pipeline.save_tool_file(tool, true, false, false).await["error"],
+            "drafting_disabled"
+        );
+        assert!(!project.path().join(".dive/tools/drafted.yaml").exists());
+        assert!(!project.path().join(".dive/agents/drafted.yaml").exists());
+    }
+
+    async fn shapes_after_a_run(runtime: &Runtime) -> usize {
+        let store = runtime.store().unwrap();
+        let pipeline = runtime
+            .pipeline(&store, Arc::new(dive_core::NullSink))
+            .await
+            .unwrap();
+        let plan: dive_core::pipeline::Plan = serde_json::from_value(serde_json::json!([
+            {"id": "E0", "toolName": "user__shaped", "input": {}},
+        ]))
+        .unwrap();
+        pipeline
+            .run_explicit("q", plan, dive_core::pipeline::Finish::Silent, None)
+            .await
+            .unwrap();
+        store.tool_shapes().await.unwrap().len()
+    }
+
+    #[tokio::test]
+    async fn serve_mode_records_no_shapes() {
+        let project = project_with("alpha_item");
+        with_tool(
+            project.path(),
+            "shaped",
+            "command: echo\nargs: ['{\"a\": 1}']\noutput: json\n",
+        );
+        assert_eq!(shapes_after_a_run(&opened_on(project.path())).await, 1);
+        assert_eq!(shapes_after_a_run(&serving(project.path())).await, 0);
     }
 
     #[test]
