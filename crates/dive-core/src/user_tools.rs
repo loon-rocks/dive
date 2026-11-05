@@ -703,7 +703,10 @@ pub struct UserToolRegistry {
     workspace: Option<PathBuf>,
     project_dir: Option<PathBuf>,
     scratch: Option<PathBuf>,
+    clean_env: bool,
 }
+
+pub const KEPT_ENV: &[&str] = &["PATH", "TMPDIR"];
 
 impl UserToolRegistry {
     pub fn new(tools: Vec<UserToolDoc>, router: Arc<ModelRouter>) -> Self {
@@ -717,6 +720,7 @@ impl UserToolRegistry {
             workspace: None,
             project_dir: None,
             scratch: None,
+            clean_env: false,
         }
     }
 
@@ -737,6 +741,11 @@ impl UserToolRegistry {
 
     pub fn with_workspace(mut self, root: &Path) -> Self {
         self.workspace = Some(root.to_path_buf());
+        self
+    }
+
+    pub fn with_clean_env(mut self, clean: bool) -> Self {
+        self.clean_env = clean;
         self
     }
 
@@ -762,6 +771,7 @@ impl UserToolRegistry {
             workspace: None,
             project_dir: None,
             scratch: None,
+            clean_env: false,
         }
     }
 
@@ -776,6 +786,7 @@ impl UserToolRegistry {
             workspace: None,
             project_dir: None,
             scratch: None,
+            clean_env: false,
         }
     }
 
@@ -1088,9 +1099,19 @@ impl UserToolRegistry {
 
         let mut cmd = tokio::process::Command::new(command);
         cmd.args(&rendered_args);
+        if self.clean_env {
+            cmd.env_clear();
+            for name in KEPT_ENV {
+                if let Some(value) = std::env::var_os(name) {
+                    cmd.env(name, value);
+                }
+            }
+        }
         if let Some(dir) = &self.pack_dir {
             cmd.env(PACK_DIR_ENV, dir);
-            cmd.env(LEGACY_PACK_DIR_ENV, dir);
+            if !self.clean_env {
+                cmd.env(LEGACY_PACK_DIR_ENV, dir);
+            }
         }
         for (key, entry) in env {
             let expanded =

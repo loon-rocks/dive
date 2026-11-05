@@ -187,7 +187,7 @@ impl Runtime {
         )));
         match self.mode {
             Mode::Local => drafted,
-            Mode::Serve => drafted.without_drafting(),
+            Mode::Serve => drafted.without_drafting().with_clean_env(true),
         }
     }
 
@@ -364,7 +364,9 @@ impl Runtime {
     }
 
     fn with_files(&self, registry: UserToolRegistry) -> UserToolRegistry {
-        let registry = registry.with_files(self.files.clone());
+        let registry = registry
+            .with_files(self.files.clone())
+            .with_clean_env(self.mode == Mode::Serve);
         let root = self
             .root
             .clone()
@@ -1296,6 +1298,55 @@ mod tests {
         );
         assert_eq!(shapes_after_a_run(&opened_on(project.path())).await, 1);
         assert_eq!(shapes_after_a_run(&serving(project.path())).await, 0);
+    }
+
+    async fn exec_env(runtime: &Runtime) -> Vec<String> {
+        let store = runtime.store().unwrap();
+        let pipeline = runtime
+            .pipeline(&store, Arc::new(dive_core::NullSink))
+            .await
+            .unwrap();
+        let plan: dive_core::pipeline::Plan = serde_json::from_value(serde_json::json!([
+            {"id": "E0", "toolName": "user__env_dump", "input": {}},
+        ]))
+        .unwrap();
+        let outcome = pipeline
+            .run_explicit("q", plan, dive_core::pipeline::Finish::Silent, None)
+            .await
+            .unwrap();
+        let result = &outcome.state.results["E0"];
+        let text = result["text"].as_str().unwrap_or_default().to_string();
+        let mut names: Vec<String> = text
+            .lines()
+            .filter_map(|line| line.split_once('=').map(|(name, _)| name.to_string()))
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[tokio::test]
+    async fn serve_mode_exec_tools_see_only_path_tmpdir_declared_vars_and_dive_variables() {
+        let project = project_with("alpha_item");
+        with_tool(
+            project.path(),
+            "env_dump",
+            "command: env\noutput: text\nenv:\n  DECLARED_VAR: \"set\"\n",
+        );
+        let names = exec_env(&serving(project.path())).await;
+        assert!(names.contains(&"DECLARED_VAR".to_string()), "{names:?}");
+        assert!(names.contains(&"PATH".to_string()), "{names:?}");
+        for name in &names {
+            assert!(
+                ["PATH", "TMPDIR", "DECLARED_VAR"].contains(&name.as_str())
+                    || name.starts_with("DIVE_"),
+                "serve mode leaked {name} into an exec tool: {names:?}"
+            );
+        }
+        let local = exec_env(&opened_on(project.path())).await;
+        assert!(
+            local.len() > names.len(),
+            "local mode keeps the process environment"
+        );
     }
 
     #[test]

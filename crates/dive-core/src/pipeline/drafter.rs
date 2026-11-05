@@ -51,6 +51,7 @@ pub struct Drafted {
     pub agent_dirs: Vec<PathBuf>,
     pub workspace: Option<PathBuf>,
     pub drafting_disabled: bool,
+    pub clean_env: bool,
     pub pack_sources: Vec<crate::packs::PackSource>,
     pub secrets: Arc<dyn SecretSource>,
 }
@@ -68,6 +69,7 @@ impl Default for Drafted {
             agent_dirs: Vec::new(),
             workspace: std::env::current_dir().ok(),
             drafting_disabled: false,
+            clean_env: false,
             pack_sources: Vec::new(),
             secrets: Arc::new(crate::secrets::system()),
         }
@@ -100,6 +102,11 @@ impl Drafted {
 
     pub fn without_drafting(mut self) -> Self {
         self.drafting_disabled = true;
+        self
+    }
+
+    pub fn with_clean_env(mut self, clean: bool) -> Self {
+        self.clean_env = clean;
         self
     }
 
@@ -155,6 +162,7 @@ impl DraftedTools {
     fn registry(&self) -> UserToolRegistry {
         UserToolRegistry::new(self.drafted.tools(), self.router.clone())
             .with_secrets(self.drafted.secrets.clone())
+            .with_clean_env(self.drafted.clean_env)
     }
 }
 
@@ -481,7 +489,8 @@ impl Pipeline {
         let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
         let mut registry = UserToolRegistry::new(vec![doc], self.router.clone())
             .with_secrets(self.drafted.secrets.clone())
-            .with_scratch(scratch.path());
+            .with_scratch(scratch.path())
+            .with_clean_env(self.drafted.clean_env);
         if let Some(root) = &self.drafted.workspace {
             registry = registry.with_project_dir(root);
         }
