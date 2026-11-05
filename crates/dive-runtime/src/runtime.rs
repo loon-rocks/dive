@@ -95,7 +95,7 @@ impl Runtime {
         self
     }
 
-    pub fn with_mode(mut self, mode: Mode) -> Self {
+    fn with_mode(mut self, mode: Mode) -> Self {
         self.mode = mode;
         self.drafted = Arc::new(self.build_drafted());
         self
