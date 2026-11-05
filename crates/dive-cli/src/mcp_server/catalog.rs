@@ -51,9 +51,10 @@ pub fn authoring_tools() -> Vec<Tool> {
     vec![
         tool(
             "dive_plan_list",
-            "List the plans available on this machine, plus any plan files that failed to \
-             load (`skipped`) and any hidden because they need an MCP server this machine \
-             does not configure (`hidden`). Start here to find out what already exists.",
+            "List the plans available on this machine, each with its `scope` and a `missing` \
+             array naming anything it needs that isn't here (empty when it can run), plus any \
+             plan files that failed to load (`skipped`). Start here to find out what already \
+             exists.",
             json!({"type": "object", "properties": {}}),
         ),
         tool(

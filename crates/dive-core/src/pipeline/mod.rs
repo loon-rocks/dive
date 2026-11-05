@@ -102,6 +102,7 @@ pub struct Pipeline {
     /// the live registry, and execution + replanning already handle its
     /// hallucinations.
     pub catalog: Option<Arc<ToolCatalog>>,
+    pub requirements: Arc<crate::requirements::Requirements>,
     pub user_context: String,
     pub current_date: String,
     pub max_attempts: u32,
@@ -586,6 +587,12 @@ impl Pipeline {
             let Some(plan_doc) = self.plans.iter().find(|d| d.identifier == identifier) else {
                 return PlanCall::error(format!("no plan named '{identifier}'"));
             };
+            if let Some(refusal) = self
+                .requirements
+                .refusal(&crate::requirements::Item::Plan(identifier.to_string()))
+            {
+                return PlanCall::error(refusal.to_string());
+            }
             if let Some(schema) = &plan_doc.input_schema {
                 doc::apply_schema_defaults(schema, &mut input);
             }
@@ -802,6 +809,7 @@ impl Pipeline {
         self.plans
             .iter()
             .filter(|plan_doc| !self.call_stack.iter().any(|f| f == &plan_doc.identifier))
+            .filter(|plan_doc| self.requirements.plan_runnable(&plan_doc.identifier))
             .map(|plan_doc| crate::tools::ToolDef {
                 name: plan_doc.tool_name(),
                 description: plan_doc.tool_description(),

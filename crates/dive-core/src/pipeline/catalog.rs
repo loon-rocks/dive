@@ -217,39 +217,23 @@ pub fn resolve_step_tools(plan: &Plan, catalog: &ToolCatalog) -> Vec<String> {
 /// control-step bodies included. These are tool *references* even though
 /// they live in input data, so they get resolved like any step tool name.
 pub fn agent_tool_patterns(plan: &Plan) -> Vec<(String, String)> {
-    let mut found = Vec::new();
-    let mut collect = |id: String, input: &serde_json::Map<String, serde_json::Value>| {
-        let Some(serde_json::Value::Array(items)) = input.get("tools") else {
-            return;
-        };
-        for item in items {
-            if let Some(pattern) = item.as_str() {
-                found.push((id.clone(), pattern.to_string()));
-            }
-        }
-    };
-    for step in plan {
-        if step.tool_name == AGENT_TOOL {
-            collect(step.id.clone(), &step.input);
-        }
-        for (key, raw) in control_bodies(&step.tool_name, &step.input) {
-            let key = key.as_str();
-            match parse_branch(key, raw) {
-                Ok(Branch::Call(call)) if call.tool_name == AGENT_TOOL => {
-                    collect(step.id.clone(), &call.input);
-                }
-                Ok(Branch::Steps(steps)) => {
-                    for body_step in steps {
-                        if body_step.tool_name == AGENT_TOOL {
-                            collect(format!("{}/{}", step.id, body_step.id), &body_step.input);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    found
+    step_calls(plan)
+        .into_iter()
+        .filter(|(_, tool, _)| tool == AGENT_TOOL)
+        .flat_map(|(id, _, input)| {
+            let patterns: Vec<String> = match input.get("tools") {
+                Some(Value::Array(items)) => items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect(),
+                _ => Vec::new(),
+            };
+            patterns
+                .into_iter()
+                .map(move |pattern| (id.clone(), pattern))
+        })
+        .collect()
 }
 
 /// Resolve one `tools:` pattern. Mirrors [`check_tool`]'s namespace rules,
@@ -459,25 +443,42 @@ pub fn step_tools(plan: &Plan) -> Vec<(String, String)> {
 pub(crate) fn step_calls(plan: &Plan) -> Vec<(String, String, Map<String, Value>)> {
     let mut calls = Vec::new();
     for step in plan {
-        calls.push((step.id.clone(), step.tool_name.clone(), step.input.clone()));
-        for (key, raw) in control_bodies(&step.tool_name, &step.input) {
-            let key = key.as_str();
-            match parse_branch(key, raw) {
-                Ok(Branch::Call(call)) => calls.push((step.id.clone(), call.tool_name, call.input)),
-                Ok(Branch::Steps(steps)) => {
-                    for body_step in steps {
-                        calls.push((
-                            format!("{}/{}", step.id, body_step.id),
-                            body_step.tool_name,
-                            body_step.input,
-                        ));
-                    }
+        collect_calls(
+            &step.id,
+            step.tool_name.clone(),
+            step.input.clone(),
+            &mut calls,
+        );
+    }
+    calls
+}
+
+fn collect_calls(
+    id: &str,
+    tool: String,
+    input: Map<String, Value>,
+    calls: &mut Vec<(String, String, Map<String, Value>)>,
+) {
+    let branches: Vec<Branch> = control_bodies(&tool, &input)
+        .into_iter()
+        .filter_map(|(key, raw)| parse_branch(&key, raw).ok())
+        .collect();
+    calls.push((id.to_string(), tool, input));
+    for branch in branches {
+        match branch {
+            Branch::Call(call) => collect_calls(id, call.tool_name, call.input, calls),
+            Branch::Steps(steps) => {
+                for body_step in steps {
+                    collect_calls(
+                        &format!("{id}/{}", body_step.id),
+                        body_step.tool_name,
+                        body_step.input,
+                        calls,
+                    );
                 }
-                Err(_) => {}
             }
         }
     }
-    calls
 }
 
 fn check_input(
@@ -642,6 +643,38 @@ steps:
         let check = resolve_plan_tools(&doc(OK_DOC), &catalog());
         assert!(check.is_ok(), "{:?}", check.errors);
         assert!(check.notes.is_empty(), "{:?}", check.notes);
+    }
+
+    const DEEP_DOC: &str = r#"
+identifier: deep
+name: Deep
+description: deep
+steps:
+  - id: sources
+    tool_name: map
+    input:
+      over: "{{input.urls}}"
+      do:
+        - id: gate
+          tool_name: route
+          input:
+            if: { value: "{{item}}", op: eq, to: "x" }
+            then:
+              - id: page
+                tool_name: user__nope
+                input: {}
+"#;
+
+    #[test]
+    fn a_tool_two_bodies_deep_is_checked_and_labelled_with_its_full_path() {
+        let check = resolve_plan_tools(&doc(DEEP_DOC), &catalog());
+        assert_eq!(
+            check.errors,
+            vec![
+                "step sources/gate/page: unknown user tool 'user__nope' — no such tool loads from [tools].paths"
+                    .to_string()
+            ]
+        );
     }
 
     #[test]

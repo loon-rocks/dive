@@ -426,6 +426,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         gate: None,
         interlocutor: None,
         catalog: Some(Arc::new(catalog)),
+        requirements: Default::default(),
         user_context: String::new(),
         // Fixed: the pipeline date must not vary between regenerations.
         current_date: "2026-07-19".to_string(),
