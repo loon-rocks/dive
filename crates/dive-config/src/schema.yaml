@@ -297,6 +297,22 @@ properties:
       id:
         type: string
         description: An id Dive generates the first time you store a project secret with `dive secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.
+  identity:
+    type: object
+    description: Who runs Dive and where. Dive records it on every run and never checks it, so a missing value never fails a run.
+    properties:
+      user:
+        type: string
+        description: The user a run belongs to. Defaults to the `USER` environment variable, then the machine's hostname. In serve mode the user comes from each request instead.
+      tenant:
+        type: string
+        description: The tenant a run belongs to. Defaults to `local`. In serve mode the tenant comes from each request instead.
+      deployment:
+        type: string
+        description: Which deployment ran it. Defaults to `cli` for the `dive` command and `desktop` for the desktop app. Required in serve mode.
+      environment:
+        type: string
+        description: Which environment ran it, such as `staging` or `production`. Defaults to `local`. Required in serve mode.
   prompts:
     type: object
     description: Deprecated. Customize agents with agent files instead.

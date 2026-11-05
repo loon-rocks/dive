@@ -1,24 +1,56 @@
+use dive_config::IdentityConfig;
 use dive_core::run::Identity;
 
 pub const LOCAL_TENANT: &str = "local";
 pub const LOCAL_ENVIRONMENT: &str = "local";
 const UNKNOWN_USER: &str = "unknown";
 
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum IdentityError {
+    #[error("serve mode needs [identity].{0} in the project config")]
+    Missing(&'static str),
+}
+
+fn present(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 pub fn local(
+    configured: &IdentityConfig,
     deployment: &str,
     user: Option<String>,
     hostname: impl FnOnce() -> Option<String>,
 ) -> Identity {
-    let present = |value: Option<String>| value.filter(|value| !value.trim().is_empty());
-    let user = present(user)
-        .or_else(|| present(hostname()))
+    let user = present(configured.user.as_deref())
+        .or_else(|| present(user.as_deref()))
+        .or_else(|| present(hostname().as_deref()))
         .unwrap_or_else(|| UNKNOWN_USER.to_string());
     Identity {
         user,
-        tenant: LOCAL_TENANT.to_string(),
-        deployment: deployment.to_string(),
-        environment: LOCAL_ENVIRONMENT.to_string(),
+        tenant: present(configured.tenant.as_deref()).unwrap_or_else(|| LOCAL_TENANT.to_string()),
+        deployment: present(configured.deployment.as_deref())
+            .unwrap_or_else(|| deployment.to_string()),
+        environment: present(configured.environment.as_deref())
+            .unwrap_or_else(|| LOCAL_ENVIRONMENT.to_string()),
     }
+}
+
+pub fn serve(
+    configured: &IdentityConfig,
+    user: &str,
+    tenant: &str,
+) -> Result<Identity, IdentityError> {
+    Ok(Identity {
+        user: user.to_string(),
+        tenant: tenant.to_string(),
+        deployment: present(configured.deployment.as_deref())
+            .ok_or(IdentityError::Missing("deployment"))?,
+        environment: present(configured.environment.as_deref())
+            .ok_or(IdentityError::Missing("environment"))?,
+    })
 }
 
 pub fn hostname() -> Option<String> {
@@ -41,9 +73,13 @@ pub fn hostname() -> Option<String> {
 mod tests {
     use super::*;
 
+    fn none() -> IdentityConfig {
+        IdentityConfig::default()
+    }
+
     #[test]
-    fn a_local_identity_takes_the_user_from_user() {
-        let identity = local("cli", Some("ada".into()), || Some("box".into()));
+    fn a_local_run_with_no_identity_section_takes_the_user_from_user() {
+        let identity = local(&none(), "cli", Some("ada".into()), || Some("box".into()));
         assert_eq!(
             identity,
             Identity {
@@ -56,17 +92,66 @@ mod tests {
     }
 
     #[test]
-    fn a_local_identity_falls_back_to_the_hostname_when_user_is_unset() {
-        assert_eq!(local("desktop", None, || Some("box".into())).user, "box");
+    fn a_local_run_with_no_identity_section_falls_back_to_the_hostname_when_user_is_unset() {
         assert_eq!(
-            local("cli", Some(" ".into()), || Some("box".into())).user,
+            local(&none(), "desktop", None, || Some("box".into())).user,
+            "box"
+        );
+        assert_eq!(
+            local(&none(), "cli", Some(" ".into()), || Some("box".into())).user,
             "box"
         );
     }
 
     #[test]
     fn a_missing_user_and_hostname_never_fail_the_run() {
-        assert_eq!(local("cli", None, || None).user, "unknown");
+        assert_eq!(local(&none(), "cli", None, || None).user, "unknown");
+    }
+
+    #[test]
+    fn the_identity_section_wins_over_every_fallback() {
+        let configured = IdentityConfig {
+            user: Some("grace".into()),
+            tenant: Some("acme".into()),
+            deployment: Some("ci".into()),
+            environment: Some("staging".into()),
+        };
+        let identity = local(&configured, "cli", Some("ada".into()), || {
+            panic!("the hostname is never needed when the user is configured")
+        });
+        assert_eq!(
+            identity,
+            Identity {
+                user: "grace".into(),
+                tenant: "acme".into(),
+                deployment: "ci".into(),
+                environment: "staging".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_serve_identity_takes_user_and_tenant_from_the_caller_and_needs_deployment_and_environment()
+    {
+        let configured = IdentityConfig {
+            user: Some("ignored".into()),
+            tenant: Some("ignored".into()),
+            deployment: Some("prod-us".into()),
+            environment: Some("production".into()),
+        };
+        assert_eq!(
+            serve(&configured, "sub-1", "tenant-9"),
+            Ok(Identity {
+                user: "sub-1".into(),
+                tenant: "tenant-9".into(),
+                deployment: "prod-us".into(),
+                environment: "production".into(),
+            })
+        );
+        assert_eq!(
+            serve(&none(), "sub-1", "tenant-9"),
+            Err(IdentityError::Missing("deployment"))
+        );
     }
 
     #[test]

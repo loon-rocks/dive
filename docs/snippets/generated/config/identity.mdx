@@ -1,0 +1,19 @@
+<ParamField body="identity" type="object">
+  Who runs Dive and where. Dive records it on every run and never checks it, so a missing value never fails a run.
+</ParamField>
+
+<ParamField body="identity.user" type="string">
+  The user a run belongs to. Defaults to the `USER` environment variable, then the machine's hostname. In serve mode the user comes from each request instead.
+</ParamField>
+
+<ParamField body="identity.tenant" type="string">
+  The tenant a run belongs to. Defaults to `local`. In serve mode the tenant comes from each request instead.
+</ParamField>
+
+<ParamField body="identity.deployment" type="string">
+  Which deployment ran it. Defaults to `cli` for the `dive` command and `desktop` for the desktop app. Required in serve mode.
+</ParamField>
+
+<ParamField body="identity.environment" type="string">
+  Which environment ran it, such as `staging` or `production`. Defaults to `local`. Required in serve mode.
+</ParamField>

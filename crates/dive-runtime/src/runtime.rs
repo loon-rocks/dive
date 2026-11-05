@@ -215,6 +215,7 @@ impl Runtime {
         self.identity
             .get_or_init(|| {
                 crate::identity::local(
+                    &self.config.identity,
                     self.host.as_str(),
                     std::env::var("USER").ok(),
                     crate::identity::hostname,
@@ -1112,6 +1113,26 @@ mod tests {
         let other = opened_on(beta.path());
         assert!(other.agent_set().get("beta_item").is_some());
         assert!(other.agent_set().get("alpha_item").is_none());
+    }
+
+    #[test]
+    fn a_local_run_with_no_identity_section_records_user_or_the_hostname() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = opened_on(dir.path());
+        let identity = runtime.run(Arc::new(dive_core::NullSink)).identity.clone();
+        let expected = std::env::var("USER")
+            .ok()
+            .filter(|user| !user.trim().is_empty())
+            .or_else(crate::identity::hostname)
+            .unwrap_or_else(|| "unknown".to_string());
+        assert_eq!(identity.user, expected);
+        assert_eq!(
+            (identity.tenant.as_str(), identity.deployment.as_str()),
+            ("local", "cli")
+        );
+        assert_eq!(identity.environment, "local");
+        let desktop = opened_on(dir.path()).hosted_by(Host::Desktop);
+        assert_eq!(desktop.identity().deployment, "desktop");
     }
 
     #[test]

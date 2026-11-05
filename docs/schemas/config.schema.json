@@ -38,6 +38,28 @@
     }
   ],
   "properties": {
+    "identity": {
+      "description": "Who runs Dive and where. Dive records it on every run and never checks it, so a missing value never fails a run.",
+      "properties": {
+        "deployment": {
+          "description": "Which deployment ran it. Defaults to `cli` for the `dive` command and `desktop` for the desktop app. Required in serve mode.",
+          "type": "string"
+        },
+        "environment": {
+          "description": "Which environment ran it, such as `staging` or `production`. Defaults to `local`. Required in serve mode.",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "The tenant a run belongs to. Defaults to `local`. In serve mode the tenant comes from each request instead.",
+          "type": "string"
+        },
+        "user": {
+          "description": "The user a run belongs to. Defaults to the `USER` environment variable, then the machine's hostname. In serve mode the user comes from each request instead.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "mcp": {
       "additionalProperties": {
         "properties": {

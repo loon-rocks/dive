@@ -30,6 +30,8 @@ pub struct Config {
     #[serde(default)]
     pub project: ProjectConfig,
     #[serde(default)]
+    pub identity: IdentityConfig,
+    #[serde(default)]
     pub prompts: PromptConfig,
     #[serde(default)]
     pub workbench: WorkbenchConfig,
@@ -983,6 +985,15 @@ pub struct UserConfig {
     /// Freeform context injected into the chat and planner prompts.
     pub context: Option<String>,
     pub timezone: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct IdentityConfig {
+    pub user: Option<String>,
+    pub tenant: Option<String>,
+    pub deployment: Option<String>,
+    pub environment: Option<String>,
 }
 
 #[cfg(test)]
