@@ -4,7 +4,7 @@ use crate::workbench::ArtifactKind;
 use anyhow::Result;
 use async_trait::async_trait;
 use dive_core::trace::{Span, SpanKind};
-use dive_core::{Attachment, EntryBody, NewEntry, Store, ThreadEntry, ToolRegistry};
+use dive_core::{Attachment, Entry, EntryBody, NewEntry, Store, ToolRegistry};
 use dive_llm::types::ChatMessage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -266,12 +266,12 @@ pub async fn from_call(
     call: &str,
 ) -> Result<Evidence, String> {
     let entries = store
-        .load_entries(thread)
+        .load_entries(thread, None)
         .await
-        .map_err(|error| format!("couldn't read thread {thread}: {error}"))?;
+        .map_err(|error| format!("couldn't read session {thread}: {error}"))?;
     let mut asked = None;
     let mut answered = None;
-    for entry in &entries {
+    for entry in entries.iter().filter(|entry| entry.path.is_empty()) {
         let EntryBody::Message { message } = &entry.body else {
             continue;
         };
@@ -355,10 +355,10 @@ fn under(spans: &[Span], span: &Span, root: &str) -> bool {
     false
 }
 
-fn turn_message(entries: &[ThreadEntry], spans: &[Span], turn: &Span) -> Value {
+fn turn_message(entries: &[Entry], spans: &[Span], turn: &Span) -> Value {
     let first = entries.iter().position(|entry| {
         entry
-            .span
+            .span_id
             .as_deref()
             .and_then(|id| spans.iter().find(|span| span.span_id == id))
             .is_some_and(|span| under(spans, span, &turn.span_id))
@@ -375,7 +375,7 @@ fn turn_message(entries: &[ThreadEntry], spans: &[Span], turn: &Span) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn spoken(entries: &[ThreadEntry], span: &Span) -> Option<Value> {
+fn spoken(entries: &[Entry], span: &Span) -> Option<Value> {
     entries.iter().find_map(|entry| match &entry.body {
         EntryBody::Message {
             message:
@@ -384,7 +384,7 @@ fn spoken(entries: &[ThreadEntry], span: &Span) -> Option<Value> {
                     tool_calls,
                     ..
                 },
-        } if entry.span.as_deref() == Some(span.span_id.as_str()) => Some(serde_json::json!({
+        } if entry.span_id.as_deref() == Some(span.span_id.as_str()) => Some(serde_json::json!({
             "text": content,
             "tool_calls": tool_calls
                 .iter()
@@ -406,7 +406,7 @@ fn failure(span: &Span) -> Option<String> {
 
 fn of_span(
     spans: &[Span],
-    entries: &[ThreadEntry],
+    entries: &[Entry],
     thread: &str,
     span: &Span,
     item: Item,
@@ -447,15 +447,15 @@ pub async fn from_span(
     let spans = store
         .load_spans(thread)
         .await
-        .map_err(|error| format!("couldn't read the trace of thread {thread}: {error}"))?;
+        .map_err(|error| format!("couldn't read the trace of session {thread}: {error}"))?;
     let entries = store
-        .load_entries(thread)
+        .load_entries(thread, None)
         .await
-        .map_err(|error| format!("couldn't read thread {thread}: {error}"))?;
+        .map_err(|error| format!("couldn't read session {thread}: {error}"))?;
     let clicked = spans
         .iter()
         .find(|span| span.span_id == id || attribute(span, "gen_ai.tool.call.id") == Some(id))
-        .ok_or_else(|| format!("thread {thread} has no call {id}"))?;
+        .ok_or_else(|| format!("session {thread} has no call {id}"))?;
     if clicked.end_time_unix_nano.is_none() {
         return Err(format!(
             "{} hasn't finished yet, so there's nothing to look at",
@@ -684,11 +684,6 @@ mod tests {
 
     async fn research_turn() -> (dive_store::MemoryStore, String, Editable) {
         let store = dive_store::MemoryStore::new();
-        let thread = store
-            .create_thread("race", "research_agent", None)
-            .await
-            .unwrap()
-            .id;
         let mut asked = NewEntry::message(
             "research_agent",
             ChatMessage::Assistant {
@@ -702,16 +697,17 @@ mod tests {
             },
         );
         asked.span = Some("m1".into());
-        store
-            .append_entries(
-                &thread,
-                &[
-                    NewEntry::message("user", ChatMessage::user("When is the next race?")),
-                    asked,
-                ],
-            )
-            .await
-            .unwrap();
+        let thread = crate::ops::session::tests::chat_session(
+            &store,
+            "race",
+            None,
+            vec![
+                NewEntry::message("user", ChatMessage::user("When is the next race?")),
+                asked,
+            ],
+        )
+        .await
+        .id;
         let mut turn = traced(
             "T",
             None,

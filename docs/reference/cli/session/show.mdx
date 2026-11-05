@@ -1,15 +1,15 @@
 ---
-title: "dive thread show"
+title: "dive session show"
 sidebarTitle: "show"
-description: "Show a thread's messages"
+description: "Show a session's runs and messages"
 playground: "none"
-keywords: ["dive thread show"]
+keywords: ["dive session show"]
 ---
 
 ## Arguments
 
 <ParamField path="ID" type="string" required>
-  The thread id, as `dive thread list` prints it
+  The session id, as `dive session list` prints it
 </ParamField>
 
 ## Options
@@ -31,15 +31,15 @@ keywords: ["dive thread show"]
 <RequestExample>
 
 ```bash Usage
-dive thread show [OPTIONS] <ID>
+dive session show [OPTIONS] <ID>
 ```
 
 ```bash Example 1
-dive thread show 4f1c9a2b7d3e
+dive session show 4f1c9a2b7d3e
 ```
 
 ```bash Example 2
-dive thread show 4f1c9a2b7d3e --state --json
+dive session show 4f1c9a2b7d3e --state --json
 ```
 
 </RequestExample>

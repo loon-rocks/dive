@@ -5,6 +5,6 @@ pub mod models;
 pub mod pack;
 pub mod plan;
 pub mod remove;
+pub mod session;
 pub mod storage;
-pub mod thread;
 pub mod tool;

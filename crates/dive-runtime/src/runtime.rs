@@ -1,12 +1,13 @@
 //! Shared wiring: config → providers → MCP registry → store → agent.
 
 use anyhow::{Context, Result};
-use dive_core::agent::conversation::{Conversation, ConversationTurn};
+use dive_core::agent::conversation::Conversation;
 use dive_core::pipeline::{doc::LoadedPlans, ExecutionGate, Interlocutor, Pipeline, ToolCatalog};
+use dive_core::store::{Page, SessionFilter, SessionKind, SessionMeta};
 use dive_core::toolbox::AgentToolbox;
 use dive_core::usage::UsageLedger;
 use dive_core::user_tools::UserToolRegistry;
-use dive_core::{CompositeRegistry, EventSink, NewEntry, Store, ThreadMeta, ToolRegistry};
+use dive_core::{CompositeRegistry, EventSink, Store, ToolRegistry};
 use dive_llm::ModelRouter;
 use dive_mcp::McpManager;
 use dive_store::{FileStore, MemoryStore, RecordingRegistry};
@@ -798,25 +799,39 @@ fn storage_backend(
     })
 }
 
-/// Resolve which existing thread to continue, if any.
+/// Resolve which existing session to continue, if any.
 ///
-/// `None` → new thread; `Some(None)` (bare `--thread`) → most recent thread,
-/// or a new one when none exist yet; `Some(Some(id))` → that thread or error.
-pub async fn resolve_thread(
+/// `None` → new session; `Some(None)` (bare `--session`) → most recent chat
+/// session, or a new one when none exist yet; `Some(Some(id))` → that
+/// session or error.
+pub async fn resolve_session(
     store: &dyn Store,
-    thread: Option<Option<String>>,
-) -> Result<Option<ThreadMeta>> {
-    match thread {
+    session: Option<Option<String>>,
+) -> Result<Option<SessionMeta>> {
+    match session {
         None => Ok(None),
         Some(Some(id)) => {
             let meta = store
-                .get_thread(&id)
+                .get_session(&id)
                 .await?
-                .with_context(|| format!("no thread with id {id} (see `dive thread list`)"))?;
+                .with_context(|| format!("no session with id {id} (see `dive session list`)"))?;
             Ok(Some(meta))
         }
-        Some(None) => Ok(store.latest_thread().await?),
+        Some(None) => latest_session(store, SessionKind::Chat).await,
     }
+}
+
+pub async fn latest_session(store: &dyn Store, kind: SessionKind) -> Result<Option<SessionMeta>> {
+    let filter = SessionFilter {
+        kind: Some(kind),
+        ..SessionFilter::default()
+    };
+    Ok(store
+        .list_sessions(&filter, Page::first(1))
+        .await?
+        .sessions
+        .into_iter()
+        .next())
 }
 
 pub fn deprecated_prompt<'a>(
@@ -840,53 +855,30 @@ pub fn deprecated_prompt<'a>(
     Some(value)
 }
 
-pub async fn load_history(store: &dyn Store, thread_id: &str) -> Result<Vec<NewEntry>> {
-    Ok(store
-        .load_entries(thread_id)
-        .await?
-        .into_iter()
-        .map(NewEntry::from)
-        .collect())
-}
-
-pub async fn persist_turn(
-    store: &dyn Store,
-    meta: &ThreadMeta,
-    active: &str,
-    turn: &ConversationTurn,
-) -> Result<()> {
-    store.append_entries(&meta.id, &turn.entries).await?;
-    store.append_spans(&meta.id, &turn.spans).await?;
-    if turn.active != active {
-        store.set_active_agent(&meta.id, &turn.active).await?;
-    }
-    Ok(())
-}
-
 pub fn starting_agent(
-    thread: Option<&ThreadMeta>,
+    session: Option<&SessionMeta>,
     requested: Option<&str>,
     known: &dyn Fn(&str) -> bool,
 ) -> Result<String> {
-    match (thread, requested) {
-        (Some(meta), Some(agent)) if agent != meta.owner => anyhow::bail!(
-            "thread {} belongs to the {} agent — continue it without naming an agent \
-             (it resumes with {}), or start a new thread for {agent}",
+    match (session, requested) {
+        (Some(meta), Some(agent)) if agent != meta.agent => anyhow::bail!(
+            "session {} belongs to the {} agent — continue it without naming an agent \
+             (it resumes with {}), or start a new session for {agent}",
             meta.id,
-            meta.owner,
-            meta.active
+            meta.agent,
+            meta.active_agent
         ),
         (Some(_), Some(owner)) => Ok(owner.to_string()),
-        (Some(meta), None) if !known(&meta.active) && known(&meta.owner) => {
+        (Some(meta), None) if !known(&meta.active_agent) && known(&meta.agent) => {
             tracing::warn!(
-                "thread {} was last with the {} agent, which isn't available here; resuming with its owner, {}",
+                "session {} was last with the {} agent, which isn't available here; resuming with its first agent, {}",
                 meta.id,
-                meta.active,
-                meta.owner
+                meta.active_agent,
+                meta.agent
             );
-            Ok(meta.owner.clone())
+            Ok(meta.agent.clone())
         }
-        (Some(meta), None) => Ok(meta.active.clone()),
+        (Some(meta), None) => Ok(meta.active_agent.clone()),
         (None, Some(agent)) => Ok(agent.to_string()),
         (None, None) => Ok(dive_core::agent::doc::CHAT_AGENT.to_string()),
     }
@@ -1453,23 +1445,17 @@ mod tests {
         assert_eq!(notices[1], "/work/site/.dive/config.toml: renamed x");
     }
 
-    fn thread(owner: &str, active: &str) -> ThreadMeta {
-        ThreadMeta {
-            id: "t1".to_string(),
-            title: "t".to_string(),
-            created_at: 0,
-            updated_at: 0,
-            message_count: 0,
-            owner: owner.to_string(),
-            active: active.to_string(),
-            attachments: Vec::new(),
-            project: None,
-        }
+    fn session(agent: &str, active: &str) -> SessionMeta {
+        let mut meta =
+            dive_core::store::NewSession::chat("t", agent, &dive_core::run::Identity::default())
+                .meta("t1".to_string(), 0);
+        meta.active_agent = active.to_string();
+        meta
     }
 
     #[test]
-    fn a_thread_resumes_with_its_active_agent_and_refuses_other_owners() {
-        let meta = thread("router", "poet");
+    fn a_session_resumes_with_its_active_agent_and_refuses_other_first_agents() {
+        let meta = session("router", "poet");
         let all = |_: &str| true;
         assert_eq!(starting_agent(Some(&meta), None, &all).unwrap(), "poet");
         assert_eq!(

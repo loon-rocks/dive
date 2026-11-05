@@ -131,7 +131,7 @@ pub async fn sessions_are_created_listed_filtered_paged_and_deleted(h: &Handles)
         .unwrap();
     assert_eq!(plan.kind, SessionKind::Plan, "{name}");
     assert!(store
-        .session_entries(&first.id, None)
+        .load_entries(&first.id, None)
         .await
         .unwrap()
         .is_empty());
@@ -194,7 +194,7 @@ pub async fn two_concurrent_starts_on_one_session_get_one_lease_and_one_busy(h: 
     let meta = h.one.get_session(&id).await.unwrap().unwrap();
     assert_eq!(meta.active_run.as_deref(), Some(lease.run.as_str()));
     assert_eq!(meta.lease_generation, lease.generation);
-    let entries = h.one.session_entries(&id, None).await.unwrap();
+    let entries = h.one.load_entries(&id, None).await.unwrap();
     assert_eq!(kinds(&entries), ["run_started"], "{}", h.name);
     assert_eq!(entries[0].seq, 1);
     assert_eq!(lease.next_seq, 2);
@@ -252,12 +252,12 @@ pub async fn a_stale_generation_loses_its_lease_and_nothing_it_sent_lands(h: &Ha
         .unwrap();
     let duplicate = h.one.append(&lease, &[first]).await;
     assert!(matches!(duplicate, Err(FenceError::Store(_))), "{}", h.name);
-    let entries = h.one.session_entries(&id, None).await.unwrap();
+    let entries = h.one.load_entries(&id, None).await.unwrap();
     assert_eq!(kinds(&entries), ["run_started", "message", "message"]);
     let seqs: Vec<u64> = entries.iter().map(|entry| entry.seq).collect();
     assert_eq!(seqs, [1, 2, 3], "{}", h.name);
     assert_eq!(
-        h.one.session_entries(&id, Some(2)).await.unwrap().len(),
+        h.one.load_entries(&id, Some(2)).await.unwrap().len(),
         1,
         "{}",
         h.name
@@ -269,7 +269,7 @@ pub async fn ending_a_run_closes_it_and_frees_the_session(h: &Handles) {
     let mut lease = h.one.start_run(start("run-a", &id, "one")).await.unwrap();
     let busy = h.two.start_run(start("run-b", &id, "two")).await;
     assert!(matches!(busy, Err(StartError::Busy { .. })), "{}", h.name);
-    h.one.set_session_agent(&lease, "back").await.unwrap();
+    h.one.set_active_agent(&lease, "back").await.unwrap();
     let entry = said(&mut lease, "hello");
     h.one.append(&lease, &[entry]).await.unwrap();
     h.time.advance(10);
@@ -288,10 +288,10 @@ pub async fn ending_a_run_closes_it_and_frees_the_session(h: &Handles) {
     assert_eq!(meta.active_agent, "back", "{}", h.name);
     assert_eq!(meta.message_count, 1, "{}", h.name);
     assert!(matches!(
-        h.one.set_session_agent(&lease, "front").await,
+        h.one.set_active_agent(&lease, "front").await,
         Err(FenceError::LeaseLost)
     ));
-    let entries = h.one.session_entries(&id, None).await.unwrap();
+    let entries = h.one.load_entries(&id, None).await.unwrap();
     assert_eq!(kinds(&entries), ["run_started", "message", "run_ended"]);
     assert!(entries.iter().all(|entry| entry.run_id == "run-a"));
     h.two.start_run(start("run-b", &id, "two")).await.unwrap();
@@ -312,7 +312,7 @@ pub async fn a_held_run_sees_a_cancel_on_its_next_renewal(h: &Handles) {
         h.name
     );
     assert!(h.one.renew(&lease).await.unwrap().cancel_requested);
-    let entries = h.one.session_entries(&id, None).await.unwrap();
+    let entries = h.one.load_entries(&id, None).await.unwrap();
     assert_eq!(kinds(&entries), ["run_started"], "{}", h.name);
 }
 
@@ -326,7 +326,7 @@ pub async fn a_cancel_of_a_run_no_one_holds_ends_it(h: &Handles) {
         "{}",
         h.name
     );
-    let entries = h.one.session_entries(&id, None).await.unwrap();
+    let entries = h.one.load_entries(&id, None).await.unwrap();
     assert_eq!(
         kinds(&entries),
         ["run_started", "cancel_requested", "run_ended"]
@@ -411,10 +411,10 @@ pub async fn the_reaper_fails_chat_runs_and_interrupts_plan_runs_once(h: &Handle
         h.name
     );
     assert_eq!(plan_meta.lease_holder, None, "{}", h.name);
-    let entries = h.one.session_entries(&chat_id, None).await.unwrap();
+    let entries = h.one.load_entries(&chat_id, None).await.unwrap();
     assert_eq!(kinds(&entries), ["run_started", "run_ended"], "{}", h.name);
     assert_eq!(ended(&entries).unwrap().status, RunStatus::Failed);
-    let entries = h.one.session_entries(&plan_id, None).await.unwrap();
+    let entries = h.one.load_entries(&plan_id, None).await.unwrap();
     assert_eq!(ended(&entries).unwrap().status, RunStatus::Interrupted);
     for lease in [&chat_lease, &plan_lease] {
         assert!(matches!(
@@ -444,23 +444,107 @@ pub async fn spans_and_attachments_live_on_the_session(h: &Handles) {
     }))
     .unwrap();
     h.one
-        .append_session_spans(&id, std::slice::from_ref(&span))
+        .append_spans(&id, std::slice::from_ref(&span))
         .await
         .unwrap();
-    assert_eq!(
-        h.two.session_spans(&id).await.unwrap().len(),
-        1,
-        "{}",
-        h.name
-    );
+    assert_eq!(h.two.load_spans(&id).await.unwrap().len(), 1, "{}", h.name);
     let attachment = dive_core::store::Attachment::new("network").with("state", "open");
     h.one
-        .set_session_attachments(&id, std::slice::from_ref(&attachment))
+        .set_attachments(&id, std::slice::from_ref(&attachment))
         .await
         .unwrap();
     assert_eq!(
         h.two.get_session(&id).await.unwrap().unwrap().attachments,
         [attachment]
     );
-    assert!(h.one.set_session_attachments("missing", &[]).await.is_err());
+    assert!(h.one.set_attachments("missing", &[]).await.is_err());
+}
+
+pub async fn tool_shapes_upsert_and_count(h: &Handles) {
+    let first = json!({"values": [{"id": "x"}]});
+    for _ in 0..2 {
+        h.one
+            .record_tool_shape("linear__search", &json!({"type": "object"}), &first)
+            .await
+            .unwrap();
+    }
+    let shapes = h.two.tool_shapes().await.unwrap();
+    assert_eq!(shapes.len(), 1, "{}", h.name);
+    assert_eq!(shapes[0].tool, "linear__search", "{}", h.name);
+    assert_eq!(shapes[0].seen_count, 2, "{}", h.name);
+    assert_eq!(shapes[0].example, first, "{}", h.name);
+    h.one
+        .record_tool_shape("weird/tool:name", &json!({}), &json!({}))
+        .await
+        .unwrap();
+    assert!(h
+        .two
+        .tool_shapes()
+        .await
+        .unwrap()
+        .iter()
+        .any(|shape| shape.tool == "weird/tool:name"));
+}
+
+pub async fn entries_keep_every_kind_their_stamps_and_their_envelope(h: &Handles) {
+    let id = chat(h.one.as_ref()).await;
+    let mut lease = h.one.start_run(start("run-a", &id, "one")).await.unwrap();
+    let usage = dive_core::store::EntryUsage {
+        model: "claude-sonnet-4-5".into(),
+        input_tokens: 1200,
+        output_tokens: 48,
+        output_image_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 3100,
+    };
+    let reply = NewEntry::message(
+        "orchestrator",
+        ChatMessage::Assistant {
+            content: Some("ok".into()),
+            thinking: Vec::new(),
+            tool_calls: Vec::new(),
+        },
+    )
+    .stamped(dive_core::store::Stamp {
+        ms: Some(1840),
+        usage: Some(usage.clone()),
+        span: Some("00f067aa0ba902b7".into()),
+    });
+    let handoff = NewEntry::new(
+        "orchestrator",
+        EntryBody::Handoff {
+            from: "orchestrator".into(),
+            to: "plan_author".into(),
+            message: "the user wants a plan".into(),
+            via: Some("transfer_to_plan_author".into()),
+        },
+    );
+    let started = NewEntry::new(
+        "plan_author",
+        EntryBody::AgentStarted {
+            agent: "plan_verifier".into(),
+            caller: "plan_author".into(),
+            input: json!({"goal": "g"}),
+        },
+    );
+    let mut entries = Vec::new();
+    for entry in [reply, handoff, started] {
+        entries.push(entry.into_entry(lease.next_seq, &lease.run, 7));
+        lease.next_seq += 1;
+    }
+    let inside = NewEntry::message("plan_verifier", ChatMessage::user("g"))
+        .at_path("agent:plan_verifier", Some(4))
+        .into_entry(lease.next_seq, &lease.run, 7);
+    entries.push(inside);
+    h.one.append(&lease, &entries).await.unwrap();
+    let loaded = h.two.load_entries(&id, None).await.unwrap();
+    assert_eq!(loaded.len(), 5, "{}", h.name);
+    assert_eq!(loaded[1].ms, Some(1840), "{}", h.name);
+    assert_eq!(loaded[1].usage.as_ref(), Some(&usage), "{}", h.name);
+    assert_eq!(loaded[1].span_id.as_deref(), Some("00f067aa0ba902b7"));
+    assert!(matches!(loaded[2].body, EntryBody::Handoff { .. }));
+    assert!(matches!(loaded[3].body, EntryBody::AgentStarted { .. }));
+    assert_eq!(loaded[4].path, "agent:plan_verifier", "{}", h.name);
+    assert_eq!(loaded[4].parent, Some(4), "{}", h.name);
+    assert!(loaded.iter().all(|entry| entry.run_id == "run-a"));
 }

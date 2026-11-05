@@ -79,10 +79,13 @@ impl TurnLog {
     }
 
     fn entries(&self) -> Vec<NewEntry> {
-        self.written
+        let mut entries = self
+            .written
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .clone()
+            .clone();
+        crate::context::order_tool_results(&mut entries);
+        entries
     }
 
     fn block(&self, block: SubagentBlock) {
@@ -1404,7 +1407,6 @@ mod tests {
                     } => "tool_result",
                     EntryBody::Message { .. } => "user",
                     EntryBody::Handoff { .. } => "handoff",
-                    EntryBody::SubagentRun { .. } => "subagent_run",
                     _ => "other",
                 };
                 (

@@ -75,30 +75,41 @@ pub fn run_entries(entries: &[Entry], run: &str) -> Vec<NewEntry> {
         .collect()
 }
 
-fn order_tool_results(entries: &mut [NewEntry]) {
+pub fn order_tool_results(entries: &mut [NewEntry]) {
     let mut at = 0;
     while at < entries.len() {
         let calls: Vec<String> = match &entries[at].body {
             EntryBody::Message {
                 message: ChatMessage::Assistant { tool_calls, .. },
-            } if !tool_calls.is_empty() => tool_calls.iter().map(|call| call.id.clone()).collect(),
+            } if !tool_calls.is_empty() && entries[at].path.is_empty() => {
+                tool_calls.iter().map(|call| call.id.clone()).collect()
+            }
             _ => {
                 at += 1;
                 continue;
             }
         };
-        let start = at + 1;
-        let end = entries[start..]
-            .iter()
-            .position(|entry| result_id(entry).is_none())
-            .map_or(entries.len(), |offset| start + offset);
+        let mut slots = Vec::new();
+        let mut next = at + 1;
+        while let Some(entry) = entries.get(next) {
+            if result_id(entry).is_some() && entry.path.is_empty() {
+                slots.push(next);
+            } else if entry.path.is_empty() && matches!(entry.body, EntryBody::Message { .. }) {
+                break;
+            }
+            next += 1;
+        }
         let index = |entry: &NewEntry| {
             result_id(entry)
                 .and_then(|id| calls.iter().position(|call| call == id))
                 .unwrap_or(usize::MAX)
         };
-        entries[start..end].sort_by_key(index);
-        at = end.max(start);
+        let mut results: Vec<NewEntry> = slots.iter().map(|&slot| entries[slot].clone()).collect();
+        results.sort_by_key(index);
+        for (slot, result) in slots.into_iter().zip(results) {
+            entries[slot] = result;
+        }
+        at = next;
     }
 }
 

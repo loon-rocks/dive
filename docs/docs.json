@@ -380,11 +380,27 @@
     },
     {
       "source": "/reference/cli/threads",
-      "destination": "/reference/cli/thread"
+      "destination": "/reference/cli/session"
     },
     {
       "source": "/reference/cli/threads/:slug*",
-      "destination": "/reference/cli/thread/:slug*"
+      "destination": "/reference/cli/session/:slug*"
+    },
+    {
+      "source": "/reference/cli/thread",
+      "destination": "/reference/cli/session"
+    },
+    {
+      "source": "/reference/cli/thread/:slug*",
+      "destination": "/reference/cli/session/:slug*"
+    },
+    {
+      "source": "/reference/cli/sessions",
+      "destination": "/reference/cli/session"
+    },
+    {
+      "source": "/reference/cli/sessions/:slug*",
+      "destination": "/reference/cli/session/:slug*"
     },
     {
       "source": "/reference/cli/shapes",

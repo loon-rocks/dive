@@ -1,6 +1,6 @@
-//! Persistence abstraction: threads, messages, and the observed-shape cache.
-//! Implemented by dive-store; behind a trait so backends (file, memory,
-//! future remote stores) can be swapped.
+//! Persistence abstraction: sessions, their runs and entries, and the
+//! observed-shape cache. Implemented by dive-store; behind a trait so
+//! backends (file, memory, future remote stores) can be swapped.
 
 pub use crate::trace::Span;
 use async_trait::async_trait;
@@ -17,28 +17,6 @@ pub const PLAN_ATTACHMENT: &str = "plan";
 pub const EVIDENCE_ATTACHMENT: &str = "evidence";
 
 pub const ATTACHMENT_KINDS: &[&str] = &[NETWORK_ATTACHMENT, PLAN_ATTACHMENT, EVIDENCE_ATTACHMENT];
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThreadMeta {
-    pub id: String,
-    pub title: String,
-    /// Epoch milliseconds.
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub message_count: i64,
-    pub owner: String,
-    pub active: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<Attachment>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-}
-
-impl ThreadMeta {
-    pub fn in_project(&self, project: Option<&str>) -> bool {
-        self.project.as_deref() == project
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
@@ -63,21 +41,6 @@ impl Attachment {
     pub fn field(&self, key: &str) -> Option<&str> {
         self.fields.get(key).and_then(Value::as_str)
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThreadEntry {
-    pub seq: u64,
-    pub at: i64,
-    pub author: String,
-    #[serde(flatten)]
-    pub body: EntryBody,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage: Option<EntryUsage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub span: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,15 +106,6 @@ pub enum EntryBody {
         message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         via: Option<String>,
-    },
-    SubagentRun {
-        agent: String,
-        caller: String,
-        input: Value,
-        messages: Vec<ChatMessage>,
-        output: Value,
-        #[serde(rename = "final")]
-        final_: bool,
     },
     AgentStarted {
         agent: String,
@@ -264,7 +218,7 @@ pub struct RunEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage: Option<Value>,
+    pub run_usage: Option<Value>,
 }
 
 impl RunEnded {
@@ -273,7 +227,7 @@ impl RunEnded {
             status,
             outcome: None,
             error: None,
-            usage: None,
+            run_usage: None,
         }
     }
 
@@ -291,8 +245,8 @@ impl RunEnded {
         }
     }
 
-    pub fn with_usage(self, usage: Option<Value>) -> Self {
-        Self { usage, ..self }
+    pub fn with_usage(self, run_usage: Option<Value>) -> Self {
+        Self { run_usage, ..self }
     }
 }
 
@@ -803,32 +757,6 @@ impl NewEntry {
             ..self
         }
     }
-
-    pub fn into_thread_entry(self, seq: u64, at: i64) -> ThreadEntry {
-        ThreadEntry {
-            seq,
-            at,
-            author: self.author,
-            body: self.body,
-            ms: self.ms,
-            usage: self.usage,
-            span: self.span,
-        }
-    }
-}
-
-impl From<ThreadEntry> for NewEntry {
-    fn from(entry: ThreadEntry) -> Self {
-        Self {
-            author: entry.author,
-            body: entry.body,
-            path: String::new(),
-            parent: None,
-            ms: entry.ms,
-            usage: entry.usage,
-            span: entry.span,
-        }
-    }
 }
 
 impl From<Entry> for NewEntry {
@@ -843,29 +771,6 @@ impl From<Entry> for NewEntry {
             span: entry.span_id,
         }
     }
-}
-
-pub fn message_entries(agent: &str, messages: &[ChatMessage]) -> Vec<NewEntry> {
-    messages
-        .iter()
-        .map(|message| {
-            let author = match message {
-                ChatMessage::User { .. } => USER_AUTHOR,
-                _ => agent,
-            };
-            NewEntry::message(author, message.clone())
-        })
-        .collect()
-}
-
-pub fn conversation(entries: &[ThreadEntry]) -> Vec<ChatMessage> {
-    entries
-        .iter()
-        .filter_map(|entry| match &entry.body {
-            EntryBody::Message { message } => Some(message.clone()),
-            _ => None,
-        })
-        .collect()
 }
 
 /// An observed (or declared) output shape for a tool.
@@ -883,40 +788,6 @@ pub struct StoreError(pub String);
 
 #[async_trait]
 pub trait Store: Send + Sync {
-    async fn create_thread(
-        &self,
-        title: &str,
-        owner: &str,
-        project: Option<&str>,
-    ) -> Result<ThreadMeta, StoreError>;
-    async fn get_thread(&self, id: &str) -> Result<Option<ThreadMeta>, StoreError>;
-    /// Most recently updated thread, if any.
-    async fn latest_thread(&self) -> Result<Option<ThreadMeta>, StoreError>;
-    /// Newest first.
-    async fn list_threads(&self) -> Result<Vec<ThreadMeta>, StoreError>;
-    async fn delete_thread(&self, id: &str) -> Result<bool, StoreError>;
-
-    async fn append_entries(&self, thread_id: &str, entries: &[NewEntry])
-        -> Result<(), StoreError>;
-    async fn load_entries(&self, thread_id: &str) -> Result<Vec<ThreadEntry>, StoreError>;
-    async fn append_spans(&self, thread_id: &str, spans: &[Span]) -> Result<(), StoreError>;
-    async fn load_spans(&self, thread_id: &str) -> Result<Vec<Span>, StoreError>;
-    async fn set_active_agent(&self, thread_id: &str, agent: &str) -> Result<(), StoreError>;
-    async fn set_attachments(
-        &self,
-        thread_id: &str,
-        attachments: &[Attachment],
-    ) -> Result<(), StoreError>;
-
-    /// Record an observed output shape for a tool (upsert; bumps seen_count).
-    async fn record_tool_shape(
-        &self,
-        tool: &str,
-        schema: &Value,
-        example: &Value,
-    ) -> Result<(), StoreError>;
-    async fn tool_shapes(&self) -> Result<Vec<ToolShape>, StoreError>;
-
     async fn create_session(&self, new: NewSession) -> Result<SessionMeta, StoreError>;
     async fn get_session(&self, id: &str) -> Result<Option<SessionMeta>, StoreError>;
     async fn list_sessions(
@@ -925,12 +796,9 @@ pub trait Store: Send + Sync {
         page: Page,
     ) -> Result<SessionPage, StoreError>;
     async fn delete_session(&self, id: &str) -> Result<bool, StoreError>;
-    async fn set_session_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError>;
-    async fn set_session_attachments(
-        &self,
-        id: &str,
-        attachments: &[Attachment],
-    ) -> Result<(), StoreError>;
+    async fn set_active_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError>;
+    async fn set_attachments(&self, id: &str, attachments: &[Attachment])
+        -> Result<(), StoreError>;
 
     async fn start_run(&self, start: StartRun) -> Result<Lease, StartError>;
     async fn append(&self, lease: &Lease, entries: &[Entry]) -> Result<(), FenceError>;
@@ -940,13 +808,22 @@ pub trait Store: Send + Sync {
     async fn reap_expired(&self, limit: usize) -> Result<Vec<Reaped>, StoreError>;
 
     async fn get_run(&self, id: &str) -> Result<Option<RunMeta>, StoreError>;
-    async fn session_entries(
+    async fn load_entries(
         &self,
         session: &str,
         after: Option<u64>,
     ) -> Result<Vec<Entry>, StoreError>;
-    async fn append_session_spans(&self, session: &str, spans: &[Span]) -> Result<(), StoreError>;
-    async fn session_spans(&self, session: &str) -> Result<Vec<Span>, StoreError>;
+    async fn append_spans(&self, session: &str, spans: &[Span]) -> Result<(), StoreError>;
+    async fn load_spans(&self, session: &str) -> Result<Vec<Span>, StoreError>;
+
+    /// Record an observed output shape for a tool (upsert; bumps seen_count).
+    async fn record_tool_shape(
+        &self,
+        tool: &str,
+        schema: &Value,
+        example: &Value,
+    ) -> Result<(), StoreError>;
+    async fn tool_shapes(&self) -> Result<Vec<ToolShape>, StoreError>;
 }
 
 #[cfg(test)]
@@ -955,98 +832,83 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn entries_serialize_flat_with_their_kind() {
-        let entry = ThreadEntry {
-            seq: 3,
-            at: 10,
-            author: "orchestrator".to_string(),
-            body: EntryBody::Handoff {
+    fn entries_serialize_flat_with_their_kind_and_envelope() {
+        let entry = NewEntry::new(
+            "orchestrator",
+            EntryBody::Handoff {
                 from: "orchestrator".to_string(),
                 to: "plan_author".to_string(),
                 message: "draft it".to_string(),
                 via: None,
             },
-            ms: None,
-            usage: None,
-            span: None,
-        };
+        )
+        .into_entry(3, "run-1", 10);
         let value = serde_json::to_value(&entry).unwrap();
         assert_eq!(
             value,
-            json!({"seq": 3, "at": 10, "author": "orchestrator", "kind": "handoff",
-                   "from": "orchestrator", "to": "plan_author", "message": "draft it"})
+            json!({"seq": 3, "run_id": "run-1", "at": 10, "author": "orchestrator",
+                   "kind": "handoff", "from": "orchestrator", "to": "plan_author",
+                   "message": "draft it"})
         );
-        let back: ThreadEntry = serde_json::from_value(value.clone()).unwrap();
+        let back: Entry = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(back).unwrap(), value);
 
-        let run = ThreadEntry {
-            seq: 4,
-            at: 11,
-            author: "plan_author".to_string(),
-            body: EntryBody::SubagentRun {
+        let finished = NewEntry::new(
+            "plan_author",
+            EntryBody::AgentFinished {
                 agent: "plan_refiner".to_string(),
-                caller: "plan_author".to_string(),
-                input: json!({"goal": "g"}),
-                messages: vec![ChatMessage::user("g".to_string())],
                 output: json!({"changes": []}),
                 final_: true,
             },
-            ms: None,
-            usage: None,
-            span: None,
-        };
-        let value = serde_json::to_value(&run).unwrap();
-        assert_eq!(value["kind"], json!("subagent_run"));
+        )
+        .at_path("", Some(4))
+        .into_entry(6, "run-1", 11);
+        let value = serde_json::to_value(&finished).unwrap();
+        assert_eq!(value["kind"], json!("agent_finished"));
         assert_eq!(value["final"], json!(true));
-        let back: ThreadEntry = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(value["parent"], json!(4));
+        assert!(value.get("path").is_none());
+        let back: Entry = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(back).unwrap(), value);
     }
 
     #[test]
-    fn thread_meta_written_before_attachments_loads_with_none() {
-        let meta: ThreadMeta = serde_json::from_value(json!({
-            "id": "a1b2c3d4e5f6", "title": "t", "created_at": 1, "updated_at": 2,
-            "message_count": 0, "owner": "chat", "active": "chat"
-        }))
-        .unwrap();
-        assert!(meta.attachments.is_empty());
-        assert!(serde_json::to_value(&meta)
-            .unwrap()
-            .get("attachments")
-            .is_none());
+    fn run_bookends_round_trip() {
+        let ended = NewEntry::new(
+            RUN_AUTHOR,
+            EntryBody::RunEnded(RunEnded::failed("boom").with_usage(Some(json!({"cost": 1})))),
+        )
+        .into_entry(9, "run-1", 12);
+        let value = serde_json::to_value(&ended).unwrap();
+        assert_eq!(value["kind"], "run_ended");
+        assert_eq!(value["status"], "failed");
+        assert_eq!(value["error"], "boom");
+        assert_eq!(value["run_usage"], json!({"cost": 1}));
+        let back: Entry = serde_json::from_value(value.clone()).unwrap();
+        assert!(matches!(
+            back.body,
+            EntryBody::RunEnded(RunEnded {
+                status: RunStatus::Failed,
+                ..
+            })
+        ));
     }
 
     #[test]
-    fn thread_meta_written_before_projects_loads_as_global() {
-        let meta: ThreadMeta = serde_json::from_value(json!({
-            "id": "a1b2c3d4e5f6", "title": "t", "created_at": 1, "updated_at": 2,
-            "message_count": 0, "owner": "chat", "active": "chat"
-        }))
-        .unwrap();
-        assert_eq!(meta.project, None);
-        assert!(meta.in_project(None));
-        assert!(!meta.in_project(Some("/work/site")));
-        assert!(serde_json::to_value(&meta)
-            .unwrap()
-            .get("project")
-            .is_none());
-    }
-
-    #[test]
-    fn a_thread_belongs_only_to_the_project_it_records() {
-        let meta: ThreadMeta = serde_json::from_value(json!({
-            "id": "a1b2c3d4e5f6", "title": "t", "created_at": 1, "updated_at": 2,
-            "message_count": 0, "owner": "chat", "active": "chat",
-            "project": "/work/site"
-        }))
-        .unwrap();
+    fn a_session_belongs_only_to_the_project_it_records() {
+        let identity = crate::run::Identity::default();
+        let meta = NewSession::chat("t", "chat", &identity)
+            .in_project(Some("/work/site"))
+            .meta("a1b2c3d4e5f6".into(), 1);
         assert!(meta.in_project(Some("/work/site")));
         assert!(!meta.in_project(Some("/work/other")));
         assert!(!meta.in_project(None));
-        assert_eq!(
-            serde_json::to_value(&meta).unwrap()["project"],
-            "/work/site"
-        );
+        let global = NewSession::chat("t", "chat", &identity).meta("b".into(), 1);
+        assert!(global.in_project(None));
+        assert!(serde_json::to_value(&global)
+            .unwrap()
+            .get("project")
+            .is_none());
     }
 
     #[test]
@@ -1060,19 +922,20 @@ mod tests {
     }
 
     #[test]
-    fn user_turns_are_authored_by_the_user_and_the_rest_by_the_agent() {
-        let entries = message_entries(
-            "chat",
-            &[
-                ChatMessage::user("hi".to_string()),
-                ChatMessage::Assistant {
-                    content: Some("hello".to_string()),
-                    thinking: Vec::new(),
-                    tool_calls: Vec::new(),
-                },
-            ],
-        );
-        let authors: Vec<&str> = entries.iter().map(|e| e.author.as_str()).collect();
-        assert_eq!(authors, [USER_AUTHOR, "chat"]);
+    fn a_batch_must_continue_the_log_in_order_within_its_run() {
+        let lease = Lease {
+            session: "s".into(),
+            run: "r".into(),
+            generation: 1,
+            holder: "h".into(),
+            next_seq: 3,
+        };
+        let entry = |seq: u64, run: &str| {
+            NewEntry::message(USER_AUTHOR, ChatMessage::user("x")).into_entry(seq, run, 0)
+        };
+        assert!(check_batch(&lease, 2, &[entry(3, "r"), entry(4, "r")]).is_ok());
+        assert!(check_batch(&lease, 3, &[entry(3, "r")]).is_err());
+        assert!(check_batch(&lease, 2, &[entry(4, "r"), entry(4, "r")]).is_err());
+        assert!(check_batch(&lease, 2, &[entry(3, "other")]).is_err());
     }
 }

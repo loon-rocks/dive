@@ -153,7 +153,7 @@ fn kinds(entries: &[Entry]) -> Vec<String> {
 async fn a_session_that_starts_with_the_assistant_gets_a_synthetic_run_at_seq_1() {
     let dir = copy_fixture("v4");
     let store = FileStore::open_as(dir.path(), &ada()).unwrap();
-    let entries = store.session_entries("be9100000001", None).await.unwrap();
+    let entries = store.load_entries("be9100000001", None).await.unwrap();
     assert_eq!(entries[0].seq, 1);
     let EntryBody::RunStarted(started) = &entries[0].body else {
         panic!("{:?}", entries[0]);
@@ -199,7 +199,7 @@ async fn a_session_that_starts_with_the_assistant_gets_a_synthetic_run_at_seq_1(
 async fn a_subagent_run_becomes_an_agent_pair_with_its_messages_between() {
     let dir = copy_fixture("v4");
     let store = FileStore::open_as(dir.path(), &ada()).unwrap();
-    let entries = store.session_entries("5ab000000001", None).await.unwrap();
+    let entries = store.load_entries("5ab000000001", None).await.unwrap();
     assert_eq!(
         kinds(&entries),
         [
@@ -236,7 +236,7 @@ async fn a_subagent_run_becomes_an_agent_pair_with_its_messages_between() {
     assert_eq!(output, &json!({"changes": ["add a changelog step"]}));
     assert!(*final_);
     assert_eq!(entries[3].span_id.as_deref(), Some("00f067aa0ba902b7"));
-    assert_eq!(store.session_spans("5ab000000001").await.unwrap().len(), 2);
+    assert_eq!(store.load_spans("5ab000000001").await.unwrap().len(), 2);
     let meta = store.get_session("5ab000000001").await.unwrap().unwrap();
     assert_eq!(
         (meta.agent.as_str(), meta.active_agent.as_str()),

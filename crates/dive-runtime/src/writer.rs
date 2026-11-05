@@ -31,6 +31,19 @@ impl Batching {
     };
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LeaseTiming {
+    pub renew_every: Duration,
+    pub self_stop_after: Duration,
+}
+
+impl LeaseTiming {
+    pub const STANDARD: LeaseTiming = LeaseTiming {
+        renew_every: LEASE_RENEW_EVERY,
+        self_stop_after: LEASE_SELF_STOP_AFTER,
+    };
+}
+
 pub fn holder() -> &'static str {
     static HOLDER: OnceLock<String> = OnceLock::new();
     HOLDER.get_or_init(|| {
@@ -53,6 +66,7 @@ struct Shared {
     tx: mpsc::UnboundedSender<Op>,
     cancel: Option<CancelHandle>,
     saw_cancel: AtomicBool,
+    cancel_by: Mutex<Option<String>>,
 }
 
 impl Shared {
@@ -83,14 +97,20 @@ impl Shared {
         if self.saw_cancel.swap(true, Ordering::SeqCst) {
             return;
         }
-        self.push(NewEntry::new(
-            RUN_AUTHOR,
-            EntryBody::CancelRequested {
-                by: by.unwrap_or_default(),
-            },
-        ));
+        *self.cancel_by.lock().unwrap_or_else(|e| e.into_inner()) = Some(by.unwrap_or_default());
         if let Some(cancel) = &self.cancel {
             cancel.cancel();
+        }
+    }
+
+    fn record_cancel(&self) {
+        let by = self
+            .cancel_by
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        if let Some(by) = by {
+            self.push(NewEntry::new(RUN_AUTHOR, EntryBody::CancelRequested { by }));
         }
     }
 }
@@ -107,7 +127,14 @@ impl RunWriter {
         start: StartRun,
         cancel: Option<CancelHandle>,
     ) -> Result<Self, StartError> {
-        Self::start_with(store, start, cancel, Batching::IMMEDIATE).await
+        Self::start_with(
+            store,
+            start,
+            cancel,
+            Batching::IMMEDIATE,
+            LeaseTiming::STANDARD,
+        )
+        .await
     }
 
     pub async fn start_with(
@@ -115,6 +142,7 @@ impl RunWriter {
         start: StartRun,
         cancel: Option<CancelHandle>,
         batching: Batching,
+        timing: LeaseTiming,
     ) -> Result<Self, StartError> {
         let lease = store.start_run(start).await?;
         let (tx, rx) = mpsc::unbounded_channel();
@@ -125,6 +153,7 @@ impl RunWriter {
             tx,
             cancel,
             saw_cancel: AtomicBool::new(false),
+            cancel_by: Mutex::new(None),
         });
         tokio::spawn(flush(
             Arc::clone(&store),
@@ -133,7 +162,7 @@ impl RunWriter {
             rx,
             batching,
         ));
-        let renewer = tokio::spawn(renew(store, lease.clone(), Arc::clone(&shared)));
+        let renewer = tokio::spawn(renew(store, lease.clone(), Arc::clone(&shared), timing));
         Ok(Self {
             shared,
             session: lease.session,
@@ -177,6 +206,7 @@ impl RunWriter {
         if self.stopped() {
             return Err(FenceError::LeaseLost);
         }
+        self.shared.record_cancel();
         let (reply, done) = oneshot::channel();
         self.shared
             .tx
@@ -239,7 +269,7 @@ async fn flush(
                 if shared.stopped.load(Ordering::SeqCst) {
                     continue;
                 }
-                match store.set_session_agent(&lease, &agent).await {
+                match store.set_active_agent(&lease, &agent).await {
                     Ok(()) => {}
                     Err(FenceError::LeaseLost) => shared.stop("its lease was lost"),
                     Err(FenceError::Store(e)) => {
@@ -261,14 +291,14 @@ async fn flush(
     }
 }
 
-async fn renew(store: Arc<dyn Store>, lease: Lease, shared: Arc<Shared>) {
+async fn renew(store: Arc<dyn Store>, lease: Lease, shared: Arc<Shared>, timing: LeaseTiming) {
     let mut last_ok = tokio::time::Instant::now();
     loop {
-        tokio::time::sleep(LEASE_RENEW_EVERY).await;
+        tokio::time::sleep(timing.renew_every).await;
         if shared.stopped.load(Ordering::SeqCst) {
             return;
         }
-        let deadline = last_ok + LEASE_SELF_STOP_AFTER;
+        let deadline = last_ok + timing.self_stop_after;
         match tokio::time::timeout_at(deadline, store.renew(&lease)).await {
             Ok(Ok(renewal)) => {
                 last_ok = tokio::time::Instant::now();
@@ -369,10 +399,10 @@ mod tests {
             Some(3)
         );
         settle().await;
-        let written = store.session_entries(&id, None).await.unwrap();
+        let written = store.load_entries(&id, None).await.unwrap();
         assert_eq!(written.len(), 3);
         writer.finish(RunEnded::completed(None)).await.unwrap();
-        let written = store.session_entries(&id, None).await.unwrap();
+        let written = store.load_entries(&id, None).await.unwrap();
         let summary: Vec<(u64, String)> = written
             .iter()
             .map(|entry| (entry.seq, kind(entry)))
@@ -395,55 +425,6 @@ mod tests {
 
     #[async_trait]
     impl Store for Unreachable {
-        async fn create_thread(
-            &self,
-            title: &str,
-            owner: &str,
-            project: Option<&str>,
-        ) -> Result<ThreadMeta, StoreError> {
-            self.inner.create_thread(title, owner, project).await
-        }
-        async fn get_thread(&self, id: &str) -> Result<Option<ThreadMeta>, StoreError> {
-            self.inner.get_thread(id).await
-        }
-        async fn latest_thread(&self) -> Result<Option<ThreadMeta>, StoreError> {
-            self.inner.latest_thread().await
-        }
-        async fn list_threads(&self) -> Result<Vec<ThreadMeta>, StoreError> {
-            self.inner.list_threads().await
-        }
-        async fn delete_thread(&self, id: &str) -> Result<bool, StoreError> {
-            self.inner.delete_thread(id).await
-        }
-        async fn append_entries(&self, id: &str, entries: &[NewEntry]) -> Result<(), StoreError> {
-            self.inner.append_entries(id, entries).await
-        }
-        async fn load_entries(&self, id: &str) -> Result<Vec<ThreadEntry>, StoreError> {
-            self.inner.load_entries(id).await
-        }
-        async fn append_spans(&self, id: &str, spans: &[Span]) -> Result<(), StoreError> {
-            self.inner.append_spans(id, spans).await
-        }
-        async fn load_spans(&self, id: &str) -> Result<Vec<Span>, StoreError> {
-            self.inner.load_spans(id).await
-        }
-        async fn set_active_agent(&self, id: &str, agent: &str) -> Result<(), StoreError> {
-            self.inner.set_active_agent(id, agent).await
-        }
-        async fn set_attachments(&self, id: &str, a: &[Attachment]) -> Result<(), StoreError> {
-            self.inner.set_attachments(id, a).await
-        }
-        async fn record_tool_shape(
-            &self,
-            tool: &str,
-            schema: &Value,
-            example: &Value,
-        ) -> Result<(), StoreError> {
-            self.inner.record_tool_shape(tool, schema, example).await
-        }
-        async fn tool_shapes(&self) -> Result<Vec<ToolShape>, StoreError> {
-            self.inner.tool_shapes().await
-        }
         async fn create_session(&self, new: NewSession) -> Result<SessionMeta, StoreError> {
             self.inner.create_session(new).await
         }
@@ -460,15 +441,15 @@ mod tests {
         async fn delete_session(&self, id: &str) -> Result<bool, StoreError> {
             self.inner.delete_session(id).await
         }
-        async fn set_session_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError> {
-            self.inner.set_session_agent(lease, agent).await
+        async fn set_active_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError> {
+            self.inner.set_active_agent(lease, agent).await
         }
-        async fn set_session_attachments(
+        async fn set_attachments(
             &self,
             id: &str,
             attachments: &[Attachment],
         ) -> Result<(), StoreError> {
-            self.inner.set_session_attachments(id, attachments).await
+            self.inner.set_attachments(id, attachments).await
         }
         async fn start_run(&self, start: StartRun) -> Result<Lease, StartError> {
             self.inner.start_run(start).await
@@ -497,22 +478,29 @@ mod tests {
         async fn get_run(&self, id: &str) -> Result<Option<RunMeta>, StoreError> {
             self.inner.get_run(id).await
         }
-        async fn session_entries(
+        async fn load_entries(
             &self,
             session: &str,
             after: Option<u64>,
         ) -> Result<Vec<Entry>, StoreError> {
-            self.inner.session_entries(session, after).await
+            self.inner.load_entries(session, after).await
         }
-        async fn append_session_spans(
+        async fn append_spans(&self, session: &str, spans: &[Span]) -> Result<(), StoreError> {
+            self.inner.append_spans(session, spans).await
+        }
+        async fn load_spans(&self, session: &str) -> Result<Vec<Span>, StoreError> {
+            self.inner.load_spans(session).await
+        }
+        async fn record_tool_shape(
             &self,
-            session: &str,
-            spans: &[Span],
+            tool: &str,
+            schema: &Value,
+            example: &Value,
         ) -> Result<(), StoreError> {
-            self.inner.append_session_spans(session, spans).await
+            self.inner.record_tool_shape(tool, schema, example).await
         }
-        async fn session_spans(&self, session: &str) -> Result<Vec<Span>, StoreError> {
-            self.inner.session_spans(session).await
+        async fn tool_shapes(&self) -> Result<Vec<ToolShape>, StoreError> {
+            self.inner.tool_shapes().await
         }
     }
 
@@ -549,7 +537,7 @@ mod tests {
             writer.finish(RunEnded::completed(None)).await,
             Err(FenceError::LeaseLost)
         ));
-        let written = store.session_entries(&id, None).await.unwrap();
+        let written = store.load_entries(&id, None).await.unwrap();
         assert_eq!(written.len(), 2);
     }
 
@@ -577,7 +565,7 @@ mod tests {
         assert!(cancel.is_cancelled());
         assert!(writer.stopped());
         let kinds: Vec<String> = store
-            .session_entries(&id, None)
+            .load_entries(&id, None)
             .await
             .unwrap()
             .iter()
@@ -607,7 +595,7 @@ mod tests {
             .finish(RunEnded::new(RunStatus::Cancelled))
             .await
             .unwrap();
-        let entries = store.session_entries(&id, None).await.unwrap();
+        let entries = store.load_entries(&id, None).await.unwrap();
         let kinds: Vec<String> = entries.iter().map(kind).collect();
         assert_eq!(kinds, ["run_started", "cancel_requested", "run_ended"]);
         assert!(matches!(

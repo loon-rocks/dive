@@ -227,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn a_thread_takes_several_attachments_but_one_of_each_kind() {
         let store = dive_store::MemoryStore::new();
-        let meta = store.create_thread("t", "chat", None).await.unwrap();
+        let meta = crate::ops::session::tests::chat_session(&store, "t", None, Vec::new()).await;
         let both = [
             Attachment::new(NETWORK_ATTACHMENT),
             Attachment::new(EVIDENCE_ATTACHMENT).with("thread", "a1"),
@@ -245,7 +245,7 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("one attachment of each kind"), "{error}");
-        let kept = store.get_thread(&meta.id).await.unwrap().unwrap();
+        let kept = store.get_session(&meta.id).await.unwrap().unwrap();
         assert_eq!(kept.attachments, both);
     }
 

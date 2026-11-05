@@ -49,4 +49,6 @@ on_every_backend!(
     a_cancel_of_a_run_no_one_holds_ends_it,
     the_reaper_fails_chat_runs_and_interrupts_plan_runs_once,
     spans_and_attachments_live_on_the_session,
+    tool_shapes_upsert_and_count,
+    entries_keep_every_kind_their_stamps_and_their_envelope,
 );

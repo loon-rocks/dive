@@ -1,16 +1,182 @@
 use crate::layout::{
-    json_lines, read_jsonl, run_bytes, write_session, ENTRIES_FILE, RUNS_DIR, SESSIONS_DIR,
-    SPANS_FILE,
+    json_lines, lock, read_jsonl, run_bytes, write_atomic, write_session, ENTRIES_FILE, RUNS_DIR,
+    SESSIONS_DIR, SPANS_FILE,
 };
 use dive_core::run::Identity;
 use dive_core::store::{
-    Attachment, Entry, EntryBody, NewEntry, RunEnded, RunMeta, RunStarted, RunStatus, SessionKind,
-    SessionMeta, StoreError, ThreadEntry, RUN_AUTHOR, USER_AUTHOR,
+    Attachment, Entry, EntryBody, EntryUsage, NewEntry, RunEnded, RunMeta, RunStarted, RunStatus,
+    SessionKind, SessionMeta, StoreError, RUN_AUTHOR, USER_AUTHOR,
 };
 use dive_llm::types::ChatMessage;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
+
+const LEGACY_MESSAGES_FILE: &str = "messages.jsonl";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadEntry {
+    pub seq: u64,
+    pub at: i64,
+    pub author: String,
+    #[serde(flatten)]
+    pub body: ThreadBody,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<EntryUsage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ThreadBody {
+    Message {
+        message: ChatMessage,
+    },
+    Handoff {
+        from: String,
+        to: String,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        via: Option<String>,
+    },
+    SubagentRun {
+        agent: String,
+        caller: String,
+        input: Value,
+        messages: Vec<ChatMessage>,
+        output: Value,
+        #[serde(rename = "final")]
+        final_: bool,
+    },
+}
+
+impl ThreadEntry {
+    fn new_entry(&self) -> Option<NewEntry> {
+        let body = match &self.body {
+            ThreadBody::Message { message } => EntryBody::Message {
+                message: message.clone(),
+            },
+            ThreadBody::Handoff {
+                from,
+                to,
+                message,
+                via,
+            } => EntryBody::Handoff {
+                from: from.clone(),
+                to: to.clone(),
+                message: message.clone(),
+                via: via.clone(),
+            },
+            ThreadBody::SubagentRun { .. } => return None,
+        };
+        Some(NewEntry {
+            ms: self.ms,
+            usage: self.usage.clone(),
+            ..NewEntry::new(&self.author, body).in_span(self.span.clone())
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct ThreadMetaV2 {
+    version: u32,
+    id: String,
+    title: String,
+    created_at: i64,
+    updated_at: i64,
+    message_count: i64,
+    #[serde(default)]
+    entry_count: u64,
+    #[serde(default = "legacy_agent")]
+    owner: String,
+    #[serde(default = "legacy_agent")]
+    active: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project: Option<String>,
+}
+
+fn read_thread_meta(dir: &Path) -> Result<Option<ThreadMetaV2>, StoreError> {
+    let path = dir.join("meta.json");
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(failed("reading", &path, e)),
+    };
+    serde_json::from_str(&raw)
+        .map(Some)
+        .map_err(|e| failed("corrupt", &path, e))
+}
+
+fn write_thread_meta(dir: &Path, meta: &ThreadMetaV2) -> Result<(), StoreError> {
+    let bytes = serde_json::to_vec_pretty(meta)
+        .map_err(|e| StoreError(format!("serializing thread meta: {e}")))?;
+    write_atomic(&dir.join("meta.json"), &bytes)
+}
+
+pub fn legacy_entries(dir: &Path, at: i64) -> Result<Option<Vec<ThreadEntry>>, StoreError> {
+    let Some(messages) = read_jsonl::<ChatMessage>(&dir.join(LEGACY_MESSAGES_FILE))? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        messages
+            .into_iter()
+            .enumerate()
+            .map(|(seq, message)| ThreadEntry {
+                seq: seq as u64,
+                at,
+                author: match message {
+                    ChatMessage::User { .. } => USER_AUTHOR.to_string(),
+                    _ => LEGACY_AGENT.to_string(),
+                },
+                body: ThreadBody::Message { message },
+                ms: None,
+                usage: None,
+                span: None,
+            })
+            .collect(),
+    ))
+}
+
+pub fn threads_v1(threads_dir: &Path) -> Result<(), StoreError> {
+    let dirs = match std::fs::read_dir(threads_dir) {
+        Ok(dirs) => dirs,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(failed("reading", threads_dir, e)),
+    };
+    for dir in dirs.filter_map(Result::ok).map(|entry| entry.path()) {
+        if !dir.join("meta.json").is_file() {
+            continue;
+        }
+        let _lock = lock(&dir)?;
+        let Some(mut meta) = read_thread_meta(&dir)? else {
+            continue;
+        };
+        meta.version = 2;
+        let legacy = dir.join(LEGACY_MESSAGES_FILE);
+        match read_jsonl::<ThreadEntry>(&dir.join(ENTRIES_FILE))? {
+            Some(entries) => meta.entry_count = entries.len() as u64,
+            None if legacy.exists() => {
+                let entries = legacy_entries(&dir, meta.created_at)?.unwrap_or_default();
+                write_atomic(
+                    &dir.join(ENTRIES_FILE),
+                    &json_lines(&entries, "thread entry")?,
+                )?;
+                meta.entry_count = entries.len() as u64;
+            }
+            None => {}
+        }
+        write_thread_meta(&dir, &meta)?;
+        if legacy.exists() {
+            std::fs::remove_file(&legacy).map_err(|e| failed("removing", &legacy, e))?;
+        }
+    }
+    Ok(())
+}
 
 const TMP_DIR: &str = "sessions.v5-tmp";
 
@@ -143,7 +309,7 @@ fn starts_turn(entry: &ThreadEntry) -> bool {
     entry.author == USER_AUTHOR
         && matches!(
             entry.body,
-            EntryBody::Message {
+            ThreadBody::Message {
                 message: ChatMessage::User { .. }
             }
         )
@@ -151,7 +317,7 @@ fn starts_turn(entry: &ThreadEntry) -> bool {
 
 fn user_text(entry: &ThreadEntry) -> Value {
     match &entry.body {
-        EntryBody::Message {
+        ThreadBody::Message {
             message: ChatMessage::User { content, .. },
         } if entry.author == USER_AUTHOR => Value::String(content.clone()),
         _ => Value::Null,
@@ -245,7 +411,11 @@ fn synthetic_runs(
 }
 
 fn carry(log: &mut Numbered, entry: &ThreadEntry, run: &str) {
-    let EntryBody::SubagentRun {
+    if let Some(plain) = entry.new_entry() {
+        log.push(plain, run, entry.at);
+        return;
+    }
+    let ThreadBody::SubagentRun {
         agent,
         caller,
         input,
@@ -254,7 +424,6 @@ fn carry(log: &mut Numbered, entry: &ThreadEntry, run: &str) {
         final_,
     } = &entry.body
     else {
-        log.push(NewEntry::from(entry.clone()), run, entry.at);
         return;
     };
     let mut opened = NewEntry::new(

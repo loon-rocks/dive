@@ -7,6 +7,7 @@ mod files;
 pub mod identity;
 pub mod ops;
 pub mod packs;
+pub mod plan_run;
 #[cfg(test)]
 mod run_tests;
 pub mod run_trace;

@@ -750,7 +750,7 @@ fn ran_in(entries: &[dive_core::NewEntry], tools_used: &[String]) -> Vec<String>
             EntryBody::Handoff { to, .. } => {
                 ran.insert(to.clone());
             }
-            EntryBody::SubagentRun { agent, .. } => {
+            EntryBody::AgentStarted { agent, .. } => {
                 ran.insert(agent.clone());
             }
             _ => {}
@@ -1796,13 +1796,10 @@ mod tests {
             ),
             dive_core::NewEntry::new(
                 "release_desk",
-                EntryBody::SubagentRun {
+                EntryBody::AgentStarted {
                     agent: "risk_check".into(),
                     caller: "release_desk".into(),
                     input: json!({}),
-                    messages: Vec::new(),
-                    output: json!({}),
-                    final_: true,
                 },
             ),
         ];

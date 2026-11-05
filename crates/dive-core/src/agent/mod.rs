@@ -191,9 +191,6 @@ impl Agent {
                 .zip(&results)
                 .find(|(call, msg)| self.stop_tools.contains(&call.name) && !is_error_result(msg))
                 .map(|(call, _)| call.name.clone());
-            for (result, stamp) in results.iter().zip(&tool_stamps) {
-                self.finished(result, stamp);
-            }
             messages.extend(results);
             stamps.extend(tool_stamps);
             if stopped_by.is_some() {
@@ -286,18 +283,18 @@ impl Agent {
                 .await;
             traced.close(outcome.is_error, Some(&outcome.result));
             let ms = traced.ms();
-            (
-                ChatMessage::ToolResult {
-                    tool_call_id: call.id.clone(),
-                    content: outcome.result,
-                    is_error: outcome.is_error,
-                },
-                Stamp {
-                    ms: Some(ms),
-                    usage: None,
-                    span: traced.span_id(),
-                },
-            )
+            let result = ChatMessage::ToolResult {
+                tool_call_id: call.id.clone(),
+                content: outcome.result,
+                is_error: outcome.is_error,
+            };
+            let stamp = Stamp {
+                ms: Some(ms),
+                usage: None,
+                span: traced.span_id(),
+            };
+            self.finished(&result, &stamp);
+            (result, stamp)
         });
         futures::future::join_all(futures).await
     }
