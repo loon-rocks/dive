@@ -776,6 +776,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_migrated_version_4_session_keeps_working_in_the_trace_view() {
+        let from = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../dive-store/tests/fixtures/v4");
+        let dir = tempfile::tempdir().unwrap();
+        let mut pending = vec![from.clone()];
+        while let Some(at) = pending.pop() {
+            for entry in std::fs::read_dir(&at).unwrap().filter_map(Result::ok) {
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    let to = dir.path().join(path.strip_prefix(&from).unwrap());
+                    std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+                    std::fs::copy(&path, to).unwrap();
+                }
+            }
+        }
+        let store = dive_store::FileStore::open(dir.path()).unwrap();
+        let editable = Editable {
+            agents: BTreeSet::from(["plan_author".to_string(), "plan_refiner".to_string()]),
+            plans: BTreeSet::new(),
+            tools: BTreeSet::new(),
+        };
+        let called = from_call(&editable, &store, "5ab000000001", "call_7")
+            .await
+            .unwrap();
+        assert_eq!(called.item.name, "plan_refiner");
+        assert_eq!(called.input, json!({"goal": "release"}));
+        assert_eq!(
+            called.output,
+            Some(json!({"changes": ["add a changelog step"]}))
+        );
+        let spanned = from_span(&editable, &store, "5ab000000001", "53995c3f42cd8ad8")
+            .await
+            .unwrap();
+        assert_eq!(spanned.item.name, "plan_author");
+        assert_eq!(spanned.focus.unwrap().span, "53995c3f42cd8ad8");
+    }
+
+    #[tokio::test]
     async fn a_step_s_evidence_is_its_plan_s_call_focused_on_the_step() {
         let (store, thread, editable) = research_turn().await;
         let step = from_span(&editable, &store, &thread, "R").await.unwrap();
