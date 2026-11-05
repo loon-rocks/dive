@@ -1801,7 +1801,6 @@ mod tests {
             .with_token(crate::run::RunToken::new("tok_REACH")),
         );
         let turn = run
-            .clone()
             .scope(conversation.run_turn(&[], "front", "question"))
             .await
             .unwrap();

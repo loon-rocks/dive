@@ -187,13 +187,13 @@ async fn two_plan_runs_and_a_chat_turn_at_once_each_report_only_their_own_usage_
         .unwrap();
 
     let (a, b, turn) = tokio::join!(
-        Box::pin(run_a.clone().scope(pipeline_a.run_explicit(
+        Box::pin(run_a.scope(pipeline_a.run_explicit(
             "q",
             agent_plan(&["alpha"]),
             Finish::Silent,
             None
         ))),
-        Box::pin(run_b.clone().scope(pipeline_b.run_explicit(
+        Box::pin(run_b.scope(pipeline_b.run_explicit(
             "q",
             agent_plan(&["bravo", "bravo"]),
             Finish::Silent,
@@ -260,7 +260,7 @@ async fn a_runs_token_appears_in_none_of_its_entries_events_or_log_lines() {
         .await
         .unwrap();
     let meta = store.create_thread("leak", "chat", None).await.unwrap();
-    let (planned, turn) = Box::pin(run.clone().scope(async {
+    let (planned, turn) = Box::pin(run.scope(async {
         let planned = pipeline
             .run_explicit("q", agent_plan(&["alpha"]), Finish::Silent, None)
             .await;

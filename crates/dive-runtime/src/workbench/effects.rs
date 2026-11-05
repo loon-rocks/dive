@@ -80,7 +80,6 @@ impl Workbench {
             ctx.pipeline.events.clone(),
         ));
         let result = run
-            .clone()
             .scope(ctx.conversation.run_turn(&history, &active, &message))
             .await;
         match &result {
@@ -251,7 +250,6 @@ impl Workbench {
             pipeline.events.clone(),
         ));
         let result = run
-            .clone()
             .scope(pipeline.run_explicit_in(
                 &query,
                 doc.steps.clone(),

@@ -138,7 +138,7 @@ impl RunLedger {
 /// Shared by `Arc` across a `Pipeline` and every plan it nests into, so a
 /// composed plan's spend rolls up without extra plumbing.
 pub struct UsageLedger {
-    calls: Mutex<Vec<CallRecord>>,
+    unscoped: RunLedger,
     prices: BTreeMap<String, ModelPrice>,
     capture_content: bool,
 }
@@ -146,7 +146,7 @@ pub struct UsageLedger {
 impl UsageLedger {
     pub fn new(prices: BTreeMap<String, ModelPrice>) -> Self {
         Self {
-            calls: Mutex::new(Vec::new()),
+            unscoped: RunLedger::default(),
             prices,
             capture_content: false,
         }
@@ -163,11 +163,7 @@ impl UsageLedger {
     }
 
     pub fn unscoped(&self) -> UsageReport {
-        let calls = self
-            .calls
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        report(&calls)
+        self.unscoped.report()
     }
 
     /// Price one model's usage, or `None` when that model has no configured
@@ -298,10 +294,7 @@ impl UsageMeter for UsageLedger {
             run.events().model_call(&event);
             return;
         }
-        self.calls
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(record);
+        self.unscoped.push(record);
     }
 
     fn captures_content(&self) -> bool {
@@ -634,7 +627,6 @@ mod tests {
         let ledger = Arc::new(priced_ledger());
         let first = scoped_run(Arc::new(Captured::default()));
         first
-            .clone()
             .scope(async { ledger.record(call("sonnet", tokens(100, 10))) })
             .await;
         let second = scoped_run(Arc::new(Captured::default()));
@@ -757,8 +749,8 @@ mod tests {
             }
         };
         tokio::join!(
-            run_a.clone().scope(record("sonnet", 3)),
-            run_b.clone().scope(record("haiku", 2)),
+            run_a.scope(record("sonnet", 3)),
+            run_b.scope(record("haiku", 2)),
         );
         let (a, b) = (run_a.usage(), run_b.usage());
         assert_eq!((a.calls, a.cost_usd), (3, Some(9.0)));

@@ -273,7 +273,6 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
     let result = run
-        .clone()
         .scope(pipeline.run_explicit_in(
             &query,
             doc.steps.clone(),

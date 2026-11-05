@@ -62,9 +62,7 @@ impl Runtime {
             Mode::Serve => load_serve_config(workspace)?,
         };
         let packs = load_packs(&loaded)?;
-        let root = (!workspace.is_global()).then(|| {
-            std::path::absolute(workspace.root()).unwrap_or_else(|_| workspace.root().to_path_buf())
-        });
+        let root = (!workspace.is_global()).then(|| absolute_root(workspace));
         Ok(Self::with_packs(loaded.config, packs, options)?
             .with_mode(mode)
             .on_workspace(workspace)

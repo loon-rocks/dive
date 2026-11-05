@@ -186,7 +186,6 @@ impl PackSession {
             .map_err(|error| error.to_string())?;
         let outcome = self
             .run
-            .clone()
             .scope(pipeline.run_explicit_in(
                 &format!("Run {tool}"),
                 vec![step],

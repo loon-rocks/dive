@@ -576,7 +576,6 @@ impl ChatSession {
             .run_turn_with(&self.history, &self.active, user.clone());
         let cancel = self.cancel.clone();
         let result: Result<ConversationTurn> = run
-            .clone()
             .scope(async move {
                 match &cancel {
                     Some(cancel) => match cancel.run(turn).await {

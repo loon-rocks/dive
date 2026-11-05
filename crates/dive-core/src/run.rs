@@ -160,8 +160,8 @@ impl Run {
         &self.events
     }
 
-    pub async fn scope<F: Future>(self: Arc<Self>, future: F) -> F::Output {
-        RUN.scope(self, future).await
+    pub async fn scope<F: Future>(self: &Arc<Self>, future: F) -> F::Output {
+        RUN.scope(Arc::clone(self), future).await
     }
 
     pub fn current() -> Option<Arc<Run>> {
