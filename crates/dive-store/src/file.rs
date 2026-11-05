@@ -21,6 +21,7 @@
 
 use crate::layout::Layout;
 use crate::session::Clock;
+use dive_core::run::Identity;
 use dive_core::store::{
     message_entries, Attachment, CancelOutcome, Entry, EntryBody, FenceError, Lease, NewEntry,
     NewSession, Page, Reaped, Renewal, RunEnded, RunMeta, SessionFilter, SessionMeta, SessionPage,
@@ -35,13 +36,15 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub const STORE_FORMAT: u32 = 4;
+pub const STORE_FORMAT: u32 = 5;
 
 pub const STORE_FORMAT_OLDEST: u32 = 1;
 
 const FORMAT_VERSION: u32 = STORE_FORMAT;
 
 const FORMAT_MARKER: &str = "FORMAT";
+
+const MIGRATE_LOCK: &str = ".migrate.lock";
 
 const ENTRIES_FILE: &str = "entries.jsonl";
 
@@ -111,17 +114,25 @@ struct ShapeFile {
 impl FileStore {
     /// Open (creating if needed) a file store rooted at the data directory.
     pub fn open(root: &Path) -> Result<Self, StoreError> {
-        Self::open_with_clock(root, crate::session::wall_clock())
+        Self::open_as(root, &crate::migrate::unknown_identity())
+    }
+
+    pub fn open_as(root: &Path, identity: &Identity) -> Result<Self, StoreError> {
+        Self::open_with(root, identity, crate::session::wall_clock())
     }
 
     pub fn open_with_clock(root: &Path, clock: Clock) -> Result<Self, StoreError> {
+        Self::open_with(root, &crate::migrate::unknown_identity(), clock)
+    }
+
+    pub fn open_with(root: &Path, identity: &Identity, clock: Clock) -> Result<Self, StoreError> {
         let threads_dir = root.join("threads");
         let shapes_dir = root.join("shapes");
         for dir in [&threads_dir, &shapes_dir] {
             std::fs::create_dir_all(dir)
                 .map_err(|e| StoreError(format!("creating {}: {e}", dir.display())))?;
         }
-        check_format_marker(root)?;
+        check_format_marker(root, identity)?;
         let layout = Layout::new(root);
         layout.create_dirs()?;
         Ok(Self {
@@ -130,6 +141,10 @@ impl FileStore {
             layout,
             clock,
         })
+    }
+
+    pub fn reap_now(&self) -> Result<Vec<dive_core::store::Reaped>, StoreError> {
+        self.layout.reap_expired(usize::MAX, self.now())
     }
 
     fn now(&self) -> i64 {
@@ -196,7 +211,7 @@ pub fn marker_format(root: &Path) -> Result<Option<u32>, StoreError> {
         })
 }
 
-fn check_format_marker(root: &Path) -> Result<(), StoreError> {
+fn check_format_marker(root: &Path, identity: &Identity) -> Result<(), StoreError> {
     match marker_format(root)? {
         Some(found) => match dive_config::window_problem(
             "store",
@@ -206,12 +221,14 @@ fn check_format_marker(root: &Path) -> Result<(), StoreError> {
             STORE_FORMAT,
         ) {
             Some(problem) => Err(StoreError(problem)),
-            None if found < STORE_FORMAT => migrate(root),
+            None if found < STORE_FORMAT => migrate(root, identity),
             None => Ok(()),
         },
         None => match link_new(root, format!("{}\n", unmarked_format(root)?).as_bytes()) {
-            Ok(()) => check_format_marker(root),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => check_format_marker(root),
+            Ok(()) => check_format_marker(root, identity),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                check_format_marker(root, identity)
+            }
             Err(e) => Err(StoreError(format!(
                 "writing {}: {e}",
                 root.join(FORMAT_MARKER).display()
@@ -231,12 +248,17 @@ fn unmarked_format(root: &Path) -> Result<u32, StoreError> {
     })
 }
 
-fn migrate(root: &Path) -> Result<(), StoreError> {
+fn migrate(root: &Path, identity: &Identity) -> Result<(), StoreError> {
     let marker = root.join(FORMAT_MARKER);
-    let lock = File::open(&marker)
-        .map_err(|e| StoreError(format!("opening {}: {e}", marker.display())))?;
+    let lock_path = root.join(MIGRATE_LOCK);
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|e| StoreError(format!("opening {}: {e}", lock_path.display())))?;
     lock.lock_exclusive()
-        .map_err(|e| StoreError(format!("locking {}: {e}", marker.display())))?;
+        .map_err(|e| StoreError(format!("locking {}: {e}", lock_path.display())))?;
     let Some(mut found) = marker_format(root)? else {
         return Err(StoreError(format!("{} disappeared", marker.display())));
     };
@@ -245,6 +267,7 @@ fn migrate(root: &Path) -> Result<(), StoreError> {
             1 => migrate_threads_v1(&root.join("threads"))?,
             2 => {}
             3 => move_files_v3(root)?,
+            4 => crate::migrate::sessions_v4(root, identity)?,
             other => {
                 return Err(StoreError(format!(
                     "no migration from store version {other}"

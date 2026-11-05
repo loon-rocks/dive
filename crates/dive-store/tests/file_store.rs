@@ -206,10 +206,16 @@ fn data_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     while let Some(dir) = pending.pop() {
         for entry in std::fs::read_dir(&dir).unwrap().filter_map(Result::ok) {
             let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            if relative.starts_with("sessions") || relative.starts_with("runs") {
+                continue;
+            }
             if path.is_dir() {
                 pending.push(path);
-            } else if path.file_name().unwrap() != ".lock" {
-                files.push(path.strip_prefix(root).unwrap().to_path_buf());
+            } else if ![".lock", ".migrate.lock"]
+                .contains(&path.file_name().unwrap().to_str().unwrap())
+            {
+                files.push(relative);
             }
         }
     }
@@ -371,7 +377,7 @@ fn a_version_3_data_directory_moves_its_files_into_the_frozen_version_4_layout()
 }
 
 #[tokio::test]
-async fn a_frozen_version_4_data_directory_opens_as_is() {
+async fn a_frozen_version_4_data_directory_keeps_its_threads_as_they_were() {
     let dir = copy_fixture("v4");
     let store = FileStore::open(dir.path()).unwrap();
     let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
@@ -407,9 +413,12 @@ async fn a_frozen_version_4_data_directory_opens_as_is() {
     assert_eq!(
         data_files(dir.path()),
         data_files(&expected),
-        "opening a current store writes nothing new"
+        "migrating writes nothing outside sessions and runs"
     );
     for file in data_files(&expected) {
+        if file == std::path::Path::new("FORMAT") {
+            continue;
+        }
         assert_eq!(
             std::fs::read(dir.path().join(&file)).unwrap(),
             std::fs::read(expected.join(&file)).unwrap(),

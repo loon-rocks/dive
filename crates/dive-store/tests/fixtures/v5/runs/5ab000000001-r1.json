@@ -1,0 +1,15 @@
+{
+  "version": 5,
+  "id": "5ab000000001-r1",
+  "session": "5ab000000001",
+  "kind": "chat",
+  "status": "completed",
+  "first_seq": 1,
+  "last_seq": 11,
+  "tenant": "local",
+  "owner": "ada",
+  "deployment": "cli",
+  "environment": "local",
+  "started_at": 1767226200000,
+  "ended_at": 1767226290000
+}

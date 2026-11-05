@@ -6,6 +6,7 @@ mod blobs;
 mod file;
 mod layout;
 mod memory;
+mod migrate;
 mod recording;
 mod session;
 

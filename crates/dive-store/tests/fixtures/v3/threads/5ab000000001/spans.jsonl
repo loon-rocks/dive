@@ -1,0 +1,2 @@
+{"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","span_id":"aa00000000000001","name":"plan_author","kind":"turn","start_time_unix_nano":1767226200000000000,"end_time_unix_nano":1767226290000000000}
+{"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","span_id":"53995c3f42cd8ad8","parent_span_id":"aa00000000000001","name":"agent__plan_refiner","kind":"tool","start_time_unix_nano":1767226220000000000,"end_time_unix_nano":1767226280000000000}

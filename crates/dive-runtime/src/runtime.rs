@@ -282,7 +282,7 @@ impl Runtime {
 
     /// Open the configured runtime-state store.
     pub fn store(&self) -> Result<Arc<dyn Store>> {
-        open_store(&self.config, &self.options)
+        open_store(&self.config, &self.options, &self.identity())
     }
 
     pub fn options(&self) -> &RuntimeOptions {
@@ -755,14 +755,22 @@ fn user_context_text(user: &dive_config::UserConfig) -> String {
 pub fn open_store(
     config: &dive_config::Config,
     options: &RuntimeOptions,
+    identity: &dive_core::run::Identity,
 ) -> Result<Arc<dyn Store>> {
     match storage_backend(config, options)? {
         dive_config::StorageBackend::Memory => Ok(Arc::new(MemoryStore::new())),
         dive_config::StorageBackend::File => {
             let root = dive_config::expand_tilde(&config.settings.data_dir);
-            Ok(Arc::new(
-                FileStore::open(&root).map_err(anyhow::Error::msg)?,
-            ))
+            let store = FileStore::open_as(&root, identity).map_err(anyhow::Error::msg)?;
+            match store.reap_now() {
+                Ok(reaped) => {
+                    for done in reaped {
+                        tracing::info!(run = %done.run, session = %done.session, status = done.status.as_str(), "reaped a run whose process stopped");
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "couldn't reap expired runs"),
+            }
+            Ok(Arc::new(store))
         }
     }
 }

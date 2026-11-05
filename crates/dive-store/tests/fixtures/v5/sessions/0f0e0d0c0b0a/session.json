@@ -1,0 +1,16 @@
+{
+  "version": 5,
+  "id": "0f0e0d0c0b0a",
+  "kind": "chat",
+  "title": "empty",
+  "tenant": "local",
+  "owner": "ada",
+  "deployment": "cli",
+  "environment": "local",
+  "agent": "chat",
+  "active_agent": "chat",
+  "lease_generation": 0,
+  "message_count": 0,
+  "created_at": 1767225700000,
+  "updated_at": 1767225700000
+}

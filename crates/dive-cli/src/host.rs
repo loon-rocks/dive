@@ -31,7 +31,13 @@ pub fn runtime() -> Result<Runtime> {
 }
 
 pub fn open_store(config: &dive_config::Config) -> Result<Arc<dyn dive_core::Store>> {
-    runtime::open_store(config, &options())
+    let identity = dive_runtime::identity::local(
+        &config.identity,
+        runtime::Host::Cli.as_str(),
+        std::env::var("USER").ok(),
+        dive_runtime::identity::hostname,
+    );
+    runtime::open_store(config, &options(), &identity)
 }
 
 pub fn open_files(config: &dive_config::Config) -> Result<Arc<dyn dive_core::files::BlobStore>> {
