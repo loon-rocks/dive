@@ -233,7 +233,7 @@ pub fn network(entries: &[NewEntry], opened: &[(ArtifactKind, String)], items: I
         match &entry.body {
             EntryBody::Message { message } => collect(std::slice::from_ref(message), &mut results),
             EntryBody::SubagentRun { messages, .. } => collect(messages, &mut results),
-            EntryBody::Handoff { .. } => {}
+            _ => {}
         }
     }
     let mut replay = Replay {
@@ -264,7 +264,7 @@ pub fn network(entries: &[NewEntry], opened: &[(ArtifactKind, String)], items: I
                     replay.run(entry, &results, items);
                 }
             }
-            EntryBody::Handoff { .. } => {}
+            _ => {}
         }
     }
     replay.network

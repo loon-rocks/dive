@@ -1385,6 +1385,7 @@ mod tests {
                     EntryBody::Message { .. } => "user",
                     EntryBody::Handoff { .. } => "handoff",
                     EntryBody::SubagentRun { .. } => "subagent_run",
+                    _ => "other",
                 };
                 (
                     kind.to_string(),

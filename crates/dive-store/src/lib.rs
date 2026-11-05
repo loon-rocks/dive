@@ -4,10 +4,13 @@
 
 mod blobs;
 mod file;
+mod layout;
 mod memory;
 mod recording;
+mod session;
 
 pub use blobs::{cache_dir, files_dir, ObjectFiles, S3Settings, FILES_DIR};
 pub use file::{marker_format, FileStore, STORE_FORMAT, STORE_FORMAT_OLDEST};
 pub use memory::MemoryStore;
 pub use recording::RecordingRegistry;
+pub use session::{wall_clock, Clock};

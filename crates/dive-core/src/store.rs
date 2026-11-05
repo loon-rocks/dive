@@ -132,6 +132,8 @@ pub struct Stamp {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EntryBody {
+    RunStarted(RunStarted),
+    RunEnded(RunEnded),
     Message {
         message: ChatMessage,
     },
@@ -151,12 +153,593 @@ pub enum EntryBody {
         #[serde(rename = "final")]
         final_: bool,
     },
+    AgentStarted {
+        agent: String,
+        caller: String,
+        input: Value,
+    },
+    AgentFinished {
+        agent: String,
+        output: Value,
+        #[serde(rename = "final")]
+        final_: bool,
+    },
+    PlanStarted {
+        plan: String,
+        #[serde(default)]
+        input: Value,
+    },
+    PlanFinished {
+        plan: String,
+        #[serde(default)]
+        output: Value,
+        #[serde(default, skip_serializing_if = "is_false")]
+        is_error: bool,
+    },
+    StepStarted {
+        step: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool: Option<String>,
+        #[serde(default)]
+        input: Value,
+    },
+    StepFinished {
+        step: String,
+        #[serde(default)]
+        output: Value,
+        #[serde(default, skip_serializing_if = "is_false")]
+        is_error: bool,
+    },
+    ItemStarted {
+        index: u64,
+        #[serde(default)]
+        item: Value,
+    },
+    ItemFinished {
+        index: u64,
+        #[serde(default)]
+        output: Value,
+        #[serde(default, skip_serializing_if = "is_false")]
+        is_error: bool,
+    },
+    ToolCalled {
+        tool: String,
+        #[serde(default)]
+        input: Value,
+        #[serde(default)]
+        output: Value,
+        #[serde(default, skip_serializing_if = "is_false")]
+        is_error: bool,
+    },
+    Ask {
+        question: Value,
+    },
+    Answer {
+        answer: Value,
+    },
+    Compaction {
+        summary: String,
+    },
+    RunResumed {
+        generation: u64,
+    },
+    CancelRequested {
+        by: String,
+    },
+}
+
+impl EntryBody {
+    pub fn is_conversation(&self) -> bool {
+        matches!(
+            self,
+            Self::Message { .. } | Self::Handoff { .. } | Self::Compaction { .. }
+        )
+    }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+pub const RUN_AUTHOR: &str = "run";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunStarted {
+    #[serde(default)]
+    pub input: Value,
+    pub identity: crate::run::Identity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<Value>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub synthetic: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunEnded {
+    pub status: RunStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Value>,
+}
+
+impl RunEnded {
+    pub fn new(status: RunStatus) -> Self {
+        Self {
+            status,
+            outcome: None,
+            error: None,
+            usage: None,
+        }
+    }
+
+    pub fn completed(outcome: Option<Value>) -> Self {
+        Self {
+            outcome,
+            ..Self::new(RunStatus::Completed)
+        }
+    }
+
+    pub fn failed(error: &str) -> Self {
+        Self {
+            error: Some(error.to_string()),
+            ..Self::new(RunStatus::Failed)
+        }
+    }
+
+    pub fn with_usage(self, usage: Option<Value>) -> Self {
+        Self { usage, ..self }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionKind {
+    #[default]
+    Chat,
+    Plan,
+}
+
+impl SessionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Chat => "chat",
+            Self::Plan => "plan",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "chat" => Some(Self::Chat),
+            "plan" => Some(Self::Plan),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+    Interrupted,
+}
+
+impl RunStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::Interrupted => "interrupted",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entry {
+    pub seq: u64,
+    pub run_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span_id: Option<String>,
+    pub at: i64,
+    pub author: String,
+    #[serde(flatten)]
+    pub body: EntryBody,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<EntryUsage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionMeta {
+    pub id: String,
+    pub kind: SessionKind,
+    pub title: String,
+    pub tenant: String,
+    pub owner: String,
+    pub deployment: String,
+    pub environment: String,
+    pub agent: String,
+    pub active_agent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_session: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_run: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_run: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_holder: Option<String>,
+    #[serde(default)]
+    pub lease_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_expires_at: Option<i64>,
+    #[serde(default)]
+    pub message_count: u64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl SessionMeta {
+    pub fn in_project(&self, project: Option<&str>) -> bool {
+        self.project.as_deref() == project
+    }
+
+    pub fn fences(&self, lease: &Lease) -> bool {
+        self.active_run.as_deref() == Some(lease.run.as_str())
+            && self.lease_generation == lease.generation
+            && self.lease_holder.as_deref() == Some(lease.holder.as_str())
+    }
+
+    pub fn held(&self, now: i64) -> bool {
+        self.lease_holder.is_some() && self.lease_expires_at.is_some_and(|at| at > now)
+    }
+
+    pub fn lease_expired(&self, now: i64) -> bool {
+        self.active_run.is_some()
+            && self.lease_holder.is_some()
+            && self.lease_expires_at.is_none_or(|at| at <= now)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunMeta {
+    pub id: String,
+    pub session: String,
+    pub kind: SessionKind,
+    pub status: RunStatus,
+    pub first_seq: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seq: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cancel_requested: bool,
+    pub tenant: String,
+    pub owner: String,
+    pub deployment: String,
+    pub environment: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_expires_at: Option<i64>,
+    pub started_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewSession {
+    pub kind: SessionKind,
+    pub title: String,
+    pub identity: crate::run::Identity,
+    pub agent: String,
+    pub plan: Option<String>,
+    pub project: Option<String>,
+    pub origin_session: Option<String>,
+    pub origin_run: Option<String>,
+}
+
+impl NewSession {
+    pub fn chat(title: &str, agent: &str, identity: &crate::run::Identity) -> Self {
+        Self {
+            kind: SessionKind::Chat,
+            title: title.to_string(),
+            identity: identity.clone(),
+            agent: agent.to_string(),
+            plan: None,
+            project: None,
+            origin_session: None,
+            origin_run: None,
+        }
+    }
+
+    pub fn plan(title: &str, plan: &str, identity: &crate::run::Identity) -> Self {
+        Self {
+            kind: SessionKind::Plan,
+            plan: Some(plan.to_string()),
+            ..Self::chat(title, "", identity)
+        }
+    }
+
+    pub fn in_project(self, project: Option<&str>) -> Self {
+        Self {
+            project: project.map(str::to_string),
+            ..self
+        }
+    }
+
+    pub fn meta(self, id: String, now: i64) -> SessionMeta {
+        SessionMeta {
+            id,
+            kind: self.kind,
+            title: self.title,
+            tenant: self.identity.tenant,
+            owner: self.identity.user,
+            deployment: self.identity.deployment,
+            environment: self.identity.environment,
+            active_agent: self.agent.clone(),
+            agent: self.agent,
+            plan: self.plan,
+            attachments: Vec::new(),
+            project: self.project,
+            origin_session: self.origin_session,
+            origin_run: self.origin_run,
+            active_run: None,
+            lease_holder: None,
+            lease_generation: 0,
+            lease_expires_at: None,
+            message_count: 0,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StartRun {
+    pub run_id: String,
+    pub session: String,
+    pub kind: SessionKind,
+    pub holder: String,
+    pub token_expires_at: Option<i64>,
+    pub started: RunStarted,
+}
+
+impl StartRun {
+    pub fn run_meta(&self, first_seq: u64, now: i64) -> RunMeta {
+        let identity = &self.started.identity;
+        RunMeta {
+            id: self.run_id.clone(),
+            session: self.session.clone(),
+            kind: self.kind,
+            status: RunStatus::Running,
+            first_seq,
+            last_seq: None,
+            trace_id: self.started.trace_id.clone(),
+            cancel_requested: false,
+            tenant: identity.tenant.clone(),
+            owner: identity.user.clone(),
+            deployment: identity.deployment.clone(),
+            environment: identity.environment.clone(),
+            token_expires_at: self.token_expires_at,
+            started_at: now,
+            ended_at: None,
+        }
+    }
+
+    pub fn first_entry(&self, seq: u64, now: i64) -> Entry {
+        NewEntry::new(RUN_AUTHOR, EntryBody::RunStarted(self.started.clone())).into_entry(
+            seq,
+            &self.run_id,
+            now,
+        )
+    }
+
+    pub fn lease(&self, generation: u64, first_seq: u64) -> Lease {
+        Lease {
+            session: self.session.clone(),
+            run: self.run_id.clone(),
+            generation,
+            holder: self.holder.clone(),
+            next_seq: first_seq + 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lease {
+    pub session: String,
+    pub run: String,
+    pub generation: u64,
+    pub holder: String,
+    pub next_seq: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Renewal {
+    pub cancel_requested: bool,
+    pub expires_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CancelOutcome {
+    Signalled,
+    Ended,
+    NotRunning,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Reaped {
+    pub run: String,
+    pub session: String,
+    pub kind: SessionKind,
+    pub status: RunStatus,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionFilter {
+    pub tenant: Option<String>,
+    pub owner: Option<String>,
+    pub kind: Option<SessionKind>,
+    pub deployment: Option<String>,
+    pub environment: Option<String>,
+    pub project: Option<Option<String>>,
+}
+
+impl SessionFilter {
+    pub fn matches(&self, meta: &SessionMeta) -> bool {
+        let same =
+            |want: &Option<String>, have: &str| want.as_deref().is_none_or(|want| want == have);
+        same(&self.tenant, &meta.tenant)
+            && same(&self.owner, &meta.owner)
+            && same(&self.deployment, &meta.deployment)
+            && same(&self.environment, &meta.environment)
+            && self.kind.is_none_or(|kind| kind == meta.kind)
+            && self
+                .project
+                .as_ref()
+                .is_none_or(|project| meta.in_project(project.as_deref()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Page {
+    pub offset: usize,
+    pub limit: usize,
+}
+
+impl Page {
+    pub const ALL: Page = Page {
+        offset: 0,
+        limit: usize::MAX,
+    };
+
+    pub fn first(limit: usize) -> Self {
+        Self { offset: 0, limit }
+    }
+
+    pub fn of(&self, mut sessions: Vec<SessionMeta>) -> SessionPage {
+        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then(a.id.cmp(&b.id)));
+        let total = sessions.len();
+        let sessions: Vec<SessionMeta> = sessions
+            .into_iter()
+            .skip(self.offset)
+            .take(self.limit)
+            .collect();
+        let more = self.offset.saturating_add(sessions.len()) < total;
+        SessionPage { sessions, more }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionPage {
+    pub sessions: Vec<SessionMeta>,
+    pub more: bool,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StartError {
+    #[error("session is busy: run {active_run} is in progress")]
+    Busy { active_run: String },
+    #[error("run {run} already exists in session {session}")]
+    Duplicate { run: String, session: String },
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FenceError {
+    #[error("the run's lease was lost")]
+    LeaseLost,
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
+pub const LEASE_RENEW_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
+
+pub const LEASE_EXPIRES_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
+
+pub const LEASE_SELF_STOP_AFTER: std::time::Duration = std::time::Duration::from_secs(25);
+
+pub const REAPED_ERROR: &str = "the process running this turn stopped renewing its lease";
+
+pub fn lease_expiry(now: i64) -> i64 {
+    now.saturating_add(LEASE_EXPIRES_AFTER.as_millis() as i64)
+}
+
+pub fn check_batch(lease: &Lease, last_seq: u64, entries: &[Entry]) -> Result<(), StoreError> {
+    let mut after = last_seq;
+    for entry in entries {
+        if entry.run_id != lease.run {
+            return Err(StoreError(format!(
+                "entry {} belongs to run {}, not {}",
+                entry.seq, entry.run_id, lease.run
+            )));
+        }
+        if entry.seq <= after {
+            return Err(StoreError(format!(
+                "duplicate seq {} in session {} (last is {after})",
+                entry.seq, lease.session
+            )));
+        }
+        after = entry.seq;
+    }
+    Ok(())
+}
+
+pub fn reaped_ending(kind: SessionKind) -> RunEnded {
+    match kind {
+        SessionKind::Chat => RunEnded::failed(REAPED_ERROR),
+        SessionKind::Plan => RunEnded {
+            error: Some(REAPED_ERROR.to_string()),
+            ..RunEnded::new(RunStatus::Interrupted)
+        },
+    }
+}
+
+pub fn ended_entry(run: &str, seq: u64, now: i64, ended: RunEnded) -> Entry {
+    NewEntry::new(RUN_AUTHOR, EntryBody::RunEnded(ended)).into_entry(seq, run, now)
+}
+
+pub fn cancel_entry(run: &str, seq: u64, now: i64, by: &str) -> Entry {
+    NewEntry::new(
+        RUN_AUTHOR,
+        EntryBody::CancelRequested { by: by.to_string() },
+    )
+    .into_entry(seq, run, now)
+}
+
+pub fn messages_in<'a>(entries: impl IntoIterator<Item = &'a Entry>) -> u64 {
+    entries
+        .into_iter()
+        .filter(|entry| entry.path.is_empty() && matches!(entry.body, EntryBody::Message { .. }))
+        .count() as u64
 }
 
 #[derive(Debug, Clone)]
 pub struct NewEntry {
     pub author: String,
     pub body: EntryBody,
+    pub path: String,
+    pub parent: Option<u64>,
     pub ms: Option<u64>,
     pub usage: Option<EntryUsage>,
     pub span: Option<String>,
@@ -167,9 +750,34 @@ impl NewEntry {
         Self {
             author: author.to_string(),
             body,
+            path: String::new(),
+            parent: None,
             ms: None,
             usage: None,
             span: None,
+        }
+    }
+
+    pub fn at_path(self, path: &str, parent: Option<u64>) -> Self {
+        Self {
+            path: path.to_string(),
+            parent,
+            ..self
+        }
+    }
+
+    pub fn into_entry(self, seq: u64, run_id: &str, at: i64) -> Entry {
+        Entry {
+            seq,
+            run_id: run_id.to_string(),
+            path: self.path,
+            parent: self.parent,
+            span_id: self.span,
+            at,
+            author: self.author,
+            body: self.body,
+            ms: self.ms,
+            usage: self.usage,
         }
     }
 
@@ -208,9 +816,25 @@ impl From<ThreadEntry> for NewEntry {
         Self {
             author: entry.author,
             body: entry.body,
+            path: String::new(),
+            parent: None,
             ms: entry.ms,
             usage: entry.usage,
             span: entry.span,
+        }
+    }
+}
+
+impl From<Entry> for NewEntry {
+    fn from(entry: Entry) -> Self {
+        Self {
+            author: entry.author,
+            body: entry.body,
+            path: entry.path,
+            parent: entry.parent,
+            ms: entry.ms,
+            usage: entry.usage,
+            span: entry.span_id,
         }
     }
 }
@@ -286,6 +910,37 @@ pub trait Store: Send + Sync {
         example: &Value,
     ) -> Result<(), StoreError>;
     async fn tool_shapes(&self) -> Result<Vec<ToolShape>, StoreError>;
+
+    async fn create_session(&self, new: NewSession) -> Result<SessionMeta, StoreError>;
+    async fn get_session(&self, id: &str) -> Result<Option<SessionMeta>, StoreError>;
+    async fn list_sessions(
+        &self,
+        filter: &SessionFilter,
+        page: Page,
+    ) -> Result<SessionPage, StoreError>;
+    async fn delete_session(&self, id: &str) -> Result<bool, StoreError>;
+    async fn set_session_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError>;
+    async fn set_session_attachments(
+        &self,
+        id: &str,
+        attachments: &[Attachment],
+    ) -> Result<(), StoreError>;
+
+    async fn start_run(&self, start: StartRun) -> Result<Lease, StartError>;
+    async fn append(&self, lease: &Lease, entries: &[Entry]) -> Result<(), FenceError>;
+    async fn renew(&self, lease: &Lease) -> Result<Renewal, FenceError>;
+    async fn end_run(&self, lease: &Lease, ended: RunEnded) -> Result<(), FenceError>;
+    async fn request_cancel(&self, run: &str, by: &str) -> Result<CancelOutcome, StoreError>;
+    async fn reap_expired(&self, limit: usize) -> Result<Vec<Reaped>, StoreError>;
+
+    async fn get_run(&self, id: &str) -> Result<Option<RunMeta>, StoreError>;
+    async fn session_entries(
+        &self,
+        session: &str,
+        after: Option<u64>,
+    ) -> Result<Vec<Entry>, StoreError>;
+    async fn append_session_spans(&self, session: &str, spans: &[Span]) -> Result<(), StoreError>;
+    async fn session_spans(&self, session: &str) -> Result<Vec<Span>, StoreError>;
 }
 
 #[cfg(test)]

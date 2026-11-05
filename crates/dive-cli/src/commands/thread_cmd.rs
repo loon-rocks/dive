@@ -137,6 +137,7 @@ fn render_entry(entry: &ThreadEntry) -> String {
                 ", stopped before answering"
             }
         ),
+        _ => String::new(),
     }
 }
 

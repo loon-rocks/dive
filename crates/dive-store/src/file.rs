@@ -19,9 +19,12 @@
 //! is advisory and may lose increments under contention. Advisory locks
 //! assume a local filesystem (flock over NFS is unreliable).
 
+use crate::layout::Layout;
+use crate::session::Clock;
 use dive_core::store::{
-    message_entries, Attachment, EntryBody, NewEntry, Span, Store, StoreError, ThreadEntry,
-    ThreadMeta, ToolShape,
+    message_entries, Attachment, CancelOutcome, Entry, EntryBody, FenceError, Lease, NewEntry,
+    NewSession, Page, Reaped, Renewal, RunEnded, RunMeta, SessionFilter, SessionMeta, SessionPage,
+    Span, StartError, StartRun, Store, StoreError, ThreadEntry, ThreadMeta, ToolShape,
 };
 use dive_llm::types::ChatMessage;
 use fs4::fs_std::FileExt;
@@ -51,6 +54,8 @@ const LEGACY_AGENT: &str = "chat";
 pub struct FileStore {
     threads_dir: PathBuf,
     shapes_dir: PathBuf,
+    layout: Layout,
+    clock: Clock,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -106,6 +111,10 @@ struct ShapeFile {
 impl FileStore {
     /// Open (creating if needed) a file store rooted at the data directory.
     pub fn open(root: &Path) -> Result<Self, StoreError> {
+        Self::open_with_clock(root, crate::session::wall_clock())
+    }
+
+    pub fn open_with_clock(root: &Path, clock: Clock) -> Result<Self, StoreError> {
         let threads_dir = root.join("threads");
         let shapes_dir = root.join("shapes");
         for dir in [&threads_dir, &shapes_dir] {
@@ -113,10 +122,40 @@ impl FileStore {
                 .map_err(|e| StoreError(format!("creating {}: {e}", dir.display())))?;
         }
         check_format_marker(root)?;
+        let layout = Layout::new(root);
+        layout.create_dirs()?;
         Ok(Self {
             threads_dir,
             shapes_dir,
+            layout,
+            clock,
         })
+    }
+
+    fn now(&self) -> i64 {
+        (self.clock)()
+    }
+
+    async fn on_layout<T, F>(&self, work: F) -> Result<T, StoreError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Layout, i64) -> Result<T, StoreError> + Send + 'static,
+    {
+        let layout = self.layout.clone();
+        let now = self.now();
+        self.blocking(move || work(&layout, now)).await
+    }
+
+    async fn fenced<T, F>(&self, work: F) -> Result<T, FenceError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Layout, i64) -> Result<T, FenceError> + Send + 'static,
+    {
+        let layout = self.layout.clone();
+        let now = self.now();
+        tokio::task::spawn_blocking(move || work(&layout, now))
+            .await
+            .map_err(|e| FenceError::Store(StoreError(format!("store task failed: {e}"))))?
     }
 
     fn thread_dir(&self, id: &str) -> PathBuf {
@@ -687,6 +726,131 @@ impl Store for FileStore {
         })
         .await
     }
+
+    async fn create_session(&self, new: NewSession) -> Result<SessionMeta, StoreError> {
+        self.on_layout(move |layout, now| layout.create_session(new, now))
+            .await
+    }
+
+    async fn get_session(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
+        let dir = self.layout.session_dir(id);
+        self.blocking(move || crate::layout::read_session(&dir))
+            .await
+    }
+
+    async fn list_sessions(
+        &self,
+        filter: &SessionFilter,
+        page: Page,
+    ) -> Result<SessionPage, StoreError> {
+        let filter = filter.clone();
+        self.on_layout(move |layout, _| {
+            let sessions = layout
+                .scan()?
+                .into_iter()
+                .filter(|meta| filter.matches(meta))
+                .collect();
+            Ok(page.of(sessions))
+        })
+        .await
+    }
+
+    async fn delete_session(&self, id: &str) -> Result<bool, StoreError> {
+        let id = id.to_string();
+        self.on_layout(move |layout, _| layout.delete_session(&id))
+            .await
+    }
+
+    async fn set_session_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError> {
+        let lease = lease.clone();
+        let agent = agent.to_string();
+        self.fenced(move |layout, now| layout.set_agent(&lease, &agent, now))
+            .await
+    }
+
+    async fn set_session_attachments(
+        &self,
+        id: &str,
+        attachments: &[Attachment],
+    ) -> Result<(), StoreError> {
+        let id = id.to_string();
+        let attachments = attachments.to_vec();
+        self.on_layout(move |layout, now| layout.set_attachments(&id, &attachments, now))
+            .await
+    }
+
+    async fn start_run(&self, start: StartRun) -> Result<Lease, StartError> {
+        let layout = self.layout.clone();
+        let now = self.now();
+        tokio::task::spawn_blocking(move || layout.start_run(&start, now))
+            .await
+            .map_err(|e| StartError::Store(StoreError(format!("store task failed: {e}"))))?
+    }
+
+    async fn append(&self, lease: &Lease, entries: &[Entry]) -> Result<(), FenceError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let lease = lease.clone();
+        let entries = entries.to_vec();
+        self.fenced(move |layout, _| layout.append(&lease, &entries))
+            .await
+    }
+
+    async fn renew(&self, lease: &Lease) -> Result<Renewal, FenceError> {
+        let lease = lease.clone();
+        self.fenced(move |layout, now| layout.renew(&lease, now))
+            .await
+    }
+
+    async fn end_run(&self, lease: &Lease, ended: RunEnded) -> Result<(), FenceError> {
+        let lease = lease.clone();
+        self.fenced(move |layout, now| layout.end_run(&lease, ended, now))
+            .await
+    }
+
+    async fn request_cancel(&self, run: &str, by: &str) -> Result<CancelOutcome, StoreError> {
+        let run = run.to_string();
+        let by = by.to_string();
+        self.on_layout(move |layout, now| layout.request_cancel(&run, &by, now))
+            .await
+    }
+
+    async fn reap_expired(&self, limit: usize) -> Result<Vec<Reaped>, StoreError> {
+        self.on_layout(move |layout, now| layout.reap_expired(limit, now))
+            .await
+    }
+
+    async fn get_run(&self, id: &str) -> Result<Option<RunMeta>, StoreError> {
+        let id = id.to_string();
+        self.on_layout(move |layout, _| layout.read_run(&id)).await
+    }
+
+    async fn session_entries(
+        &self,
+        session: &str,
+        after: Option<u64>,
+    ) -> Result<Vec<Entry>, StoreError> {
+        let session = session.to_string();
+        self.on_layout(move |layout, _| layout.entries(&session, after))
+            .await
+    }
+
+    async fn append_session_spans(&self, session: &str, spans: &[Span]) -> Result<(), StoreError> {
+        if spans.is_empty() {
+            return Ok(());
+        }
+        let session = session.to_string();
+        let spans = spans.to_vec();
+        self.on_layout(move |layout, _| layout.append_spans(&session, &spans))
+            .await
+    }
+
+    async fn session_spans(&self, session: &str) -> Result<Vec<Span>, StoreError> {
+        let session = session.to_string();
+        self.on_layout(move |layout, _| layout.spans(&session))
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -723,7 +887,9 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok)
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| name != FORMAT_MARKER && name != "threads" && name != "shapes")
+            .filter(|name| {
+                ![FORMAT_MARKER, "threads", "shapes", "sessions", "runs"].contains(&name.as_str())
+            })
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
     }
