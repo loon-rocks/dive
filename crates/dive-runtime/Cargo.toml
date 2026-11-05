@@ -58,6 +58,7 @@ clap = ["dep:clap"]
 fixtures = ["gix/revision"]
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 opentelemetry_sdk = { version = "0.33", features = ["testing"] }
 futures.workspace = true
 gix = { version = "0.89", default-features = false, features = ["revision"] }

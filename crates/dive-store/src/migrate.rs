@@ -231,6 +231,7 @@ fn synthetic_runs(
             last_seq: Some(last_seq),
             trace_id: None,
             cancel_requested: false,
+            cancel_by: None,
             tenant: identity.tenant.clone(),
             owner: identity.user.clone(),
             deployment: identity.deployment.clone(),

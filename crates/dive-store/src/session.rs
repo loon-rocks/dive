@@ -64,6 +64,7 @@ pub fn renew(
     session.lease_expires_at = Some(expires_at);
     Ok(Renewal {
         cancel_requested: run.cancel_requested,
+        cancel_by: run.cancel_by.clone(),
         expires_at,
     })
 }
@@ -122,6 +123,7 @@ pub fn cancel(
         return Cancel::NotRunning;
     }
     run.cancel_requested = true;
+    run.cancel_by = Some(by.to_string());
     if session.held(now) {
         return Cancel::Flag;
     }

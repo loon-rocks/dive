@@ -433,6 +433,8 @@ pub struct RunMeta {
     pub trace_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub cancel_requested: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel_by: Option<String>,
     pub tenant: String,
     pub owner: String,
     pub deployment: String,
@@ -534,6 +536,7 @@ impl StartRun {
             last_seq: None,
             trace_id: self.started.trace_id.clone(),
             cancel_requested: false,
+            cancel_by: None,
             tenant: identity.tenant.clone(),
             owner: identity.user.clone(),
             deployment: identity.deployment.clone(),
@@ -572,11 +575,14 @@ pub struct Lease {
     pub next_seq: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Renewal {
     pub cancel_requested: bool,
+    pub cancel_by: Option<String>,
     pub expires_at: i64,
 }
+
+pub type EntryHook = std::sync::Arc<dyn Fn(NewEntry) -> Option<u64> + Send + Sync>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
