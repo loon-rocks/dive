@@ -109,10 +109,9 @@ pub struct Pipeline {
     pub current_date: String,
     pub max_attempts: u32,
     pub max_agent_iterations: u32,
-    /// Where this run's model calls are tallied. Shared with the
-    /// [`ModelRouter`] as its `UsageMeter`, and — because [`Pipeline::nested`]
-    /// clones — with every plan this one calls, so a composed plan's spend
-    /// rolls up into its caller for free.
+    /// The router's process-wide meter. Calls made inside a
+    /// [`Run`](crate::run::Run) scope are tallied on that run, nested plans
+    /// included; this ledger keeps only calls made outside any run.
     pub usage: Arc<crate::usage::UsageLedger>,
     pub agents: Arc<crate::agent::doc::AgentSet>,
     pub agent_depth: usize,

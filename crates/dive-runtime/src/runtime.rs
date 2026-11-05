@@ -29,8 +29,9 @@ pub struct Runtime {
     pub registry: Arc<McpManager>,
     files: Arc<dyn dive_core::files::BlobStore>,
     router: Arc<ModelRouter>,
-    /// Tally for every model call this runtime's router serves — plan steps,
-    /// agent rounds, prompt tools, and the chat loop alike.
+    /// The router's process-wide meter. Each run reports its own usage
+    /// through [`Run::usage`](dive_core::run::Run::usage); this ledger keeps
+    /// only calls made outside any run.
     pub usage: Arc<UsageLedger>,
     /// One warning per skipped plan file per command, even though several
     /// components (pipeline, toolbox, commands) each load the catalog.
