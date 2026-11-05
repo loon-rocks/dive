@@ -1,9 +1,9 @@
 <ParamField body="trace" type="object">
-  What each thread's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the thread's `spans.jsonl`.
+  What each session's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the session's `spans.jsonl`.
 </ParamField>
 
 <ParamField body="trace.content" type="boolean" default="true">
-  Keep the input and output of every tool, plan, agent and turn in the thread's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.
+  Keep the input and output of every tool, plan, agent and turn in the session's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.
 </ParamField>
 
 <ParamField body="trace.clip_bytes" type="integer">

@@ -446,7 +446,7 @@
       "properties": {
         "data_dir": {
           "default": "~/.local/share/dive",
-          "description": "Where threads and the shape cache are stored.",
+          "description": "Where sessions, runs and the shape cache are stored.",
           "type": "string"
         },
         "history_limit": {
@@ -611,7 +611,7 @@
       "type": "object"
     },
     "trace": {
-      "description": "What each thread's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the thread's `spans.jsonl`.",
+      "description": "What each session's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the session's `spans.jsonl`.",
       "properties": {
         "clip_bytes": {
           "description": "Clip each kept input and output to about this many bytes of JSON, in the trace and in exported spans. Absent keeps them whole.",
@@ -619,7 +619,7 @@
         },
         "content": {
           "default": true,
-          "description": "Keep the input and output of every tool, plan, agent and turn in the thread's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.",
+          "description": "Keep the input and output of every tool, plan, agent and turn in the session's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.",
           "type": "boolean"
         }
       },
@@ -699,7 +699,7 @@
       "variables": [
         {
           "default": "file",
-          "description": "Where Dive keeps threads and the shape cache.",
+          "description": "Where Dive keeps sessions, runs and the shape cache.",
           "name": "DIVE_STORAGE",
           "overrides": "storage.backend",
           "values": {

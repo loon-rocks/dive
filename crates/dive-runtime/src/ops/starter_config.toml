@@ -72,7 +72,7 @@ model = "claude-sonnet-5"
 # Authorization = "Basic ${LANGFUSE_AUTH}"   # base64 of pk-lf-…:sk-lf-…
 # "x-langfuse-ingestion-version" = "4"
 
-# What each thread's trace keeps of the calls a turn makes.
+# What each session's trace keeps of the calls a turn makes.
 # [trace]
 # content = true            # default; false keeps only names, timing, status and token counts
 # clip_bytes = 16384        # clip each kept input and output; absent keeps them whole

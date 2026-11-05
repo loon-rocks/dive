@@ -37,7 +37,7 @@
               "agents/guides/multi-agent-networks",
               "agents/guides/customize-built-ins",
               "agents/guides/steer-tool-choice",
-              "agents/guides/threads"
+              "agents/guides/sessions"
             ]
           },
           {
@@ -356,7 +356,11 @@
     },
     {
       "source": "/using/threads",
-      "destination": "/agents/guides/threads"
+      "destination": "/agents/guides/sessions"
+    },
+    {
+      "source": "/agents/guides/threads",
+      "destination": "/agents/guides/sessions"
     },
     {
       "source": "/using/tool-selection",

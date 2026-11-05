@@ -253,12 +253,12 @@ pub struct TelemetryConfig {
     pub missing_env: Vec<MissingEnv>,
 }
 
-/// What each thread's trace keeps of the calls it records.
+/// What each session's trace keeps of the calls it records.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct TraceConfig {
     /// Keep every call's input and output (model prompts and responses,
-    /// tool arguments and results) in the thread's trace. Default: true.
+    /// tool arguments and results) in the session's trace. Default: true.
     pub content: bool,
     /// Clip each kept input and output to about this many bytes of JSON.
     /// Absent keeps them whole; it also clips what telemetry exports.

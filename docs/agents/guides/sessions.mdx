@@ -1,0 +1,99 @@
+---
+title: "Manage sessions"
+description: "Find the conversation where chat looked up the latest Rust release, see what its researcher did, continue it, and delete it."
+keywords: ["sessions", "threads", "runs", "history", "dive session", "resume"]
+---
+
+Every conversation with `dive ask` or `dive chat` is a chat session, and every `dive plan run` is a plan session. Each turn of a chat, and each plan run, is one run of its session: it opens with the input and who ran it, and closes with how it ended.
+
+## Find the session
+
+```bash
+dive session list
+```
+
+```text
+169a26420daf  2026-10-13 13:46  chat    4 msgs  What is the latest stable version of Rust?
+7d03be41c2a9  2026-10-13 12:10  plan    0 msgs  Daily digest
+```
+
+A session belongs to the project it was started in: the current directory when it has a `.dive` folder. `dive session list` lists the sessions of the project you're in, or the global sessions outside one. Add `--all` to list every session, and `--kind chat` or `--kind plan` to keep one kind:
+
+```bash
+dive session list --all --kind chat
+```
+
+The other `dive session` commands take a session's id, so they work on any session from anywhere. `dive thread` still works as a hidden alias of `dive session` for one release.
+
+## Read it
+
+```bash
+dive session show 169a26420daf
+```
+
+The session records each message with its author, every tool call, and the subagents that ran:
+
+```text
+169a26420daf — What is the latest stable version of Rust? (chat, 4 messages, updated 2026-10-13 13:46; started with chat, active chat)
+
+user> What is the latest stable version of Rust?
+
+  → agent__researcher {"prompt":"What is the latest stable version of the Rust programming language…"}
+
+  ↳ chat ran researcher (8 messages)
+
+  ✓ {"result":"As of October 2026, the latest stable version of the Rust programming language is **Rust 1.99.0**…"}
+
+chat> The latest stable version of Rust is **1.99.0**, released October 1, 2026.
+```
+
+Each entry is written as soon as it finishes, so a turn that is interrupted keeps your message, the model's replies and the tool results it got to. A turn that fails, for example on a provider error, or is cancelled, ends with the error or the cancellation, and its entries stay in the session for you to read. The next turn doesn't see them: an agent only reads the turns that completed.
+
+## Continue it
+
+Pass the session's id with `--session`, after the message:
+
+```bash
+dive ask "When is the next one due?" \
+  --session 169a26420daf
+```
+
+```text
+The next stable release, **Rust 1.100.0**, is due **November 12, 2026**…
+```
+
+A session runs one turn at a time. While a turn is running, in another terminal or on another machine sharing the data directory, a second turn on the same session is refused as busy. When a process stops without closing its turn, the next Dive to open the data directory 30 seconds later or more marks that turn failed and frees the session.
+
+A session where the drafting architect built a network of tools, plans and agents reopens with that network, rebuilt from the session's history:
+
+```bash
+dive chat --session 4be1c0a9d2e7
+```
+
+An edit session, opened by `network_editor` on the agents, plans or tools to fix, reopens the same way, with those items, its sketch, the edits made to them, any new items and the call the edit started from.
+
+## Delete it
+
+```bash
+dive session rm 169a26420daf
+```
+
+```text
+deleted 169a26420daf
+```
+
+Deleting a session also removes its runs and the stored files, such as generated images, that no other session refers to, and the output says how many. Files in S3 storage are kept, since other machines may share the bucket.
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Talk to an agent" icon="comments" href="/agents/guides/talk-to-an-agent">
+    Start conversations with `dive ask` and `dive chat`.
+  </Card>
+  <Card title="Customize a built-in agent" icon="sliders" href="/agents/guides/customize-built-ins">
+    Give `chat` the researcher subagent used here.
+  </Card>
+  <Card title="Build a multi-agent network" icon="diagram-project" href="/agents/guides/multi-agent-networks">
+    Hand conversations between agents.
+  </Card>
+</CardGroup>

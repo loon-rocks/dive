@@ -17,7 +17,7 @@ The answer streams to stdout. Usage and a resume command follow on stderr:
 
 ```text
 3 calls · 12k in / 840 out · $0.04
-resume with `dive chat --thread 0b9c2f6e-…`
+resume with `dive chat --session 0b9c2f6e…`
 ```
 
 Piped input is added to the message:
@@ -32,20 +32,20 @@ git diff main | dive ask "Review this diff"
 dive chat release_notes
 ```
 
-The prompt shows which agent you are talking to. Switch agents mid-conversation with `/agent <name>`, list them with `/agent`, and leave with `/quit`.
+The prompt shows which agent you are talking to. Switch agents mid-conversation with `/agent <name>`, which takes effect from your next message, list them with `/agent`, and leave with `/quit`.
 
 ## Pick it up later
 
-Add `--thread` to continue the most recent conversation, or `--thread <id>` for a specific one. On `dive ask`, put it after the message:
+Add `--session` to continue the most recent conversation, or `--session <id>` for a specific one. On `dive ask`, put it after the message:
 
 <CodeGroup>
 ```bash dive chat
-dive chat --thread
+dive chat --session
 ```
 
 ```bash dive ask
 dive ask "And the release before?" \
-  --thread
+  --session
 ```
 </CodeGroup>
 
@@ -55,7 +55,7 @@ dive ask "And the release before?" \
   <Card title="Create an agent in the workbench" icon="wand-magic-sparkles" href="/agents/guides/create-in-workbench">
     Draft and save an agent to talk to.
   </Card>
-  <Card title="Manage threads" icon="list" href="/agents/guides/threads">
+  <Card title="Manage sessions" icon="list" href="/agents/guides/sessions">
     Find, inspect and delete past conversations.
   </Card>
   <Card title="Build a multi-agent network" icon="diagram-project" href="/agents/guides/multi-agent-networks">

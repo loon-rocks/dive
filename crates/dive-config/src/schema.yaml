@@ -28,7 +28,7 @@ properties:
       data_dir:
         type: string
         default: ~/.local/share/dive
-        description: Where threads and the shape cache are stored.
+        description: Where sessions, runs and the shape cache are stored.
       max_agent_iterations:
         type: integer
         default: 15
@@ -371,12 +371,12 @@ properties:
         description: Export logs as well as traces.
   trace:
     type: object
-    description: What each thread's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the thread's `spans.jsonl`.
+    description: What each session's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the session's `spans.jsonl`.
     properties:
       content:
         type: boolean
         default: true
-        description: Keep the input and output of every tool, plan, agent and turn in the thread's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.
+        description: Keep the input and output of every tool, plan, agent and turn in the session's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.
       clip_bytes:
         type: integer
         description: Clip each kept input and output to about this many bytes of JSON, in the trace and in exported spans. Absent keeps them whole.
@@ -454,7 +454,7 @@ x-environment:
       - name: DIVE_STORAGE
         overrides: storage.backend
         default: file
-        description: Where Dive keeps threads and the shape cache.
+        description: Where Dive keeps sessions, runs and the shape cache.
         values:
           file: Under `settings.data_dir`.
           memory: In memory only. Nothing is kept between runs.
