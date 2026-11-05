@@ -42,6 +42,8 @@ pub struct Runtime {
     root: Option<std::path::PathBuf>,
     host: Host,
     identity: std::sync::OnceLock<dive_core::run::Identity>,
+    workspace: Workspace,
+    workspace_root: PathBuf,
 }
 
 impl Runtime {
@@ -56,6 +58,7 @@ impl Runtime {
             std::path::absolute(workspace.root()).unwrap_or_else(|_| workspace.root().to_path_buf())
         });
         Ok(Self::with_packs(loaded.config, packs, options)?
+            .on_workspace(workspace)
             .in_project(workspace.project())
             .in_root(root)
             .signing_in_for(workspace)
@@ -76,6 +79,54 @@ impl Runtime {
         self.registry
             .use_sign_ins(system_sign_ins(crate::secrets::project_id(workspace)));
         self
+    }
+
+    pub fn on_workspace(mut self, workspace: &Workspace) -> Self {
+        self.workspace_root = absolute_root(workspace);
+        self.workspace = workspace.clone();
+        self.drafted = Arc::new(self.build_drafted());
+        self
+    }
+
+    pub fn workspace(&self) -> &Workspace {
+        &self.workspace
+    }
+
+    pub fn workspace_root(&self) -> &Path {
+        &self.workspace_root
+    }
+
+    pub fn agent_dirs(&self) -> Vec<PathBuf> {
+        self.workspace.agent_dirs()
+    }
+
+    fn rebased(&self, path: &Path) -> PathBuf {
+        let path = dive_config::expand_tilde(path);
+        let root = self.workspace.root();
+        if path.is_relative() && root != Path::new(".") {
+            root.join(path.strip_prefix(".").unwrap_or(&path))
+        } else {
+            path
+        }
+    }
+
+    fn build_drafted(&self) -> dive_core::pipeline::Drafted {
+        let tool_dirs = self.tool_dirs();
+        let agent_dirs = self.agent_dirs();
+        dive_core::pipeline::Drafted::new(tool_dirs.first().cloned(), agent_dirs.first().cloned())
+            .with_tool_dirs(tool_dirs)
+            .with_agent_dirs(agent_dirs)
+            .with_workspace(self.workspace_root.clone())
+            .with_pack_sources(
+                self.packs
+                    .tool_docs()
+                    .into_iter()
+                    .map(|(source, _)| source)
+                    .collect(),
+            )
+            .with_secrets(Arc::new(dive_core::secrets::in_project(
+                self.config.project.id.clone(),
+            )))
     }
 
     pub fn in_project(mut self, project: Option<String>) -> Self {
@@ -128,51 +179,26 @@ impl Runtime {
                 .with_files(files.clone())
                 .with_sign_ins(system_sign_ins(None)),
         );
-        let drafted = Arc::new(
-            dive_core::pipeline::Drafted::new(
-                loaded
-                    .config
-                    .tools
-                    .paths
-                    .first()
-                    .map(|p| dive_config::expand_tilde(p)),
-                dive_core::agent::doc::agent_dirs().into_iter().next(),
-            )
-            .with_tool_dirs(
-                loaded
-                    .config
-                    .tools
-                    .paths
-                    .iter()
-                    .map(|p| dive_config::expand_tilde(p))
-                    .collect(),
-            )
-            .with_pack_sources(
-                packs
-                    .tool_docs()
-                    .into_iter()
-                    .map(|(source, _)| source)
-                    .collect(),
-            )
-            .with_secrets(Arc::new(dive_core::secrets::in_project(
-                loaded.config.project.id.clone(),
-            ))),
-        );
-        Ok(Self {
+        let workspace = Workspace::current();
+        let mut runtime = Self {
             config: loaded.config,
             registry,
             files,
             router: Arc::new(router),
             usage,
             plans_warned: std::sync::atomic::AtomicBool::new(false),
-            drafted,
+            drafted: Arc::new(dive_core::pipeline::Drafted::default()),
             packs: Arc::new(packs),
             options,
             project: None,
             root: None,
             host: Host::default(),
             identity: std::sync::OnceLock::new(),
-        })
+            workspace_root: absolute_root(&workspace),
+            workspace,
+        };
+        runtime.drafted = Arc::new(runtime.build_drafted());
+        Ok(runtime)
     }
 
     pub fn hosted_by(mut self, host: Host) -> Self {
@@ -292,7 +318,7 @@ impl Runtime {
             .tools
             .paths
             .iter()
-            .map(|p| dive_config::expand_tilde(p))
+            .map(|p| self.rebased(p))
             .collect()
     }
 
@@ -377,8 +403,7 @@ impl Runtime {
 
     pub fn agent_set(&self) -> dive_core::agent::doc::AgentSet {
         let sources = crate::workbench::agents::builtin_sources();
-        let (set, errors) =
-            dive_core::agent::doc::AgentSet::load(&sources, &dive_core::agent::doc::agent_dirs());
+        let (set, errors) = dive_core::agent::doc::AgentSet::load(&sources, &self.agent_dirs());
         for error in errors {
             tracing::warn!("skipping agent file — {error}");
         }
@@ -394,11 +419,7 @@ impl Runtime {
     /// `[plans].paths` entry. None when nothing is configured, which makes
     /// "where would this go?" a caller-visible error rather than a guess.
     pub fn plans_dir(&self) -> Option<std::path::PathBuf> {
-        self.config
-            .plans
-            .paths
-            .first()
-            .map(|p| dive_config::expand_tilde(p))
+        self.config.plans.paths.first().map(|p| self.rebased(p))
     }
 
     /// The file holding the plan with this identifier, anywhere in the
@@ -414,13 +435,7 @@ impl Runtime {
         let holds_it = |path: &std::path::Path| {
             dive_core::pipeline::authoring::on_disk_identifier(path).as_deref() == Some(identifier)
         };
-        for dir in self
-            .config
-            .plans
-            .paths
-            .iter()
-            .map(|p| dive_config::expand_tilde(p))
-        {
+        for dir in self.plan_dirs() {
             for extension in ["yaml", "yml"] {
                 let candidate = dir.join(format!("{identifier}.{extension}"));
                 if holds_it(&candidate) {
@@ -453,14 +468,17 @@ impl Runtime {
     /// The plan catalog, kept to documents whose `requires_servers` are all
     /// configured. Files that fail to load stay in `skipped` and are warned
     /// about here — a broken plan never takes the command down.
-    pub fn plan_docs(&self) -> LoadedPlans {
-        let dirs: Vec<std::path::PathBuf> = self
-            .config
+    pub fn plan_dirs(&self) -> Vec<PathBuf> {
+        self.config
             .plans
             .paths
             .iter()
-            .map(|p| dive_config::expand_tilde(p))
-            .collect();
+            .map(|p| self.rebased(p))
+            .collect()
+    }
+
+    pub fn plan_docs(&self) -> LoadedPlans {
+        let dirs = self.plan_dirs();
         let mut loaded = dive_core::pipeline::doc::load_plan_docs(&dirs);
         dive_core::pipeline::doc::add_builtin_plans(
             &mut loaded,
@@ -933,6 +951,12 @@ impl Workspace {
         Some(root.to_string_lossy().into_owned())
     }
 
+    pub fn agent_dirs(&self) -> Vec<PathBuf> {
+        let project = (!self.is_global()).then(|| dive_config::legacy::project_dir(&self.root));
+        let global = global_config_dir();
+        dive_core::agent::doc::agent_dirs(project.as_deref(), Some(&global))
+    }
+
     pub fn project_dir(&self) -> PathBuf {
         if self.is_global() {
             global_config_dir()
@@ -951,6 +975,10 @@ impl Workspace {
             ]
         }
     }
+}
+
+fn absolute_root(workspace: &Workspace) -> PathBuf {
+    std::path::absolute(workspace.root()).unwrap_or_else(|_| workspace.root().to_path_buf())
 }
 
 pub fn global_config_dir() -> PathBuf {
@@ -1010,6 +1038,80 @@ mod tests {
         assert_eq!(session_date(evening), session_date(morning));
         let next_day = chrono::Utc.with_ymd_and_hms(2026, 10, 19, 0, 0, 0).unwrap();
         assert_ne!(session_date(next_day), session_date(morning));
+    }
+
+    fn project_with(name: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let dive = dir.path().join(".dive");
+        for sub in ["agents", "plans", "tools"] {
+            std::fs::create_dir_all(dive.join(sub)).unwrap();
+        }
+        std::fs::write(
+            dive.join("agents").join(format!("{name}.yaml")),
+            format!("name: {name}\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: x\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            dive.join("plans").join(format!("{name}.yaml")),
+            format!(
+                "identifier: {name}\nname: {name}\ndescription: d\nsteps:\n  - id: E0\n    tool_name: builtin__reshape\n    input: {{}}\n    reasoning: r\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dive.join("tools").join(format!("{name}.yaml")),
+            format!("name: {name}\ndescription: d\nkind: exec\ncommand: \"true\"\n"),
+        )
+        .unwrap();
+        dir
+    }
+
+    fn opened_on(dir: &Path) -> Runtime {
+        let options = RuntimeOptions {
+            storage_backend: Some("memory".to_string()),
+            ..Default::default()
+        };
+        Runtime::with_packs(
+            dive_config::Config::default(),
+            crate::packs::InstalledPacks::default(),
+            options,
+        )
+        .unwrap()
+        .on_workspace(&Workspace::new(dir))
+    }
+
+    #[test]
+    fn a_runtime_loads_agents_tools_and_plans_from_its_workspace_alone() {
+        let alpha = project_with("alpha_item");
+        let beta = project_with("beta_item");
+        let runtime = opened_on(alpha.path());
+        assert!(runtime.agent_set().get("alpha_item").is_some());
+        assert!(runtime.agent_set().get("beta_item").is_none());
+        let plans: Vec<String> = runtime
+            .plan_docs()
+            .docs
+            .into_iter()
+            .map(|doc| doc.identifier)
+            .collect();
+        assert!(plans.contains(&"alpha_item".to_string()), "{plans:?}");
+        assert!(!plans.contains(&"beta_item".to_string()));
+        let tools: Vec<String> = runtime
+            .tool_docs()
+            .unwrap()
+            .user
+            .into_iter()
+            .map(|doc| doc.name)
+            .collect();
+        assert!(tools.contains(&"alpha_item".to_string()), "{tools:?}");
+        assert!(!tools.contains(&"beta_item".to_string()));
+        assert_eq!(
+            runtime.agent_dirs()[0],
+            alpha.path().join(".dive").join("agents")
+        );
+        assert_eq!(runtime.drafted().workspace.as_deref(), Some(alpha.path()));
+        let other = opened_on(beta.path());
+        assert!(other.agent_set().get("beta_item").is_some());
+        assert!(other.agent_set().get("alpha_item").is_none());
     }
 
     #[test]

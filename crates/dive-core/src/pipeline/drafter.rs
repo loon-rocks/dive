@@ -39,6 +39,8 @@ pub struct Drafted {
     pub tools_dir: Option<PathBuf>,
     pub agents_dir: Option<PathBuf>,
     pub tool_dirs: Vec<PathBuf>,
+    pub agent_dirs: Vec<PathBuf>,
+    pub workspace: Option<PathBuf>,
     pub pack_sources: Vec<crate::packs::PackSource>,
     pub secrets: Arc<dyn SecretSource>,
 }
@@ -53,6 +55,8 @@ impl Default for Drafted {
             tools_dir: None,
             agents_dir: None,
             tool_dirs: Vec::new(),
+            agent_dirs: Vec::new(),
+            workspace: std::env::current_dir().ok(),
             pack_sources: Vec::new(),
             secrets: Arc::new(crate::secrets::system()),
         }
@@ -70,6 +74,16 @@ impl Drafted {
 
     pub fn with_tool_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
         self.tool_dirs = dirs;
+        self
+    }
+
+    pub fn with_agent_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.agent_dirs = dirs;
+        self
+    }
+
+    pub fn with_workspace(mut self, root: PathBuf) -> Self {
+        self.workspace = Some(root);
         self
     }
 
@@ -452,6 +466,9 @@ impl Pipeline {
         let mut registry = UserToolRegistry::new(vec![doc], self.router.clone())
             .with_secrets(self.drafted.secrets.clone())
             .with_scratch(scratch.path());
+        if let Some(root) = &self.drafted.workspace {
+            registry = registry.with_project_dir(root);
+        }
         if let Some(space) = &self.files {
             registry = registry.with_files(space.store.clone());
         }

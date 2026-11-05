@@ -1,12 +1,12 @@
 use crate::cli::AgentCommand;
 use crate::commands::outcome::{report, Outcome};
 use anyhow::Result;
-use dive_core::agent::doc::{agent_dirs, AgentDoc};
+use dive_core::agent::doc::AgentDoc;
 use dive_runtime::ops;
 use std::path::{Path, PathBuf};
 
 pub fn run(command: AgentCommand) -> Result<()> {
-    let dirs = agent_dirs();
+    let dirs = dive_runtime::runtime::Workspace::current().agent_dirs();
     if let AgentCommand::Migrate { path, json } = command {
         return report(migrate(&path)?, json);
     }

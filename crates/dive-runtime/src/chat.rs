@@ -233,10 +233,10 @@ impl ChatStart {
             .as_ref()
             .map(|meta| meta.attachments.clone())
             .unwrap_or_default();
-        let root = match self.root.take() {
-            Some(root) => root,
-            None => std::env::current_dir().context("failed to read the current directory")?,
-        };
+        let root = self
+            .root
+            .take()
+            .unwrap_or_else(|| runtime.workspace_root().to_path_buf());
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let network = NetworkAttachment::new(NetworkSetup {
             pipeline: pipeline.clone(),

@@ -94,7 +94,7 @@ impl Workbench {
         let registry = attachment.tools(toolbox as Arc<dyn ToolRegistry>);
         let (agent_set, errors) = dive_core::agent::doc::AgentSet::load(
             &agents::builtin_sources(),
-            &dive_core::agent::doc::agent_dirs(),
+            &runtime.agent_dirs(),
         );
         let agent_set = agent_set.with_drafted(runtime.drafted().agents());
         for error in errors {

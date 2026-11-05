@@ -701,6 +701,7 @@ pub struct UserToolRegistry {
     pack_dir: Option<PathBuf>,
     files: Option<Arc<dyn BlobStore>>,
     workspace: Option<PathBuf>,
+    project_dir: Option<PathBuf>,
     scratch: Option<PathBuf>,
 }
 
@@ -714,6 +715,7 @@ impl UserToolRegistry {
             pack_dir: None,
             files: None,
             workspace: None,
+            project_dir: None,
             scratch: None,
         }
     }
@@ -738,6 +740,11 @@ impl UserToolRegistry {
         self
     }
 
+    pub fn with_project_dir(mut self, root: &Path) -> Self {
+        self.project_dir = Some(root.to_path_buf());
+        self
+    }
+
     pub fn with_pack_dir(mut self, dir: &Path) -> Self {
         self.pack_dir = Some(std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf()));
         self
@@ -753,6 +760,7 @@ impl UserToolRegistry {
             pack_dir: None,
             files: None,
             workspace: None,
+            project_dir: None,
             scratch: None,
         }
     }
@@ -766,6 +774,7 @@ impl UserToolRegistry {
             pack_dir: None,
             files: None,
             workspace: None,
+            project_dir: None,
             scratch: None,
         }
     }
@@ -1092,9 +1101,9 @@ impl UserToolRegistry {
             cmd.current_dir(cwd);
             if self.scratch.as_deref() == Some(cwd) {
                 let project = self
-                    .workspace
+                    .project_dir
                     .clone()
-                    .or_else(|| std::env::current_dir().ok())
+                    .or_else(|| self.workspace.clone())
                     .unwrap_or_default();
                 cmd.env(PROJECT_DIR_ENV, project);
             }

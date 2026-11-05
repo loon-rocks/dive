@@ -369,7 +369,7 @@ fn existing_agent(name: &str, pipeline: &Pipeline) -> Result<Existing, String> {
     let name = network::bare_name(ArtifactKind::Agent, name);
     let (set, _) = dive_core::agent::doc::AgentSet::load(
         &crate::workbench::agents::builtin_sources(),
-        &dive_core::agent::doc::agent_dirs(),
+        &pipeline.drafted.agent_dirs,
     );
     let doc = set
         .get(&name)
