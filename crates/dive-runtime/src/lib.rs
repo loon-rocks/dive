@@ -12,6 +12,7 @@ pub mod plan_run;
 mod run_tests;
 pub mod run_trace;
 pub mod runtime;
+pub mod scoped;
 pub mod secrets;
 pub mod telemetry;
 pub mod workbench;
