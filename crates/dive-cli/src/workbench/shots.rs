@@ -498,6 +498,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         handoff_guard: None,
         files: None,
         trace: Default::default(),
+        entries: None,
     };
 
     let start_agent = spec.agent.clone().unwrap_or_else(|| {

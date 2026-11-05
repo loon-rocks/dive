@@ -40,7 +40,10 @@ pub struct Agent {
     pub standing_tools: Vec<String>,
     pub call_site: crate::usage::CallSite,
     pub files: Option<Arc<dyn crate::files::BlobStore>>,
+    pub on_message: Option<MessageHook>,
 }
+
+pub type MessageHook = Arc<dyn Fn(&ChatMessage, &Stamp) + Send + Sync>;
 
 /// Failures of the agent loop (`ask`/`chat`/workbench turns). The plan
 /// pipeline never runs the agent loop, so these sit outside its
@@ -129,19 +132,22 @@ impl Agent {
             model_span.close(failure.is_some(), failure.as_ref());
             let response = response?;
             usage.add(&response.usage);
-            stamps.push(Stamp {
+            let stamp = Stamp {
                 ms: Some(millis(called.elapsed())),
                 usage: Some(EntryUsage::new(&self.model, &response.usage)),
                 span: model_span.span_id(),
-            });
+            };
 
-            messages.push(ChatMessage::Assistant {
+            let reply = ChatMessage::Assistant {
                 content: response.content.clone(),
                 tool_calls: response.tool_calls.clone(),
                 // Carried forward so the model keeps its own reasoning
                 // across rounds instead of re-deriving it each time.
                 thinking: response.thinking.clone(),
-            });
+            };
+            self.finished(&reply, &stamp);
+            messages.push(reply);
+            stamps.push(stamp);
 
             if response.tool_calls.is_empty() {
                 let text = response.content.unwrap_or_default();
@@ -185,6 +191,9 @@ impl Agent {
                 .zip(&results)
                 .find(|(call, msg)| self.stop_tools.contains(&call.name) && !is_error_result(msg))
                 .map(|(call, _)| call.name.clone());
+            for (result, stamp) in results.iter().zip(&tool_stamps) {
+                self.finished(result, stamp);
+            }
             messages.extend(results);
             stamps.extend(tool_stamps);
             if stopped_by.is_some() {
@@ -197,6 +206,12 @@ impl Agent {
                     stamps,
                 });
             }
+        }
+    }
+
+    fn finished(&self, message: &ChatMessage, stamp: &Stamp) {
+        if let Some(hook) = &self.on_message {
+            hook(message, stamp);
         }
     }
 
@@ -483,6 +498,7 @@ mod tests {
             standing_tools: Vec::new(),
             call_site: crate::usage::CallSite::role("chat"),
             files: None,
+            on_message: None,
         };
         (agent, registry)
     }

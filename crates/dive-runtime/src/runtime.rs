@@ -688,6 +688,7 @@ impl Runtime {
             handoff_guard: None,
             files: Some(self.files()),
             trace: self.trace_content(),
+            entries: None,
         }
     }
 

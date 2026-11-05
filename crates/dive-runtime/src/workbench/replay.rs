@@ -1,6 +1,7 @@
 use super::artifact::{self, ArtifactKind, Existing};
 use super::network::{Network, TestRun};
 use dive_core::agent::conversation::starts_run;
+use dive_core::context::{fold, Folded, SubagentCall};
 use dive_core::store::EntryBody;
 use dive_core::NewEntry;
 use dive_llm::types::{ChatMessage, ToolCall};
@@ -11,7 +12,7 @@ type Results = HashMap<String, (Value, bool)>;
 
 pub type Items<'a> = &'a dyn Fn(ArtifactKind, &str) -> Option<Existing>;
 
-fn collect(messages: &[ChatMessage], results: &mut Results) {
+fn collect(messages: &[&ChatMessage], results: &mut Results) {
     for message in messages {
         if let ChatMessage::ToolResult {
             tool_call_id,
@@ -28,7 +29,7 @@ fn collect(messages: &[ChatMessage], results: &mut Results) {
 struct Replay<'a> {
     network: Network,
     composed: Option<Value>,
-    runs: Vec<(&'a NewEntry, bool)>,
+    runs: Vec<(&'a SubagentCall<'a>, bool)>,
 }
 
 fn yaml_name(yaml: &str) -> Option<String> {
@@ -53,7 +54,7 @@ fn strings(value: &Value) -> Vec<String> {
 }
 
 impl<'a> Replay<'a> {
-    fn messages(&mut self, messages: &[ChatMessage], results: &Results, items: Items) {
+    fn messages(&mut self, messages: &[&ChatMessage], results: &Results, items: Items) {
         for message in messages {
             let ChatMessage::Assistant { tool_calls, .. } = message else {
                 continue;
@@ -70,34 +71,28 @@ impl<'a> Replay<'a> {
         }
     }
 
-    fn started(&mut self, call: &ToolCall) -> Option<&'a NewEntry> {
-        let (run, done) = self.runs.iter_mut().find(|(run, done)| {
-            !*done
-                && matches!(&run.body, EntryBody::SubagentRun { agent, input, .. } if starts_run(call, agent, input))
-        })?;
+    fn started(&mut self, call: &ToolCall) -> Option<&'a SubagentCall<'a>> {
+        let (run, done) = self
+            .runs
+            .iter_mut()
+            .find(|(run, done)| !*done && starts_run(call, run.agent, run.input))?;
         *done = true;
         Some(*run)
     }
 
-    fn run(&mut self, entry: &'a NewEntry, results: &Results, items: Items) {
-        let EntryBody::SubagentRun {
-            agent,
-            input,
-            messages,
-            output,
-            final_,
-            ..
-        } = &entry.body
-        else {
-            return;
-        };
-        let node = input["node"].as_str().map(str::to_string);
+    fn run(&mut self, run: &'a SubagentCall<'a>, results: &Results, items: Items) {
+        let node = run.input["node"].as_str().map(str::to_string);
         if let Some(node) = &node {
-            self.network.builder_started(node, agent);
+            self.network.builder_started(node, run.agent);
         }
-        self.messages(messages, results, items);
+        self.messages(&run.messages, results, items);
         if let Some(node) = &node {
-            self.network.builder_finished(node, agent, output, !final_);
+            self.network.builder_finished(
+                node,
+                run.agent,
+                run.output.unwrap_or(&Value::Null),
+                !run.final_,
+            );
         }
     }
 
@@ -228,19 +223,25 @@ impl<'a> Replay<'a> {
 }
 
 pub fn network(entries: &[NewEntry], opened: &[(ArtifactKind, String)], items: Items) -> Network {
+    let folded = fold(entries);
     let mut results = Results::new();
-    for entry in entries {
-        match &entry.body {
-            EntryBody::Message { message } => collect(std::slice::from_ref(message), &mut results),
-            EntryBody::SubagentRun { messages, .. } => collect(messages, &mut results),
-            _ => {}
+    for item in &folded {
+        match item {
+            Folded::Entry(NewEntry {
+                body: EntryBody::Message { message },
+                ..
+            }) => collect(&[message], &mut results),
+            Folded::Subagent(run) => collect(&run.messages, &mut results),
+            Folded::Entry(_) => {}
         }
     }
     let mut replay = Replay {
-        runs: entries
+        runs: folded
             .iter()
-            .filter(|entry| matches!(entry.body, EntryBody::SubagentRun { .. }))
-            .map(|entry| (entry, false))
+            .filter_map(|item| match item {
+                Folded::Subagent(run) => Some((run, false)),
+                Folded::Entry(_) => None,
+            })
             .collect(),
         ..Replay::default()
     };
@@ -249,22 +250,25 @@ pub fn network(entries: &[NewEntry], opened: &[(ArtifactKind, String)], items: I
             replay.network.open(*kind, found, Vec::new());
         }
     }
-    for entry in entries {
-        match &entry.body {
-            EntryBody::Message { message } => {
-                replay.messages(std::slice::from_ref(message), &results, items);
+    for item in &folded {
+        match item {
+            Folded::Entry(NewEntry {
+                body: EntryBody::Message { message },
+                ..
+            }) => {
+                replay.messages(&[message], &results, items);
             }
-            EntryBody::SubagentRun { .. } => {
+            Folded::Subagent(run) => {
                 let pending = replay
                     .runs
                     .iter_mut()
-                    .find(|(run, done)| !*done && std::ptr::eq(*run, entry));
+                    .find(|(pending, done)| !*done && std::ptr::eq(*pending, run));
                 if let Some((_, done)) = pending {
                     *done = true;
-                    replay.run(entry, &results, items);
+                    replay.run(run, &results, items);
                 }
             }
-            _ => {}
+            Folded::Entry(_) => {}
         }
     }
     replay.network
@@ -307,6 +311,38 @@ mod tests {
         )
     }
 
+    fn subagent_run(
+        caller: &str,
+        agent: &str,
+        input: Value,
+        messages: Vec<ChatMessage>,
+        output: Value,
+    ) -> Vec<NewEntry> {
+        let path = format!("agent:{agent}");
+        let mut block = vec![NewEntry::new(
+            caller,
+            EntryBody::AgentStarted {
+                agent: agent.into(),
+                caller: caller.into(),
+                input,
+            },
+        )];
+        block.extend(
+            messages
+                .into_iter()
+                .map(|message| NewEntry::message(agent, message).at_path(&path, None)),
+        );
+        block.push(NewEntry::new(
+            caller,
+            EntryBody::AgentFinished {
+                agent: agent.into(),
+                output,
+                final_: true,
+            },
+        ));
+        block
+    }
+
     fn result(id: &str, content: Value) -> NewEntry {
         NewEntry::message(
             "network_drafter",
@@ -334,32 +370,31 @@ mod tests {
             result("1", json!({"confidence": 60, "shown": true})),
             call("2", artifact::SET_SKETCH, sketch),
             result("2", json!({"nodes": 1})),
-            NewEntry::new(
-                "network_drafter",
-                EntryBody::SubagentRun {
-                    agent: "tool_drafter".into(),
-                    caller: "network_drafter".into(),
-                    input: json!({"node": "word_count"}),
-                    messages: vec![
-                        ChatMessage::Assistant {
-                            content: None,
-                            tool_calls: vec![ToolCall {
-                                id: "3".into(),
-                                name: artifact::SET_ARTIFACT.into(),
-                                arguments: json!({"kind": "tool", "yaml": tool}),
-                            }],
-                            thinking: Vec::new(),
-                        },
-                        ChatMessage::ToolResult {
-                            tool_call_id: "3".into(),
-                            content: json!({"name": "word_count", "kind": "tool", "problems": []}),
-                            is_error: false,
-                        },
-                    ],
-                    output: json!({"name": "word_count", "status": "drafted", "summary": "counts"}),
-                    final_: true,
+        ]
+        .into_iter()
+        .chain(subagent_run(
+            "network_drafter",
+            "tool_drafter",
+            json!({"node": "word_count"}),
+            vec![
+                ChatMessage::Assistant {
+                    content: None,
+                    tool_calls: vec![ToolCall {
+                        id: "3".into(),
+                        name: artifact::SET_ARTIFACT.into(),
+                        arguments: json!({"kind": "tool", "yaml": tool}),
+                    }],
+                    thinking: Vec::new(),
                 },
-            ),
+                ChatMessage::ToolResult {
+                    tool_call_id: "3".into(),
+                    content: json!({"name": "word_count", "kind": "tool", "problems": []}),
+                    is_error: false,
+                },
+            ],
+            json!({"name": "word_count", "status": "drafted", "summary": "counts"}),
+        ))
+        .chain(vec![
             call(
                 "4",
                 artifact::TEST_NETWORK,
@@ -369,7 +404,8 @@ mod tests {
                 "4",
                 json!({"passed": true, "ran": ["user__word_count"], "answer": "2"}),
             ),
-        ];
+        ])
+        .collect::<Vec<_>>();
         let network = network(&entries, &[], &|_, _| None);
         assert_eq!(network.interview.as_ref().unwrap().confidence, 60);
         let node = network.node(ArtifactKind::Tool, "word_count").unwrap();
@@ -404,33 +440,32 @@ mod tests {
                 "4",
                 json!({"passed": true, "ran": ["user__word_count"], "answer": "2"}),
             ),
-            NewEntry::new(
-                "network_drafter",
-                EntryBody::SubagentRun {
-                    agent: "tool_drafter".into(),
-                    caller: "network_drafter".into(),
-                    input,
-                    messages: vec![
-                        ChatMessage::Assistant {
-                            content: None,
-                            tool_calls: vec![ToolCall {
-                                id: "3".into(),
-                                name: artifact::SET_ARTIFACT.into(),
-                                arguments: json!({"kind": "tool", "yaml": tool}),
-                            }],
-                            thinking: Vec::new(),
-                        },
-                        ChatMessage::ToolResult {
-                            tool_call_id: "3".into(),
-                            content: json!({"name": "word_count", "kind": "tool", "problems": []}),
-                            is_error: false,
-                        },
-                    ],
-                    output: json!({"name": "word_count", "status": "drafted", "summary": "counts"}),
-                    final_: true,
+        ]
+        .into_iter()
+        .chain(subagent_run(
+            "network_drafter",
+            "tool_drafter",
+            input,
+            vec![
+                ChatMessage::Assistant {
+                    content: None,
+                    tool_calls: vec![ToolCall {
+                        id: "3".into(),
+                        name: artifact::SET_ARTIFACT.into(),
+                        arguments: json!({"kind": "tool", "yaml": tool}),
+                    }],
+                    thinking: Vec::new(),
                 },
-            ),
-        ];
+                ChatMessage::ToolResult {
+                    tool_call_id: "3".into(),
+                    content: json!({"name": "word_count", "kind": "tool", "problems": []}),
+                    is_error: false,
+                },
+            ],
+            json!({"name": "word_count", "status": "drafted", "summary": "counts"}),
+        ))
+        .chain(vec![])
+        .collect::<Vec<_>>();
         let network = network(&entries, &[], &|_, _| None);
         let node = network.node(ArtifactKind::Tool, "word_count").unwrap();
         assert_eq!(node.yaml.as_deref(), Some(tool));
@@ -477,40 +512,39 @@ mod tests {
             }),
             _ => None,
         };
-        let entries = vec![
-            NewEntry::new(
+        let entries = vec![]
+            .into_iter()
+            .chain(subagent_run(
                 "network_editor",
-                EntryBody::SubagentRun {
-                    agent: "tool_drafter".into(),
-                    caller: "network_editor".into(),
-                    input: json!({"node": "word_count", "notes": "count words, not lines"}),
-                    messages: vec![
-                        ChatMessage::Assistant {
-                            content: None,
-                            tool_calls: vec![ToolCall {
-                                id: "1".into(),
-                                name: artifact::SET_ARTIFACT.into(),
-                                arguments: json!({"kind": "tool", "yaml": edited}),
-                            }],
-                            thinking: Vec::new(),
-                        },
-                        ChatMessage::ToolResult {
-                            tool_call_id: "1".into(),
-                            content: json!({"name": "word_count", "kind": "tool", "problems": []}),
-                            is_error: false,
-                        },
-                    ],
-                    output: json!({"name": "word_count", "status": "drafted", "summary": "counts words"}),
-                    final_: true,
-                },
-            ),
-            call(
-                "2",
-                artifact::LOAD_ARTIFACT,
-                json!({"kind": "plan", "name": "digest", "reason": "it calls word_count"}),
-            ),
-            result("2", json!({"opened": "digest", "kind": "plan"})),
-        ];
+                "tool_drafter",
+                json!({"node": "word_count", "notes": "count words, not lines"}),
+                vec![
+                    ChatMessage::Assistant {
+                        content: None,
+                        tool_calls: vec![ToolCall {
+                            id: "1".into(),
+                            name: artifact::SET_ARTIFACT.into(),
+                            arguments: json!({"kind": "tool", "yaml": edited}),
+                        }],
+                        thinking: Vec::new(),
+                    },
+                    ChatMessage::ToolResult {
+                        tool_call_id: "1".into(),
+                        content: json!({"name": "word_count", "kind": "tool", "problems": []}),
+                        is_error: false,
+                    },
+                ],
+                json!({"name": "word_count", "status": "drafted", "summary": "counts words"}),
+            ))
+            .chain(vec![
+                call(
+                    "2",
+                    artifact::LOAD_ARTIFACT,
+                    json!({"kind": "plan", "name": "digest", "reason": "it calls word_count"}),
+                ),
+                result("2", json!({"opened": "digest", "kind": "plan"})),
+            ])
+            .collect::<Vec<_>>();
         let opened = [(ArtifactKind::Tool, "word_count".to_string())];
 
         let network = network(&entries, &opened, &items);
