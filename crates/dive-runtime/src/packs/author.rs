@@ -84,6 +84,7 @@ pub struct PackSession {
     store: Arc<dyn Store>,
     events: Arc<dyn EventSink>,
     pack: LoadedPack,
+    run: Arc<dive_core::run::Run>,
 }
 
 impl PackSession {
@@ -95,11 +96,13 @@ impl PackSession {
     ) -> Result<Self> {
         let runtime = isolated_runtime(config, options, None, pack.clone())?;
         let store = runtime.store()?;
+        let run = runtime.run(Arc::new(dive_core::NullSink));
         Ok(PackSession {
             runtime,
             store,
             events,
             pack,
+            run,
         })
     }
 
@@ -181,14 +184,16 @@ impl PackSession {
             .pipeline(&self.store, self.events.clone())
             .await
             .map_err(|error| error.to_string())?;
-        let outcome = pipeline
-            .run_explicit_in(
+        let outcome = self
+            .run
+            .clone()
+            .scope(pipeline.run_explicit_in(
                 &format!("Run {tool}"),
                 vec![step],
                 Finish::Silent,
                 Some(input),
                 Some(&self.pack.source),
-            )
+            ))
             .await
             .map_err(|error| error.to_string())?;
         Ok(outcome
@@ -213,7 +218,7 @@ impl PackSession {
     }
 
     pub fn usage(&self) -> Option<String> {
-        let usage = self.runtime.usage.take();
+        let usage = self.run.usage();
         (!usage.is_empty()).then(|| usage.summary())
     }
 

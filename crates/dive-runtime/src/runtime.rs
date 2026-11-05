@@ -30,8 +30,7 @@ pub struct Runtime {
     files: Arc<dyn dive_core::files::BlobStore>,
     router: Arc<ModelRouter>,
     /// Tally for every model call this runtime's router serves — plan steps,
-    /// agent rounds, prompt tools, and the chat loop alike. Drain it with
-    /// [`UsageLedger::take`] at the end of a run or turn.
+    /// agent rounds, prompt tools, and the chat loop alike.
     pub usage: Arc<UsageLedger>,
     /// One warning per skipped plan file per command, even though several
     /// components (pipeline, toolbox, commands) each load the catalog.
@@ -41,6 +40,8 @@ pub struct Runtime {
     options: RuntimeOptions,
     project: Option<String>,
     root: Option<std::path::PathBuf>,
+    host: Host,
+    identity: std::sync::OnceLock<dive_core::run::Identity>,
 }
 
 impl Runtime {
@@ -169,7 +170,35 @@ impl Runtime {
             options,
             project: None,
             root: None,
+            host: Host::default(),
+            identity: std::sync::OnceLock::new(),
         })
+    }
+
+    pub fn hosted_by(mut self, host: Host) -> Self {
+        self.host = host;
+        self.identity = std::sync::OnceLock::new();
+        self
+    }
+
+    pub fn host(&self) -> Host {
+        self.host
+    }
+
+    pub fn identity(&self) -> dive_core::run::Identity {
+        self.identity
+            .get_or_init(|| {
+                crate::identity::local(
+                    self.host.as_str(),
+                    std::env::var("USER").ok(),
+                    crate::identity::hostname,
+                )
+            })
+            .clone()
+    }
+
+    pub fn run(&self, events: Arc<dyn EventSink>) -> Arc<dive_core::run::Run> {
+        Arc::new(dive_core::run::Run::new(self.identity(), events))
     }
 
     /// Gracefully close MCP connections. Call before returning from a
@@ -940,6 +969,22 @@ pub fn system_sign_ins(project: Option<String>) -> dive_mcp::SignIns {
         Arc::new(dive_core::secrets::CredentialStore::system()),
         project,
     )
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Host {
+    #[default]
+    Cli,
+    Desktop,
+}
+
+impl Host {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            Self::Desktop => "desktop",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

@@ -140,11 +140,6 @@ impl RunLedger {
 pub struct UsageLedger {
     calls: Mutex<Vec<CallRecord>>,
     prices: BTreeMap<String, ModelPrice>,
-    /// Set per command by [`UsageLedger::attach_events`]. Interior mutability
-    /// because the ledger outlives any one run — it is built with the router,
-    /// while the sink is chosen per command — and `record` only ever has
-    /// `&self`.
-    events: Mutex<Option<std::sync::Arc<dyn crate::EventSink>>>,
     capture_content: bool,
 }
 
@@ -153,7 +148,6 @@ impl UsageLedger {
         Self {
             calls: Mutex::new(Vec::new()),
             prices,
-            events: Mutex::new(None),
             capture_content: false,
         }
     }
@@ -163,24 +157,16 @@ impl UsageLedger {
         self
     }
 
-    /// Stream each call to `sink` as it lands, in addition to tallying it.
-    /// Replaces any previously attached sink.
-    pub fn attach_events(&self, sink: std::sync::Arc<dyn crate::EventSink>) {
-        *self.events.lock().unwrap() = Some(sink);
-    }
-
     /// A ledger that meters tokens but reports no cost.
     pub fn unpriced() -> Self {
         Self::new(BTreeMap::new())
     }
 
-    /// Drain everything recorded so far into a report.
-    ///
-    /// Draining rather than snapshotting is what makes one long-lived router
-    /// compatible with per-run reporting: `plan run` takes once at the end,
-    /// the `chat` REPL takes once per turn.
-    pub fn take(&self) -> UsageReport {
-        let calls = std::mem::take(&mut *self.calls.lock().unwrap());
+    pub fn unscoped(&self) -> UsageReport {
+        let calls = self
+            .calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         report(&calls)
     }
 
@@ -316,12 +302,6 @@ impl UsageMeter for UsageLedger {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(record);
-        // Emitted with no lock held: a sink is arbitrary caller code, and
-        // one that touched the ledger would deadlock on `calls`.
-        let sink = self.events.lock().unwrap().clone();
-        if let Some(sink) = sink {
-            sink.model_call(&event);
-        }
     }
 
     fn captures_content(&self) -> bool {
@@ -531,7 +511,7 @@ mod tests {
     async fn the_model_call_event_carries_attribution_price_and_content() {
         let ledger = Arc::new(priced_ledger().with_content_capture(true));
         let sink = Arc::new(Captured::default());
-        ledger.attach_events(sink.clone());
+        let run = scoped_run(sink.clone());
         assert!(ledger.captures_content());
 
         let mut metered = call("sonnet", tokens(1_000_000, 0));
@@ -540,7 +520,7 @@ mod tests {
         CallSite::role("solver")
             .at("E2")
             .in_plans(&["outer".to_string()])
-            .scope(async { ledger.record(metered) })
+            .scope(run.scope(async { ledger.record(metered) }))
             .await;
 
         let events = sink.0.lock().unwrap();
@@ -560,14 +540,16 @@ mod tests {
     async fn a_repair_call_is_labelled_repair_with_the_reason_it_ran() {
         let ledger = Arc::new(priced_ledger());
         let sink = Arc::new(Captured::default());
-        ledger.attach_events(sink.clone());
-        CallSite::role("default")
-            .at("result")
-            .scope(CallSite::repairing(
-                "\"severity\" is a required property",
-                async { ledger.record(call("sonnet", tokens(10, 1))) },
-            ))
-            .await;
+        let run = scoped_run(sink.clone());
+        run.scope(
+            CallSite::role("default")
+                .at("result")
+                .scope(CallSite::repairing(
+                    "\"severity\" is a required property",
+                    async { ledger.record(call("sonnet", tokens(10, 1))) },
+                )),
+        )
+        .await;
         let events = sink.0.lock().unwrap();
         let span = events[0].span();
         assert_eq!(events[0].role, "repair");
@@ -601,7 +583,7 @@ mod tests {
             },
         ));
         // 3 (input) + 15 (output) + 3.75 (write, 1.25x) + 0.30 (read, 0.1x)
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.cost_usd, Some(22.05));
     }
 
@@ -618,7 +600,7 @@ mod tests {
         let ledger = UsageLedger::new(BTreeMap::from([("haiku".to_string(), haiku)]));
         ledger.record(call("haiku", tokens(60_000, 1_000)));
         ledger.record(call("haiku", tokens(60_000, 1_000)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         let rounded = |usd: Option<f64>| (usd.unwrap() * 100_000.0).round() / 100_000.0;
         assert_eq!(rounded(report.by_model[0].cost_usd), 0.013);
         assert_eq!(rounded(report.cost_usd), 0.013);
@@ -628,7 +610,7 @@ mod tests {
     async fn an_unpriced_model_reports_tokens_but_no_cost() {
         let ledger = UsageLedger::unpriced();
         ledger.record(call("mystery", tokens(500, 100)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.total.input_tokens, 500);
         assert_eq!(
             report.cost_usd, None,
@@ -642,17 +624,22 @@ mod tests {
         let ledger = priced_ledger();
         ledger.record(call("sonnet", tokens(1_000_000, 0)));
         ledger.record(call("mystery", tokens(9_000_000, 0)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.cost_usd, Some(3.0));
         assert_eq!(report.calls, 2);
     }
 
     #[tokio::test]
-    async fn take_drains_so_the_next_run_starts_clean() {
-        let ledger = priced_ledger();
-        ledger.record(call("sonnet", tokens(100, 10)));
-        assert_eq!(ledger.take().calls, 1);
-        assert_eq!(ledger.take().calls, 0, "a second take sees nothing");
+    async fn each_run_starts_clean_on_a_long_lived_ledger() {
+        let ledger = Arc::new(priced_ledger());
+        let first = scoped_run(Arc::new(Captured::default()));
+        first
+            .clone()
+            .scope(async { ledger.record(call("sonnet", tokens(100, 10))) })
+            .await;
+        let second = scoped_run(Arc::new(Captured::default()));
+        assert_eq!(first.usage().calls, 1);
+        assert_eq!(second.usage().calls, 0, "a later run sees nothing earlier");
     }
 
     #[tokio::test]
@@ -668,7 +655,7 @@ mod tests {
             .scope(async { ledger.record(call("haiku", tokens(1_000_000, 0))) })
             .await;
 
-        let report = ledger.take();
+        let report = ledger.unscoped();
         // Sorted by cost: sonnet's $3 outranks haiku's $1.
         assert_eq!(report.by_step[0].path, "E4f/do.1/agent");
         assert_eq!(report.by_step[0].cost_usd, Some(3.0));
@@ -680,7 +667,7 @@ mod tests {
     async fn an_unscoped_call_is_recorded_as_unknown() {
         let ledger = priced_ledger();
         ledger.record(call("sonnet", tokens(100, 10)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         // Metering must not depend on attribution — a bare pipeline still
         // reports its spend, it just cannot say which step.
         assert_eq!(report.by_step[0].path, "unknown");
@@ -700,7 +687,7 @@ mod tests {
             .scope(async { ledger.record(call("sonnet", tokens(10, 1))) })
             .await;
 
-        let report = ledger.take();
+        let report = ledger.unscoped();
         let paths: Vec<&str> = report.by_step.iter().map(|s| s.path.as_str()).collect();
         // An inner plan's E0 must not merge with the outer plan's.
         assert!(paths.contains(&"dive_review_9000/E0"));
@@ -738,7 +725,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.calls, 12);
         assert_eq!(report.by_step.len(), 6, "one group per map item");
         for step in &report.by_step {
@@ -781,7 +768,7 @@ mod tests {
         assert_eq!(sink_a.0.lock().unwrap().len(), 3);
         assert_eq!(sink_b.0.lock().unwrap().len(), 2);
         assert!(
-            ledger.take().is_empty(),
+            ledger.unscoped().is_empty(),
             "a call made inside a run never lands on the process tally"
         );
     }
@@ -811,7 +798,7 @@ mod tests {
         assert_eq!(run.usage().calls, 4);
         assert_eq!(run.usage().by_step.len(), 4);
         assert_eq!(sink.0.lock().unwrap().len(), 4);
-        assert!(ledger.take().is_empty());
+        assert!(ledger.unscoped().is_empty());
     }
 
     #[test]

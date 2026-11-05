@@ -3635,13 +3635,21 @@ async fn usage_is_attributed_to_the_step_that_spent_it() {
     )]))
     .unwrap();
 
-    pipeline
-        .run_explicit("q", plan, Finish::Solver(SolverData::default()), None)
+    let run = Arc::new(crate::run::Run::new(
+        Default::default(),
+        Arc::new(crate::NullSink),
+    ));
+    run.clone()
+        .scope(pipeline.run_explicit("q", plan, Finish::Solver(SolverData::default()), None))
         .await
         .unwrap();
 
-    let report = pipeline.usage.take();
+    let report = run.usage();
     assert_eq!(report.calls, 3, "two agent rounds plus the solver");
+    assert!(
+        pipeline.usage.unscoped().is_empty(),
+        "every model call made during a run records against that run"
+    );
 
     let by_step: std::collections::HashMap<&str, usize> = report
         .by_step
@@ -3697,13 +3705,18 @@ output:
     ]))
     .unwrap();
 
-    pipeline
-        .run_explicit("q", plan, Finish::Silent, None)
+    let run = Arc::new(crate::run::Run::new(
+        Default::default(),
+        Arc::new(crate::NullSink),
+    ));
+    run.clone()
+        .scope(pipeline.run_explicit("q", plan, Finish::Silent, None))
         .await
         .unwrap();
 
-    let report = pipeline.usage.take();
+    let report = run.usage();
     assert_eq!(report.calls, 2, "the inner plan's call is not lost");
+    assert!(pipeline.usage.unscoped().is_empty());
     let paths: Vec<&str> = report.by_step.iter().map(|s| s.path.as_str()).collect();
     // Qualified by the plan it ran in, so the inner E0 stays distinct from
     // the outer plan's own steps.
@@ -6625,4 +6638,104 @@ async fn a_test_run_writes_in_a_scratch_directory_and_says_what_it_wrote() {
         before.display().to_string()
     );
     assert!(!before.join(".dive/snapshots/a.json").exists());
+}
+
+type SeenRun = Option<(String, String, Option<String>)>;
+
+#[derive(Default)]
+struct RunProbe(Mutex<Vec<SeenRun>>);
+
+#[async_trait]
+impl ToolRegistry for RunProbe {
+    async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
+        Ok(vec![ToolDef {
+            name: "probe__see".into(),
+            description: "records the run in scope".into(),
+            input_schema: json!({"type": "object"}),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(true),
+            file_input: Default::default(),
+        }])
+    }
+
+    async fn invoke(&self, _: &str, _: Value) -> Result<ToolOutcome, ToolError> {
+        self.0
+            .lock()
+            .unwrap()
+            .push(crate::run::Run::current().map(|run| {
+                (
+                    run.id.to_string(),
+                    run.identity.user.clone(),
+                    run.token.as_ref().map(|token| token.expose().to_string()),
+                )
+            }));
+        Ok(ToolOutcome {
+            result: json!({"seen": true}),
+            is_error: false,
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_tool_at_any_depth_of_a_plan_sees_the_run_it_belongs_to() {
+    let probe = Arc::new(RunProbe::default());
+    let (mut pipeline, _) = pipeline(
+        vec![tool_use("c1", "probe__see", json!({})), text("done")],
+        probe.clone(),
+        1,
+    );
+    pipeline.plans = Arc::new(vec![plan_doc_yaml(
+        r#"
+identifier: inner
+name: Inner
+description: probes the run from a nested plan
+steps:
+  - id: E0
+    tool_name: probe__see
+    input: {}
+    reasoning: see the run
+output:
+  seen: '{{E0.seen}}'
+"#,
+    )]);
+    pipeline.agents = Arc::new(crate::agent::doc::AgentSet::layered(
+        crate::agent::doc::builtin_agents(&[
+            "name: prober\ndescription: Probes\nmodel: default\ntools: [probe__see]\nsystem_prompt: Probe.\n",
+        ]),
+        Vec::new(),
+    ));
+    pipeline.always_loaded = Arc::new(vec!["probe__see".to_string()]);
+    let plan: Plan = serde_json::from_value(json!([
+        {"id": "E0", "toolName": "plan__inner", "input": {}},
+        {"id": "E1", "toolName": "map", "input": {
+            "over": [1, 2, 3, 4],
+            "concurrency": 4,
+            "do": {"toolName": "probe__see", "input": {}},
+        }},
+        {"id": "E2", "toolName": "agent__prober", "input": {"prompt": "go"}},
+    ]))
+    .unwrap();
+    let run = Arc::new(
+        crate::run::Run::new(
+            crate::run::Identity {
+                user: "ada".into(),
+                ..Default::default()
+            },
+            Arc::new(NullSink),
+        )
+        .with_token(crate::run::RunToken::new("tok_REACH")),
+    );
+    run.clone()
+        .scope(pipeline.run_explicit("q", plan, Finish::Silent, None))
+        .await
+        .unwrap();
+    let expected = Some((
+        run.id.to_string(),
+        "ada".to_string(),
+        Some("tok_REACH".to_string()),
+    ));
+    let seen = probe.0.lock().unwrap();
+    assert_eq!(seen.len(), 6, "nested plan + four map items + the subagent");
+    assert!(seen.iter().all(|entry| *entry == expected), "{seen:?}");
 }

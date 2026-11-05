@@ -268,18 +268,19 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     };
     // Stream each model call to the sink as it lands, so `DIVE_EVENTS=jsonl`
     // carries per-call detail and not just the end-of-run totals.
-    runtime.usage.attach_events(events.clone());
+    let run = runtime.run(events.clone());
     let pipeline = runtime.pipeline_with(&store, events.clone(), hooks).await?;
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
-    let result = pipeline
-        .run_explicit_in(
+    let result = run
+        .clone()
+        .scope(pipeline.run_explicit_in(
             &query,
             doc.steps.clone(),
             finish,
             Some(input),
             doc.pack.as_ref(),
-        )
+        ))
         .await;
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);
@@ -294,7 +295,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     // knows the whole run is over. Taken before the error branch — a failed
     // run has still spent the tokens, and that is exactly when you want to
     // know how many.
-    let usage = runtime.usage.take();
+    let usage = run.usage();
     if !usage.is_empty() {
         events.usage_summary(&usage);
     }

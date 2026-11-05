@@ -38,6 +38,7 @@ pub struct Workbench {
     pub thread: std::sync::Mutex<Option<String>>,
     pub project: Option<String>,
     pub attachment: Arc<super::attachment::NetworkAttachment>,
+    pub identity: dive_core::run::Identity,
 }
 
 impl Workbench {
@@ -74,7 +75,14 @@ impl Workbench {
             session_id: None,
             input: Some(serde_json::Value::String(message.clone())),
         });
-        let result = ctx.conversation.run_turn(&history, &active, &message).await;
+        let run = Arc::new(dive_core::run::Run::new(
+            ctx.identity.clone(),
+            ctx.pipeline.events.clone(),
+        ));
+        let result = run
+            .clone()
+            .scope(ctx.conversation.run_turn(&history, &active, &message))
+            .await;
         match &result {
             Ok(turn) => events.run_finished(&serde_json::Value::String(turn.text.clone()), false),
             Err(error) => {
@@ -112,7 +120,7 @@ impl Workbench {
         // Per turn, matching `dive chat`. The ledger is shared with
         // the pipeline, so a turn that called a plan tool reports that
         // plan's spend too.
-        let usage = ctx.pipeline.usage.take();
+        let usage = run.usage();
         if !usage.is_empty() {
             events.usage_summary(&usage);
         }
@@ -238,14 +246,19 @@ impl Workbench {
             input: Some(input.clone()),
         });
         let query = format!("Run the '{}' plan", doc.name);
-        let result = pipeline
-            .run_explicit_in(
+        let run = Arc::new(dive_core::run::Run::new(
+            ctx.identity.clone(),
+            pipeline.events.clone(),
+        ));
+        let result = run
+            .clone()
+            .scope(pipeline.run_explicit_in(
                 &query,
                 doc.steps.clone(),
                 doc.finish.clone(),
                 Some(input),
                 doc.pack.as_ref(),
-            )
+            ))
             .await;
         crate::telemetry::report_plan_result(pipeline.events.as_ref(), &result);
         tracing::debug!(
@@ -256,7 +269,7 @@ impl Workbench {
         // Before the finished message, so the run log reads
         // step → usage → verdict. Drained even on a failed run: the
         // tokens were still spent.
-        let usage = pipeline.usage.take();
+        let usage = run.usage();
         if !usage.is_empty() {
             pipeline.events.usage_summary(&usage);
         }

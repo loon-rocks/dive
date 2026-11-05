@@ -518,6 +518,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         thread: Mutex::new(None),
         project: None,
         attachment,
+        identity: Default::default(),
     });
 
     // Boot exactly like `run_plan_workbench`, then type the chat message
