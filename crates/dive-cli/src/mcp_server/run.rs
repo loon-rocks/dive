@@ -17,7 +17,7 @@ use serde_json::{json, Map, Value};
 pub fn plan_list() -> Result<Outcome> {
     let runtime = runtime()?;
     Ok(Outcome::ok(serde_json::to_value(
-        dive_runtime::ops::plan::PlanList::from(&runtime.plan_docs()),
+        dive_runtime::ops::plan::list(&runtime),
     )?))
 }
 
@@ -204,6 +204,13 @@ pub async fn run_plan(
     {
         runtime.shutdown().await;
         return Err(error);
+    }
+    let requirements = runtime.requirements_over(&loaded.docs, &runtime.agent_set(), &tool_catalog);
+    if let Some(refusal) =
+        requirements.refusal(&dive_core::requirements::Item::Plan(identifier.to_string()))
+    {
+        runtime.shutdown().await;
+        return Err(refusal.into());
     }
     let mut check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &tool_catalog);
     check.errors.append(&mut check.notes);

@@ -27,7 +27,8 @@ pub async fn run(command: ToolCommand) -> Result<()> {
         .toolbox(&store, std::sync::Arc::new(dive_core::NullSink))
         .await?;
     let docs = runtime.tool_docs()?;
-    let result = dispatch(toolbox.as_ref(), command, &docs).await;
+    let context = runtime.list_context_or_default();
+    let result = dispatch(toolbox.as_ref(), command, &docs, &context).await;
     runtime.shutdown().await;
     let (outcome, json) = result?;
     report(outcome, json)
@@ -37,10 +38,11 @@ async fn dispatch(
     registry: &AgentToolbox,
     command: ToolCommand,
     docs: &dive_core::user_tools::ToolDocs,
+    context: &dive_runtime::scope::ListContext,
 ) -> Result<(Outcome, bool)> {
     match command {
         ToolCommand::List { json } => Ok((
-            list_labeled(registry, &ops::tool::pack_labels(docs)).await?,
+            list_labeled(registry, &ops::tool::pack_labels(docs), context).await?,
             json,
         )),
         ToolCommand::Show { name, json } => Ok((show(registry, docs, &name).await?, json)),
@@ -60,14 +62,15 @@ async fn dispatch(
 }
 
 pub(crate) async fn list(registry: &(dyn ToolRegistry + Send + Sync)) -> Result<Outcome> {
-    list_labeled(registry, &BTreeMap::new()).await
+    list_labeled(registry, &BTreeMap::new(), &Default::default()).await
 }
 
 pub(crate) async fn list_labeled(
     registry: &(dyn ToolRegistry + Send + Sync),
     labels: &BTreeMap<String, String>,
+    context: &dive_runtime::scope::ListContext,
 ) -> Result<Outcome> {
-    let listing = ops::tool::list(registry, labels).await?;
+    let listing = ops::tool::list(registry, labels, context).await?;
     let body = serde_json::to_value(&listing)?;
     if listing.defs.is_empty() {
         return Ok(Outcome::raw(String::new(), body)

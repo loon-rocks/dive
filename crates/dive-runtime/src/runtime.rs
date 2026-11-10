@@ -443,6 +443,81 @@ impl Runtime {
         })
     }
 
+    pub fn requirements(&self) -> Result<dive_core::requirements::Requirements> {
+        let loaded = self.plan_docs();
+        let catalog = self.tool_catalog(&loaded.docs)?;
+        Ok(self.requirements_over(&loaded.docs, &self.agent_set(), &catalog))
+    }
+
+    pub fn requirements_over(
+        &self,
+        plans: &[dive_core::pipeline::doc::PlanDoc],
+        agents: &dive_core::agent::doc::AgentSet,
+        catalog: &ToolCatalog,
+    ) -> dive_core::requirements::Requirements {
+        let mut present = catalog.clone();
+        present.builtin_tools.extend(
+            crate::attach::ATTACH_TOOLS
+                .iter()
+                .map(|name| name.to_string()),
+        );
+        present.user_tools.extend(
+            self.drafted
+                .tools()
+                .into_iter()
+                .map(|doc| format!("{}{}", dive_core::user_tools::USER_TOOL_PREFIX, doc.name)),
+        );
+        dive_core::requirements::Requirements::compute(plans, agents, &present)
+    }
+
+    pub fn scope_of(&self, path: &std::path::Path) -> crate::scope::Scope {
+        crate::scope::of_path(path, self.root.as_deref(), &global_config_dir())
+    }
+
+    pub fn list_context_or_default(&self) -> crate::scope::ListContext {
+        self.list_context()
+            .inspect_err(|error| tracing::warn!("listing without scope or requirements — {error}"))
+            .unwrap_or_default()
+    }
+
+    pub fn list_context(&self) -> Result<crate::scope::ListContext> {
+        let workspace = match &self.root {
+            Some(root) => Workspace::new(root),
+            None => Workspace::new(global_config_dir()),
+        };
+        let servers = self
+            .config
+            .mcp
+            .keys()
+            .map(|name| {
+                let scope = match crate::ops::mcp::defined_in(&workspace, name) {
+                    dive_mcp::SignInScope::Project => crate::scope::Scope::Project,
+                    dive_mcp::SignInScope::Global => crate::scope::Scope::Global,
+                };
+                (name.clone(), scope)
+            })
+            .collect();
+        let user_tools = self
+            .tool_docs()?
+            .user
+            .into_iter()
+            .filter_map(|doc| {
+                let path = doc.path?;
+                Some((
+                    format!("{}{}", dive_core::user_tools::USER_TOOL_PREFIX, doc.name),
+                    path,
+                ))
+            })
+            .collect();
+        Ok(crate::scope::ListContext {
+            requirements: self.requirements()?,
+            root: self.root.clone(),
+            global_dir: global_config_dir(),
+            servers,
+            user_tools,
+        })
+    }
+
     pub fn agent_set(&self) -> dive_core::agent::doc::AgentSet {
         let sources = crate::workbench::agents::builtin_sources();
         let (set, errors) = dive_core::agent::doc::AgentSet::load(&sources, &self.agent_dirs());
@@ -507,13 +582,12 @@ impl Runtime {
         None
     }
 
-    /// The plan catalog, kept to documents whose `requires_servers` are all
-    /// configured. Files that fail to load stay in `skipped` and are warned
-    /// about here — a broken plan never takes the command down.
     pub fn plan_dirs(&self) -> Vec<PathBuf> {
         self.layer_paths(&self.config.plans.paths)
     }
 
+    /// The plan catalog. Files that fail to load stay in `skipped` and are
+    /// warned about here — a broken plan never takes the command down.
     pub fn plan_docs(&self) -> LoadedPlans {
         let dirs = self.plan_dirs();
         let mut loaded = dive_core::pipeline::doc::load_plan_docs(&dirs);
@@ -540,27 +614,6 @@ impl Runtime {
             for error in &loaded.skipped {
                 tracing::warn!("skipping plan file — {error}");
             }
-        }
-        let (visible, hidden): (Vec<_>, Vec<_>) = loaded.docs.drain(..).partition(|doc| {
-            doc.requires_servers
-                .iter()
-                .all(|server| self.config.mcp.contains_key(server))
-        });
-        loaded.docs = visible;
-        for doc in hidden {
-            tracing::info!(
-                plan = doc.identifier,
-                "hidden: required MCP server not configured"
-            );
-            loaded.hidden.push(dive_core::pipeline::doc::HiddenPlan {
-                missing_servers: doc
-                    .requires_servers
-                    .iter()
-                    .filter(|server| !self.config.mcp.contains_key(*server))
-                    .cloned()
-                    .collect(),
-                identifier: doc.identifier,
-            });
         }
         loaded
     }
@@ -601,6 +654,8 @@ impl Runtime {
         let user_context = user_context_text(&self.config.user);
         let plans = self.plan_docs().docs;
         let catalog = self.tool_catalog(&plans)?;
+        let agents = self.agent_set();
+        let requirements = self.requirements_over(&plans, &agents, &catalog);
         Ok(Arc::new(Pipeline {
             router: self.router.clone(),
             registry: base,
@@ -611,12 +666,13 @@ impl Runtime {
             gate,
             interlocutor,
             catalog: Some(Arc::new(catalog)),
+            requirements: Arc::new(requirements),
             user_context,
             current_date: chrono::Local::now().format("%Y-%m-%d").to_string(),
             max_attempts: self.config.settings.planning_attempts.max(1),
             max_agent_iterations: self.config.settings.max_agent_iterations,
             usage: self.usage.clone(),
-            agents: Arc::new(self.agent_set()),
+            agents: Arc::new(agents),
             agent_depth: 0,
             always_loaded: Arc::new(self.config.tools.always_loaded.clone()),
             search_pool: None,

@@ -31,11 +31,28 @@ pub fn run(command: AgentCommand) -> Result<()> {
 }
 
 pub(crate) fn list(dirs: &[PathBuf], packs: &[AgentDoc]) -> Outcome {
-    let listed = ops::agent::list(&crate::workbench::agents::builtin_sources(), dirs, packs);
+    let context = crate::host::runtime()
+        .map(|runtime| runtime.list_context_or_default())
+        .unwrap_or_default();
+    let listed = ops::agent::list(
+        &crate::workbench::agents::builtin_sources(),
+        dirs,
+        packs,
+        &context,
+    );
     let text: String = listed
         .agents
         .iter()
-        .map(|agent| format!("{}\t{}\t{}\n", agent.name, agent.source, agent.description))
+        .map(|agent| {
+            format!(
+                "{}\t{}\t{}\t{}{}\n",
+                agent.name,
+                agent.source,
+                agent.description,
+                agent.scope.label(),
+                super::listing::missing_column(&agent.missing)
+            )
+        })
         .collect();
     let errors = listed.load_errors.len();
     let outcome = Outcome::raw(text, serde_json::to_value(&listed).unwrap_or_default());
@@ -55,8 +72,17 @@ pub(crate) fn show(dirs: &[PathBuf], packs: &[AgentDoc], name: &str) -> Result<O
         packs,
         name,
     )?;
-    let body = serde_json::to_value(&detail)?;
-    Ok(Outcome::raw(detail.yaml, body).with_note(format!("source: {}", detail.label)))
+    let mut body = serde_json::to_value(&detail)?;
+    let missing = crate::host::runtime()
+        .map(|runtime| runtime.list_context_or_default())
+        .unwrap_or_default()
+        .missing(&dive_core::requirements::Item::Agent(name.to_string()));
+    body["missing"] = serde_json::to_value(&missing)?;
+    let note = match super::listing::missing_note(&missing) {
+        Some(paths) => format!("source: {}\n{paths}", detail.label),
+        None => format!("source: {}", detail.label),
+    };
+    Ok(Outcome::raw(detail.yaml, body).with_note(note))
 }
 
 pub(crate) fn validate(

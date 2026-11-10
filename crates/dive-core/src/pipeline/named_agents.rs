@@ -36,6 +36,7 @@ impl Pipeline {
         self.agents
             .iter()
             .filter(|doc| doc.name != CHAT_AGENT)
+            .filter(|doc| self.requirements.agent_runnable(&doc.name))
             .map(|doc| named_agent_tool_def(&doc))
             .collect()
     }
@@ -64,6 +65,12 @@ impl Pipeline {
         let Some(doc) = self.agents.get(name) else {
             return failed(format!("no agent named '{name}'"));
         };
+        if let Some(refusal) = self
+            .requirements
+            .refusal(&crate::requirements::Item::Agent(name.to_string()))
+        {
+            return failed(refusal.to_string());
+        }
         let problems = input_problems(&doc.subagent_input_schema(), &input);
         if !problems.is_empty() {
             return failed(format!(

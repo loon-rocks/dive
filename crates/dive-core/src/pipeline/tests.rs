@@ -166,6 +166,7 @@ fn pipeline_with_named(
             gate: None,
             interlocutor: None,
             catalog: None,
+            requirements: Default::default(),
             user_context: "test user".into(),
             current_date: "2026-07-09".into(),
             max_attempts,
@@ -6638,6 +6639,123 @@ async fn a_test_run_writes_in_a_scratch_directory_and_says_what_it_wrote() {
         before.display().to_string()
     );
     assert!(!before.join(".dive/snapshots/a.json").exists());
+}
+
+fn pipeline_with_a_plan_that_cant_run() -> Pipeline {
+    let plans: Vec<doc::PlanDoc> = vec![
+        "identifier: good\nname: good\ndescription: d\nsteps:\n  - id: s\n    tool_name: t__search\n    input: {}\n"
+            .parse()
+            .unwrap(),
+        "identifier: broken\nname: broken\ndescription: d\nsteps:\n  - id: s\n    tool_name: user__gone\n    input: {}\n"
+            .parse()
+            .unwrap(),
+    ];
+    let agents = crate::agent::doc::AgentSet::layered(
+        Vec::new(),
+        vec![vec![
+            crate::agent::doc::parse_agent_source(
+                "name: fine\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: p\n",
+            )
+            .unwrap(),
+            crate::agent::doc::parse_agent_source(
+                "name: helper\ndescription: d\nmodel: chat\ntools: [plan__broken]\nsystem_prompt: p\n",
+            )
+            .unwrap(),
+        ]],
+    );
+    let catalog = ToolCatalog {
+        mcp_servers: std::collections::BTreeSet::from(["t".to_string()]),
+        ..Default::default()
+    };
+    let mut pipeline = pipeline_for(Arc::new(MockRegistry {
+        search_result: json!({}),
+        invocations: Mutex::new(Vec::new()),
+        fail_tools: Vec::new(),
+    }));
+    pipeline.requirements = Arc::new(crate::requirements::Requirements::compute(
+        &plans, &agents, &catalog,
+    ));
+    pipeline.plans = Arc::new(plans);
+    pipeline.agents = Arc::new(agents);
+    pipeline
+}
+
+async fn planner_names(pipeline: &Pipeline) -> Vec<String> {
+    pipeline
+        .planner_tool_defs()
+        .await
+        .into_iter()
+        .map(|def| def.name)
+        .collect()
+}
+
+#[tokio::test]
+async fn the_planner_catalog_leaves_out_a_plan_that_cant_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(!names.contains(&"plan__broken".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_planner_catalog_keeps_a_plan_that_can_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(names.contains(&"plan__good".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_planner_catalog_leaves_out_an_agent_that_cant_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(!names.contains(&"agent__helper".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_planner_catalog_keeps_an_agent_that_can_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(names.contains(&"agent__fine".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn tool_search_leaves_out_a_plan_that_cant_run_here() {
+    let pipeline = pipeline_with_a_plan_that_cant_run();
+    let names: Vec<String> = pipeline
+        .searchable_tools()
+        .await
+        .into_iter()
+        .map(|def| def.name)
+        .collect();
+    assert!(!names.contains(&"plan__broken".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn calling_a_plan_that_cant_run_here_by_name_is_refused_naming_the_missing_tool() {
+    let pipeline = pipeline_with_a_plan_that_cant_run();
+    let call = pipeline.call_plan("broken", json!({})).await;
+    assert_eq!(
+        call.result,
+        json!({"error": "plan 'broken' can't run here: user__gone (step s) is not in this project's catalog"})
+    );
+}
+
+#[tokio::test]
+async fn a_subagent_that_cant_run_here_is_refused_before_a_model_call() {
+    let pipeline = pipeline_with_a_plan_that_cant_run();
+    let Ok(run) = pipeline
+        .run_subagent(
+            &StepPath::top("agent__helper"),
+            "helper",
+            json!({"prompt": "x"}),
+        )
+        .await
+    else {
+        panic!("a refusal is a refused run, not a dispatch error");
+    };
+    assert!(
+        run.outcome
+            .result
+            .to_string()
+            .contains("agent 'helper' can't run here"),
+        "{}",
+        run.outcome.result
+    );
 }
 
 type SeenRun = Option<(String, String, Option<String>)>;

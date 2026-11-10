@@ -84,6 +84,31 @@ pub fn render_tool_listing_labeled(
     out
 }
 
+pub(crate) fn missing_column(missing: &[dive_core::requirements::Missing]) -> String {
+    missing
+        .first()
+        .map(|entry| format!("\tmissing: {}", entry.item.name()))
+        .unwrap_or_default()
+}
+
+pub(crate) fn missing_note(missing: &[dive_core::requirements::Missing]) -> Option<String> {
+    (!missing.is_empty()).then(|| {
+        missing
+            .iter()
+            .map(|entry| {
+                let path = entry
+                    .path
+                    .iter()
+                    .map(|hop| format!("{} ({})", hop.item.name(), hop.via.describe()))
+                    .collect::<Vec<_>>()
+                    .join(" → ");
+                format!("can't run here: {path} is {}", entry.reason.describe())
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

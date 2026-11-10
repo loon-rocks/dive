@@ -31,7 +31,7 @@ claude mcp add dive -- dive mcp serve --dir /path/to/project
 
 ## What the client sees
 
-- **One tool per plan,** named `plan_<identifier>` and titled with the plan's `name`. Its input schema is the plan's `input_schema`, and its description is the plan's `description` with the `exemplars` added. A plan whose `requires_servers` aren't configured isn't offered.
+- **One tool per plan,** named `plan_<identifier>` and titled with the plan's `name`. Its input schema is the plan's `input_schema`, and its description is the plan's `description` with the `exemplars` added. A plan that [can't run here](/plans/overview#plans-that-cant-run-here) isn't offered, whether it's missing a server, a tool, a plan or an agent.
 - **What a plan tool returns:** the plan's result when it succeeds, or `{error, kind?, step?, cause?}` when it fails. See [`finish`](/plans/reference/plan-file#param-finish).
 - **Tools for writing and testing plans,** listed in [MCP server tools](/integrating/mcp/reference/server-tools). When the client changes a plan with them, Dive tells the client to reload its tool list, so a new plan can be called right away.
 

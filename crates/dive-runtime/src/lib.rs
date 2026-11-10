@@ -11,6 +11,7 @@ pub mod packs;
 mod run_tests;
 pub mod run_trace;
 pub mod runtime;
+pub mod scope;
 pub mod secrets;
 pub mod telemetry;
 pub mod workbench;

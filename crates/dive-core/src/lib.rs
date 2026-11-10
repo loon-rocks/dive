@@ -11,6 +11,7 @@ pub mod list_tools;
 pub mod packs;
 pub mod pipeline;
 pub mod prompts;
+pub mod requirements;
 pub mod run;
 pub mod schemas;
 pub mod secrets;
