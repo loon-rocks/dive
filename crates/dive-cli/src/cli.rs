@@ -23,7 +23,7 @@ pub struct Cli {
 pub enum Command {
     /// Ask a one-shot question (runs one agent turn)
     #[command(
-        after_long_help = "Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.\n\nPut `--thread` after the message, since it takes an optional value. On an existing thread, `--agent` must name the thread's owner.\n\nWith `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, agent}` instead of streaming.\n\nExamples:\n  dive ask \"Which issues are blocking the release?\"\n  git diff | dive ask \"Review this diff\"\n  dive ask --agent release_notes \"What shipped this week?\"\n  dive ask \"And the week before?\" --thread"
+        after_long_help = "Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.\n\nPut `--session` after the message, since it takes an optional value. On an existing session, `--agent` must name the agent the session started with.\n\nWith `--json`, prints `{content, tool_calls_made, tools_used, usage, session_id, run_id, agent}` instead of streaming.\n\nExamples:\n  dive ask \"Which issues are blocking the release?\"\n  git diff | dive ask \"Review this diff\"\n  dive ask --agent release_notes \"What shipped this week?\"\n  dive ask \"And the week before?\" --session"
     )]
     Ask {
         /// The message; reads stdin when omitted and piped
@@ -31,10 +31,10 @@ pub enum Command {
         /// Run a named agent instead of the default `chat` agent
         #[arg(long)]
         agent: Option<String>,
-        /// Continue a thread: `--thread <id>` for a specific one, bare
-        /// `--thread` for the most recent. Omit to start a new thread.
-        #[arg(long)]
-        thread: Option<Option<String>>,
+        /// Continue a session: `--session <id>` for a specific one, bare
+        /// `--session` for the most recent chat. Omit to start a new session.
+        #[arg(long, alias = "thread")]
+        session: Option<Option<String>>,
         /// Emit a JSON envelope instead of streaming text
         #[arg(long)]
         json: bool,
@@ -44,15 +44,15 @@ pub enum Command {
     },
     /// Interactive chat (REPL)
     #[command(
-        after_long_help = "Starts a conversation with the default `chat` agent or the named one. A resumed thread continues with its active agent; naming an agent other than the thread's owner is refused.\n\nSlash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another, `/thread` and `/state` print the current thread and its state, and `/quit` exits.\n\nExamples:\n  dive chat\n  dive chat release_notes\n  dive chat --thread"
+        after_long_help = "Starts a conversation with the default `chat` agent or the named one. A resumed session continues with its active agent; naming an agent other than the one the session started with is refused.\n\nSlash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another from the next message, `/session` and `/state` print the current session and its state, and `/quit` exits.\n\nExamples:\n  dive chat\n  dive chat release_notes\n  dive chat --session"
     )]
     Chat {
         /// The agent to talk to; the default `chat` agent when omitted
         agent: Option<String>,
-        /// Continue a thread: `--thread <id>` for a specific one, bare
-        /// `--thread` for the most recent. Omit to start a new thread.
-        #[arg(long)]
-        thread: Option<Option<String>>,
+        /// Continue a session: `--session <id>` for a specific one, bare
+        /// `--session` for the most recent chat. Omit to start a new session.
+        #[arg(long, alias = "thread")]
+        session: Option<Option<String>>,
     },
     /// Manage and run plan documents
     #[command(alias = "plans")]
@@ -72,11 +72,11 @@ pub enum Command {
         #[command(subcommand)]
         command: AgentCommand,
     },
-    /// Manage conversation threads
-    #[command(alias = "threads")]
-    Thread {
+    /// List, show and delete sessions: chats and plan runs
+    #[command(alias = "sessions", alias = "thread", alias = "threads")]
+    Session {
         #[command(subcommand)]
-        command: ThreadCommand,
+        command: SessionCommand,
     },
     #[command(
         about = "Store, inspect and remove secrets in the OS credential store",
@@ -598,23 +598,25 @@ pub enum AgentCommand {
 }
 
 #[derive(Subcommand)]
-pub enum ThreadCommand {
-    /// List threads
+pub enum SessionCommand {
+    /// List sessions
     #[command(
-        after_long_help = "Lists the threads started in the current directory's project, or the global threads when the directory has no `.dive` folder. `--all` lists every thread.\n\nExamples:\n  dive thread list\n  dive thread list --all"
+        after_long_help = "Lists the sessions started in the current directory's project, or the global sessions when the directory has no `.dive` folder, newest first. `--all` lists every session and `--kind` keeps only chats or plan runs.\n\nExamples:\n  dive session list\n  dive session list --all --kind plan"
     )]
     List {
-        #[arg(long, help = "List every thread, whatever project it was started in")]
+        #[arg(long, help = "List every session, whatever project it was started in")]
         all: bool,
+        #[arg(long, value_parser = ["chat", "plan"], help = "Only sessions of this kind: chat or plan")]
+        kind: Option<String>,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
-    /// Show a thread's messages
+    /// Show a session's runs and messages
     #[command(
-        after_long_help = "Examples:\n  dive thread show 4f1c9a2b7d3e\n  dive thread show 4f1c9a2b7d3e --state --json"
+        after_long_help = "Examples:\n  dive session show 4f1c9a2b7d3e\n  dive session show 4f1c9a2b7d3e --state --json"
     )]
     Show {
-        #[arg(help = "The thread id, as `dive thread list` prints it")]
+        #[arg(help = "The session id, as `dive session list` prints it")]
         id: String,
         /// Include the full runtime state
         #[arg(long)]
@@ -622,12 +624,12 @@ pub enum ThreadCommand {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
-    /// Delete a thread
+    /// Delete a session
     #[command(
-        after_long_help = "Also removes the stored files, such as generated images, that no other thread refers to. Files in S3 storage are kept, since other machines may share the bucket.\n\nExamples:\n  dive thread rm 4f1c9a2b7d3e"
+        after_long_help = "Also removes the session's runs and the stored files, such as generated images, that no other session refers to. Files in S3 storage are kept, since other machines may share the bucket.\n\nExamples:\n  dive session rm 4f1c9a2b7d3e"
     )]
     Rm {
-        #[arg(help = "The thread id, as `dive thread list` prints it")]
+        #[arg(help = "The session id, as `dive session list` prints it")]
         id: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
@@ -1050,7 +1052,9 @@ mod tests {
             (&root, "plans", "plan"),
             (&root, "tools", "tool"),
             (&root, "agents", "agent"),
-            (&root, "threads", "thread"),
+            (&root, "sessions", "session"),
+            (&root, "threads", "session"),
+            (&root, "thread", "session"),
             (&root, "shapes", "shape"),
             (&root, "packs", "pack"),
             (workbench, "plans", "plan"),
@@ -1072,7 +1076,11 @@ mod tests {
                 let names = std::iter::once(sub.get_name()).chain(sub.get_visible_aliases());
                 for name in names {
                     assert!(
-                        !["plans", "tools", "agents", "threads", "shapes", "packs"].contains(&name),
+                        ![
+                            "plans", "tools", "agents", "sessions", "threads", "thread", "shapes",
+                            "packs"
+                        ]
+                        .contains(&name),
                         "{name} is visible in help"
                     );
                 }

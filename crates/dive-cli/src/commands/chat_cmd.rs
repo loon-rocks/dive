@@ -1,4 +1,4 @@
-//! `dive chat` — interactive REPL with persistent threads.
+//! `dive chat` — interactive REPL over a persistent chat session.
 
 use anyhow::{bail, Result};
 use dive_core::agent::conversation::view;
@@ -6,16 +6,18 @@ use dive_runtime::chat::{ChatSession, ChatStart};
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use std::sync::Arc;
 
-pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Result<()> {
+pub async fn run(agent: Option<String>, session: Option<Option<String>>) -> Result<()> {
     if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
         bail!("chat needs an interactive terminal — use `dive ask` for scripted queries");
     }
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
-    let start = ChatStart::resolve(&runtime, store, agent.as_deref(), thread).await?;
-    let run =
-        crate::telemetry::RunInfo::conversation("chat", start.thread().map(|meta| meta.id.clone()))
-            .user(runtime.config.user.name.as_deref());
+    let start = ChatStart::resolve(&runtime, store, agent.as_deref(), session).await?;
+    let run = crate::telemetry::RunInfo::conversation(
+        "chat",
+        start.session().map(|meta| meta.id.clone()),
+    )
+    .user(runtime.config.user.name.as_deref());
     let events: Arc<dyn dive_core::EventSink> = crate::output::make_sink(false, false, run);
     // A conversation already has the user's attention: a plan called as
     // plan__* from here can put an `ask` step's question to them.
@@ -27,9 +29,9 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
         .open(&runtime, events, hooks, Some("chat".to_string()))
         .await?;
 
-    if let Some(meta) = session.thread() {
+    if let Some(meta) = session.session() {
         eprintln!(
-            "continuing thread {} — {} (with {})",
+            "continuing session {} — {} (with {})",
             meta.id,
             meta.title,
             session.active()
@@ -38,7 +40,7 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
 
     let mut editor = Reedline::create();
     eprintln!(
-        "dive chat with {} — /quit to exit, /agent to see or switch agents, /state to inspect, /thread for the thread id",
+        "dive chat with {} — /quit to exit, /agent to see or switch agents, /state to inspect, /session for the session id",
         session.active()
     );
 
@@ -62,8 +64,8 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
                 let before = session.active().to_string();
                 match session.send(&line).await {
                     Ok(report) => {
-                        if let Some(e) = &report.thread_error {
-                            eprintln!("warning: failed to create thread: {e}");
+                        if let Some(e) = &report.session_error {
+                            eprintln!("warning: failed to create the session: {e}");
                         }
                         println!();
                         if !report.usage.is_empty() && !crate::output::jsonl_events() {
@@ -88,8 +90,8 @@ pub async fn run(agent: Option<String>, thread: Option<Option<String>>) -> Resul
         }
     }
     runtime.shutdown().await;
-    if let Some(meta) = session.thread() {
-        eprintln!("resume with `dive chat --thread {}`", meta.id);
+    if let Some(meta) = session.session() {
+        eprintln!("resume with `dive chat --session {}`", meta.id);
     }
     Ok(())
 }
@@ -113,13 +115,13 @@ async fn slash(session: &mut ChatSession, command: &str) -> Result<bool> {
             println!("{}", serde_json::to_string_pretty(&messages)?);
             Ok(false)
         }
-        ("thread", _) => {
-            match session.thread() {
+        ("session" | "thread", _) => {
+            match session.session() {
                 Some(meta) => println!(
-                    "{} — {} (owner {}, active {active})",
-                    meta.id, meta.title, meta.owner
+                    "{} — {} (started with {}, active {active})",
+                    meta.id, meta.title, meta.agent
                 ),
-                None => println!("no thread yet (created after the first turn)"),
+                None => println!("no session yet (created with the first turn)"),
             }
             Ok(false)
         }
@@ -143,7 +145,7 @@ async fn slash(session: &mut ChatSession, command: &str) -> Result<bool> {
         }
         (other, _) => {
             eprintln!(
-                "unknown command: /{other} (try /quit, /agent, /agent <name>, /state, /thread)"
+                "unknown command: /{other} (try /quit, /agent, /agent <name>, /state, /session)"
             );
             Ok(false)
         }

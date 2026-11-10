@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "id": "be9100000001",
+  "title": "network_drafter",
+  "created_at": 1767226000000,
+  "updated_at": 1767226120000,
+  "message_count": 4,
+  "entry_count": 4,
+  "owner": "network_drafter",
+  "active": "network_drafter",
+  "attachments": [
+    {
+      "kind": "network",
+      "state": "open"
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 //! and dive-store respectively.
 
 pub mod agent;
+pub mod context;
 pub mod file_tools;
 pub mod files;
 pub mod format;
@@ -28,8 +29,8 @@ mod user_tools_tests;
 
 pub use agent::{Agent, AgentError, EventSink, NullSink, RunStart, TeeSink, TurnOutcome};
 pub use store::{
-    conversation, message_entries, Attachment, EntryBody, EntryUsage, NewEntry, Stamp, Store,
-    StoreError, ThreadEntry, ThreadMeta, ToolShape, USER_AUTHOR,
+    Attachment, Entry, EntryBody, EntryUsage, NewEntry, RunMeta, SessionKind, SessionMeta, Stamp,
+    Store, StoreError, ToolShape, USER_AUTHOR,
 };
 pub use tools::{
     AllowlistRegistry, CompositeRegistry, ExcludingRegistry, ServerIdentity, ToolDef, ToolError,

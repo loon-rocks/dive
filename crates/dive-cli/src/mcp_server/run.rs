@@ -261,6 +261,9 @@ pub async fn run_plan(
         .await?;
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
+    let writer =
+        dive_runtime::plan_run::start_or_warn(&store, &run, &doc, &input, runtime.project(), None)
+            .await;
     let result = run
         .scope(pipeline.run_explicit_in(
             &query,
@@ -270,6 +273,7 @@ pub async fn run_plan(
             doc.pack.as_ref(),
         ))
         .await;
+    dive_runtime::plan_run::end(writer, &result, &run.usage()).await;
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);
 

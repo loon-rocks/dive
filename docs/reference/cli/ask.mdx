@@ -8,9 +8,9 @@ keywords: ["dive ask"]
 
 Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.
 
-Put `--thread` after the message, since it takes an optional value. On an existing thread, `--agent` must name the thread's owner.
+Put `--session` after the message, since it takes an optional value. On an existing session, `--agent` must name the agent the session started with.
 
-With `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, agent}` instead of streaming.
+With `--json`, prints `{content, tool_calls_made, tools_used, usage, session_id, run_id, agent}` instead of streaming.
 
 ## Arguments
 
@@ -26,12 +26,12 @@ With `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, 
   Format: `AGENT`.
 </ParamField>
 
-<ParamField query="--thread" type="string">
-  Continue a thread: `--thread <id>` for a specific one, bare `--thread` for the most recent. Omit to start a new thread
+<ParamField query="--session" type="string">
+  Continue a session: `--session <id>` for a specific one, bare `--session` for the most recent chat. Omit to start a new session
 
-  Format: `THREAD`.
+  Format: `SESSION`.
 
-  The value is optional: `--thread` on its own is accepted.
+  The value is optional: `--session` on its own is accepted.
 </ParamField>
 
 <ParamField query="--json" type="boolean">
@@ -67,7 +67,7 @@ dive ask --agent release_notes "What shipped this week?"
 ```
 
 ```bash Example 4
-dive ask "And the week before?" --thread
+dive ask "And the week before?" --session
 ```
 
 </RequestExample>

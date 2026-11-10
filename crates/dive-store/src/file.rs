@@ -3,94 +3,51 @@
 //! Layout:
 //!
 //! ```text
-//! <root>/threads/<id>/meta.json       thread metadata (atomic rename writes)
-//! <root>/threads/<id>/entries.jsonl   one ThreadEntry per line (O_APPEND)
-//! <root>/threads/<id>/spans.jsonl     one finished trace Span per line (O_APPEND)
-//! <root>/threads/<id>/.lock           advisory lock for append+meta updates
+//! <root>/FORMAT                       store version
+//! <root>/sessions/<id>/session.json   session meta, claim and lease (atomic rename)
+//! <root>/sessions/<id>/entries.jsonl  one Entry per line (O_APPEND)
+//! <root>/sessions/<id>/spans.jsonl    one finished trace Span per line (O_APPEND)
+//! <root>/sessions/<id>/.lock          advisory lock every write takes
+//! <root>/runs/<run_id>.json           run row, created only if absent
 //! <root>/shapes/<tool>.json           one file per tool shape (atomic rename)
 //! <root>/files/<hash>.<ext>           stored files, see `ObjectFiles`
 //! ```
 //!
 //! Concurrency model: whole files are written to a temp file and renamed
-//! into place, so readers never observe partial writes. Message appends go
-//! through `O_APPEND` as a single write, serialized across processes by an
-//! exclusive flock on the thread's `.lock` file so `meta.json` stays
-//! consistent with the log. Shape writes are last-writer-wins; `seen_count`
-//! is advisory and may lose increments under contention. Advisory locks
-//! assume a local filesystem (flock over NFS is unreliable).
+//! into place, so readers never observe partial writes. Appends go through
+//! `O_APPEND` under an exclusive flock on the session's `.lock` file, after
+//! checking the lease generation in `session.json` (the fence). Shape writes
+//! are last-writer-wins; `seen_count` is advisory and may lose increments
+//! under contention. Advisory locks assume a local filesystem (flock over
+//! NFS is unreliable).
 
+use crate::layout::{encode_name, read_session, write_atomic, Layout};
+use crate::session::Clock;
+use dive_core::run::Identity;
 use dive_core::store::{
-    message_entries, Attachment, EntryBody, NewEntry, Span, Store, StoreError, ThreadEntry,
-    ThreadMeta, ToolShape,
+    Attachment, CancelOutcome, Entry, FenceError, Lease, NewSession, Page, Reaped, Renewal,
+    RunEnded, RunMeta, SessionFilter, SessionMeta, SessionPage, Span, StartError, StartRun, Store,
+    StoreError, ToolShape,
 };
-use dive_llm::types::ChatMessage;
 use fs4::fs_std::FileExt;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub const STORE_FORMAT: u32 = 4;
+pub const STORE_FORMAT: u32 = 5;
 
 pub const STORE_FORMAT_OLDEST: u32 = 1;
 
-const FORMAT_VERSION: u32 = STORE_FORMAT;
-
 const FORMAT_MARKER: &str = "FORMAT";
 
-const ENTRIES_FILE: &str = "entries.jsonl";
-
-const SPANS_FILE: &str = "spans.jsonl";
-
-const LEGACY_MESSAGES_FILE: &str = "messages.jsonl";
-
-const LEGACY_AGENT: &str = "chat";
+const MIGRATE_LOCK: &str = ".migrate.lock";
 
 pub struct FileStore {
-    threads_dir: PathBuf,
     shapes_dir: PathBuf,
-}
-
-#[derive(Serialize, Deserialize)]
-struct MetaFile {
-    version: u32,
-    id: String,
-    title: String,
-    created_at: i64,
-    updated_at: i64,
-    message_count: i64,
-    #[serde(default)]
-    entry_count: u64,
-    #[serde(default = "legacy_agent")]
-    owner: String,
-    #[serde(default = "legacy_agent")]
-    active: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    attachments: Vec<Attachment>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    project: Option<String>,
-}
-
-fn legacy_agent() -> String {
-    LEGACY_AGENT.to_string()
-}
-
-impl From<MetaFile> for ThreadMeta {
-    fn from(m: MetaFile) -> Self {
-        ThreadMeta {
-            id: m.id,
-            title: m.title,
-            created_at: m.created_at,
-            updated_at: m.updated_at,
-            message_count: m.message_count,
-            owner: m.owner,
-            active: m.active,
-            attachments: m.attachments,
-            project: m.project,
-        }
-    }
+    layout: Layout,
+    clock: Clock,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -104,36 +61,71 @@ struct ShapeFile {
 }
 
 impl FileStore {
-    /// Open (creating if needed) a file store rooted at the data directory.
     pub fn open(root: &Path) -> Result<Self, StoreError> {
-        let threads_dir = root.join("threads");
+        Self::open_as(root, &crate::migrate::unknown_identity())
+    }
+
+    pub fn open_as(root: &Path, identity: &Identity) -> Result<Self, StoreError> {
+        Self::open_with(root, identity, crate::session::wall_clock())
+    }
+
+    pub fn open_with_clock(root: &Path, clock: Clock) -> Result<Self, StoreError> {
+        Self::open_with(root, &crate::migrate::unknown_identity(), clock)
+    }
+
+    pub fn open_with(root: &Path, identity: &Identity, clock: Clock) -> Result<Self, StoreError> {
         let shapes_dir = root.join("shapes");
-        for dir in [&threads_dir, &shapes_dir] {
-            std::fs::create_dir_all(dir)
-                .map_err(|e| StoreError(format!("creating {}: {e}", dir.display())))?;
-        }
-        check_format_marker(root)?;
+        std::fs::create_dir_all(&shapes_dir)
+            .map_err(|e| StoreError(format!("creating {}: {e}", shapes_dir.display())))?;
+        check_format_marker(root, identity)?;
+        let layout = Layout::new(root);
+        layout.create_dirs()?;
         Ok(Self {
-            threads_dir,
             shapes_dir,
+            layout,
+            clock,
         })
     }
 
-    fn thread_dir(&self, id: &str) -> PathBuf {
-        self.threads_dir.join(id)
+    pub fn reap_now(&self) -> Result<Vec<Reaped>, StoreError> {
+        self.layout.reap_expired(usize::MAX, self.now())
     }
 
-    /// Run blocking filesystem work off the async runtime; lock waits and
-    /// directory scans must not stall other tasks (map steps run buffered).
-    async fn blocking<T, F>(&self, work: F) -> Result<T, StoreError>
+    fn now(&self) -> i64 {
+        (self.clock)()
+    }
+
+    async fn on_layout<T, F>(&self, work: F) -> Result<T, StoreError>
     where
         T: Send + 'static,
-        F: FnOnce() -> Result<T, StoreError> + Send + 'static,
+        F: FnOnce(&Layout, i64) -> Result<T, StoreError> + Send + 'static,
     {
-        tokio::task::spawn_blocking(work)
-            .await
-            .map_err(|e| StoreError(format!("store task failed: {e}")))?
+        let layout = self.layout.clone();
+        let now = self.now();
+        blocking(move || work(&layout, now)).await
     }
+
+    async fn fenced<T, F>(&self, work: F) -> Result<T, FenceError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Layout, i64) -> Result<T, FenceError> + Send + 'static,
+    {
+        let layout = self.layout.clone();
+        let now = self.now();
+        tokio::task::spawn_blocking(move || work(&layout, now))
+            .await
+            .map_err(|e| FenceError::Store(StoreError(format!("store task failed: {e}"))))?
+    }
+}
+
+async fn blocking<T, F>(work: F) -> Result<T, StoreError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, StoreError> + Send + 'static,
+{
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| StoreError(format!("store task failed: {e}")))?
 }
 
 pub fn marker_format(root: &Path) -> Result<Option<u32>, StoreError> {
@@ -157,7 +149,7 @@ pub fn marker_format(root: &Path) -> Result<Option<u32>, StoreError> {
         })
 }
 
-fn check_format_marker(root: &Path) -> Result<(), StoreError> {
+fn check_format_marker(root: &Path, identity: &Identity) -> Result<(), StoreError> {
     match marker_format(root)? {
         Some(found) => match dive_config::window_problem(
             "store",
@@ -167,12 +159,14 @@ fn check_format_marker(root: &Path) -> Result<(), StoreError> {
             STORE_FORMAT,
         ) {
             Some(problem) => Err(StoreError(problem)),
-            None if found < STORE_FORMAT => migrate(root),
+            None if found < STORE_FORMAT => migrate(root, identity),
             None => Ok(()),
         },
         None => match link_new(root, format!("{}\n", unmarked_format(root)?).as_bytes()) {
-            Ok(()) => check_format_marker(root),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => check_format_marker(root),
+            Ok(()) => check_format_marker(root, identity),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                check_format_marker(root, identity)
+            }
             Err(e) => Err(StoreError(format!(
                 "writing {}: {e}",
                 root.join(FORMAT_MARKER).display()
@@ -183,29 +177,37 @@ fn check_format_marker(root: &Path) -> Result<(), StoreError> {
 
 fn unmarked_format(root: &Path) -> Result<u32, StoreError> {
     let threads = root.join("threads");
-    let mut dirs = std::fs::read_dir(&threads)
-        .map_err(|e| StoreError(format!("reading {}: {e}", threads.display())))?;
-    Ok(if dirs.next().is_some() {
-        1
-    } else {
-        STORE_FORMAT
-    })
+    match std::fs::read_dir(&threads) {
+        Ok(mut dirs) => Ok(if dirs.next().is_some() {
+            1
+        } else {
+            STORE_FORMAT
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(STORE_FORMAT),
+        Err(e) => Err(StoreError(format!("reading {}: {e}", threads.display()))),
+    }
 }
 
-fn migrate(root: &Path) -> Result<(), StoreError> {
+fn migrate(root: &Path, identity: &Identity) -> Result<(), StoreError> {
     let marker = root.join(FORMAT_MARKER);
-    let lock = File::open(&marker)
-        .map_err(|e| StoreError(format!("opening {}: {e}", marker.display())))?;
+    let lock_path = root.join(MIGRATE_LOCK);
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|e| StoreError(format!("opening {}: {e}", lock_path.display())))?;
     lock.lock_exclusive()
-        .map_err(|e| StoreError(format!("locking {}: {e}", marker.display())))?;
+        .map_err(|e| StoreError(format!("locking {}: {e}", lock_path.display())))?;
     let Some(mut found) = marker_format(root)? else {
         return Err(StoreError(format!("{} disappeared", marker.display())));
     };
     while found < STORE_FORMAT {
         match found {
-            1 => migrate_threads_v1(&root.join("threads"))?,
+            1 => crate::migrate::threads_v1(&root.join("threads"))?,
             2 => {}
             3 => move_files_v3(root)?,
+            4 => crate::migrate::sessions_v4(root, identity)?,
             other => {
                 return Err(StoreError(format!(
                     "no migration from store version {other}"
@@ -214,23 +216,6 @@ fn migrate(root: &Path) -> Result<(), StoreError> {
         }
         found += 1;
         write_atomic(&marker, format!("{found}\n").as_bytes())?;
-    }
-    Ok(())
-}
-
-fn migrate_threads_v1(threads_dir: &Path) -> Result<(), StoreError> {
-    let dirs = std::fs::read_dir(threads_dir)
-        .map_err(|e| StoreError(format!("reading {}: {e}", threads_dir.display())))?;
-    for dir in dirs.filter_map(Result::ok).map(|entry| entry.path()) {
-        if !dir.join("meta.json").is_file() {
-            continue;
-        }
-        let _lock = lock_thread(&dir)?;
-        let Some(mut meta) = read_meta(&dir)? else {
-            continue;
-        };
-        meta.version = 2;
-        upgrade_legacy_log(&dir, &mut meta)?;
     }
     Ok(())
 }
@@ -274,348 +259,130 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-fn new_thread_id() -> String {
-    uuid::Uuid::new_v4().simple().to_string()[..12].to_string()
-}
-
-/// Write `bytes` to `path` atomically: temp file in the same directory,
-/// fsync, then rename over the destination.
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
-    let dir = path
-        .parent()
-        .ok_or_else(|| StoreError(format!("no parent dir for {}", path.display())))?;
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)
-        .map_err(|e| StoreError(format!("creating temp file in {}: {e}", dir.display())))?;
-    tmp.write_all(bytes)
-        .and_then(|()| tmp.as_file().sync_all())
-        .map_err(|e| StoreError(format!("writing {}: {e}", path.display())))?;
-    tmp.persist(path)
-        .map_err(|e| StoreError(format!("renaming into {}: {e}", path.display())))?;
-    Ok(())
-}
-
-fn read_meta(dir: &Path) -> Result<Option<MetaFile>, StoreError> {
-    let path = dir.join("meta.json");
-    let raw = match std::fs::read_to_string(&path) {
-        Ok(raw) => raw,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(StoreError(format!("reading {}: {e}", path.display()))),
-    };
-    let meta: MetaFile = serde_json::from_str(&raw)
-        .map_err(|e| StoreError(format!("corrupt {}: {e}", path.display())))?;
-    Ok(Some(meta))
-}
-
-fn write_meta(dir: &Path, meta: &MetaFile) -> Result<(), StoreError> {
-    let bytes = serde_json::to_vec_pretty(meta)
-        .map_err(|e| StoreError(format!("serializing thread meta: {e}")))?;
-    write_atomic(&dir.join("meta.json"), &bytes)
-}
-
-/// Take the per-thread exclusive advisory lock. Released when the returned
-/// file handle drops (flock releases on close).
-fn lock_thread(dir: &Path) -> Result<File, StoreError> {
-    let path = dir.join(".lock");
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(&path)
-        .map_err(|e| StoreError(format!("opening {}: {e}", path.display())))?;
-    file.lock_exclusive()
-        .map_err(|e| StoreError(format!("locking {}: {e}", path.display())))?;
-    Ok(file)
-}
-
-fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Option<Vec<T>>, StoreError> {
-    let raw = match std::fs::read_to_string(path) {
-        Ok(raw) => raw,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(StoreError(format!("reading {}: {e}", path.display()))),
-    };
-    let lines: Vec<&str> = raw.lines().filter(|l| !l.trim().is_empty()).collect();
-    let mut items = Vec::with_capacity(lines.len());
-    for (i, line) in lines.iter().enumerate() {
-        match serde_json::from_str::<T>(line) {
-            Ok(item) => items.push(item),
-            // A torn final line is a partially flushed append; drop it.
-            // Corruption anywhere else is a real error.
-            Err(e) if i == lines.len() - 1 => {
-                tracing::warn!("dropping torn final line in {}: {e}", path.display());
-            }
-            Err(e) => {
-                return Err(StoreError(format!(
-                    "corrupt line {} in {}: {e}",
-                    i + 1,
-                    path.display()
-                )))
-            }
-        }
-    }
-    Ok(Some(items))
-}
-
-fn legacy_entries(dir: &Path, at: i64) -> Result<Option<Vec<ThreadEntry>>, StoreError> {
-    let Some(messages) = read_jsonl::<ChatMessage>(&dir.join(LEGACY_MESSAGES_FILE))? else {
-        return Ok(None);
-    };
-    Ok(Some(
-        message_entries(LEGACY_AGENT, &messages)
-            .into_iter()
-            .enumerate()
-            .map(|(seq, entry)| entry.into_thread_entry(seq as u64, at))
-            .collect(),
-    ))
-}
-
-fn json_lines<T: Serialize>(items: &[T], what: &str) -> Result<Vec<u8>, StoreError> {
-    let mut buf = Vec::new();
-    for item in items {
-        serde_json::to_writer(&mut buf, item)
-            .map_err(|e| StoreError(format!("serializing {what}: {e}")))?;
-        buf.push(b'\n');
-    }
-    Ok(buf)
-}
-
-fn entry_lines(entries: &[ThreadEntry]) -> Result<Vec<u8>, StoreError> {
-    json_lines(entries, "thread entry")
-}
-
-fn append_to(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|e| StoreError(format!("opening {}: {e}", path.display())))?
-        .write_all(bytes)
-        .map_err(|e| StoreError(format!("appending to {}: {e}", path.display())))
-}
-
-fn upgrade_legacy_log(dir: &Path, meta: &mut MetaFile) -> Result<(), StoreError> {
-    let legacy = dir.join(LEGACY_MESSAGES_FILE);
-    match read_jsonl::<ThreadEntry>(&dir.join(ENTRIES_FILE))? {
-        Some(entries) => meta.entry_count = entries.len() as u64,
-        None if legacy.exists() => {
-            let entries = legacy_entries(dir, meta.created_at)?.unwrap_or_default();
-            write_atomic(&dir.join(ENTRIES_FILE), &entry_lines(&entries)?)?;
-            meta.entry_count = entries.len() as u64;
-        }
-        None => {}
-    }
-    write_meta(dir, meta)?;
-    if legacy.exists() {
-        std::fs::remove_file(&legacy)
-            .map_err(|e| StoreError(format!("removing {}: {e}", legacy.display())))?;
-    }
-    Ok(())
-}
-
-fn lock_existing_thread(dir: &Path, thread_id: &str) -> Result<(File, MetaFile), StoreError> {
-    let missing = || StoreError(format!("no thread {thread_id}"));
-    read_meta(dir)?.ok_or_else(missing)?;
-    let lock = lock_thread(dir)?;
-    let meta = read_meta(dir)?.ok_or_else(missing)?;
-    Ok((lock, meta))
-}
-
-fn scan_threads(threads_dir: &Path) -> Result<Vec<ThreadMeta>, StoreError> {
-    let entries = match std::fs::read_dir(threads_dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => {
-            return Err(StoreError(format!(
-                "reading {}: {e}",
-                threads_dir.display()
-            )))
-        }
-    };
-    let mut threads: Vec<ThreadMeta> = Vec::new();
-    for entry in entries.filter_map(|e| e.ok()) {
-        if !entry.path().is_dir() {
-            continue;
-        }
-        // A vanished or unreadable meta.json (mid-delete, mid-create) is
-        // skipped rather than failing the whole listing.
-        match read_meta(&entry.path()) {
-            Ok(Some(meta)) => threads.push(meta.into()),
-            Ok(None) => {}
-            Err(e) => tracing::warn!("skipping thread dir {}: {e}", entry.path().display()),
-        }
-    }
-    threads.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then(a.id.cmp(&b.id)));
-    Ok(threads)
-}
-
-/// Encode a tool name into a filename: bytes outside `[A-Za-z0-9_.-]` are
-/// percent-encoded. The authoritative name lives inside the file.
-fn encode_tool_filename(tool: &str) -> String {
-    let mut out = String::with_capacity(tool.len() + 5);
-    for byte in tool.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' | b'-' => out.push(byte as char),
-            other => out.push_str(&format!("%{other:02X}")),
-        }
-    }
-    out.push_str(".json");
-    out
-}
-
 #[async_trait::async_trait]
 impl Store for FileStore {
-    async fn create_thread(
-        &self,
-        title: &str,
-        owner: &str,
-        project: Option<&str>,
-    ) -> Result<ThreadMeta, StoreError> {
-        let title = title.to_string();
-        let owner = owner.to_string();
-        let project = project.map(str::to_string);
-        let threads_dir = self.threads_dir.clone();
-        self.blocking(move || {
-            let id = new_thread_id();
-            let dir = threads_dir.join(&id);
-            std::fs::create_dir_all(&dir)
-                .map_err(|e| StoreError(format!("creating {}: {e}", dir.display())))?;
-            let now = now_ms();
-            let meta = MetaFile {
-                version: FORMAT_VERSION,
-                id,
-                title,
-                created_at: now,
-                updated_at: now,
-                message_count: 0,
-                entry_count: 0,
-                active: owner.clone(),
-                owner,
-                attachments: Vec::new(),
-                project,
-            };
-            write_meta(&dir, &meta)?;
-            Ok(meta.into())
-        })
-        .await
-    }
-
-    async fn get_thread(&self, id: &str) -> Result<Option<ThreadMeta>, StoreError> {
-        let dir = self.thread_dir(id);
-        self.blocking(move || Ok(read_meta(&dir)?.map(Into::into)))
+    async fn create_session(&self, new: NewSession) -> Result<SessionMeta, StoreError> {
+        self.on_layout(move |layout, now| layout.create_session(new, now))
             .await
     }
 
-    async fn latest_thread(&self) -> Result<Option<ThreadMeta>, StoreError> {
-        let threads_dir = self.threads_dir.clone();
-        self.blocking(move || Ok(scan_threads(&threads_dir)?.into_iter().next()))
-            .await
+    async fn get_session(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
+        let dir = self.layout.session_dir(id);
+        blocking(move || read_session(&dir)).await
     }
 
-    async fn list_threads(&self) -> Result<Vec<ThreadMeta>, StoreError> {
-        let threads_dir = self.threads_dir.clone();
-        self.blocking(move || scan_threads(&threads_dir)).await
-    }
-
-    async fn delete_thread(&self, id: &str) -> Result<bool, StoreError> {
-        let dir = self.thread_dir(id);
-        self.blocking(move || match std::fs::remove_dir_all(&dir) {
-            Ok(()) => Ok(true),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-            Err(e) => Err(StoreError(format!("deleting {}: {e}", dir.display()))),
-        })
-        .await
-    }
-
-    async fn append_entries(
+    async fn list_sessions(
         &self,
-        thread_id: &str,
-        entries: &[NewEntry],
-    ) -> Result<(), StoreError> {
-        let thread_id = thread_id.to_string();
-        let dir = self.thread_dir(&thread_id);
-        let entries = entries.to_vec();
-        self.blocking(move || {
-            let (_lock, mut meta) = lock_existing_thread(&dir, &thread_id)?;
-            let at = now_ms();
-            let numbered: Vec<ThreadEntry> = entries
+        filter: &SessionFilter,
+        page: Page,
+    ) -> Result<SessionPage, StoreError> {
+        let filter = filter.clone();
+        self.on_layout(move |layout, _| {
+            let sessions = layout
+                .scan()?
                 .into_iter()
-                .enumerate()
-                .map(|(i, entry)| entry.into_thread_entry(meta.entry_count + i as u64, at))
+                .filter(|meta| filter.matches(meta))
                 .collect();
-            let path = dir.join(ENTRIES_FILE);
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .map_err(|e| StoreError(format!("opening {}: {e}", path.display())))?;
-            file.write_all(&entry_lines(&numbered)?)
-                .map_err(|e| StoreError(format!("appending to {}: {e}", path.display())))?;
-            meta.entry_count += numbered.len() as u64;
-            meta.message_count += numbered
-                .iter()
-                .filter(|entry| matches!(entry.body, EntryBody::Message { .. }))
-                .count() as i64;
-            meta.updated_at = meta.updated_at.max(at);
-            write_meta(&dir, &meta)
+            Ok(page.of(sessions))
         })
         .await
     }
 
-    async fn load_entries(&self, thread_id: &str) -> Result<Vec<ThreadEntry>, StoreError> {
-        let dir = self.thread_dir(thread_id);
-        self.blocking(move || {
-            Ok(read_jsonl::<ThreadEntry>(&dir.join(ENTRIES_FILE))?.unwrap_or_default())
-        })
-        .await
-    }
-
-    async fn append_spans(&self, thread_id: &str, spans: &[Span]) -> Result<(), StoreError> {
-        if spans.is_empty() {
-            return Ok(());
-        }
-        let thread_id = thread_id.to_string();
-        let dir = self.thread_dir(&thread_id);
-        let lines = json_lines(spans, "trace span")?;
-        self.blocking(move || {
-            let (_lock, _) = lock_existing_thread(&dir, &thread_id)?;
-            append_to(&dir.join(SPANS_FILE), &lines)
-        })
-        .await
-    }
-
-    async fn load_spans(&self, thread_id: &str) -> Result<Vec<Span>, StoreError> {
-        let dir = self.thread_dir(thread_id);
-        self.blocking(move || Ok(read_jsonl::<Span>(&dir.join(SPANS_FILE))?.unwrap_or_default()))
+    async fn delete_session(&self, id: &str) -> Result<bool, StoreError> {
+        let id = id.to_string();
+        self.on_layout(move |layout, _| layout.delete_session(&id))
             .await
     }
 
-    async fn set_active_agent(&self, thread_id: &str, agent: &str) -> Result<(), StoreError> {
-        let thread_id = thread_id.to_string();
+    async fn set_active_agent(&self, lease: &Lease, agent: &str) -> Result<(), FenceError> {
+        let lease = lease.clone();
         let agent = agent.to_string();
-        let dir = self.thread_dir(&thread_id);
-        self.blocking(move || {
-            let (_lock, mut meta) = lock_existing_thread(&dir, &thread_id)?;
-            meta.active = agent;
-            meta.updated_at = meta.updated_at.max(now_ms());
-            write_meta(&dir, &meta)
-        })
-        .await
+        self.fenced(move |layout, now| layout.set_agent(&lease, &agent, now))
+            .await
     }
 
     async fn set_attachments(
         &self,
-        thread_id: &str,
+        id: &str,
         attachments: &[Attachment],
     ) -> Result<(), StoreError> {
-        let thread_id = thread_id.to_string();
+        let id = id.to_string();
         let attachments = attachments.to_vec();
-        let dir = self.thread_dir(&thread_id);
-        self.blocking(move || {
-            let (_lock, mut meta) = lock_existing_thread(&dir, &thread_id)?;
-            meta.attachments = attachments;
-            meta.updated_at = meta.updated_at.max(now_ms());
-            write_meta(&dir, &meta)
-        })
-        .await
+        self.on_layout(move |layout, now| layout.set_attachments(&id, &attachments, now))
+            .await
+    }
+
+    async fn start_run(&self, start: StartRun) -> Result<Lease, StartError> {
+        let layout = self.layout.clone();
+        let now = self.now();
+        tokio::task::spawn_blocking(move || layout.start_run(&start, now))
+            .await
+            .map_err(|e| StartError::Store(StoreError(format!("store task failed: {e}"))))?
+    }
+
+    async fn append(&self, lease: &Lease, entries: &[Entry]) -> Result<(), FenceError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let lease = lease.clone();
+        let entries = entries.to_vec();
+        self.fenced(move |layout, _| layout.append(&lease, &entries))
+            .await
+    }
+
+    async fn renew(&self, lease: &Lease) -> Result<Renewal, FenceError> {
+        let lease = lease.clone();
+        self.fenced(move |layout, now| layout.renew(&lease, now))
+            .await
+    }
+
+    async fn end_run(&self, lease: &Lease, ended: RunEnded) -> Result<(), FenceError> {
+        let lease = lease.clone();
+        self.fenced(move |layout, now| layout.end_run(&lease, ended, now))
+            .await
+    }
+
+    async fn request_cancel(&self, run: &str, by: &str) -> Result<CancelOutcome, StoreError> {
+        let run = run.to_string();
+        let by = by.to_string();
+        self.on_layout(move |layout, now| layout.request_cancel(&run, &by, now))
+            .await
+    }
+
+    async fn reap_expired(&self, limit: usize) -> Result<Vec<Reaped>, StoreError> {
+        self.on_layout(move |layout, now| layout.reap_expired(limit, now))
+            .await
+    }
+
+    async fn get_run(&self, id: &str) -> Result<Option<RunMeta>, StoreError> {
+        let id = id.to_string();
+        self.on_layout(move |layout, _| layout.read_run(&id)).await
+    }
+
+    async fn load_entries(
+        &self,
+        session: &str,
+        after: Option<u64>,
+    ) -> Result<Vec<Entry>, StoreError> {
+        let session = session.to_string();
+        self.on_layout(move |layout, _| layout.entries(&session, after))
+            .await
+    }
+
+    async fn append_spans(&self, session: &str, spans: &[Span]) -> Result<(), StoreError> {
+        if spans.is_empty() {
+            return Ok(());
+        }
+        let session = session.to_string();
+        let spans = spans.to_vec();
+        self.on_layout(move |layout, _| layout.append_spans(&session, &spans))
+            .await
+    }
+
+    async fn load_spans(&self, session: &str) -> Result<Vec<Span>, StoreError> {
+        let session = session.to_string();
+        self.on_layout(move |layout, _| layout.spans(&session))
+            .await
     }
 
     async fn record_tool_shape(
@@ -627,8 +394,8 @@ impl Store for FileStore {
         let tool = tool.to_string();
         let schema = schema.clone();
         let example = example.clone();
-        let path = self.shapes_dir.join(encode_tool_filename(&tool));
-        self.blocking(move || {
+        let path = self.shapes_dir.join(encode_name(&tool, ".json"));
+        blocking(move || {
             // Last-writer-wins by design; a corrupt or missing file just
             // starts the count over.
             let seen_count = std::fs::read_to_string(&path)
@@ -637,7 +404,7 @@ impl Store for FileStore {
                 .map(|s| s.seen_count)
                 .unwrap_or(0);
             let shape = ShapeFile {
-                version: FORMAT_VERSION,
+                version: STORE_FORMAT,
                 tool,
                 schema,
                 example,
@@ -653,7 +420,7 @@ impl Store for FileStore {
 
     async fn tool_shapes(&self) -> Result<Vec<ToolShape>, StoreError> {
         let shapes_dir = self.shapes_dir.clone();
-        self.blocking(move || {
+        blocking(move || {
             let entries = match std::fs::read_dir(&shapes_dir) {
                 Ok(entries) => entries,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -692,6 +459,8 @@ impl Store for FileStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dive_core::store::{EntryBody, SessionFilter};
+    use dive_llm::types::ChatMessage;
 
     #[test]
     fn open_writes_the_format_marker_once() {
@@ -703,6 +472,7 @@ mod tests {
         let written = std::fs::read_to_string(&marker).unwrap();
         FileStore::open(dir.path()).unwrap();
         assert_eq!(std::fs::read_to_string(&marker).unwrap(), written);
+        assert!(!dir.path().join("threads").exists());
     }
 
     #[test]
@@ -723,7 +493,7 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok)
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| name != FORMAT_MARKER && name != "threads" && name != "shapes")
+            .filter(|name| ![FORMAT_MARKER, "shapes", "sessions", "runs"].contains(&name.as_str()))
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
     }
@@ -770,15 +540,26 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            dir.join(LEGACY_MESSAGES_FILE),
+            dir.join("messages.jsonl"),
             "{\"kind\":\"user\",\"content\":\"hi\"}\n{\"kind\":\"assistant\",\"content\":\"hello\"}\n",
         )
         .unwrap();
         "legacy00001".to_string()
     }
 
+    async fn authors(store: &FileStore, id: &str) -> Vec<String> {
+        store
+            .load_entries(id, None)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|entry| matches!(entry.body, EntryBody::Message { .. }))
+            .map(|entry| entry.author)
+            .collect()
+    }
+
     #[tokio::test]
-    async fn opening_a_version_1_store_converts_its_message_logs_to_chat_entries() {
+    async fn opening_a_version_1_store_converts_its_message_logs_into_a_chat_session() {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join(FORMAT_MARKER), "1\n").unwrap();
         let id = legacy_thread(root.path());
@@ -793,40 +574,20 @@ mod tests {
         let store = FileStore::open(root.path()).unwrap();
         assert_eq!(marker_format(root.path()).unwrap(), Some(STORE_FORMAT));
         let dir = root.path().join("threads").join(&id);
-        assert!(!dir.join(LEGACY_MESSAGES_FILE).exists());
-        let meta = read_meta(&dir).unwrap().unwrap();
-        assert_eq!((meta.version, meta.entry_count), (2, 2));
+        assert!(!dir.join("messages.jsonl").exists());
+        assert_eq!(authors(&store, &id).await, ["user", "chat"]);
+        let meta = store.get_session(&id).await.unwrap().unwrap();
         assert_eq!(
-            (meta.owner.as_str(), meta.active.as_str()),
+            (meta.agent.as_str(), meta.active_agent.as_str()),
             ("chat", "chat")
         );
-        assert_eq!(read_meta(&empty).unwrap().unwrap().version, 2);
-        let entries = store.load_entries(&id).await.unwrap();
-        let authors: Vec<&str> = entries.iter().map(|e| e.author.as_str()).collect();
-        assert_eq!(authors, ["user", "chat"]);
-
-        store
-            .append_entries(
-                &id,
-                &[NewEntry::message(
-                    "user",
-                    ChatMessage::user("again".to_string()),
-                )],
-            )
+        assert_eq!(meta.message_count, 2);
+        assert!(store.get_session("empty000001").await.unwrap().is_some());
+        let listed = store
+            .list_sessions(&SessionFilter::default(), Page::ALL)
             .await
             .unwrap();
-        let seqs: Vec<u64> = store
-            .load_entries(&id)
-            .await
-            .unwrap()
-            .iter()
-            .map(|e| e.seq)
-            .collect();
-        assert_eq!(seqs, [0, 1, 2]);
-        assert_eq!(
-            store.get_thread(&id).await.unwrap().unwrap().message_count,
-            3
-        );
+        assert_eq!(listed.sessions.len(), 2);
     }
 
     #[test]
@@ -860,46 +621,25 @@ mod tests {
         let id = legacy_thread(root.path());
         let store = FileStore::open(root.path()).unwrap();
         assert_eq!(marker_format(root.path()).unwrap(), Some(STORE_FORMAT));
-        let authors: Vec<String> = store
-            .load_entries(&id)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|entry| entry.author)
-            .collect();
-        assert_eq!(authors, ["user", "chat"]);
+        assert_eq!(authors(&store, &id).await, ["user", "chat"]);
     }
 
     #[tokio::test]
-    async fn a_migration_interrupted_after_writing_entries_finishes_with_the_right_count() {
+    async fn a_migration_interrupted_after_writing_entries_finishes_once() {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join(FORMAT_MARKER), "1\n").unwrap();
         let id = legacy_thread(root.path());
         let dir = root.path().join("threads").join(&id);
-        let entries = legacy_entries(&dir, 5).unwrap().unwrap();
-        std::fs::write(dir.join(ENTRIES_FILE), entry_lines(&entries).unwrap()).unwrap();
+        let entries = crate::migrate::legacy_entries(&dir, 5).unwrap().unwrap();
+        std::fs::write(
+            dir.join("entries.jsonl"),
+            crate::layout::json_lines(&entries, "thread entry").unwrap(),
+        )
+        .unwrap();
 
         let store = FileStore::open(root.path()).unwrap();
-        assert!(!dir.join(LEGACY_MESSAGES_FILE).exists());
-        assert_eq!(read_meta(&dir).unwrap().unwrap().entry_count, 2);
-        store
-            .append_entries(
-                &id,
-                &[NewEntry::message(
-                    "user",
-                    ChatMessage::user("again".to_string()),
-                )],
-            )
-            .await
-            .unwrap();
-        let seqs: Vec<u64> = store
-            .load_entries(&id)
-            .await
-            .unwrap()
-            .iter()
-            .map(|e| e.seq)
-            .collect();
-        assert_eq!(seqs, [0, 1, 2]);
+        assert!(!dir.join("messages.jsonl").exists());
+        assert_eq!(authors(&store, &id).await, ["user", "chat"]);
     }
 
     #[test]
@@ -919,117 +659,18 @@ mod tests {
         }
         assert_eq!(marker_format(&path).unwrap(), Some(STORE_FORMAT));
         let entries =
-            std::fs::read_to_string(path.join("threads").join(id).join(ENTRIES_FILE)).unwrap();
+            std::fs::read_to_string(path.join("threads").join(&id).join("entries.jsonl")).unwrap();
         assert_eq!(entries.lines().count(), 2);
-    }
-
-    #[tokio::test]
-    async fn entries_keep_their_authors_order_and_kinds() {
-        let root = tempfile::tempdir().unwrap();
-        let store = FileStore::open(root.path()).unwrap();
-        let meta = store
-            .create_thread("t", "orchestrator", None)
-            .await
-            .unwrap();
-        assert_eq!(
-            (meta.owner.as_str(), meta.active.as_str()),
-            ("orchestrator", "orchestrator")
-        );
-        store
-            .append_entries(
-                &meta.id,
-                &[
-                    NewEntry::message("user", ChatMessage::user("go".to_string())),
-                    NewEntry::new(
-                        "orchestrator",
-                        EntryBody::Handoff {
-                            from: "orchestrator".to_string(),
-                            to: "plan_author".to_string(),
-                            message: "draft it".to_string(),
-                            via: None,
-                        },
-                    ),
-                ],
-            )
-            .await
-            .unwrap();
-        store
-            .set_active_agent(&meta.id, "plan_author")
-            .await
-            .unwrap();
-        store
-            .append_entries(
-                &meta.id,
-                &[NewEntry::new(
-                    "plan_author",
-                    EntryBody::SubagentRun {
-                        agent: "plan_refiner".to_string(),
-                        caller: "plan_author".to_string(),
-                        input: serde_json::json!({"goal": "g"}),
-                        messages: Vec::new(),
-                        output: serde_json::json!({"changes": []}),
-                        final_: true,
-                    },
-                )],
-            )
-            .await
-            .unwrap();
-
-        let entries = store.load_entries(&meta.id).await.unwrap();
-        let summary: Vec<(u64, &str)> =
-            entries.iter().map(|e| (e.seq, e.author.as_str())).collect();
-        assert_eq!(
-            summary,
-            [(0, "user"), (1, "orchestrator"), (2, "plan_author")]
-        );
-        assert!(matches!(entries[2].body, EntryBody::SubagentRun { .. }));
-        let meta = store.get_thread(&meta.id).await.unwrap().unwrap();
-        assert_eq!(meta.active, "plan_author");
-        assert_eq!(meta.owner, "orchestrator");
-        assert_eq!(meta.message_count, 1);
-    }
-
-    #[tokio::test]
-    async fn concurrent_appends_number_entries_without_gaps() {
-        let root = tempfile::tempdir().unwrap();
-        let store = std::sync::Arc::new(FileStore::open(root.path()).unwrap());
-        let meta = store.create_thread("t", "chat", None).await.unwrap();
-        let tasks: Vec<_> = (0..8)
-            .map(|i| {
-                let store = store.clone();
-                let id = meta.id.clone();
-                tokio::spawn(async move {
-                    store
-                        .append_entries(
-                            &id,
-                            &[NewEntry::message(
-                                "user",
-                                ChatMessage::user(format!("m{i}")),
-                            )],
-                        )
-                        .await
-                        .unwrap();
-                })
-            })
-            .collect();
-        for task in tasks {
-            task.await.unwrap();
-        }
-        let mut seqs: Vec<u64> = store
-            .load_entries(&meta.id)
-            .await
-            .unwrap()
-            .iter()
-            .map(|e| e.seq)
-            .collect();
-        seqs.sort();
-        assert_eq!(seqs, (0..8).collect::<Vec<u64>>());
+        let session =
+            std::fs::read_to_string(path.join("sessions").join(&id).join("entries.jsonl")).unwrap();
+        assert_eq!(session.lines().count(), 4);
+        assert!(session.contains(&serde_json::to_string(&ChatMessage::user("hi")).unwrap()));
     }
 
     #[test]
     fn tool_filename_encoding() {
-        assert_eq!(encode_tool_filename("user__git_log"), "user__git_log.json");
-        assert_eq!(encode_tool_filename("a/b:c"), "a%2Fb%3Ac.json");
-        assert_eq!(encode_tool_filename("café"), "caf%C3%A9.json");
+        assert_eq!(encode_name("user__git_log", ".json"), "user__git_log.json");
+        assert_eq!(encode_name("a/b:c", ".json"), "a%2Fb%3Ac.json");
+        assert_eq!(encode_name("café", ".json"), "caf%C3%A9.json");
     }
 }

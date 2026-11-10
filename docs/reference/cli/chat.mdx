@@ -6,9 +6,9 @@ playground: "none"
 keywords: ["dive chat"]
 ---
 
-Starts a conversation with the default `chat` agent or the named one. A resumed thread continues with its active agent; naming an agent other than the thread's owner is refused.
+Starts a conversation with the default `chat` agent or the named one. A resumed session continues with its active agent; naming an agent other than the one the session started with is refused.
 
-Slash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another, `/thread` and `/state` print the current thread and its state, and `/quit` exits.
+Slash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another from the next message, `/session` and `/state` print the current session and its state, and `/quit` exits.
 
 ## Arguments
 
@@ -18,12 +18,12 @@ Slash commands: `/agent` lists agents and marks the active one, `/agent <name>` 
 
 ## Options
 
-<ParamField query="--thread" type="string">
-  Continue a thread: `--thread <id>` for a specific one, bare `--thread` for the most recent. Omit to start a new thread
+<ParamField query="--session" type="string">
+  Continue a session: `--session <id>` for a specific one, bare `--session` for the most recent chat. Omit to start a new session
 
-  Format: `THREAD`.
+  Format: `SESSION`.
 
-  The value is optional: `--thread` on its own is accepted.
+  The value is optional: `--session` on its own is accepted.
 </ParamField>
 
 ## Global options
@@ -47,7 +47,7 @@ dive chat release_notes
 ```
 
 ```bash Example 3
-dive chat --thread
+dive chat --session
 ```
 
 </RequestExample>

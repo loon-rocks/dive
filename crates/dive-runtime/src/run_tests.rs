@@ -259,7 +259,27 @@ async fn a_runs_token_appears_in_none_of_its_entries_events_or_log_lines() {
         .conversation(&store, sink.clone(), PipelineHooks::default())
         .await
         .unwrap();
-    let meta = store.create_thread("leak", "chat", None).await.unwrap();
+    let meta =
+        crate::ops::session::tests::chat_session(store.as_ref(), "leak", None, Vec::new()).await;
+    let start = dive_core::store::StartRun {
+        run_id: run.id.to_string(),
+        session: meta.id.clone(),
+        kind: dive_core::store::SessionKind::Chat,
+        holder: crate::writer::holder().to_string(),
+        token_expires_at: None,
+        started: dive_core::store::RunStarted {
+            input: serde_json::json!("hello"),
+            identity: run.identity.clone(),
+            trace_id: None,
+            plan: None,
+            synthetic: false,
+        },
+    };
+    let writer = crate::writer::RunWriter::start(store.clone(), start, None)
+        .await
+        .unwrap();
+    let mut conversation = conversation;
+    conversation.entries = Some(writer.hook());
     let (planned, turn) = Box::pin(run.scope(async {
         let planned = pipeline
             .run_explicit("q", agent_plan(&["alpha"]), Finish::Silent, None)
@@ -270,14 +290,16 @@ async fn a_runs_token_appears_in_none_of_its_entries_events_or_log_lines() {
     .await;
     planned.unwrap();
     let turn = turn.unwrap();
-    crate::runtime::persist_turn(store.as_ref(), &meta, "chat", &turn)
+    store.append_spans(&meta.id, &turn.spans).await.unwrap();
+    writer
+        .finish(dive_core::store::RunEnded::completed(None))
         .await
         .unwrap();
     tracing::info!(run = ?run, "finished");
 
     let usage = run.usage();
     assert_eq!(usage.calls, 2);
-    let stored = store.load_entries(&meta.id).await.unwrap();
+    let stored = store.load_entries(&meta.id, None).await.unwrap();
     let spans = store.load_spans(&meta.id).await.unwrap();
     let everything = [
         serde_json::to_string(&stored).unwrap(),

@@ -498,7 +498,8 @@ fn every_listing_command_answers_json_with_a_counted_envelope() {
     for (args, key) in [
         (vec!["plan", "list", "--json"], "plans"),
         (vec!["tool", "list", "--json"], "tools"),
-        (vec!["thread", "list", "--json"], "threads"),
+        (vec!["session", "list", "--json"], "sessions"),
+        (vec!["thread", "list", "--json"], "sessions"),
         (vec!["shape", "list", "--json"], "shapes"),
         (vec!["mcp", "list", "--json"], "servers"),
     ] {
@@ -526,7 +527,7 @@ fn an_empty_listing_is_an_envelope_with_a_note_not_stderr_advice() {
 
     // Under --json the hint is data, so stderr stays completely silent: a
     // machine caller gets one parseable thing and nothing to scrape.
-    let run = scratch.dive(&["thread", "list", "--json"]);
+    let run = scratch.dive(&["session", "list", "--json"]);
     run.code_is(0);
     assert_eq!(
         run.stderr, "",
@@ -539,10 +540,10 @@ fn an_empty_listing_is_an_envelope_with_a_note_not_stderr_advice() {
     // Without --json the same hint is the only thing the human gets, and it
     // is a diagnostic, so stdout stays empty rather than carrying prose.
     scratch
-        .dive(&["thread", "list"])
+        .dive(&["session", "list"])
         .code_is(0)
         .stdout_empty()
-        .stderr_contains("no threads yet");
+        .stderr_contains("no sessions yet");
 }
 
 #[test]

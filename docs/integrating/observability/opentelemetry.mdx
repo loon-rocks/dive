@@ -79,7 +79,7 @@ Langfuse groups the traces of one thread, or one workbench session, into a sessi
 - `capture_content` includes each call's input and output: prompts, responses, tool arguments and results. It's off unless you turn it on. Content is exported whole; set [`trace.clip_bytes`](/reference/configuration#param-trace-clip-bytes) to clip it
 - `logs` exports logs too
 
-Dive also keeps every turn's trace with its thread, whether or not telemetry is on. See [Thread traces](/reference/data-directory#thread-traces).
+Dive also keeps every turn's trace with its session, whether or not telemetry is on. See [Session traces](/reference/data-directory#session-traces).
 
 ## Check it worked
 

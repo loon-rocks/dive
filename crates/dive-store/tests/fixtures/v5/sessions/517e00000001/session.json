@@ -1,0 +1,17 @@
+{
+  "version": 5,
+  "id": "517e00000001",
+  "kind": "chat",
+  "title": "what changed in the site this week?",
+  "tenant": "local",
+  "owner": "ada",
+  "deployment": "cli",
+  "environment": "local",
+  "agent": "chat",
+  "active_agent": "chat",
+  "project": "/work/site",
+  "lease_generation": 0,
+  "message_count": 2,
+  "created_at": 1767225900000,
+  "updated_at": 1767225960000
+}

@@ -37,7 +37,7 @@
               "agents/guides/multi-agent-networks",
               "agents/guides/customize-built-ins",
               "agents/guides/steer-tool-choice",
-              "agents/guides/threads"
+              "agents/guides/sessions"
             ]
           },
           {
@@ -356,7 +356,11 @@
     },
     {
       "source": "/using/threads",
-      "destination": "/agents/guides/threads"
+      "destination": "/agents/guides/sessions"
+    },
+    {
+      "source": "/agents/guides/threads",
+      "destination": "/agents/guides/sessions"
     },
     {
       "source": "/using/tool-selection",
@@ -380,11 +384,27 @@
     },
     {
       "source": "/reference/cli/threads",
-      "destination": "/reference/cli/thread"
+      "destination": "/reference/cli/session"
     },
     {
       "source": "/reference/cli/threads/:slug*",
-      "destination": "/reference/cli/thread/:slug*"
+      "destination": "/reference/cli/session/:slug*"
+    },
+    {
+      "source": "/reference/cli/thread",
+      "destination": "/reference/cli/session"
+    },
+    {
+      "source": "/reference/cli/thread/:slug*",
+      "destination": "/reference/cli/session/:slug*"
+    },
+    {
+      "source": "/reference/cli/sessions",
+      "destination": "/reference/cli/session"
+    },
+    {
+      "source": "/reference/cli/sessions/:slug*",
+      "destination": "/reference/cli/session/:slug*"
     },
     {
       "source": "/reference/cli/shapes",
@@ -404,7 +424,7 @@
     "plan_file_version": "3",
     "tool_file_version": "4",
     "agent_file_version": "2",
-    "data_directory_version": "4",
+    "data_directory_version": "5",
     "pack_file_version": "2",
     "pack_lock_version": "1"
   }

@@ -1,0 +1,14 @@
+{"seq":1,"run_id":"5ab000000001-r1","at":1767226200000,"author":"run","kind":"run_started","input":"draft the release plan","identity":{"user":"ada","tenant":"local","deployment":"cli","environment":"local"},"synthetic":true}
+{"seq":2,"run_id":"5ab000000001-r1","at":1767226200000,"author":"user","kind":"message","message":{"kind":"user","content":"draft the release plan"}}
+{"seq":3,"run_id":"5ab000000001-r1","at":1767226210000,"author":"front_desk","kind":"handoff","from":"front_desk","to":"plan_author","message":"draft it","via":"transfer_to_plan_author"}
+{"seq":4,"run_id":"5ab000000001-r1","span_id":"00f067aa0ba902b7","at":1767226220000,"author":"plan_author","kind":"message","message":{"kind":"assistant","content":null,"tool_calls":[{"id":"call_7","name":"agent__plan_refiner","arguments":{"goal":"release"}}]},"ms":900,"usage":{"model":"claude-sonnet-4-5","input_tokens":1500,"output_tokens":20,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}
+{"seq":5,"run_id":"5ab000000001-r1","span_id":"53995c3f42cd8ad8","at":1767226280000,"author":"plan_author","kind":"agent_started","agent":"plan_refiner","caller":"plan_author","input":{"goal":"release"}}
+{"seq":6,"run_id":"5ab000000001-r1","path":"agent:plan_refiner","parent":5,"at":1767226280000,"author":"plan_refiner","kind":"message","message":{"kind":"user","content":"{\n  \"goal\": \"release\"\n}"}}
+{"seq":7,"run_id":"5ab000000001-r1","path":"agent:plan_refiner","parent":5,"at":1767226280000,"author":"plan_refiner","kind":"message","message":{"kind":"assistant","content":"{\"changes\":[\"add a changelog step\"]}"}}
+{"seq":8,"run_id":"5ab000000001-r1","parent":5,"at":1767226280000,"author":"plan_author","kind":"agent_finished","agent":"plan_refiner","output":{"changes":["add a changelog step"]},"final":true}
+{"seq":9,"run_id":"5ab000000001-r1","span_id":"53995c3f42cd8ad8","at":1767226280000,"author":"plan_author","kind":"message","message":{"kind":"tool_result","tool_call_id":"call_7","content":{"changes":["add a changelog step"]},"is_error":false},"ms":60000}
+{"seq":10,"run_id":"5ab000000001-r1","at":1767226290000,"author":"plan_author","kind":"message","message":{"kind":"assistant","content":"The plan now ends with a changelog step."},"ms":700,"usage":{"model":"claude-sonnet-4-5","input_tokens":1600,"output_tokens":12,"cache_creation_input_tokens":0,"cache_read_input_tokens":1500}}
+{"seq":11,"run_id":"5ab000000001-r1","at":1767226290000,"author":"run","kind":"run_ended","status":"completed"}
+{"seq":12,"run_id":"5ab000000001-r2","at":1767226290000,"author":"run","kind":"run_started","input":"ship it","identity":{"user":"ada","tenant":"local","deployment":"cli","environment":"local"},"synthetic":true}
+{"seq":13,"run_id":"5ab000000001-r2","at":1767226290000,"author":"user","kind":"message","message":{"kind":"user","content":"ship it"}}
+{"seq":14,"run_id":"5ab000000001-r2","at":1767226290000,"author":"run","kind":"run_ended","status":"completed"}

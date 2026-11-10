@@ -510,69 +510,6 @@ struct ShapeOnlyStore {
 
 #[async_trait]
 impl crate::store::Store for ShapeOnlyStore {
-    async fn create_thread(
-        &self,
-        _: &str,
-        _: &str,
-        _: Option<&str>,
-    ) -> Result<crate::store::ThreadMeta, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn get_thread(
-        &self,
-        _: &str,
-    ) -> Result<Option<crate::store::ThreadMeta>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn latest_thread(
-        &self,
-    ) -> Result<Option<crate::store::ThreadMeta>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn list_threads(
-        &self,
-    ) -> Result<Vec<crate::store::ThreadMeta>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn delete_thread(&self, _: &str) -> Result<bool, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn append_entries(
-        &self,
-        _: &str,
-        _: &[crate::store::NewEntry],
-    ) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn append_spans(
-        &self,
-        _: &str,
-        _: &[crate::store::Span],
-    ) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn load_spans(
-        &self,
-        _: &str,
-    ) -> Result<Vec<crate::store::Span>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn load_entries(
-        &self,
-        _: &str,
-    ) -> Result<Vec<crate::store::ThreadEntry>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn set_active_agent(&self, _: &str, _: &str) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn set_attachments(
-        &self,
-        _: &str,
-        _: &[crate::store::Attachment],
-    ) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
     async fn record_tool_shape(
         &self,
         tool: &str,
@@ -589,6 +526,107 @@ impl crate::store::Store for ShapeOnlyStore {
     }
     async fn tool_shapes(&self) -> Result<Vec<crate::store::ToolShape>, crate::store::StoreError> {
         Ok(self.shapes.lock().unwrap().clone())
+    }
+    async fn create_session(
+        &self,
+        _: crate::store::NewSession,
+    ) -> Result<crate::store::SessionMeta, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn get_session(
+        &self,
+        _: &str,
+    ) -> Result<Option<crate::store::SessionMeta>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn list_sessions(
+        &self,
+        _: &crate::store::SessionFilter,
+        _: crate::store::Page,
+    ) -> Result<crate::store::SessionPage, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn delete_session(&self, _: &str) -> Result<bool, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn set_active_agent(
+        &self,
+        _: &crate::store::Lease,
+        _: &str,
+    ) -> Result<(), crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn set_attachments(
+        &self,
+        _: &str,
+        _: &[crate::store::Attachment],
+    ) -> Result<(), crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn start_run(
+        &self,
+        _: crate::store::StartRun,
+    ) -> Result<crate::store::Lease, crate::store::StartError> {
+        unimplemented!()
+    }
+    async fn append(
+        &self,
+        _: &crate::store::Lease,
+        _: &[crate::store::Entry],
+    ) -> Result<(), crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn renew(
+        &self,
+        _: &crate::store::Lease,
+    ) -> Result<crate::store::Renewal, crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn end_run(
+        &self,
+        _: &crate::store::Lease,
+        _: crate::store::RunEnded,
+    ) -> Result<(), crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn request_cancel(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<crate::store::CancelOutcome, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn reap_expired(
+        &self,
+        _: usize,
+    ) -> Result<Vec<crate::store::Reaped>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn get_run(
+        &self,
+        _: &str,
+    ) -> Result<Option<crate::store::RunMeta>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn load_entries(
+        &self,
+        _: &str,
+        _: Option<u64>,
+    ) -> Result<Vec<crate::store::Entry>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn append_spans(
+        &self,
+        _: &str,
+        _: &[crate::store::Span],
+    ) -> Result<(), crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn load_spans(
+        &self,
+        _: &str,
+    ) -> Result<Vec<crate::store::Span>, crate::store::StoreError> {
+        unimplemented!()
     }
 }
 

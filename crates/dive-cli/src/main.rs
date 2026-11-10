@@ -89,21 +89,21 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
         Command::Ask {
             message,
             agent,
-            thread,
+            session,
             json,
             no_stream,
         } => {
             commands::ask::run(commands::ask::AskArgs {
                 message,
                 agent,
-                thread,
+                session,
                 json,
                 no_stream,
             })
             .await
         }
-        Command::Chat { agent, thread } => commands::chat_cmd::run(agent, thread).await,
-        Command::Thread { command } => commands::thread_cmd::run(command).await,
+        Command::Chat { agent, session } => commands::chat_cmd::run(agent, session).await,
+        Command::Session { command } => commands::session_cmd::run(command).await,
         Command::Secret { command } => commands::secret_cmd::run(command),
         Command::Shape { command } => commands::shape_cmd::run(command).await,
         Command::Plan { command } => commands::plan_cmd::run(command).await,

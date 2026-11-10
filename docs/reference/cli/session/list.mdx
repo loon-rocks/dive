@@ -1,0 +1,49 @@
+---
+title: "dive session list"
+sidebarTitle: "list"
+description: "List sessions"
+playground: "none"
+keywords: ["dive session list"]
+---
+
+Lists the sessions started in the current directory's project, or the global sessions when the directory has no `.dive` folder, newest first. `--all` lists every session and `--kind` keeps only chats or plan runs.
+
+## Options
+
+<ParamField query="--all" type="boolean">
+  List every session, whatever project it was started in
+</ParamField>
+
+<ParamField query="--kind" type="enum<string>">
+  Only sessions of this kind: chat or plan
+
+  Format: `KIND`.
+
+  Available options: `chat`, `plan`
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive session list [OPTIONS]
+```
+
+```bash Example 1
+dive session list
+```
+
+```bash Example 2
+dive session list --all --kind plan
+```
+
+</RequestExample>

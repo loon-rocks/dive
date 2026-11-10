@@ -1,6 +1,6 @@
 use crate::usage::{RunLedger, UsageReport};
 use crate::EventSink;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
@@ -101,7 +101,7 @@ impl TraceParent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Identity {
     pub user: String,
     pub tenant: String,

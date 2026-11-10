@@ -1,4 +1,4 @@
-//! `dive ask` — one agent turn, persisted to a thread.
+//! `dive ask` — one agent turn, recorded as a run of a chat session.
 
 use anyhow::{bail, Result};
 use dive_core::NullSink;
@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub struct AskArgs {
     pub message: Option<String>,
     pub agent: Option<String>,
-    pub thread: Option<Option<String>>,
+    pub session: Option<Option<String>>,
     pub json: bool,
     pub no_stream: bool,
 }
@@ -19,14 +19,15 @@ pub async fn run(args: AskArgs) -> Result<()> {
 
     let runtime = crate::host::runtime()?;
     let store = runtime.store()?;
-    let mut start = ChatStart::resolve(&runtime, store, args.agent.as_deref(), args.thread).await?;
+    let mut start =
+        ChatStart::resolve(&runtime, store, args.agent.as_deref(), args.session).await?;
 
     let stream_text = !args.json && !args.no_stream;
-    let thread_id = match start.thread() {
+    let session_id = match start.session() {
         Some(meta) => meta.id.clone(),
-        None => start.create_thread(&message).await?.id.clone(),
+        None => start.create_session(&message).await?.id.clone(),
     };
-    let run = crate::telemetry::RunInfo::conversation("ask", Some(thread_id.clone()))
+    let run = crate::telemetry::RunInfo::conversation("ask", Some(session_id.clone()))
         .user(runtime.config.user.name.as_deref())
         .input(serde_json::Value::String(message.clone()));
     let events: Arc<dyn dive_core::EventSink> = if args.json {
@@ -62,7 +63,8 @@ pub async fn run(args: AskArgs) -> Result<()> {
             "tool_calls_made": outcome.tool_calls_made,
             "tools_used": outcome.tools_used,
             "usage": usage,
-            "thread_id": thread_id,
+            "session_id": session_id,
+            "run_id": report.run_id,
             "agent": outcome.active,
         });
         println!("{}", serde_json::to_string_pretty(&envelope)?);
@@ -78,8 +80,8 @@ pub async fn run(args: AskArgs) -> Result<()> {
             eprintln!("\x1b[2m{}\x1b[0m", usage.summary());
         }
         eprintln!(
-            "\x1b[2mresume with `dive chat --thread {}`\x1b[0m",
-            thread_id
+            "\x1b[2mresume with `dive chat --session {}`\x1b[0m",
+            session_id
         );
     }
     Ok(())
