@@ -261,3 +261,27 @@ fn roles_and_fallbacks_take_images_unless_they_say_not() {
     assert!(!default.fallbacks[0].takes_images());
     assert!(!config.models.get("judge").unwrap().takes_images());
 }
+
+#[test]
+fn the_identity_section_names_who_runs_dive_and_where() {
+    let path = fixture_dir(CONFIG_FORMAT).join("identity.toml");
+    let identity = load_from(std::slice::from_ref(&path))
+        .unwrap()
+        .config
+        .identity;
+    assert_eq!(
+        identity,
+        dive_config::IdentityConfig {
+            user: Some("ada".into()),
+            tenant: Some("acme".into()),
+            deployment: Some("ci".into()),
+            environment: Some("staging".into()),
+        }
+    );
+    let minimal = fixture_dir(CONFIG_FORMAT).join("minimal.toml");
+    let absent = load_from(std::slice::from_ref(&minimal))
+        .unwrap()
+        .config
+        .identity;
+    assert_eq!(absent, dive_config::IdentityConfig::default());
+}

@@ -1,0 +1,22 @@
+version = 7
+
+[pricing."claude-haiku-5-5"]
+input = 0.10
+output = 0.50
+cache_read = 0.01
+
+[[pricing."claude-haiku-5-5".tiers]]
+above = 100_000
+input = 0.50
+output = 2.50
+
+[pricing."gpt-5.5"]
+input = 5.00
+output = 30.00
+cache_read = 0.50
+
+[[pricing."gpt-5.5".tiers]]
+above = 272_000
+input = 10.00
+output = 45.00
+cache_read = 1.00

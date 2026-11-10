@@ -65,7 +65,6 @@ impl Workbench {
             Arc::new(sink::ChannelSink::plan_run(tx.clone())),
             exporter.clone(),
         );
-        runtime.usage.attach_events(run_sink.clone());
         let pipeline = runtime.pipeline(&store, run_sink).await?;
         let plans_dir = runtime.plans_dir();
         let root: PathBuf = root.into();
@@ -95,7 +94,7 @@ impl Workbench {
         let registry = attachment.tools(toolbox as Arc<dyn ToolRegistry>);
         let (agent_set, errors) = dive_core::agent::doc::AgentSet::load(
             &agents::builtin_sources(),
-            &dive_core::agent::doc::agent_dirs(),
+            &runtime.agent_dirs(),
         );
         let agent_set = agent_set.with_drafted(runtime.drafted().agents());
         for error in errors {
@@ -165,6 +164,7 @@ impl Workbench {
             root,
             project: runtime.project().map(str::to_string),
             attachment,
+            identity: runtime.identity(),
         };
         if let Some((kind, name)) = opening {
             workbench

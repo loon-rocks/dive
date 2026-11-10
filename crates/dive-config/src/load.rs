@@ -67,6 +67,21 @@ pub fn load(secrets: &dyn SecretSource) -> Result<LoadedConfig> {
 }
 
 pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<LoadedConfig> {
+    load_layers(paths, secrets, true)
+}
+
+pub fn load_from_without_legacy(
+    paths: &[PathBuf],
+    secrets: &dyn SecretSource,
+) -> Result<LoadedConfig> {
+    load_layers(paths, secrets, false)
+}
+
+fn load_layers(
+    paths: &[PathBuf],
+    secrets: &dyn SecretSource,
+    legacy: bool,
+) -> Result<LoadedConfig> {
     let mut merged = toml::Table::new();
     let mut sources = Vec::new();
     let mut layers = Vec::new();
@@ -122,7 +137,9 @@ pub fn load_from(paths: &[PathBuf], secrets: &dyn SecretSource) -> Result<Loaded
         .try_into()
         .context("config does not match the expected schema")?;
     distribute_missing_env(&mut config, missing)?;
-    settle_legacy_paths(&mut config);
+    if legacy {
+        settle_legacy_paths(&mut config);
+    }
     for layer in &pack_layers {
         config.packs.extend(layer.packs.clone());
     }

@@ -369,7 +369,7 @@ fn existing_agent(name: &str, pipeline: &Pipeline) -> Result<Existing, String> {
     let name = network::bare_name(ArtifactKind::Agent, name);
     let (set, _) = dive_core::agent::doc::AgentSet::load(
         &crate::workbench::agents::builtin_sources(),
-        &dive_core::agent::doc::agent_dirs(),
+        &pipeline.drafted.agent_dirs,
     );
     let doc = set
         .get(&name)
@@ -1150,6 +1150,9 @@ pub async fn save_network(
         untested,
         confirm,
     } = request;
+    if pipeline.drafted.drafting_disabled {
+        return Err(dive_core::pipeline::DRAFTING_DISABLED.to_string());
+    }
     let scoped = scoped_dir(scope, root);
     let network = draft.lock().unwrap().network.clone();
     if network.in_save_order().is_empty() {

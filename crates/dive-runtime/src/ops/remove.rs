@@ -87,11 +87,11 @@ pub enum RemoveError {
 }
 
 pub fn removal(runtime: &Runtime, kind: ItemKind, name: &str) -> Result<Removal, RemoveError> {
-    removal_in(runtime, &dive_core::agent::doc::agent_dirs(), kind, name)
+    removal_in(runtime, &runtime.agent_dirs(), kind, name)
 }
 
 pub fn remove(runtime: &Runtime, kind: ItemKind, name: &str) -> Result<Removal, RemoveError> {
-    remove_in(runtime, &dive_core::agent::doc::agent_dirs(), kind, name)
+    remove_in(runtime, &runtime.agent_dirs(), kind, name)
 }
 
 fn remove_in(

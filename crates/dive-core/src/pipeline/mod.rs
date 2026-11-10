@@ -44,7 +44,10 @@ pub use ask::{ask_tool_def, AskResult, WhenUnanswered, ASK_TOOL};
 pub use authoring::{EditAccepted, EditRejected, WriteError};
 pub use catalog::{CatalogCheck, ToolCatalog};
 pub use compose::{draft_input, COMPOSE_PLAN};
-pub use drafter::{drafter_tool_defs, stamped, write_file, Drafted, DraftedTools};
+pub use drafter::{
+    drafter_tool_defs, drafting_disabled, stamped, write_file, Drafted, DraftedTools,
+    DRAFTING_DISABLED,
+};
 pub use exit::{ExitStatus, PlanExit, EXIT_TOOL};
 pub use filter::FILTER_TOOL;
 pub use gate::{ErrorDecision, ExecutionGate, GateContext, GateDecision, StepPath};
@@ -107,17 +110,9 @@ pub struct Pipeline {
     pub current_date: String,
     pub max_attempts: u32,
     pub max_agent_iterations: u32,
-    /// Where this run's model calls are tallied. Shared with the
-    /// [`ModelRouter`] as its `UsageMeter`, and — because [`Pipeline::nested`]
-    /// clones — with every plan this one calls, so a composed plan's spend
-    /// rolls up into its caller for free.
-    ///
-    /// Deliberately **not** drained by the pipeline, and so deliberately not
-    /// a field on [`PipelineOutcome`]: `call_plan` runs a nested plan through
-    /// the same `run_explicit` entry point against this same ledger, so a
-    /// drain in there would hand the inner plan its caller's tally and leave
-    /// the caller reporting only what happened afterwards. The owner of the
-    /// top-level run calls [`UsageLedger::take`] once, when it is over.
+    /// The router's process-wide meter. Calls made inside a
+    /// [`Run`](crate::run::Run) scope are tallied on that run, nested plans
+    /// included; this ledger keeps only calls made outside any run.
     pub usage: Arc<crate::usage::UsageLedger>,
     pub agents: Arc<crate::agent::doc::AgentSet>,
     pub agent_depth: usize,

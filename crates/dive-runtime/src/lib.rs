@@ -4,8 +4,11 @@ pub mod cancel;
 pub mod chat;
 pub mod evidence;
 mod files;
+pub mod identity;
 pub mod ops;
 pub mod packs;
+#[cfg(test)]
+mod run_tests;
 pub mod run_trace;
 pub mod runtime;
 pub mod scope;

@@ -1789,6 +1789,71 @@ mod tests {
         assert!(tool_names(&requests[1]).contains(&"transfer_back".to_string()));
     }
 
+    type SeenRun = Option<(String, String, Option<String>)>;
+
+    #[derive(Default)]
+    struct RunProbe(Mutex<Vec<SeenRun>>);
+
+    #[async_trait]
+    impl ToolRegistry for RunProbe {
+        async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
+            Echo.tools().await
+        }
+        async fn invoke(&self, _: &str, _: Value) -> Result<ToolOutcome, ToolError> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(crate::run::Run::current().map(|run| {
+                    (
+                        run.id.to_string(),
+                        run.identity.user.clone(),
+                        run.token.as_ref().map(|token| token.expose().to_string()),
+                    )
+                }));
+            Ok(ToolOutcome {
+                result: json!({"seen": true}),
+                is_error: false,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_tool_a_conversation_subagent_calls_sees_the_turns_run() {
+        let (mut conversation, _) = conversation(vec![
+            call("c1", "agent__helper", json!({"prompt": "look it up"})),
+            call("c2", "t__echo", json!({})),
+            text("found it"),
+            text("the answer"),
+        ]);
+        let probe = Arc::new(RunProbe::default());
+        conversation.catalog = probe.clone();
+        conversation.standing_tools = vec!["t__echo".to_string()];
+        let run = Arc::new(
+            crate::run::Run::new(
+                crate::run::Identity {
+                    user: "ada".into(),
+                    ..Default::default()
+                },
+                Arc::new(crate::NullSink),
+            )
+            .with_token(crate::run::RunToken::new("tok_REACH")),
+        );
+        let turn = run
+            .scope(conversation.run_turn(&[], "front", "question"))
+            .await
+            .unwrap();
+        assert_eq!(turn.text, "the answer");
+        let seen = probe.0.lock().unwrap();
+        assert_eq!(
+            *seen,
+            [Some((
+                run.id.to_string(),
+                "ada".to_string(),
+                Some("tok_REACH".to_string())
+            ))]
+        );
+    }
+
     #[tokio::test]
     async fn a_subagent_run_is_logged_but_never_enters_a_view() {
         let (conversation, provider) = conversation(vec![

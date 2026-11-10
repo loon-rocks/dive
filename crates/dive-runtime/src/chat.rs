@@ -10,7 +10,8 @@ use crate::workbench::ArtifactKind;
 use anyhow::{Context, Result};
 use dive_core::agent::conversation::{Conversation, ConversationTurn};
 use dive_core::pipeline::doc::PlanDoc;
-use dive_core::usage::{UsageLedger, UsageReport};
+use dive_core::run::{Identity, Run};
+use dive_core::usage::UsageReport;
 use dive_core::{Attachment, EventSink, NewEntry, RunStart, Store, TeeSink, ThreadMeta};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -66,6 +67,7 @@ pub struct ChatStart {
     root: Option<PathBuf>,
     project: Option<String>,
     title: Option<String>,
+    identity: Identity,
 }
 
 const UNRECORDED_DRAFTERS: [&str; 5] = [
@@ -115,6 +117,7 @@ impl ChatStart {
             root: None,
             project: runtime.project().map(str::to_string),
             title: None,
+            identity: runtime.identity(),
         })
     }
 
@@ -177,6 +180,7 @@ impl ChatStart {
             root: None,
             project: runtime.project().map(str::to_string),
             title,
+            identity: runtime.identity(),
         })
     }
 
@@ -217,7 +221,6 @@ impl ChatStart {
         mut hooks: PipelineHooks,
         run_name: Option<String>,
     ) -> Result<ChatSession> {
-        runtime.usage.attach_events(events.clone());
         let cancel = hooks.cancel.get_or_insert_with(CancelHandle::new).clone();
         let kinds = self.attachments.clone();
         let pipeline = runtime
@@ -230,10 +233,10 @@ impl ChatStart {
             .as_ref()
             .map(|meta| meta.attachments.clone())
             .unwrap_or_default();
-        let root = match self.root.take() {
-            Some(root) => root,
-            None => std::env::current_dir().context("failed to read the current directory")?,
-        };
+        let root = self
+            .root
+            .take()
+            .unwrap_or_else(|| runtime.workspace_root().to_path_buf());
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let network = NetworkAttachment::new(NetworkSetup {
             pipeline: pipeline.clone(),
@@ -287,13 +290,7 @@ impl ChatStart {
             host.wire(&mut conversation);
         }
         let mut session = self
-            .over(
-                conversation,
-                runtime.usage.clone(),
-                events,
-                run_name,
-                Some(cancel),
-            )
+            .over(conversation, events, run_name, Some(cancel))
             .await?;
         if let Some(recorded) = session
             .recorded
@@ -318,7 +315,6 @@ impl ChatStart {
     pub async fn over(
         self,
         conversation: Conversation,
-        usage: Arc<UsageLedger>,
         events: Arc<dyn EventSink>,
         run_name: Option<String>,
         cancel: Option<CancelHandle>,
@@ -336,7 +332,7 @@ impl ChatStart {
         Ok(ChatSession {
             conversation,
             store: self.store,
-            usage,
+            identity: self.identity,
             events,
             run_name,
             cancel,
@@ -412,7 +408,7 @@ fn edit_title(items: &[Item], evidence: Option<&Evidence>) -> String {
 pub struct ChatSession {
     conversation: Conversation,
     store: Arc<dyn Store>,
-    usage: Arc<UsageLedger>,
+    identity: Identity,
     events: Arc<dyn EventSink>,
     run_name: Option<String>,
     cancel: Option<CancelHandle>,
@@ -574,17 +570,23 @@ impl ChatSession {
                 input: message.map(|message| serde_json::Value::String(message.to_string())),
             });
         }
+        let run = Arc::new(Run::new(self.identity.clone(), self.events.clone()));
         let turn = self
             .conversation
             .run_turn_with(&self.history, &self.active, user.clone());
-        let result: Result<ConversationTurn> = match &self.cancel {
-            Some(cancel) => match cancel.run(turn).await {
-                Ok(result) => result.map_err(Into::into),
-                Err(cancelled) => Err(cancelled.into()),
-            },
-            None => turn.await.map_err(Into::into),
-        };
-        let usage = self.usage.take();
+        let cancel = self.cancel.clone();
+        let result: Result<ConversationTurn> = run
+            .scope(async move {
+                match &cancel {
+                    Some(cancel) => match cancel.run(turn).await {
+                        Ok(result) => result.map_err(Into::into),
+                        Err(cancelled) => Err(cancelled.into()),
+                    },
+                    None => turn.await.map_err(Into::into),
+                }
+            })
+            .await;
+        let usage = run.usage();
         let outcome = match result {
             Ok(mut turn) => {
                 if turn.text.trim().is_empty() {
@@ -775,7 +777,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }
@@ -794,7 +796,7 @@ mod tests {
         ChatStart::resolve(runtime, store.clone(), Some("front"), thread)
             .await
             .unwrap()
-            .over(conversation, runtime.usage.clone(), events, None, None)
+            .over(conversation, events, None, None)
             .await
             .unwrap()
     }
@@ -1003,7 +1005,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         let runtime =
             Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap();
@@ -1029,13 +1031,7 @@ mod tests {
         let mut chat = ChatStart::resolve(&runtime, store.clone(), Some("waiter"), None)
             .await
             .unwrap()
-            .over(
-                conversation,
-                runtime.usage.clone(),
-                events,
-                None,
-                Some(cancel.clone()),
-            )
+            .over(conversation, events, None, Some(cancel.clone()))
             .await
             .unwrap();
 
@@ -1112,7 +1108,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("file".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }
@@ -1548,7 +1544,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("file".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }

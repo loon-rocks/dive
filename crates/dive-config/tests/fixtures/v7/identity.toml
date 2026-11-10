@@ -1,0 +1,7 @@
+version = 7
+
+[identity]
+user = "ada"
+tenant = "acme"
+deployment = "ci"
+environment = "staging"

@@ -62,7 +62,7 @@ impl Fixture {
         let router = ModelRouter::with_providers(HashMap::new(), Default::default());
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, packs, options, router).unwrap()
     }

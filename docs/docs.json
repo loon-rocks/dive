@@ -400,7 +400,7 @@
   },
   "variables": {
     "release_version": "v0.18.0",
-    "config_file_version": "6",
+    "config_file_version": "7",
     "plan_file_version": "3",
     "tool_file_version": "4",
     "agent_file_version": "2",
