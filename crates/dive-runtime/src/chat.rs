@@ -777,7 +777,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }
@@ -1005,7 +1005,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         let runtime =
             Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap();
@@ -1108,7 +1108,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("file".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }
@@ -1544,7 +1544,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("file".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }

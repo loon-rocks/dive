@@ -41,11 +41,9 @@ pub struct Runtime {
     options: RuntimeOptions,
     project: Option<String>,
     root: Option<std::path::PathBuf>,
-    host: Host,
     identity: std::sync::OnceLock<dive_core::run::Identity>,
     workspace: Workspace,
     workspace_root: PathBuf,
-    mode: Mode,
 }
 
 impl Runtime {
@@ -54,18 +52,13 @@ impl Runtime {
     }
 
     pub fn open(workspace: &Workspace, options: RuntimeOptions) -> Result<Self> {
-        Self::open_as(workspace, options, Mode::Local)
-    }
-
-    pub fn open_as(workspace: &Workspace, options: RuntimeOptions, mode: Mode) -> Result<Self> {
-        let loaded = match mode {
+        let loaded = match options.mode {
             Mode::Local => load_config(workspace)?,
             Mode::Serve => load_serve_config(workspace)?,
         };
         let packs = load_packs(&loaded)?;
         let root = (!workspace.is_global()).then(|| absolute_root(workspace));
         Ok(Self::with_packs(loaded.config, packs, options)?
-            .with_mode(mode)
             .on_workspace(workspace)
             .in_project(workspace.project())
             .in_root(root)
@@ -96,14 +89,8 @@ impl Runtime {
         self
     }
 
-    fn with_mode(mut self, mode: Mode) -> Self {
-        self.mode = mode;
-        self.drafted = Arc::new(self.build_drafted());
-        self
-    }
-
     pub fn mode(&self) -> Mode {
-        self.mode
+        self.options.mode
     }
 
     pub fn serve_run(
@@ -130,7 +117,7 @@ impl Runtime {
     }
 
     pub fn agent_dirs(&self) -> Vec<PathBuf> {
-        match self.mode {
+        match self.mode() {
             Mode::Local => self.workspace.agent_dirs(),
             Mode::Serve => dive_core::agent::doc::agent_dirs(
                 Some(&self.workspace.root().join(dive_config::legacy::PROJECT_DIR)),
@@ -142,7 +129,7 @@ impl Runtime {
     fn layer_paths(&self, paths: &[PathBuf]) -> Vec<PathBuf> {
         paths
             .iter()
-            .filter(|path| self.mode == Mode::Local || self.in_workspace(path))
+            .filter(|path| self.mode() == Mode::Local || self.in_workspace(path))
             .map(|path| self.rebased(path))
             .collect()
     }
@@ -184,7 +171,7 @@ impl Runtime {
         .with_secrets(Arc::new(dive_core::secrets::in_project(
             self.config.project.id.clone(),
         )));
-        match self.mode {
+        match self.mode() {
             Mode::Local => drafted,
             Mode::Serve => drafted.without_drafting().with_clean_env(true),
         }
@@ -253,24 +240,16 @@ impl Runtime {
             options,
             project: None,
             root: None,
-            host: Host::default(),
             identity: std::sync::OnceLock::new(),
             workspace_root: absolute_root(&workspace),
             workspace,
-            mode: Mode::Local,
         };
         runtime.drafted = Arc::new(runtime.build_drafted());
         Ok(runtime)
     }
 
-    pub fn hosted_by(mut self, host: Host) -> Self {
-        self.host = host;
-        self.identity = std::sync::OnceLock::new();
-        self
-    }
-
     pub fn host(&self) -> Host {
-        self.host
+        self.options.host
     }
 
     pub fn identity(&self) -> dive_core::run::Identity {
@@ -278,7 +257,7 @@ impl Runtime {
             .get_or_init(|| {
                 crate::identity::local(
                     &self.config.identity,
-                    self.host.as_str(),
+                    self.host().as_str(),
                     std::env::var("USER").ok(),
                     crate::identity::hostname,
                 )
@@ -342,7 +321,7 @@ impl Runtime {
             ));
         }
         let base: Arc<dyn ToolRegistry> = Arc::new(CompositeRegistry::new(sources));
-        Ok(match self.mode {
+        Ok(match self.mode() {
             Mode::Local => Arc::new(RecordingRegistry::new(base, store.clone())),
             Mode::Serve => base,
         })
@@ -365,7 +344,7 @@ impl Runtime {
     fn with_files(&self, registry: UserToolRegistry) -> UserToolRegistry {
         let registry = registry
             .with_files(self.files.clone())
-            .with_clean_env(self.mode == Mode::Serve);
+            .with_clean_env(self.mode() == Mode::Serve);
         let root = self
             .root
             .clone()
@@ -628,7 +607,7 @@ impl Runtime {
             events,
             plans: Arc::new(plans),
             call_stack: Vec::new(),
-            store: (self.mode == Mode::Local).then(|| store.clone()),
+            store: (self.mode() == Mode::Local).then(|| store.clone()),
             gate,
             interlocutor,
             catalog: Some(Arc::new(catalog)),
@@ -1092,6 +1071,8 @@ impl Host {
 pub struct RuntimeOptions {
     pub storage_backend: Option<String>,
     pub capture_content: bool,
+    pub mode: Mode,
+    pub host: Host,
 }
 
 #[cfg(test)]
@@ -1190,9 +1171,10 @@ mod tests {
     fn serving(dir: &Path) -> Runtime {
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
+            mode: Mode::Serve,
             ..Default::default()
         };
-        Runtime::open_as(&Workspace::new(dir), options, Mode::Serve).unwrap()
+        Runtime::open(&Workspace::new(dir), options).unwrap()
     }
 
     fn with_tool(dir: &Path, name: &str, body: &str) {
@@ -1364,7 +1346,16 @@ mod tests {
             ("local", "cli")
         );
         assert_eq!(identity.environment, "local");
-        let desktop = opened_on(dir.path()).hosted_by(Host::Desktop);
+        let desktop = Runtime::with_packs(
+            dive_config::Config::default(),
+            crate::packs::InstalledPacks::default(),
+            RuntimeOptions {
+                storage_backend: Some("memory".to_string()),
+                host: Host::Desktop,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(desktop.identity().deployment, "desktop");
     }
 
