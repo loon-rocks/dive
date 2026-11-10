@@ -174,6 +174,7 @@ fn pipeline() -> (Pipeline, Arc<Tools>, Arc<Recorder>) {
         gate: None,
         interlocutor: None,
         catalog: None,
+        requirements: Default::default(),
         user_context: String::new(),
         current_date: "2026-10-13".into(),
         max_attempts: 1,

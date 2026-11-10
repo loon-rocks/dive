@@ -111,6 +111,8 @@ pub enum ConversationError {
     UnknownAgent { name: String, available: String },
     #[error("agent '{agent}': {message}")]
     Setup { agent: String, message: String },
+    #[error(transparent)]
+    Unrunnable(#[from] crate::requirements::Unrunnable),
     #[error("agent '{agent}': {source}")]
     Turn {
         agent: String,
@@ -176,6 +178,13 @@ impl Conversation {
         active: &str,
         user: Option<ChatMessage>,
     ) -> Result<ConversationTurn, ConversationError> {
+        if let Some(refusal) = self
+            .pipeline
+            .requirements
+            .refusal(&crate::requirements::Item::Agent(active.to_string()))
+        {
+            return Err(refusal.into());
+        }
         let mut open = crate::trace::Open::new(crate::trace::SpanKind::Turn, active)
             .attr("gen_ai.operation.name", "invoke_agent")
             .attr("gen_ai.agent.name", active);
@@ -752,6 +761,7 @@ impl ConversationTools {
                 .subagents
                 .iter()
                 .filter(|name| conversation.pipeline.packs.shows(&origin, name))
+                .filter(|name| conversation.pipeline.requirements.agent_runnable(name))
                 .filter_map(|name| conversation.agents.get(name))
                 .map(|doc| named_agent_tool_def(&doc))
                 .collect(),
@@ -759,6 +769,7 @@ impl ConversationTools {
                 .handoffs
                 .iter()
                 .filter(|name| may_hand_off && conversation.agents.get(name).is_some())
+                .filter(|name| conversation.pipeline.requirements.agent_runnable(name))
                 .cloned()
                 .collect(),
             back_to: None,
@@ -1114,6 +1125,7 @@ mod tests {
             gate: None,
             interlocutor: None,
             catalog: None,
+            requirements: Default::default(),
             user_context: String::new(),
             current_date: "2026-09-30".into(),
             max_attempts: 1,
@@ -1146,6 +1158,32 @@ mod tests {
             entries: None,
         };
         (conversation, provider)
+    }
+
+    fn conversation_where_front_cant_run() -> (Conversation, Arc<Scripted>) {
+        let (mut conversation, provider) = conversation(Vec::new());
+        let mut pipeline = (*conversation.pipeline).clone();
+        pipeline.requirements = Arc::new(crate::requirements::Requirements::compute(
+            &[],
+            &conversation.agents,
+            &crate::pipeline::ToolCatalog::default(),
+        ));
+        conversation.pipeline = Arc::new(pipeline);
+        (conversation, provider)
+    }
+
+    #[tokio::test]
+    async fn a_turn_for_an_agent_that_cant_run_here_is_refused() {
+        let (conversation, _) = conversation_where_front_cant_run();
+        let error = conversation.run_turn(&[], "front", "hi").await.unwrap_err();
+        assert!(matches!(error, ConversationError::Unrunnable(_)), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_refused_turn_makes_no_model_call() {
+        let (conversation, provider) = conversation_where_front_cant_run();
+        let _ = conversation.run_turn(&[], "front", "hi").await;
+        assert!(provider.requests.lock().unwrap().is_empty());
     }
 
     struct Services;

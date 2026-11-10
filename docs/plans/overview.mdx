@@ -95,6 +95,21 @@ A failing step fails the run. Dive doesn't rewrite a plan you wrote to work arou
 
 Dive reads `./.dive/plans/` before `~/.config/dive/plans/`, and the first plan with an identifier wins, so a project plan replaces one in your home directory. A plan with a [built-in plan's](/plans/reference/built-in-plans) identifier replaces the built-in. `dive plan rm <identifier>` deletes the plan's file, and whatever it was shadowing takes over. Commit `./.dive/plans/` to give your whole team the same plans.
 
+Lists show each plan's scope: `project` for `./.dive/plans/`, `global` for `~/.config/dive/plans/` and other shared directories, the pack's name for a pack plan, and `built-in`.
+
+## Plans that can't run here
+
+A plan can run only when everything it reaches resolves in the current project: every tool, plan and agent its steps call (control-step bodies included, at any depth), the tools and subagents of those agents, and every MCP server in `requires_servers`. A global plan can reach a tool that exists in only one project, so it can run in one project and not in another.
+
+When something is missing, the plan is still listed, marked with what it's missing:
+
+- `dive plan list` adds a `missing:` column naming the first missing item. `--json` gives each plan a `missing` array, one entry per missing item with the path from the plan to it.
+- `dive plan show` adds the path to its note, for example `can't run here: researcher (subagent) → read_sources (tool) → user__crawl4ai_markdown (step sources/page) is not in this project's catalog`.
+- `dive plan run`, the plan tools `dive mcp serve` offers, and a `plan__` call from another plan or agent all refuse it before its first step, with the same path.
+- The planner, `search_tools` and agents never offer it to a model.
+
+Everything that reaches a plan that can't run can't run either. Adding the missing item to the project or to `~/.config/dive`, or removing the reference, makes it runnable again.
+
 ## Guides
 
 <CardGroup cols={2}>

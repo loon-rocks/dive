@@ -427,7 +427,11 @@ impl ServerHandler for DiveServer {
 }
 
 fn served_plans(runtime: &Runtime) -> Vec<rmcp::model::Tool> {
-    catalog::served_plan_tools(&runtime.packs.pack_set(), &runtime.plan_docs().docs)
+    let mut docs = runtime.plan_docs().docs;
+    if let Ok(requirements) = runtime.requirements() {
+        docs.retain(|doc| requirements.plan_runnable(&doc.identifier));
+    }
+    catalog::served_plan_tools(&runtime.packs.pack_set(), &docs)
 }
 
 #[cfg(test)]

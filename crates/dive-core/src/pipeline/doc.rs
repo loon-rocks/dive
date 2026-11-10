@@ -68,14 +68,6 @@ impl DocError {
     }
 }
 
-/// A plan withheld from the catalog because `requires_servers` names MCP
-/// servers that aren't configured — not broken, just not runnable here.
-#[derive(Debug)]
-pub struct HiddenPlan {
-    pub identifier: String,
-    pub missing_servers: Vec<String>,
-}
-
 /// The plan catalog: every document that loaded, plus one error per file
 /// that didn't. A broken file never takes the catalog down — callers
 /// surface `skipped` as diagnostics.
@@ -83,27 +75,9 @@ pub struct HiddenPlan {
 pub struct LoadedPlans {
     pub docs: Vec<PlanDoc>,
     pub skipped: Vec<DocError>,
-    /// Plans hidden by unconfigured `requires_servers` (populated by the
-    /// CLI runtime, which knows the MCP config). Naming one directly must
-    /// fail loudly with the missing servers, never "no plan named".
-    pub hidden: Vec<HiddenPlan>,
 }
 
 impl LoadedPlans {
-    /// Why a plan with this identifier is hidden from the catalog, if it is.
-    pub fn hidden_reason(&self, identifier: &str) -> Option<String> {
-        let hidden = self.hidden.iter().find(|h| h.identifier == identifier)?;
-        Some(format!(
-            "plan '{identifier}' requires MCP server(s) {} — configure them \
-             under [mcp.<name>] to use it",
-            hidden
-                .missing_servers
-                .iter()
-                .map(|s| format!("'{s}'"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))
-    }
     /// Why a plan with this identifier is absent from `docs`, if a skipped
     /// file's stem matches it (plan files are conventionally named after
     /// their identifier).

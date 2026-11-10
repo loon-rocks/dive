@@ -27,6 +27,7 @@ pub struct ToolEntry {
     pub has_output_schema: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pack: Option<String>,
+    pub scope: crate::scope::Scope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -52,6 +53,14 @@ impl ToolListing {
     }
 
     pub fn labeled(defs: Vec<ToolDef>, labels: &BTreeMap<String, String>) -> Self {
+        Self::in_context(defs, labels, &crate::scope::ListContext::default())
+    }
+
+    pub fn in_context(
+        defs: Vec<ToolDef>,
+        labels: &BTreeMap<String, String>,
+        context: &crate::scope::ListContext,
+    ) -> Self {
         let label = |source: &str| labels.get(source).cloned();
         let mut sources: Vec<SourceCount> = Vec::new();
         for def in &defs {
@@ -75,6 +84,7 @@ impl ToolListing {
                     read_only: def.read_only,
                     has_output_schema: def.output_schema.is_some(),
                     pack: label(source_of(&def.name)),
+                    scope: tool_scope(&def.name, labels, context),
                 })
                 .collect(),
             count: defs.len(),
@@ -127,6 +137,31 @@ pub async fn catalog(registry: &(dyn ToolRegistry + Send + Sync)) -> Result<Vec<
     Ok(defs)
 }
 
+fn tool_scope(
+    name: &str,
+    labels: &BTreeMap<String, String>,
+    context: &crate::scope::ListContext,
+) -> crate::scope::Scope {
+    let source = source_of(name);
+    if labels.contains_key(source) {
+        return crate::scope::Scope::Pack;
+    }
+    match source {
+        "user" => context
+            .user_tools
+            .get(name)
+            .map_or(crate::scope::Scope::Global, |path| {
+                context.scope_of_path(path)
+            }),
+        "builtin" | "(core)" => crate::scope::Scope::Builtin,
+        server => context
+            .servers
+            .get(server)
+            .copied()
+            .unwrap_or(crate::scope::Scope::Global),
+    }
+}
+
 pub fn pack_labels(docs: &ToolDocs) -> BTreeMap<String, String> {
     docs.packs
         .iter()
@@ -137,8 +172,13 @@ pub fn pack_labels(docs: &ToolDocs) -> BTreeMap<String, String> {
 pub async fn list(
     registry: &(dyn ToolRegistry + Send + Sync),
     labels: &BTreeMap<String, String>,
+    context: &crate::scope::ListContext,
 ) -> Result<ToolListing> {
-    Ok(ToolListing::labeled(catalog(registry).await?, labels))
+    Ok(ToolListing::in_context(
+        catalog(registry).await?,
+        labels,
+        context,
+    ))
 }
 
 pub fn tool_source(docs: &ToolDocs, name: &str) -> Option<String> {
@@ -388,6 +428,7 @@ mod tests {
                         "description": "Echoes back the input.",
                         "readOnly": null,
                         "hasOutputSchema": false,
+                        "scope": "global",
                     },
                     {
                         "name": "everything__get-sum",
@@ -395,6 +436,7 @@ mod tests {
                         "description": "Adds two numbers.",
                         "readOnly": true,
                         "hasOutputSchema": false,
+                        "scope": "global",
                     },
                     {
                         "name": "plan_and_execute",
@@ -402,6 +444,7 @@ mod tests {
                         "description": "Plan and execute a task.",
                         "readOnly": null,
                         "hasOutputSchema": false,
+                        "scope": "builtin",
                     },
                 ],
                 "count": 3,

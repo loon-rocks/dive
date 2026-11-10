@@ -168,7 +168,7 @@ pub enum WorkbenchCommand {
 pub enum PlanCommand {
     /// List available plan documents
     #[command(
-        after_long_help = "Lists the runnable catalog. `--json` also reports plans that failed to load under `skipped`, and plans hidden by unconfigured `requires_servers` under `hidden`.\n\nExamples:\n  dive plan list\n  dive plan list --json"
+        after_long_help = "Lists the plan catalog, one plan per line: identifier, name, and scope (`project`, `global`, the pack, or `built-in`). A plan that [can't run here](/plans/overview#plans-that-cant-run-here) gets a fourth column, `missing: <item>`, naming the first thing it's missing. `--json` gives every plan a `scope` and a `missing` array, and reports plans that failed to load under `skipped`.\n\nExamples:\n  dive plan list\n  dive plan list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -217,7 +217,7 @@ pub enum PlanCommand {
     },
     /// Run a plan directly (bypasses the agent loop)
     #[command(
-        after_long_help = concat!("Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  dive plan run weekly_changes\n  dive plan run weekly_changes '{\"base\":\"", "v", env!("CARGO_PKG_VERSION"), "\"}'\n  dive plan run weekly_changes @inputs.json --input base=v0.14.0")
+        after_long_help = concat!("Resolves every step's tool first and refuses to start if any is missing, including anything reached through the plans and agents it calls; the error names the path to the missing item. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  dive plan run weekly_changes\n  dive plan run weekly_changes '{\"base\":\"", "v", env!("CARGO_PKG_VERSION"), "\"}'\n  dive plan run weekly_changes @inputs.json --input base=v0.14.0")
     )]
     Run {
         #[arg(help = "The plan's identifier, as `dive plan list` prints it")]
@@ -489,7 +489,7 @@ pub enum StepCommand {
 pub enum ToolCommand {
     /// List every tool visible to the agent and planner
     #[command(
-        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly` and `hasOutputSchema`.\n\nExamples:\n  dive tool list\n  dive tool list --json"
+        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly`, `hasOutputSchema` and `scope` (`project` or `global` for user tools and MCP servers, by the layer that defines them; `pack`; `builtin`).\n\nExamples:\n  dive tool list\n  dive tool list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -549,7 +549,7 @@ pub enum ToolCommand {
 pub enum AgentCommand {
     /// List every agent: built-in, global (~/.config/dive/agents), and project (./.dive/agents)
     #[command(
-        after_long_help = "Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).\n\nExamples:\n  dive agent list\n  dive agent list --json"
+        after_long_help = "Prints each agent's name, source, description and scope (`project`, `global`, `pack` or `built-in`). An agent that [can't run here](/plans/overview#plans-that-cant-run-here) gets a final column, `missing: <item>`. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), its `scope`, a `missing` array with the path to each missing item, and any files that failed to load (`loadErrors`).\n\nExamples:\n  dive agent list\n  dive agent list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]

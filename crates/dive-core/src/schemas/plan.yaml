@@ -31,7 +31,7 @@ properties:
     type: array
     items:
       type: string
-    description: MCP servers the steps use. The plan is hidden from the catalog while any of them isn't configured.
+    description: "MCP servers the steps use. While any of them isn't configured, the plan [can't run here](/plans/overview#plans-that-cant-run-here): it's still listed, with the server it's missing."
   input_schema:
     type: object
     description: JSON Schema for the plan's inputs, validated before any step runs. Steps reference inputs as `{{input.<field>}}`.

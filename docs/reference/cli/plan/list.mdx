@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["dive plan list"]
 ---
 
-Lists the runnable catalog. `--json` also reports plans that failed to load under `skipped`, and plans hidden by unconfigured `requires_servers` under `hidden`.
+Lists the plan catalog, one plan per line: identifier, name, and scope (`project`, `global`, the pack, or `built-in`). A plan that [can't run here](/plans/overview#plans-that-cant-run-here) gets a fourth column, `missing: <item>`, naming the first thing it's missing. `--json` gives every plan a `scope` and a `missing` array, and reports plans that failed to load under `skipped`.
 
 ## Options
 
