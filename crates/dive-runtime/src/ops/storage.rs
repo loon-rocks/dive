@@ -78,8 +78,8 @@ pub struct FilesProbe {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StorageUsage {
-    pub threads: u64,
-    pub thread_bytes: u64,
+    pub sessions: u64,
+    pub session_bytes: u64,
     pub files: u64,
     pub file_bytes: u64,
     pub cache_bytes: u64,
@@ -352,8 +352,8 @@ fn walk(dir: &Path) -> (u64, u64) {
 }
 
 pub fn usage(data_dir: &Path) -> StorageUsage {
-    let threads_dir = data_dir.join("threads");
-    let threads = std::fs::read_dir(&threads_dir)
+    let sessions_dir = data_dir.join("sessions");
+    let sessions = std::fs::read_dir(&sessions_dir)
         .map(|entries| {
             entries
                 .flatten()
@@ -361,12 +361,13 @@ pub fn usage(data_dir: &Path) -> StorageUsage {
                 .count() as u64
         })
         .unwrap_or(0);
-    let (_, thread_bytes) = walk(&threads_dir);
+    let (_, session_bytes) = walk(&sessions_dir);
+    let (_, run_bytes) = walk(&data_dir.join("runs"));
     let (files, file_bytes) = walk(&dive_store::files_dir(data_dir));
     let (_, cache_bytes) = walk(&dive_store::cache_dir(data_dir));
     StorageUsage {
-        threads,
-        thread_bytes,
+        sessions,
+        session_bytes: session_bytes + run_bytes,
         files,
         file_bytes,
         cache_bytes,
