@@ -198,13 +198,15 @@ fn a_newer_file_is_shown_but_never_edited() {
 }
 
 #[test]
-fn usage_counts_threads_files_and_cache() {
+fn usage_counts_sessions_and_their_runs_files_and_cache() {
     let dir = tempfile::tempdir().unwrap();
     assert_eq!(usage(dir.path()), StorageUsage::default());
     for (path, bytes) in [
-        ("threads/a/meta.json", 10),
-        ("threads/a/entries.jsonl", 30),
-        ("threads/b/meta.json", 5),
+        ("sessions/a/session.json", 10),
+        ("sessions/a/entries.jsonl", 30),
+        ("sessions/b/session.json", 5),
+        ("runs/r1.json", 4),
+        ("threads/old/meta.json", 1000),
         ("files/one.png", 100),
         ("files/two.png", 50),
         ("cache/files/three.png", 7),
@@ -216,8 +218,8 @@ fn usage_counts_threads_files_and_cache() {
     assert_eq!(
         usage(dir.path()),
         StorageUsage {
-            threads: 2,
-            thread_bytes: 45,
+            sessions: 2,
+            session_bytes: 49,
             files: 2,
             file_bytes: 150,
             cache_bytes: 7,
