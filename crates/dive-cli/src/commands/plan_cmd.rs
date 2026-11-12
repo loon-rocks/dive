@@ -109,9 +109,14 @@ fn list() -> Result<Outcome> {
     let text = listed
         .plans
         .iter()
-        .map(|plan| match &plan.pack {
-            Some(source) => format!("{}\t{}\t{}\n", plan.identifier, plan.name, source),
-            None => format!("{}\t{}\n", plan.identifier, plan.name),
+        .map(|plan| {
+            let scope = plan.pack.as_deref().unwrap_or(plan.scope.label());
+            format!(
+                "{}\t{}\t{scope}{}\n",
+                plan.identifier,
+                plan.name,
+                super::listing::missing_column(&plan.missing)
+            )
         })
         .collect::<String>();
     Ok(Outcome::raw(text, body))
@@ -122,7 +127,17 @@ fn show(name: &str) -> Result<Outcome> {
     let detail = ops::plan::show(&runtime, name)?;
     let mut body = plan_edit::doc_as_json(&detail.doc)?;
     body["source"] = serde_json::json!(detail.source);
-    Ok(Outcome::raw(detail.yaml, body).with_note(format!("source: {}", detail.source)))
+    let missing = runtime
+        .list_context_or_default()
+        .missing(&dive_core::requirements::Item::Plan(
+            detail.doc.identifier.clone(),
+        ));
+    body["missing"] = serde_json::to_value(&missing)?;
+    let note = match super::listing::missing_note(&missing) {
+        Some(paths) => format!("source: {}\n{paths}", detail.source),
+        None => format!("source: {}", detail.source),
+    };
+    Ok(Outcome::raw(detail.yaml, body).with_note(note))
 }
 
 pub fn validate(name_or_path: &str) -> Result<Outcome> {
@@ -220,6 +235,14 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
         annotate(&error.to_string());
         return Err(error);
     }
+    let requirements = runtime.requirements_over(&loaded.docs, &runtime.agent_set(), &catalog);
+    if let Some(refusal) =
+        requirements.refusal(&dive_core::requirements::Item::Plan(name.to_string()))
+    {
+        let message = refusal.to_string();
+        annotate(&message);
+        bail!(message);
+    }
     let mut check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &catalog);
     check.errors.append(&mut check.notes);
     if !check.errors.is_empty() {
@@ -268,19 +291,23 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     };
     // Stream each model call to the sink as it lands, so `DIVE_EVENTS=jsonl`
     // carries per-call detail and not just the end-of-run totals.
-    runtime.usage.attach_events(events.clone());
+    let run = runtime.run(events.clone());
     let pipeline = runtime.pipeline_with(&store, events.clone(), hooks).await?;
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
-    let result = pipeline
-        .run_explicit_in(
+    let writer =
+        dive_runtime::plan_run::start_or_warn(&store, &run, &doc, &input, runtime.project(), None)
+            .await;
+    let result = run
+        .scope(pipeline.run_explicit_in(
             &query,
             doc.steps.clone(),
             finish,
             Some(input),
             doc.pack.as_ref(),
-        )
+        ))
         .await;
+    dive_runtime::plan_run::end(writer, &result, &run.usage()).await;
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);
 
@@ -294,7 +321,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     // knows the whole run is over. Taken before the error branch — a failed
     // run has still spent the tokens, and that is exactly when you want to
     // know how many.
-    let usage = runtime.usage.take();
+    let usage = run.usage();
     if !usage.is_empty() {
         events.usage_summary(&usage);
     }

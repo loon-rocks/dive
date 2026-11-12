@@ -17,7 +17,7 @@ use serde_json::{json, Map, Value};
 pub fn plan_list() -> Result<Outcome> {
     let runtime = runtime()?;
     Ok(Outcome::ok(serde_json::to_value(
-        dive_runtime::ops::plan::PlanList::from(&runtime.plan_docs()),
+        dive_runtime::ops::plan::list(&runtime),
     )?))
 }
 
@@ -205,6 +205,13 @@ pub async fn run_plan(
         runtime.shutdown().await;
         return Err(error);
     }
+    let requirements = runtime.requirements_over(&loaded.docs, &runtime.agent_set(), &tool_catalog);
+    if let Some(refusal) =
+        requirements.refusal(&dive_core::requirements::Item::Plan(identifier.to_string()))
+    {
+        runtime.shutdown().await;
+        return Err(refusal.into());
+    }
     let mut check = catalog::resolve_plan_tools_deep(&doc, &loaded.docs, &tool_catalog);
     check.errors.append(&mut check.notes);
     if !check.errors.is_empty() {
@@ -240,7 +247,7 @@ pub async fn run_plan(
             .user(runtime.config.user.name.as_deref())
             .input(input.clone()),
     );
-    runtime.usage.attach_events(events.clone());
+    let run = runtime.run(events.clone());
     let pipeline = runtime
         .pipeline_with(
             &store,
@@ -254,21 +261,25 @@ pub async fn run_plan(
         .await?;
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();
-    let result = pipeline
-        .run_explicit_in(
+    let writer =
+        dive_runtime::plan_run::start_or_warn(&store, &run, &doc, &input, runtime.project(), None)
+            .await;
+    let result = run
+        .scope(pipeline.run_explicit_in(
             &query,
             doc.steps.clone(),
             finish,
             Some(input),
             doc.pack.as_ref(),
-        )
+        ))
         .await;
+    dive_runtime::plan_run::end(writer, &result, &run.usage()).await;
     runtime.shutdown().await;
     crate::telemetry::report_plan_result(events.as_ref(), &result);
 
     // Drained before the branches below: a cancelled or failed run has still
     // spent the tokens, and that is exactly when the number is worth having.
-    let usage = runtime.usage.take();
+    let usage = run.usage();
     if !usage.is_empty() {
         events.usage_summary(&usage);
     }

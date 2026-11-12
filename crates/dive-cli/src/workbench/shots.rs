@@ -426,6 +426,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         gate: None,
         interlocutor: None,
         catalog: Some(Arc::new(catalog)),
+        requirements: Default::default(),
         user_context: String::new(),
         // Fixed: the pipeline date must not vary between regenerations.
         current_date: "2026-07-19".to_string(),
@@ -498,6 +499,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         handoff_guard: None,
         files: None,
         trace: Default::default(),
+        entries: None,
     };
 
     let start_agent = spec.agent.clone().unwrap_or_else(|| {
@@ -515,9 +517,10 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         debug,
         tx: tx.clone(),
         root: root.to_path_buf(),
-        thread: Mutex::new(None),
+        session: Mutex::new(None),
         project: None,
         attachment,
+        identity: Default::default(),
     });
 
     // Boot exactly like `run_plan_workbench`, then type the chat message

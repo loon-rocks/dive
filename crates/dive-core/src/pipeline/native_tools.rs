@@ -71,6 +71,12 @@ pub fn native_tool_defs() -> Vec<ToolDef> {
 
 impl Pipeline {
     pub(super) async fn call_native(&self, name: &str, input: Value) -> ToolOutcome {
+        if self.drafted.drafting_disabled && matches!(name, SAVE_TOOL_TOOL | SAVE_AGENT_TOOL) {
+            return ToolOutcome {
+                result: super::drafter::drafting_disabled(),
+                is_error: true,
+            };
+        }
         let result = match name {
             VALIDATE_PLAN_TOOL => self.validate_plan_input(input).await,
             CATALOG_TOOLS_TOOL => self.catalog_tools().await,

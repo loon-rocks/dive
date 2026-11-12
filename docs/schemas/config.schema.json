@@ -38,6 +38,28 @@
     }
   ],
   "properties": {
+    "identity": {
+      "description": "Who runs Dive and where. Dive records it on every run and never checks it, so a missing value never fails a run.",
+      "properties": {
+        "deployment": {
+          "description": "Which deployment ran it. Defaults to `cli` for the `dive` command and `desktop` for the desktop app. Required in serve mode.",
+          "type": "string"
+        },
+        "environment": {
+          "description": "Which environment ran it, such as `staging` or `production`. Defaults to `local`. Required in serve mode.",
+          "type": "string"
+        },
+        "tenant": {
+          "description": "The tenant a run belongs to. Defaults to `local`. In serve mode the tenant comes from each request instead.",
+          "type": "string"
+        },
+        "user": {
+          "description": "The user a run belongs to. Defaults to the `USER` environment variable, then the machine's hostname. In serve mode the user comes from each request instead.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "mcp": {
       "additionalProperties": {
         "properties": {
@@ -419,12 +441,53 @@
       "description": "Named provider connections, as `[providers.<name>]`.",
       "type": "object"
     },
+    "serve": {
+      "description": "How `dive serve` runs Dive as an HTTP service. Belongs in the project config. Without it, or with no `public_keys`, `dive serve` refuses to start unless you pass `--dev-key`.",
+      "properties": {
+        "audience": {
+          "description": "The value a run token's `aud` must contain. Required unless you pass `--dev-key`.",
+          "type": "string"
+        },
+        "heartbeat_secs": {
+          "description": "Seconds without traffic before an entry stream sends a heartbeat comment. Defaults to 15.",
+          "type": "integer"
+        },
+        "issuer": {
+          "description": "The `iss` every run token must carry. Required unless you pass `--dev-key`.",
+          "type": "string"
+        },
+        "listen": {
+          "description": "The address and port to listen on. Defaults to `0.0.0.0:8080`. `--listen` overrides it.",
+          "type": "string"
+        },
+        "max_runs": {
+          "description": "How many runs this process runs at once. At the limit, `/readyz` returns 503 and starts get `at_capacity`. Defaults to 32.",
+          "type": "integer"
+        },
+        "max_runs_per_tenant": {
+          "description": "How many runs one tenant runs at once on this process. Over it, starts get `at_capacity`. Defaults to 8.",
+          "type": "integer"
+        },
+        "public_keys": {
+          "description": "Paths to the PEM public keys that verify run tokens, as Ed25519, P-256 (ES256) or RSA (RS256) keys. List more than one to rotate keys.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "shutdown_grace_secs": {
+          "description": "Seconds a stopping process gives its runs to end before it exits. Defaults to 30.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "settings": {
       "description": "Runtime settings.",
       "properties": {
         "data_dir": {
           "default": "~/.local/share/dive",
-          "description": "Where threads and the shape cache are stored.",
+          "description": "Where sessions, runs and the shape cache are stored.",
           "type": "string"
         },
         "history_limit": {
@@ -589,7 +652,7 @@
       "type": "object"
     },
     "trace": {
-      "description": "What each thread's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the thread's `spans.jsonl`.",
+      "description": "What each session's trace keeps of the calls it records. Every model, tool, plan and agent call in a turn is recorded as a span, at any depth, in the session's `spans.jsonl`.",
       "properties": {
         "clip_bytes": {
           "description": "Clip each kept input and output to about this many bytes of JSON, in the trace and in exported spans. Absent keeps them whole.",
@@ -597,7 +660,7 @@
         },
         "content": {
           "default": true,
-          "description": "Keep the input and output of every tool, plan, agent and turn in the thread's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.",
+          "description": "Keep the input and output of every tool, plan, agent and turn in the session's trace. Model calls keep only their tokens, cost and timing. Off keeps names, timing, status and token counts only.",
           "type": "boolean"
         }
       },
@@ -677,13 +740,28 @@
       "variables": [
         {
           "default": "file",
-          "description": "Where Dive keeps threads and the shape cache.",
+          "description": "Where Dive keeps sessions, runs and the shape cache.",
           "name": "DIVE_STORAGE",
           "overrides": "storage.backend",
           "values": {
             "file": "Under `settings.data_dir`.",
             "memory": "In memory only. Nothing is kept between runs."
           }
+        }
+      ]
+    },
+    {
+      "group": "HTTP service",
+      "variables": [
+        {
+          "description": "Set to any value other than `0` to have `dive serve` serve its OpenAPI document at `/openapi.json` and an API reference page at `/docs`.",
+          "name": "DIVE_SERVE_DOCS",
+          "type": "string"
+        },
+        {
+          "description": "Set to `production` to make `dive serve` refuse `--dev-key`, as `[identity].environment = \"production\"` also does.",
+          "name": "DIVE_ENV",
+          "type": "string"
         }
       ]
     },
@@ -748,6 +826,10 @@
     {
       "body": "A string value can include `${NAME}` references, such as `api_key = \"${ANTHROPIC_API_KEY}\"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, Dive reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`. On macOS the Keychain lets only the program that stored a value read it, so `dive secret set` replaces a value another program stored, such as Loon Dive or a different `dive` build, and that program then can't read it until it stores the value again. See every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.\n\nA name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.\n\nWhere no credential store is available, as in a container or on Linux without a Secret Service daemon, Dive reads the environment only. Set `DIVE_SECRET_STORE` to `none` to skip the store on purpose.",
       "heading": "Secret references"
+    },
+    {
+      "body": "A host that runs Dive's runtime in serve mode, for many users at once, reads only the project's `.dive/config.toml`. It ignores `~/.config/dive`, including the agents, tools and plans there, keeps only plan and tool directories inside the project, and doesn't read old `.graph` folders. In serve mode, saving a drafted tool or agent fails with `drafting_disabled`, Dive records no tool output shapes, and exec tools start from an empty environment (see [exec tools](/tools/reference/tool-file/exec)). Each run records the identity from [`[identity]`](#param-identity), with the user and tenant taken from the request.",
+      "heading": "Serve mode"
     }
   ]
 }

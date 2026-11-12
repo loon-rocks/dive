@@ -301,17 +301,15 @@ pub fn load_agent_dir(dir: &Path) -> LoadedAgents {
     loaded
 }
 
-pub fn agent_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
-    if !dive_config::is_global_dir(std::path::Path::new(".")) {
-        if let Some(parent) = dive_config::project_config_path().parent() {
-            dirs.push(parent.join("agents"));
-        }
-    }
-    if let Some(parent) = dive_config::global_config_path().parent() {
-        dirs.push(parent.join("agents"));
-    }
-    dirs
+pub fn agent_dirs(
+    project: Option<&std::path::Path>,
+    global: Option<&std::path::Path>,
+) -> Vec<PathBuf> {
+    project
+        .into_iter()
+        .chain(global)
+        .map(|layer| layer.join("agents"))
+        .collect()
 }
 
 pub fn global_fragments() -> BTreeMap<&'static str, &'static str> {

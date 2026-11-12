@@ -51,6 +51,15 @@ rmcp = { version = "2.2", default-features = false, features = [
     "elicitation",
 ] }
 schemars = "1"
+axum = "0.8"
+jsonwebtoken = "9"
+utoipa = "5"
+ring = "0.17"
+base64 = "0.22"
+thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 dive-runtime = { workspace = true, features = ["clap", "fixtures"] }

@@ -23,7 +23,7 @@ pub struct Cli {
 pub enum Command {
     /// Ask a one-shot question (runs one agent turn)
     #[command(
-        after_long_help = "Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.\n\nPut `--thread` after the message, since it takes an optional value. On an existing thread, `--agent` must name the thread's owner.\n\nWith `--json`, prints `{content, tool_calls_made, tools_used, usage, thread_id, agent}` instead of streaming.\n\nExamples:\n  dive ask \"Which issues are blocking the release?\"\n  git diff | dive ask \"Review this diff\"\n  dive ask --agent release_notes \"What shipped this week?\"\n  dive ask \"And the week before?\" --thread"
+        after_long_help = "Runs one turn of the default `chat` agent, or the agent named with `--agent`, and streams its answer to stdout. Piped stdin is appended to the message as input context.\n\nPut `--session` after the message, since it takes an optional value. On an existing session, `--agent` must name the agent the session started with.\n\nWith `--json`, prints `{content, tool_calls_made, tools_used, usage, session_id, run_id, agent}` instead of streaming.\n\nExamples:\n  dive ask \"Which issues are blocking the release?\"\n  git diff | dive ask \"Review this diff\"\n  dive ask --agent release_notes \"What shipped this week?\"\n  dive ask \"And the week before?\" --session"
     )]
     Ask {
         /// The message; reads stdin when omitted and piped
@@ -31,10 +31,10 @@ pub enum Command {
         /// Run a named agent instead of the default `chat` agent
         #[arg(long)]
         agent: Option<String>,
-        /// Continue a thread: `--thread <id>` for a specific one, bare
-        /// `--thread` for the most recent. Omit to start a new thread.
-        #[arg(long)]
-        thread: Option<Option<String>>,
+        /// Continue a session: `--session <id>` for a specific one, bare
+        /// `--session` for the most recent chat. Omit to start a new session.
+        #[arg(long, alias = "thread")]
+        session: Option<Option<String>>,
         /// Emit a JSON envelope instead of streaming text
         #[arg(long)]
         json: bool,
@@ -44,15 +44,15 @@ pub enum Command {
     },
     /// Interactive chat (REPL)
     #[command(
-        after_long_help = "Starts a conversation with the default `chat` agent or the named one. A resumed thread continues with its active agent; naming an agent other than the thread's owner is refused.\n\nSlash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another, `/thread` and `/state` print the current thread and its state, and `/quit` exits.\n\nExamples:\n  dive chat\n  dive chat release_notes\n  dive chat --thread"
+        after_long_help = "Starts a conversation with the default `chat` agent or the named one. A resumed session continues with its active agent; naming an agent other than the one the session started with is refused.\n\nSlash commands: `/agent` lists agents and marks the active one, `/agent <name>` switches to another from the next message, `/session` and `/state` print the current session and its state, and `/quit` exits.\n\nExamples:\n  dive chat\n  dive chat release_notes\n  dive chat --session"
     )]
     Chat {
         /// The agent to talk to; the default `chat` agent when omitted
         agent: Option<String>,
-        /// Continue a thread: `--thread <id>` for a specific one, bare
-        /// `--thread` for the most recent. Omit to start a new thread.
-        #[arg(long)]
-        thread: Option<Option<String>>,
+        /// Continue a session: `--session <id>` for a specific one, bare
+        /// `--session` for the most recent chat. Omit to start a new session.
+        #[arg(long, alias = "thread")]
+        session: Option<Option<String>>,
     },
     /// Manage and run plan documents
     #[command(alias = "plans")]
@@ -72,11 +72,11 @@ pub enum Command {
         #[command(subcommand)]
         command: AgentCommand,
     },
-    /// Manage conversation threads
-    #[command(alias = "threads")]
-    Thread {
+    /// List, show and delete sessions: chats and plan runs
+    #[command(alias = "sessions", alias = "thread", alias = "threads")]
+    Session {
         #[command(subcommand)]
-        command: ThreadCommand,
+        command: SessionCommand,
     },
     #[command(
         about = "Store, inspect and remove secrets in the OS credential store",
@@ -86,6 +86,31 @@ pub enum Command {
     Secret {
         #[command(subcommand)]
         command: SecretCommand,
+    },
+    #[command(
+        about = "Run Dive as an HTTP service that starts, streams and cancels plan runs",
+        after_long_help = "Serves the plans in this project's `.dive/` over HTTP. Each request carries a run token, a JWT signed by your app and checked against the keys in `[serve].public_keys`. Reads only the project config, as serve mode always does. `--dev-key` signs and trusts a local key instead, for development, and is refused when `DIVE_ENV` or `[identity].environment` is `production`.\n\nExamples:\n  dive serve --dev-key --listen 127.0.0.1:8080\n  dive serve token --plan triage --tenant acme --sub ada@example.com"
+    )]
+    Serve {
+        #[command(subcommand)]
+        command: Option<ServeCommand>,
+        #[arg(
+            long,
+            value_name = "ADDR",
+            help = "Address and port to listen on; overrides `[serve].listen`"
+        )]
+        listen: Option<String>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Project directory to serve, the one holding `.dive/`; defaults to the current directory"
+        )]
+        dir: Option<PathBuf>,
+        #[arg(
+            long,
+            help = "Sign and trust a local development key, created in the data directory on first use"
+        )]
+        dev_key: bool,
     },
     /// Manage MCP servers
     Mcp {
@@ -168,7 +193,7 @@ pub enum WorkbenchCommand {
 pub enum PlanCommand {
     /// List available plan documents
     #[command(
-        after_long_help = "Lists the runnable catalog. `--json` also reports plans that failed to load under `skipped`, and plans hidden by unconfigured `requires_servers` under `hidden`.\n\nExamples:\n  dive plan list\n  dive plan list --json"
+        after_long_help = "Lists the plan catalog, one plan per line: identifier, name, and scope (`project`, `global`, the pack, or `built-in`). A plan that [can't run here](/plans/overview#plans-that-cant-run-here) gets a fourth column, `missing: <item>`, naming the first thing it's missing. `--json` gives every plan a `scope` and a `missing` array, and reports plans that failed to load under `skipped`.\n\nExamples:\n  dive plan list\n  dive plan list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -217,7 +242,7 @@ pub enum PlanCommand {
     },
     /// Run a plan directly (bypasses the agent loop)
     #[command(
-        after_long_help = concat!("Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  dive plan run weekly_changes\n  dive plan run weekly_changes '{\"base\":\"", "v", env!("CARGO_PKG_VERSION"), "\"}'\n  dive plan run weekly_changes @inputs.json --input base=v0.14.0")
+        after_long_help = concat!("Resolves every step's tool first and refuses to start if any is missing, including anything reached through the plans and agents it calls; the error names the path to the missing item. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.\n\nMissing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.\n\nExamples:\n  dive plan run weekly_changes\n  dive plan run weekly_changes '{\"base\":\"", "v", env!("CARGO_PKG_VERSION"), "\"}'\n  dive plan run weekly_changes @inputs.json --input base=v0.14.0")
     )]
     Run {
         #[arg(help = "The plan's identifier, as `dive plan list` prints it")]
@@ -489,7 +514,7 @@ pub enum StepCommand {
 pub enum ToolCommand {
     /// List every tool visible to the agent and planner
     #[command(
-        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly` and `hasOutputSchema`.\n\nExamples:\n  dive tool list\n  dive tool list --json"
+        after_long_help = "Groups the catalog by source with one-line descriptions. `--json` prints the flat catalog instead: each tool's namespaced name, `source`, full `description`, `readOnly`, `hasOutputSchema` and `scope` (`project` or `global` for user tools and MCP servers, by the layer that defines them; `pack`; `builtin`).\n\nExamples:\n  dive tool list\n  dive tool list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -549,7 +574,7 @@ pub enum ToolCommand {
 pub enum AgentCommand {
     /// List every agent: built-in, global (~/.config/dive/agents), and project (./.dive/agents)
     #[command(
-        after_long_help = "Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).\n\nExamples:\n  dive agent list\n  dive agent list --json"
+        after_long_help = "Prints each agent's name, source, description and scope (`project`, `global`, `pack` or `built-in`). An agent that [can't run here](/plans/overview#plans-that-cant-run-here) gets a final column, `missing: <item>`. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), its `scope`, a `missing` array with the path to each missing item, and any files that failed to load (`loadErrors`).\n\nExamples:\n  dive agent list\n  dive agent list --json"
     )]
     List {
         #[arg(long, help = "Print a JSON envelope instead of text")]
@@ -598,23 +623,25 @@ pub enum AgentCommand {
 }
 
 #[derive(Subcommand)]
-pub enum ThreadCommand {
-    /// List threads
+pub enum SessionCommand {
+    /// List sessions
     #[command(
-        after_long_help = "Lists the threads started in the current directory's project, or the global threads when the directory has no `.dive` folder. `--all` lists every thread.\n\nExamples:\n  dive thread list\n  dive thread list --all"
+        after_long_help = "Lists the sessions started in the current directory's project, or the global sessions when the directory has no `.dive` folder, newest first. `--all` lists every session and `--kind` keeps only chats or plan runs.\n\nExamples:\n  dive session list\n  dive session list --all --kind plan"
     )]
     List {
-        #[arg(long, help = "List every thread, whatever project it was started in")]
+        #[arg(long, help = "List every session, whatever project it was started in")]
         all: bool,
+        #[arg(long, value_parser = ["chat", "plan"], help = "Only sessions of this kind: chat or plan")]
+        kind: Option<String>,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
-    /// Show a thread's messages
+    /// Show a session's runs and messages
     #[command(
-        after_long_help = "Examples:\n  dive thread show 4f1c9a2b7d3e\n  dive thread show 4f1c9a2b7d3e --state --json"
+        after_long_help = "Examples:\n  dive session show 4f1c9a2b7d3e\n  dive session show 4f1c9a2b7d3e --state --json"
     )]
     Show {
-        #[arg(help = "The thread id, as `dive thread list` prints it")]
+        #[arg(help = "The session id, as `dive session list` prints it")]
         id: String,
         /// Include the full runtime state
         #[arg(long)]
@@ -622,12 +649,12 @@ pub enum ThreadCommand {
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
     },
-    /// Delete a thread
+    /// Delete a session
     #[command(
-        after_long_help = "Also removes the stored files, such as generated images, that no other thread refers to. Files in S3 storage are kept, since other machines may share the bucket.\n\nExamples:\n  dive thread rm 4f1c9a2b7d3e"
+        after_long_help = "Also removes the session's runs and the stored files, such as generated images, that no other session refers to. Files in S3 storage are kept, since other machines may share the bucket.\n\nExamples:\n  dive session rm 4f1c9a2b7d3e"
     )]
     Rm {
-        #[arg(help = "The thread id, as `dive thread list` prints it")]
+        #[arg(help = "The session id, as `dive session list` prints it")]
         id: String,
         #[arg(long, help = "Print a JSON envelope instead of text")]
         json: bool,
@@ -1050,7 +1077,9 @@ mod tests {
             (&root, "plans", "plan"),
             (&root, "tools", "tool"),
             (&root, "agents", "agent"),
-            (&root, "threads", "thread"),
+            (&root, "sessions", "session"),
+            (&root, "threads", "session"),
+            (&root, "thread", "session"),
             (&root, "shapes", "shape"),
             (&root, "packs", "pack"),
             (workbench, "plans", "plan"),
@@ -1072,11 +1101,43 @@ mod tests {
                 let names = std::iter::once(sub.get_name()).chain(sub.get_visible_aliases());
                 for name in names {
                     assert!(
-                        !["plans", "tools", "agents", "threads", "shapes", "packs"].contains(&name),
+                        ![
+                            "plans", "tools", "agents", "sessions", "threads", "thread", "shapes",
+                            "packs"
+                        ]
+                        .contains(&name),
                         "{name} is visible in help"
                     );
                 }
             }
         }
     }
+}
+
+#[derive(Subcommand)]
+pub enum ServeCommand {
+    #[command(
+        about = "Print a run token signed with the local development key",
+        after_long_help = "Prints a token with a fresh `jti` that expires in an hour, for `dive serve --dev-key`. Pass `--plan` for a token that starts a run of that plan, or `--scope` for one that reads and cancels runs.\n\nExamples:\n  dive serve token --plan triage --tenant acme --sub ada@example.com\n  dive serve token --scope \"runs:read runs:cancel\" --tenant acme --sub ada@example.com"
+    )]
+    Token {
+        #[arg(long, help = "The plan the token may start")]
+        plan: Option<String>,
+        #[arg(long, help = "The tenant the run belongs to")]
+        tenant: String,
+        #[arg(long, help = "The user the run belongs to")]
+        sub: String,
+        #[arg(
+            long,
+            default_value = "plans:read runs:read runs:cancel",
+            help = "Space-separated scopes"
+        )]
+        scope: String,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Project directory, the one holding `.dive/`; defaults to the current directory"
+        )]
+        dir: Option<PathBuf>,
+    },
 }

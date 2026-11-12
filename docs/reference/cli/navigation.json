@@ -51,13 +51,13 @@
     "root": "reference/cli/agent"
   },
   {
-    "group": "dive thread",
+    "group": "dive session",
     "pages": [
-      "reference/cli/thread/list",
-      "reference/cli/thread/show",
-      "reference/cli/thread/rm"
+      "reference/cli/session/list",
+      "reference/cli/session/show",
+      "reference/cli/session/rm"
     ],
-    "root": "reference/cli/thread"
+    "root": "reference/cli/session"
   },
   {
     "group": "dive secret",
@@ -68,6 +68,13 @@
       "reference/cli/secret/show"
     ],
     "root": "reference/cli/secret"
+  },
+  {
+    "group": "dive serve",
+    "pages": [
+      "reference/cli/serve/token"
+    ],
+    "root": "reference/cli/serve"
   },
   {
     "group": "dive mcp",

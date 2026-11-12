@@ -1,0 +1,120 @@
+---
+title: "API"
+description: "The endpoints of dive serve, the entry stream, and its errors."
+keywords: ["api", "endpoints", "sse", "Last-Event-ID", "errors", "openapi"]
+---
+
+All paths are under the server's address. Bodies are JSON. The OpenAPI document for this API is [`docs/openapi.json`](https://github.com/loon-rocks/dive/blob/main/docs/openapi.json). With `DIVE_SERVE_DOCS` set, a server also serves its own at `/openapi.json`, with a typed start operation per plan it serves, and a reference page at `/docs`.
+
+| Method and path | Does |
+| --- | --- |
+| `GET /v1/plans` | Lists the plans you can start, with their descriptions and input schemas |
+| `GET /v1/plans/{plan}` | Returns one plan: description, input schema, and result schema when it declares `output_schema` |
+| `POST /v1/plans/{plan}/runs` | Starts a run and returns at once |
+| `GET /v1/runs/{run}` | Returns the run's status, outcome, result and usage |
+| `GET /v1/runs/{run}/entries` | Streams the run's entries |
+| `POST /v1/runs/{run}/cancel` | Asks the run to stop after the tool call in progress |
+| `GET /healthz` | 200 while the process is up |
+| `GET /readyz` | 200 when the process takes runs; 503 while stopping or at `max_runs` |
+
+## Start a run
+
+```http
+POST /v1/plans/triage/runs
+Authorization: Bearer <start token>
+Content-Type: application/json
+
+{ "input": { "issue": "ENG-142" }, "title": "Triage ENG-142" }
+```
+
+`input` is required and must match the plan's input schema, after the schema's defaults are filled in. `title` names the session, and defaults to the plan's name.
+
+```http
+202 Accepted
+Location: /v1/runs/7f3c…
+
+{ "run_id": "7f3c…", "session_id": "a91e04c2b7d1", "status": "running", "entries_url": "/v1/runs/7f3c…/entries" }
+```
+
+## Read a run
+
+```json
+{
+  "id": "7f3c…",
+  "session_id": "a91e04c2b7d1",
+  "plan": "triage",
+  "status": "completed",
+  "outcome": "ok",
+  "result": { "priority": "p1", "team": "platform" },
+  "error": null,
+  "first_seq": 1,
+  "last_seq": 8,
+  "cancel_requested": false,
+  "usage": { "calls": 3, "input_tokens": 18234, "output_tokens": 2210, "cost_usd": 0.071, "by_model": […], "by_step": […] },
+  "started_at": "2026-11-11T17:02:11Z",
+  "ended_at": "2026-11-11T17:03:40Z"
+}
+```
+
+- **`status`**: `running`, `completed`, `failed`, `cancelled` or `interrupted`.
+- **`outcome`**: set only on a completed run. `ok`, or `exit_gate` when an [exit gate](/plans/guides/exit-gates) with `status: error` ended the plan; `error` then carries the gate's message.
+- **`result`**: the plan's output, the same value `dive plan run` prints.
+- **`usage`**: the run's model calls, tokens and cost, in total and by model and step, as the `run_ended` entry records them. `cost_usd` appears only when [`[pricing]`](/reference/configuration#param-pricing) prices the models used.
+
+## Watch entries
+
+```text
+GET /v1/runs/7f3c…/entries
+Accept: text/event-stream
+Last-Event-ID: 3
+
+id: 4
+event: entry
+data: {"seq":4,"run_id":"7f3c…","path":"step:classify","at":1762880533120,"author":"run","kind":"step_finished","step":"classify","output":{"team":"platform"}}
+
+event: delta
+data: {"text":"The issue"}
+
+: heartbeat
+
+id: 8
+event: entry
+data: {"seq":8,"run_id":"7f3c…","at":1762880620004,"author":"run","kind":"run_ended","status":"completed","outcome":{"priority":"p1","team":"platform"}}
+```
+
+- **Entries.** Each goes out as an `entry` event whose `id` is its `seq`. The data is the entry as the [data directory](/reference/data-directory#session-entries) stores it. A plan run writes `run_started`, a `step_started` and `step_finished` pair per step (at path `step:<id>`, or `plan:<name>/step:<id>` inside a called plan), `cancel_requested` when someone cancels it, and `run_ended`.
+- **Text.** Model text streams as `delta` events with no `id`, from the process running the run. They aren't stored, so a reconnect doesn't replay them.
+- **Where a stream starts.** Without `Last-Event-ID` it starts at the run's first entry. With it, it sends every entry after that seq from the log, then follows live, so a client that reconnects with the last id it saw misses nothing.
+- **Heartbeats.** A `: heartbeat` comment goes out after `[serve].heartbeat_secs` without other traffic, 15 by default.
+- **End.** The stream closes after `run_ended`. Watching a finished run replays its entries and closes.
+- **Without SSE.** `Accept: application/json` returns the entries after `?after=<seq>` as a JSON array, without following.
+
+## Cancel
+
+`POST /v1/runs/{run}/cancel` returns 202 with the run.
+
+- **A running run** gets `cancel_requested` set. The process running it stops after the tool call in progress, writes a `cancel_requested` entry naming the token's `sub`, and ends the run `cancelled`. On the process running the run this happens at once; a run another process holds sees it at its next lease renewal, within 10 seconds.
+- **A finished run** is left as it is.
+
+## Errors
+
+Every error has one shape:
+
+```json
+{ "error": { "code": "not_found", "message": "no run 7f3c…" } }
+```
+
+| Status | `code` | When |
+| --- | --- | --- |
+| 400 | `bad_request` | The body isn't JSON or has no `input`, or `Last-Event-ID` isn't a seq |
+| 401 | `invalid_token` | No token, a bad signature, the wrong `iss` or `aud`, expired, or no `sub`, `tenant` or start `jti` |
+| 403 | `forbidden` | A missing scope, or a `plan` claim that differs from the path |
+| 404 | `not_found` | An unknown plan, or a run that doesn't exist or belongs to another tenant |
+| 409 | `idempotency_violation` | The start's `jti` already started a run; `run_id` and `session_id` name it |
+| 422 | `invalid_input` | The input doesn't match the plan's input schema; `problems` lists why |
+| 429 | `at_capacity` | The process or the tenant is at its run limit; `Retry-After` says when to retry |
+| 503 | `shutting_down` | The process is stopping |
+| 503 | `plan_unavailable` | The plan needs an MCP server or tool this deployment doesn't have |
+| 500 | `internal` | Anything else. The message carries no detail; the server's log has it |
+
+Changes under `/v1` only add things. Ignore fields and event types you don't recognize.

@@ -67,7 +67,11 @@ impl AgentToolbox {
 impl ToolRegistry for AgentToolbox {
     async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
         let mut defs = self.base.tools().await?;
-        for doc in &self.plans {
+        for doc in self
+            .plans
+            .iter()
+            .filter(|doc| self.pipeline.requirements.plan_runnable(&doc.identifier))
+        {
             defs.push(ToolDef {
                 name: doc.tool_name(),
                 description: doc.tool_description(),
@@ -226,6 +230,7 @@ mod tests {
             gate: None,
             interlocutor: None,
             catalog: None,
+            requirements: Default::default(),
             user_context: String::new(),
             current_date: "2026-07-09".into(),
             max_attempts: 2,

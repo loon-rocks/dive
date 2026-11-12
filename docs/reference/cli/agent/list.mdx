@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["dive agent list"]
 ---
 
-Prints each agent's name, source and description. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), and any files that failed to load (`loadErrors`).
+Prints each agent's name, source, description and scope (`project`, `global`, `pack` or `built-in`). An agent that [can't run here](/plans/overview#plans-that-cant-run-here) gets a final column, `missing: <item>`. `--json` adds its model, subagents, handoffs, how it is called as a subagent (`subagentIo`), its `scope`, a `missing` array with the path to each missing item, and any files that failed to load (`loadErrors`).
 
 ## Options
 

@@ -108,6 +108,29 @@ struct CallRecord {
     model: String,
     site: CallSite,
     usage: Usage,
+    cost: Option<f64>,
+}
+
+#[derive(Default)]
+pub(crate) struct RunLedger {
+    calls: Mutex<Vec<CallRecord>>,
+}
+
+impl RunLedger {
+    fn push(&self, record: CallRecord) {
+        self.calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(record);
+    }
+
+    pub(crate) fn report(&self) -> UsageReport {
+        let calls = self
+            .calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        report(&calls)
+    }
 }
 
 /// Accumulates every model call of a run.
@@ -115,22 +138,16 @@ struct CallRecord {
 /// Shared by `Arc` across a `Pipeline` and every plan it nests into, so a
 /// composed plan's spend rolls up without extra plumbing.
 pub struct UsageLedger {
-    calls: Mutex<Vec<CallRecord>>,
+    unscoped: RunLedger,
     prices: BTreeMap<String, ModelPrice>,
-    /// Set per command by [`UsageLedger::attach_events`]. Interior mutability
-    /// because the ledger outlives any one run — it is built with the router,
-    /// while the sink is chosen per command — and `record` only ever has
-    /// `&self`.
-    events: Mutex<Option<std::sync::Arc<dyn crate::EventSink>>>,
     capture_content: bool,
 }
 
 impl UsageLedger {
     pub fn new(prices: BTreeMap<String, ModelPrice>) -> Self {
         Self {
-            calls: Mutex::new(Vec::new()),
+            unscoped: RunLedger::default(),
             prices,
-            events: Mutex::new(None),
             capture_content: false,
         }
     }
@@ -140,104 +157,13 @@ impl UsageLedger {
         self
     }
 
-    /// Stream each call to `sink` as it lands, in addition to tallying it.
-    /// Replaces any previously attached sink.
-    pub fn attach_events(&self, sink: std::sync::Arc<dyn crate::EventSink>) {
-        *self.events.lock().unwrap() = Some(sink);
-    }
-
     /// A ledger that meters tokens but reports no cost.
     pub fn unpriced() -> Self {
         Self::new(BTreeMap::new())
     }
 
-    /// Drain everything recorded so far into a report.
-    ///
-    /// Draining rather than snapshotting is what makes one long-lived router
-    /// compatible with per-run reporting: `plan run` takes once at the end,
-    /// the `chat` REPL takes once per turn.
-    pub fn take(&self) -> UsageReport {
-        let calls = std::mem::take(&mut *self.calls.lock().unwrap());
-        self.report(calls)
-    }
-
-    fn report(&self, calls: Vec<CallRecord>) -> UsageReport {
-        let mut total = Usage::default();
-        let mut by_step: BTreeMap<String, Usage> = BTreeMap::new();
-        // Keyed by provider *and* model: failover can serve one role from a
-        // second provider, and "which model actually answered" is the whole
-        // point of metering each candidate separately.
-        let mut by_model: BTreeMap<(String, String), (Usage, usize, dive_config::ModelKind)> =
-            BTreeMap::new();
-
-        for call in &calls {
-            total.add(&call.usage);
-            by_step
-                .entry(call.site.group())
-                .or_default()
-                .add(&call.usage);
-            let entry = by_model
-                .entry((call.provider.clone(), call.model.clone()))
-                .or_default();
-            entry.0.add(&call.usage);
-            entry.1 += 1;
-            entry.2 = call.kind;
-        }
-
-        let mut steps: Vec<StepUsage> = by_step
-            .into_iter()
-            .map(|(path, usage)| StepUsage {
-                calls: calls.iter().filter(|c| c.site.group() == path).count(),
-                cost_usd: self.cost_of_group(&calls, &path),
-                path,
-                usage,
-            })
-            .collect();
-        steps.sort_by(|a, b| rank(b).total_cmp(&rank(a)));
-
-        let mut models: Vec<ModelUsage> = by_model
-            .into_iter()
-            .map(
-                |((provider, model), (usage, calls_made, kind))| ModelUsage {
-                    kind,
-                    cost_usd: self.cost_of(
-                        calls
-                            .iter()
-                            .filter(|c| c.provider == provider && c.model == model),
-                    ),
-                    calls: calls_made,
-                    provider,
-                    model,
-                    usage,
-                },
-            )
-            .collect();
-        models.sort_by(|a, b| rank_model(b).total_cmp(&rank_model(a)));
-
-        // Sum the per-model costs rather than pricing the grand total: a run
-        // that mixes a strong chat model with a cheap repair model has no
-        // single rate to apply. `None` only when nothing at all was priced.
-        let priced: Vec<f64> = models.iter().filter_map(|m| m.cost_usd).collect();
-        let cost_usd = (!priced.is_empty()).then(|| priced.iter().sum());
-
-        UsageReport {
-            calls: calls.len(),
-            total,
-            cost_usd,
-            by_step: steps,
-            by_model: models,
-        }
-    }
-
-    fn cost_of_group(&self, calls: &[CallRecord], group: &str) -> Option<f64> {
-        self.cost_of(calls.iter().filter(|c| c.site.group() == group))
-    }
-
-    fn cost_of<'a>(&self, calls: impl Iterator<Item = &'a CallRecord>) -> Option<f64> {
-        let costs: Vec<f64> = calls
-            .filter_map(|c| self.cost(&c.model, &c.usage))
-            .collect();
-        (!costs.is_empty()).then(|| costs.iter().sum())
+    pub fn unscoped(&self) -> UsageReport {
+        self.unscoped.report()
     }
 
     /// Price one model's usage, or `None` when that model has no configured
@@ -245,6 +171,83 @@ impl UsageLedger {
     fn cost(&self, model: &str, usage: &Usage) -> Option<f64> {
         Some(self.prices.get(model)?.cost(&usage.into()))
     }
+}
+
+fn report(calls: &[CallRecord]) -> UsageReport {
+    let mut total = Usage::default();
+    let mut by_step: BTreeMap<String, Usage> = BTreeMap::new();
+    // Keyed by provider *and* model: failover can serve one role from a
+    // second provider, and "which model actually answered" is the whole
+    // point of metering each candidate separately.
+    let mut by_model: BTreeMap<(String, String), (Usage, usize, dive_config::ModelKind)> =
+        BTreeMap::new();
+
+    for call in calls {
+        total.add(&call.usage);
+        by_step
+            .entry(call.site.group())
+            .or_default()
+            .add(&call.usage);
+        let entry = by_model
+            .entry((call.provider.clone(), call.model.clone()))
+            .or_default();
+        entry.0.add(&call.usage);
+        entry.1 += 1;
+        entry.2 = call.kind;
+    }
+
+    let mut steps: Vec<StepUsage> = by_step
+        .into_iter()
+        .map(|(path, usage)| StepUsage {
+            calls: calls.iter().filter(|c| c.site.group() == path).count(),
+            cost_usd: cost_of_group(calls, &path),
+            path,
+            usage,
+        })
+        .collect();
+    steps.sort_by(|a, b| rank(b).total_cmp(&rank(a)));
+
+    let mut models: Vec<ModelUsage> = by_model
+        .into_iter()
+        .map(
+            |((provider, model), (usage, calls_made, kind))| ModelUsage {
+                kind,
+                cost_usd: cost_of(
+                    calls
+                        .iter()
+                        .filter(|c| c.provider == provider && c.model == model),
+                ),
+                calls: calls_made,
+                provider,
+                model,
+                usage,
+            },
+        )
+        .collect();
+    models.sort_by(|a, b| rank_model(b).total_cmp(&rank_model(a)));
+
+    // Sum the per-model costs rather than pricing the grand total: a run
+    // that mixes a strong chat model with a cheap repair model has no
+    // single rate to apply. `None` only when nothing at all was priced.
+    let priced: Vec<f64> = models.iter().filter_map(|m| m.cost_usd).collect();
+    let cost_usd = (!priced.is_empty()).then(|| priced.iter().sum());
+
+    UsageReport {
+        calls: calls.len(),
+        total,
+        cost_usd,
+        by_step: steps,
+        by_model: models,
+    }
+}
+
+fn cost_of_group(calls: &[CallRecord], group: &str) -> Option<f64> {
+    cost_of(calls.iter().filter(|c| c.site.group() == group))
+}
+
+fn cost_of<'a>(calls: impl Iterator<Item = &'a CallRecord>) -> Option<f64> {
+    let costs: Vec<f64> = calls.filter_map(|c| c.cost).collect();
+    (!costs.is_empty()).then(|| costs.iter().sum())
 }
 
 /// Sort key: cost where known, else total tokens, so an unpriced run still
@@ -263,11 +266,12 @@ fn rank_model(model: &ModelUsage) -> f64 {
 impl UsageMeter for UsageLedger {
     fn record(&self, call: ModelCall) {
         let site = CallSite::current();
+        let cost = self.cost(&call.model, &call.usage);
         let event = ModelCallEvent {
             kind: call.kind,
             site: site.group(),
             role: site.role.clone(),
-            cost_usd: self.cost(&call.model, &call.usage),
+            cost_usd: cost,
             provider: call.provider.clone(),
             model: call.model.clone(),
             usage: call.usage,
@@ -277,19 +281,20 @@ impl UsageMeter for UsageLedger {
             repair_reason: site.repairing.clone(),
         };
         crate::trace::model(event.span());
-        self.calls.lock().unwrap().push(CallRecord {
+        let record = CallRecord {
             kind: call.kind,
             provider: call.provider,
             model: call.model,
             site,
             usage: call.usage,
-        });
-        // Emitted with no lock held: a sink is arbitrary caller code, and
-        // one that touched the ledger would deadlock on `calls`.
-        let sink = self.events.lock().unwrap().clone();
-        if let Some(sink) = sink {
-            sink.model_call(&event);
+            cost,
+        };
+        if let Some(run) = crate::run::Run::current() {
+            run.ledger().push(record);
+            run.events().model_call(&event);
+            return;
         }
+        self.unscoped.push(record);
     }
 
     fn captures_content(&self) -> bool {
@@ -499,7 +504,7 @@ mod tests {
     async fn the_model_call_event_carries_attribution_price_and_content() {
         let ledger = Arc::new(priced_ledger().with_content_capture(true));
         let sink = Arc::new(Captured::default());
-        ledger.attach_events(sink.clone());
+        let run = scoped_run(sink.clone());
         assert!(ledger.captures_content());
 
         let mut metered = call("sonnet", tokens(1_000_000, 0));
@@ -508,7 +513,7 @@ mod tests {
         CallSite::role("solver")
             .at("E2")
             .in_plans(&["outer".to_string()])
-            .scope(async { ledger.record(metered) })
+            .scope(run.scope(async { ledger.record(metered) }))
             .await;
 
         let events = sink.0.lock().unwrap();
@@ -528,14 +533,16 @@ mod tests {
     async fn a_repair_call_is_labelled_repair_with_the_reason_it_ran() {
         let ledger = Arc::new(priced_ledger());
         let sink = Arc::new(Captured::default());
-        ledger.attach_events(sink.clone());
-        CallSite::role("default")
-            .at("result")
-            .scope(CallSite::repairing(
-                "\"severity\" is a required property",
-                async { ledger.record(call("sonnet", tokens(10, 1))) },
-            ))
-            .await;
+        let run = scoped_run(sink.clone());
+        run.scope(
+            CallSite::role("default")
+                .at("result")
+                .scope(CallSite::repairing(
+                    "\"severity\" is a required property",
+                    async { ledger.record(call("sonnet", tokens(10, 1))) },
+                )),
+        )
+        .await;
         let events = sink.0.lock().unwrap();
         let span = events[0].span();
         assert_eq!(events[0].role, "repair");
@@ -569,7 +576,7 @@ mod tests {
             },
         ));
         // 3 (input) + 15 (output) + 3.75 (write, 1.25x) + 0.30 (read, 0.1x)
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.cost_usd, Some(22.05));
     }
 
@@ -586,7 +593,7 @@ mod tests {
         let ledger = UsageLedger::new(BTreeMap::from([("haiku".to_string(), haiku)]));
         ledger.record(call("haiku", tokens(60_000, 1_000)));
         ledger.record(call("haiku", tokens(60_000, 1_000)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         let rounded = |usd: Option<f64>| (usd.unwrap() * 100_000.0).round() / 100_000.0;
         assert_eq!(rounded(report.by_model[0].cost_usd), 0.013);
         assert_eq!(rounded(report.cost_usd), 0.013);
@@ -596,7 +603,7 @@ mod tests {
     async fn an_unpriced_model_reports_tokens_but_no_cost() {
         let ledger = UsageLedger::unpriced();
         ledger.record(call("mystery", tokens(500, 100)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.total.input_tokens, 500);
         assert_eq!(
             report.cost_usd, None,
@@ -610,17 +617,21 @@ mod tests {
         let ledger = priced_ledger();
         ledger.record(call("sonnet", tokens(1_000_000, 0)));
         ledger.record(call("mystery", tokens(9_000_000, 0)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.cost_usd, Some(3.0));
         assert_eq!(report.calls, 2);
     }
 
     #[tokio::test]
-    async fn take_drains_so_the_next_run_starts_clean() {
-        let ledger = priced_ledger();
-        ledger.record(call("sonnet", tokens(100, 10)));
-        assert_eq!(ledger.take().calls, 1);
-        assert_eq!(ledger.take().calls, 0, "a second take sees nothing");
+    async fn each_run_starts_clean_on_a_long_lived_ledger() {
+        let ledger = Arc::new(priced_ledger());
+        let first = scoped_run(Arc::new(Captured::default()));
+        first
+            .scope(async { ledger.record(call("sonnet", tokens(100, 10))) })
+            .await;
+        let second = scoped_run(Arc::new(Captured::default()));
+        assert_eq!(first.usage().calls, 1);
+        assert_eq!(second.usage().calls, 0, "a later run sees nothing earlier");
     }
 
     #[tokio::test]
@@ -636,7 +647,7 @@ mod tests {
             .scope(async { ledger.record(call("haiku", tokens(1_000_000, 0))) })
             .await;
 
-        let report = ledger.take();
+        let report = ledger.unscoped();
         // Sorted by cost: sonnet's $3 outranks haiku's $1.
         assert_eq!(report.by_step[0].path, "E4f/do.1/agent");
         assert_eq!(report.by_step[0].cost_usd, Some(3.0));
@@ -648,7 +659,7 @@ mod tests {
     async fn an_unscoped_call_is_recorded_as_unknown() {
         let ledger = priced_ledger();
         ledger.record(call("sonnet", tokens(100, 10)));
-        let report = ledger.take();
+        let report = ledger.unscoped();
         // Metering must not depend on attribution — a bare pipeline still
         // reports its spend, it just cannot say which step.
         assert_eq!(report.by_step[0].path, "unknown");
@@ -668,7 +679,7 @@ mod tests {
             .scope(async { ledger.record(call("sonnet", tokens(10, 1))) })
             .await;
 
-        let report = ledger.take();
+        let report = ledger.unscoped();
         let paths: Vec<&str> = report.by_step.iter().map(|s| s.path.as_str()).collect();
         // An inner plan's E0 must not merge with the outer plan's.
         assert!(paths.contains(&"dive_review_9000/E0"));
@@ -706,7 +717,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        let report = ledger.take();
+        let report = ledger.unscoped();
         assert_eq!(report.calls, 12);
         assert_eq!(report.by_step.len(), 6, "one group per map item");
         for step in &report.by_step {
@@ -714,6 +725,72 @@ mod tests {
             // $3 sonnet + $1 haiku, never two of one model.
             assert_eq!(step.cost_usd, Some(4.0), "{} priced wrong", step.path);
         }
+    }
+
+    fn scoped_run(sink: Arc<Captured>) -> Arc<crate::run::Run> {
+        Arc::new(crate::run::Run::new(
+            crate::run::Identity::default(),
+            sink as Arc<dyn crate::EventSink>,
+        ))
+    }
+
+    #[tokio::test]
+    async fn concurrent_runs_on_one_ledger_each_keep_their_own_calls_and_events() {
+        let ledger = Arc::new(priced_ledger());
+        let (sink_a, sink_b) = (Arc::new(Captured::default()), Arc::new(Captured::default()));
+        let (run_a, run_b) = (scoped_run(sink_a.clone()), scoped_run(sink_b.clone()));
+        let record = |model: &'static str, times: usize| {
+            let ledger = ledger.clone();
+            async move {
+                for _ in 0..times {
+                    tokio::task::yield_now().await;
+                    ledger.record(call(model, tokens(1_000_000, 0)));
+                }
+            }
+        };
+        tokio::join!(
+            run_a.scope(record("sonnet", 3)),
+            run_b.scope(record("haiku", 2)),
+        );
+        let (a, b) = (run_a.usage(), run_b.usage());
+        assert_eq!((a.calls, a.cost_usd), (3, Some(9.0)));
+        assert_eq!((b.calls, b.cost_usd), (2, Some(2.0)));
+        assert!(sink_a.0.lock().unwrap().iter().all(|e| e.model == "sonnet"));
+        assert!(sink_b.0.lock().unwrap().iter().all(|e| e.model == "haiku"));
+        assert_eq!(sink_a.0.lock().unwrap().len(), 3);
+        assert_eq!(sink_b.0.lock().unwrap().len(), 2);
+        assert!(
+            ledger.unscoped().is_empty(),
+            "a call made inside a run never lands on the process tally"
+        );
+    }
+
+    #[tokio::test]
+    async fn buffered_items_inside_a_run_all_reach_that_run() {
+        use futures::stream::{self, StreamExt};
+        let ledger = Arc::new(priced_ledger());
+        let sink = Arc::new(Captured::default());
+        let run = scoped_run(sink.clone());
+        run.clone()
+            .scope(
+                stream::iter(0..4)
+                    .map(|index| {
+                        let ledger = ledger.clone();
+                        CallSite::role("chat")
+                            .at(format!("E1/do.{index}"))
+                            .scope(async move {
+                                tokio::task::yield_now().await;
+                                ledger.record(call("sonnet", tokens(10, 1)));
+                            })
+                    })
+                    .buffered(4)
+                    .collect::<Vec<_>>(),
+            )
+            .await;
+        assert_eq!(run.usage().calls, 4);
+        assert_eq!(run.usage().by_step.len(), 4);
+        assert_eq!(sink.0.lock().unwrap().len(), 4);
+        assert!(ledger.unscoped().is_empty());
     }
 
     #[test]

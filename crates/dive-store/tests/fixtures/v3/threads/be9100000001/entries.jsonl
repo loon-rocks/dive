@@ -1,0 +1,4 @@
+{"seq":0,"at":1767226000000,"author":"context:network_drafter","kind":"message","message":{"kind":"user","content":"The network is empty."}}
+{"seq":1,"at":1767226000000,"author":"network_drafter","kind":"message","message":{"kind":"assistant","content":"What should we build?"},"ms":600,"usage":{"model":"claude-sonnet-4-5","input_tokens":700,"output_tokens":8,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}
+{"seq":2,"at":1767226100000,"author":"user","kind":"message","message":{"kind":"user","content":"a word counter"}}
+{"seq":3,"at":1767226120000,"author":"network_drafter","kind":"message","message":{"kind":"assistant","content":"Counting words or lines?"},"ms":500,"usage":{"model":"claude-sonnet-4-5","input_tokens":720,"output_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":700}}

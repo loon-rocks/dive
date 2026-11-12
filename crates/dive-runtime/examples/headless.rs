@@ -81,11 +81,11 @@ async fn main() -> anyhow::Result<()> {
     let report = chat.send("Say hello").await?;
     runtime.shutdown().await;
 
-    let thread = chat.thread().expect("the first message creates a thread");
-    let persisted = store.load_entries(&thread.id).await?.len();
+    let session = chat.session().expect("the first message creates a session");
+    let persisted = store.load_entries(&session.id, None).await?.len();
     println!(
         "{} ({}): {}",
-        report.turn.active, thread.id, report.turn.text
+        report.turn.active, session.id, report.turn.text
     );
     println!(
         "{persisted} entries persisted under {}",

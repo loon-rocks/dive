@@ -6,6 +6,7 @@ mod host;
 mod interlocutor;
 mod mcp_server;
 mod output;
+mod serve;
 mod workbench;
 
 use anyhow::Result;
@@ -70,6 +71,10 @@ fn telemetry_config_paths(command: &Command) -> Vec<PathBuf> {
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: None },
         } => vec![global],
+        Command::Serve { dir: Some(dir), .. } => {
+            vec![dive_config::legacy::project_dir(dir).join("config.toml")]
+        }
+        Command::Serve { dir: None, .. } => vec![dive_config::project_config_path()],
         _ => vec![global, dive_config::project_config_path()],
     }
 }
@@ -89,26 +94,50 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
         Command::Ask {
             message,
             agent,
-            thread,
+            session,
             json,
             no_stream,
         } => {
             commands::ask::run(commands::ask::AskArgs {
                 message,
                 agent,
-                thread,
+                session,
                 json,
                 no_stream,
             })
             .await
         }
-        Command::Chat { agent, thread } => commands::chat_cmd::run(agent, thread).await,
-        Command::Thread { command } => commands::thread_cmd::run(command).await,
+        Command::Chat { agent, session } => commands::chat_cmd::run(agent, session).await,
+        Command::Session { command } => commands::session_cmd::run(command).await,
         Command::Secret { command } => commands::secret_cmd::run(command),
         Command::Shape { command } => commands::shape_cmd::run(command).await,
         Command::Plan { command } => commands::plan_cmd::run(command).await,
         Command::Workbench { command } => workbench::run(command, verbose).await,
         Command::Version { json } => commands::version_cmd::run(json),
+        Command::Serve {
+            command:
+                Some(cli::ServeCommand::Token {
+                    plan,
+                    tenant,
+                    sub,
+                    scope,
+                    dir,
+                }),
+            ..
+        } => serve::dev_key::print_token(dir, plan, tenant, sub, scope),
+        Command::Serve {
+            command: None,
+            listen,
+            dir,
+            dev_key,
+        } => {
+            serve::run(serve::ServeArgs {
+                listen,
+                dir,
+                dev_key,
+            })
+            .await
+        }
     }
 }
 

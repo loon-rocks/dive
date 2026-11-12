@@ -44,7 +44,10 @@ pub use ask::{ask_tool_def, AskResult, WhenUnanswered, ASK_TOOL};
 pub use authoring::{EditAccepted, EditRejected, WriteError};
 pub use catalog::{CatalogCheck, ToolCatalog};
 pub use compose::{draft_input, COMPOSE_PLAN};
-pub use drafter::{drafter_tool_defs, stamped, write_file, Drafted, DraftedTools};
+pub use drafter::{
+    drafter_tool_defs, drafting_disabled, stamped, write_file, Drafted, DraftedTools,
+    DRAFTING_DISABLED,
+};
 pub use exit::{ExitStatus, PlanExit, EXIT_TOOL};
 pub use filter::FILTER_TOOL;
 pub use gate::{ErrorDecision, ExecutionGate, GateContext, GateDecision, StepPath};
@@ -102,21 +105,14 @@ pub struct Pipeline {
     /// the live registry, and execution + replanning already handle its
     /// hallucinations.
     pub catalog: Option<Arc<ToolCatalog>>,
+    pub requirements: Arc<crate::requirements::Requirements>,
     pub user_context: String,
     pub current_date: String,
     pub max_attempts: u32,
     pub max_agent_iterations: u32,
-    /// Where this run's model calls are tallied. Shared with the
-    /// [`ModelRouter`] as its `UsageMeter`, and — because [`Pipeline::nested`]
-    /// clones — with every plan this one calls, so a composed plan's spend
-    /// rolls up into its caller for free.
-    ///
-    /// Deliberately **not** drained by the pipeline, and so deliberately not
-    /// a field on [`PipelineOutcome`]: `call_plan` runs a nested plan through
-    /// the same `run_explicit` entry point against this same ledger, so a
-    /// drain in there would hand the inner plan its caller's tally and leave
-    /// the caller reporting only what happened afterwards. The owner of the
-    /// top-level run calls [`UsageLedger::take`] once, when it is over.
+    /// The router's process-wide meter. Calls made inside a
+    /// [`Run`](crate::run::Run) scope are tallied on that run, nested plans
+    /// included; this ledger keeps only calls made outside any run.
     pub usage: Arc<crate::usage::UsageLedger>,
     pub agents: Arc<crate::agent::doc::AgentSet>,
     pub agent_depth: usize,
@@ -586,6 +582,12 @@ impl Pipeline {
             let Some(plan_doc) = self.plans.iter().find(|d| d.identifier == identifier) else {
                 return PlanCall::error(format!("no plan named '{identifier}'"));
             };
+            if let Some(refusal) = self
+                .requirements
+                .refusal(&crate::requirements::Item::Plan(identifier.to_string()))
+            {
+                return PlanCall::error(refusal.to_string());
+            }
             if let Some(schema) = &plan_doc.input_schema {
                 doc::apply_schema_defaults(schema, &mut input);
             }
@@ -802,6 +804,7 @@ impl Pipeline {
         self.plans
             .iter()
             .filter(|plan_doc| !self.call_stack.iter().any(|f| f == &plan_doc.identifier))
+            .filter(|plan_doc| self.requirements.plan_runnable(&plan_doc.identifier))
             .map(|plan_doc| crate::tools::ToolDef {
                 name: plan_doc.tool_name(),
                 description: plan_doc.tool_description(),

@@ -306,7 +306,7 @@ mod tests {
         config.plans.paths = vec![plans];
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         let runtime = Runtime::with_packs(config, InstalledPacks::default(), options).unwrap();
         let store = runtime.store().unwrap();

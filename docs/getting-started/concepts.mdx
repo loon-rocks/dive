@@ -49,7 +49,7 @@ Agents, plan steps and tools name a role, such as `chat` or `judge`, not a model
 
 ## Threads
 
-`dive ask` and `dive chat` save each conversation as a thread, with every message, tool call and handoff. Pass `--thread <id>` to continue one. See [Manage threads](/agents/guides/threads).
+`dive ask` and `dive chat` save each conversation as a chat session, with every message, tool call and handoff, and `dive plan run` saves each run as a plan session. Each turn is one run of its session. Pass `--session <id>` to continue a conversation. See [Manage sessions](/agents/guides/sessions).
 
 ## Where files live
 

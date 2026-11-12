@@ -65,7 +65,6 @@ impl Workbench {
             Arc::new(sink::ChannelSink::plan_run(tx.clone())),
             exporter.clone(),
         );
-        runtime.usage.attach_events(run_sink.clone());
         let pipeline = runtime.pipeline(&store, run_sink).await?;
         let plans_dir = runtime.plans_dir();
         let root: PathBuf = root.into();
@@ -95,7 +94,7 @@ impl Workbench {
         let registry = attachment.tools(toolbox as Arc<dyn ToolRegistry>);
         let (agent_set, errors) = dive_core::agent::doc::AgentSet::load(
             &agents::builtin_sources(),
-            &dive_core::agent::doc::agent_dirs(),
+            &runtime.agent_dirs(),
         );
         let agent_set = agent_set.with_drafted(runtime.drafted().agents());
         for error in errors {
@@ -130,10 +129,10 @@ impl Workbench {
         let (resumed, history) = match &start {
             Start::Resume(id) => {
                 let meta = store
-                    .get_thread(id)
+                    .get_session(id)
                     .await?
-                    .with_context(|| format!("no thread '{id}'"))?;
-                let history = crate::runtime::load_history(store.as_ref(), id).await?;
+                    .with_context(|| format!("no session '{id}'"))?;
+                let entries = store.load_entries(id, None).await?;
                 if let Some(recorded) = meta
                     .attachments
                     .iter()
@@ -141,18 +140,26 @@ impl Workbench {
                 {
                     attachment.recall(recorded);
                 }
-                attachment.restore(&history).await;
-                (Some(meta), history)
+                let logged: Vec<dive_core::NewEntry> = entries
+                    .iter()
+                    .cloned()
+                    .map(dive_core::NewEntry::from)
+                    .collect();
+                attachment.restore(&logged).await;
+                (
+                    Some(meta),
+                    dive_core::context::context_entries(&entries, None),
+                )
             }
             _ => (None, Vec::new()),
         };
         let starting = resumed
             .as_ref()
-            .map(|meta| meta.active.clone())
+            .map(|meta| meta.active_agent.clone())
             .unwrap_or_else(|| agents::starting_agent(&start, doc.as_ref()).to_string());
         let workbench = Workbench {
             active: std::sync::Mutex::new(starting),
-            thread: std::sync::Mutex::new(resumed.map(|meta| meta.id)),
+            session: std::sync::Mutex::new(resumed.map(|meta| meta.id)),
             conversation,
             pipeline,
             history: Arc::new(tokio::sync::Mutex::new(history)),
@@ -165,6 +172,7 @@ impl Workbench {
             root,
             project: runtime.project().map(str::to_string),
             attachment,
+            identity: runtime.identity(),
         };
         if let Some((kind, name)) = opening {
             workbench

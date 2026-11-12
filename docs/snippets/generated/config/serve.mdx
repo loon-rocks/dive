@@ -1,0 +1,35 @@
+<ParamField body="serve" type="object">
+  How `dive serve` runs Dive as an HTTP service. Belongs in the project config. Without it, or with no `public_keys`, `dive serve` refuses to start unless you pass `--dev-key`.
+</ParamField>
+
+<ParamField body="serve.listen" type="string">
+  The address and port to listen on. Defaults to `0.0.0.0:8080`. `--listen` overrides it.
+</ParamField>
+
+<ParamField body="serve.issuer" type="string">
+  The `iss` every run token must carry. Required unless you pass `--dev-key`.
+</ParamField>
+
+<ParamField body="serve.audience" type="string">
+  The value a run token's `aud` must contain. Required unless you pass `--dev-key`.
+</ParamField>
+
+<ParamField body="serve.public_keys" type="string[]">
+  Paths to the PEM public keys that verify run tokens, as Ed25519, P-256 (ES256) or RSA (RS256) keys. List more than one to rotate keys.
+</ParamField>
+
+<ParamField body="serve.max_runs" type="integer">
+  How many runs this process runs at once. At the limit, `/readyz` returns 503 and starts get `at_capacity`. Defaults to 32.
+</ParamField>
+
+<ParamField body="serve.max_runs_per_tenant" type="integer">
+  How many runs one tenant runs at once on this process. Over it, starts get `at_capacity`. Defaults to 8.
+</ParamField>
+
+<ParamField body="serve.heartbeat_secs" type="integer">
+  Seconds without traffic before an entry stream sends a heartbeat comment. Defaults to 15.
+</ParamField>
+
+<ParamField body="serve.shutdown_grace_secs" type="integer">
+  Seconds a stopping process gives its runs to end before it exits. Defaults to 30.
+</ParamField>

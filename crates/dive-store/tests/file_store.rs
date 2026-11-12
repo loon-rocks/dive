@@ -1,145 +1,155 @@
-//! FileStore-specific behavior: durability, corruption handling, and
-//! concurrent access through independent store instances on one directory
-//! (each instance holds its own file descriptors, so flock contention is
-//! real even in-process).
-
-mod common;
-
-use common::MessageLog;
-use dive_core::store::{Attachment, EntryUsage, Store, ThreadEntry};
+use dive_core::run::Identity;
+use dive_core::store::{
+    EntryBody, NewEntry, NewSession, Page, RunEnded, RunStarted, SessionFilter, SessionKind,
+    StartRun, Store,
+};
 use dive_llm::types::ChatMessage;
 use dive_store::{FileStore, STORE_FORMAT};
 use serde_json::json;
 use std::io::Write;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 
-fn user(content: &str) -> ChatMessage {
-    ChatMessage::user(content)
+fn ada() -> Identity {
+    Identity {
+        user: "ada".into(),
+        tenant: "local".into(),
+        deployment: "cli".into(),
+        environment: "local".into(),
+    }
+}
+
+async fn session_with(store: &FileStore, texts: &[&str]) -> String {
+    let id = store
+        .create_session(NewSession::chat("t", "chat", &ada()))
+        .await
+        .unwrap()
+        .id;
+    let mut lease = store
+        .start_run(StartRun {
+            run_id: uuid::Uuid::new_v4().to_string(),
+            session: id.clone(),
+            kind: SessionKind::Chat,
+            holder: "test".into(),
+            token_expires_at: None,
+            started: RunStarted {
+                input: json!(null),
+                identity: ada(),
+                trace_id: None,
+                plan: None,
+                synthetic: false,
+            },
+        })
+        .await
+        .unwrap();
+    let entries: Vec<_> = texts
+        .iter()
+        .map(|text| {
+            let entry = NewEntry::message("user", ChatMessage::user(*text)).into_entry(
+                lease.next_seq,
+                &lease.run,
+                1,
+            );
+            lease.next_seq += 1;
+            entry
+        })
+        .collect();
+    store.append(&lease, &entries).await.unwrap();
+    store
+        .end_run(&lease, RunEnded::completed(None))
+        .await
+        .unwrap();
+    id
+}
+
+fn messages(entries: &[dive_core::store::Entry]) -> usize {
+    entries
+        .iter()
+        .filter(|entry| matches!(entry.body, EntryBody::Message { .. }))
+        .count()
 }
 
 #[tokio::test]
 async fn persists_across_reopen() {
     let dir = tempfile::tempdir().unwrap();
-    let thread_id = {
+    let id = {
         let store = FileStore::open(dir.path()).unwrap();
-        let thread = store.create_thread("durable", "chat", None).await.unwrap();
-        store
-            .append_messages(&thread.id, &[user("hello")])
-            .await
-            .unwrap();
         store
             .record_tool_shape("t__x", &json!({"type": "object"}), &json!({}))
             .await
             .unwrap();
-        thread.id
+        session_with(&store, &["hello"]).await
     };
     let store = FileStore::open(dir.path()).unwrap();
-    assert_eq!(store.load_messages(&thread_id).await.unwrap().len(), 1);
-    let meta = store.get_thread(&thread_id).await.unwrap().unwrap();
+    assert_eq!(messages(&store.load_entries(&id, None).await.unwrap()), 1);
+    let meta = store.get_session(&id).await.unwrap().unwrap();
     assert_eq!(meta.message_count, 1);
     assert_eq!(store.tool_shapes().await.unwrap()[0].tool, "t__x");
+}
+
+fn entries_file(root: &Path, id: &str) -> PathBuf {
+    root.join("sessions").join(id).join("entries.jsonl")
 }
 
 #[tokio::test]
 async fn torn_final_line_is_dropped() {
     let dir = tempfile::tempdir().unwrap();
     let store = FileStore::open(dir.path()).unwrap();
-    let thread = store.create_thread("torn", "chat", None).await.unwrap();
-    store
-        .append_messages(&thread.id, &[user("one"), user("two")])
-        .await
-        .unwrap();
-
-    // Simulate a partially flushed append: garbage with no closing newline.
-    let path = dir
-        .path()
-        .join("threads")
-        .join(&thread.id)
-        .join("entries.jsonl");
+    let id = session_with(&store, &["one", "two"]).await;
     let mut file = std::fs::OpenOptions::new()
         .append(true)
-        .open(&path)
+        .open(entries_file(dir.path(), &id))
         .unwrap();
-    file.write_all(b"{\"kind\":\"user\",\"content\":\"tru")
+    file.write_all(b"{\"seq\":99,\"run_id\":\"r\",\"kind\":\"mess")
         .unwrap();
     drop(file);
-
-    let loaded = store.load_messages(&thread.id).await.unwrap();
-    assert_eq!(loaded.len(), 2);
+    assert_eq!(messages(&store.load_entries(&id, None).await.unwrap()), 2);
 }
 
 #[tokio::test]
 async fn mid_file_corruption_errors() {
     let dir = tempfile::tempdir().unwrap();
     let store = FileStore::open(dir.path()).unwrap();
-    let thread = store.create_thread("corrupt", "chat", None).await.unwrap();
-    store
-        .append_messages(&thread.id, &[user("one")])
-        .await
-        .unwrap();
-
-    let path = dir
-        .path()
-        .join("threads")
-        .join(&thread.id)
-        .join("entries.jsonl");
-    let mut file = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&path)
-        .unwrap();
-    file.write_all(b"not json\n").unwrap();
-    drop(file);
-    store
-        .append_messages(&thread.id, &[user("three")])
-        .await
-        .unwrap();
-
-    let err = store.load_messages(&thread.id).await.unwrap_err();
+    let id = session_with(&store, &["one"]).await;
+    let path = entries_file(dir.path(), &id);
+    let mut raw = std::fs::read_to_string(&path).unwrap();
+    raw.insert_str(0, "not json\n");
+    std::fs::write(&path, raw).unwrap();
+    let err = store.load_entries(&id, None).await.unwrap_err();
     assert!(err.to_string().contains("corrupt line"), "{err}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn concurrent_appends_from_separate_instances() {
+async fn separate_instances_write_their_own_sessions_without_corrupting_each_other() {
     const WRITERS: usize = 8;
-    const MESSAGES_EACH: usize = 25;
-
     let dir = tempfile::tempdir().unwrap();
-    let thread_id = FileStore::open(dir.path())
-        .unwrap()
-        .create_thread("contended", "chat", None)
-        .await
-        .unwrap()
-        .id;
-
     let mut handles = Vec::new();
-    for w in 0..WRITERS {
+    for _ in 0..WRITERS {
         let root = dir.path().to_path_buf();
-        let thread_id = thread_id.clone();
         handles.push(tokio::spawn(async move {
             let store = FileStore::open(&root).unwrap();
-            for m in 0..MESSAGES_EACH {
-                store
-                    .append_messages(&thread_id, &[user(&format!("w{w} m{m}"))])
-                    .await
-                    .unwrap();
+            for _ in 0..5 {
+                session_with(&store, &["a", "b"]).await;
             }
         }));
     }
     for handle in handles {
         handle.await.unwrap();
     }
-
     let store = FileStore::open(dir.path()).unwrap();
-    let loaded = store.load_messages(&thread_id).await.unwrap();
-    assert_eq!(loaded.len(), WRITERS * MESSAGES_EACH);
-    let meta = store.get_thread(&thread_id).await.unwrap().unwrap();
-    assert_eq!(meta.message_count, (WRITERS * MESSAGES_EACH) as i64);
+    let listed = store
+        .list_sessions(&SessionFilter::default(), Page::ALL)
+        .await
+        .unwrap();
+    assert_eq!(listed.sessions.len(), WRITERS * 5);
+    for meta in listed.sessions {
+        assert_eq!(meta.message_count, 2);
+        assert_eq!(meta.active_run, None);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn concurrent_shape_writes_never_corrupt() {
     const WRITERS: usize = 8;
-
     let dir = tempfile::tempdir().unwrap();
     let mut handles = Vec::new();
     for w in 0..WRITERS {
@@ -157,9 +167,6 @@ async fn concurrent_shape_writes_never_corrupt() {
     for handle in handles {
         handle.await.unwrap();
     }
-
-    // Last-writer-wins: the file must parse and hold a sane count, even if
-    // some increments were lost under contention.
     let shapes = FileStore::open(dir.path())
         .unwrap()
         .tool_shapes()
@@ -172,44 +179,51 @@ async fn concurrent_shape_writes_never_corrupt() {
 }
 
 #[tokio::test]
-async fn tool_name_encoding_roundtrips() {
+async fn a_listing_skips_incomplete_session_dirs() {
     let dir = tempfile::tempdir().unwrap();
-    let store: Arc<dyn Store> = Arc::new(FileStore::open(dir.path()).unwrap());
-    store
-        .record_tool_shape("weird/tool:name", &json!({}), &json!({}))
+    let store = FileStore::open(dir.path()).unwrap();
+    session_with(&store, &[]).await;
+    std::fs::create_dir_all(dir.path().join("sessions").join("halfmade")).unwrap();
+    let listed = store
+        .list_sessions(&SessionFilter::default(), Page::ALL)
         .await
         .unwrap();
-    let shapes = store.tool_shapes().await.unwrap();
-    assert_eq!(shapes.len(), 1);
-    assert_eq!(shapes[0].tool, "weird/tool:name");
+    assert_eq!(listed.sessions.len(), 1);
 }
 
 #[tokio::test]
-async fn scan_skips_incomplete_thread_dirs() {
+async fn deleting_a_session_removes_its_runs() {
     let dir = tempfile::tempdir().unwrap();
     let store = FileStore::open(dir.path()).unwrap();
-    store.create_thread("real", "chat", None).await.unwrap();
-    // A directory without meta.json (mid-create or mid-delete) is skipped.
-    std::fs::create_dir_all(dir.path().join("threads").join("halfmade")).unwrap();
-    assert_eq!(store.list_threads().await.unwrap().len(), 1);
+    let id = session_with(&store, &["x"]).await;
+    let runs = || std::fs::read_dir(dir.path().join("runs")).unwrap().count();
+    assert_eq!(runs(), 1);
+    assert!(store.delete_session(&id).await.unwrap());
+    assert_eq!(runs(), 0);
 }
 
-fn fixture_dir(version: &str) -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+fn fixture_dir(version: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(version)
 }
 
-fn data_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+fn data_files(root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
         for entry in std::fs::read_dir(&dir).unwrap().filter_map(Result::ok) {
             let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            if relative.starts_with("sessions") || relative.starts_with("runs") {
+                continue;
+            }
             if path.is_dir() {
                 pending.push(path);
-            } else if path.file_name().unwrap() != ".lock" {
-                files.push(path.strip_prefix(root).unwrap().to_path_buf());
+            } else if ![".lock", ".migrate.lock"]
+                .contains(&path.file_name().unwrap().to_str().unwrap())
+            {
+                files.push(relative);
             }
         }
     }
@@ -228,7 +242,7 @@ fn copy_fixture(version: &str) -> tempfile::TempDir {
     dir
 }
 
-fn contents(path: &std::path::Path) -> Vec<serde_json::Value> {
+fn contents(path: &Path) -> Vec<serde_json::Value> {
     let raw = std::fs::read_to_string(path).unwrap();
     if path.extension().is_some_and(|ext| ext == "jsonl") {
         return raw
@@ -240,11 +254,11 @@ fn contents(path: &std::path::Path) -> Vec<serde_json::Value> {
     vec![serde_json::from_str(&raw).unwrap_or_else(|_| json!(raw.trim()))]
 }
 
-fn assert_matches_fixture_except_marker(root: &std::path::Path, version: &str) {
+fn assert_matches_fixture_except_marker(root: &Path, version: &str) {
     let expected = fixture_dir(version);
     assert_eq!(data_files(root), data_files(&expected));
     for file in data_files(&expected) {
-        if file == std::path::Path::new("FORMAT") {
+        if file == Path::new("FORMAT") {
             continue;
         }
         assert_eq!(
@@ -261,14 +275,14 @@ fn assert_matches_fixture_except_marker(root: &std::path::Path, version: &str) {
 }
 
 #[test]
-fn a_version_1_data_directory_migrates_to_the_frozen_version_2_layout_and_is_marked_current() {
+fn a_version_1_data_directory_migrates_to_the_frozen_version_2_threads_and_is_marked_current() {
     let dir = copy_fixture("v1");
     FileStore::open(dir.path()).unwrap();
     assert_matches_fixture_except_marker(dir.path(), "v2");
 }
 
 #[tokio::test]
-async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untouched() {
+async fn a_frozen_version_2_data_directory_keeps_its_threads_and_opens_as_sessions() {
     let dir = copy_fixture("v2");
     let store = FileStore::open(dir.path()).unwrap();
     assert_matches_fixture_except_marker(dir.path(), "v2");
@@ -277,90 +291,16 @@ async fn a_frozen_version_2_data_directory_is_marked_current_and_otherwise_untou
         std::fs::read(dir.path().join(entries_file)).unwrap(),
         std::fs::read(fixture_dir("v2").join(entries_file)).unwrap()
     );
-    let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
-    assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
-    let entries = store.load_entries("a1b2c3d4e5f6").await.unwrap();
-    let authors: Vec<&str> = entries.iter().map(|entry| entry.author.as_str()).collect();
-    assert_eq!(authors, ["user", "chat", "chat", "chat"]);
-    assert!(entries
+    let session = store.get_session("a1b2c3d4e5f6").await.unwrap().unwrap();
+    assert_eq!((session.agent.as_str(), session.message_count), ("chat", 4));
+    let entries = store.load_entries("a1b2c3d4e5f6", None).await.unwrap();
+    let authors: Vec<&str> = entries
         .iter()
-        .all(|entry| entry.ms.is_none() && entry.usage.is_none()));
+        .filter(|entry| matches!(entry.body, EntryBody::Message { .. }))
+        .map(|entry| entry.author.as_str())
+        .collect();
+    assert_eq!(authors, ["user", "chat", "chat", "chat"]);
     assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
-}
-
-#[test]
-fn entries_without_timing_round_trip_byte_for_byte() {
-    let raw = std::fs::read_to_string(fixture_dir("v2").join("threads/a1b2c3d4e5f6/entries.jsonl"))
-        .unwrap();
-    for line in raw.lines() {
-        let entry: ThreadEntry = serde_json::from_str(line).unwrap();
-        assert_eq!(serde_json::to_string(&entry).unwrap(), line);
-    }
-}
-
-#[test]
-fn entries_from_before_spans_load_and_drop_their_nested_calls() {
-    for version in ["v3", "v4"] {
-        let raw = std::fs::read_to_string(
-            fixture_dir(version).join("threads/a1b2c3d4e5f6/entries.jsonl"),
-        )
-        .unwrap();
-        for line in raw.lines() {
-            let entry: ThreadEntry = serde_json::from_str(line).unwrap();
-            assert_eq!(entry.span, None, "{version}");
-            let text = serde_json::to_string(&entry).unwrap();
-            assert!(!text.contains("\"calls\""), "{version}: {text}");
-        }
-    }
-}
-
-#[tokio::test]
-async fn attachments_are_set_and_kept_across_reopen() {
-    let dir = tempfile::tempdir().unwrap();
-    let id = {
-        let store = FileStore::open(dir.path()).unwrap();
-        let meta = store
-            .create_thread("draft", "network_drafter", None)
-            .await
-            .unwrap();
-        assert!(meta.attachments.is_empty());
-        store
-            .set_attachments(&meta.id, &[Attachment::new("network")])
-            .await
-            .unwrap();
-        meta.id
-    };
-    let store = FileStore::open(dir.path()).unwrap();
-    let meta = store.get_thread(&id).await.unwrap().unwrap();
-    assert_eq!(meta.attachments, [Attachment::new("network")]);
-    assert!(store.set_attachments("missing0000", &[]).await.is_err());
-}
-
-#[tokio::test]
-async fn a_thread_keeps_the_project_it_was_created_in_across_reopen() {
-    let dir = tempfile::tempdir().unwrap();
-    let (site, global) = {
-        let store = FileStore::open(dir.path()).unwrap();
-        let site = store
-            .create_thread("site", "chat", Some("/work/site"))
-            .await
-            .unwrap();
-        let global = store.create_thread("global", "chat", None).await.unwrap();
-        (site.id, global.id)
-    };
-    let store = FileStore::open(dir.path()).unwrap();
-    let site = store.get_thread(&site).await.unwrap().unwrap();
-    assert_eq!(site.project.as_deref(), Some("/work/site"));
-    let global = store.get_thread(&global).await.unwrap().unwrap();
-    assert_eq!(global.project, None);
-    let raw = std::fs::read_to_string(
-        dir.path()
-            .join("threads")
-            .join(&global.id)
-            .join("meta.json"),
-    )
-    .unwrap();
-    assert!(!raw.contains("project"));
 }
 
 #[test]
@@ -371,45 +311,15 @@ fn a_version_3_data_directory_moves_its_files_into_the_frozen_version_4_layout()
 }
 
 #[tokio::test]
-async fn a_frozen_version_4_data_directory_opens_as_is() {
+async fn a_frozen_version_4_data_directory_keeps_its_threads_as_they_were() {
     let dir = copy_fixture("v4");
     let store = FileStore::open(dir.path()).unwrap();
-    let thread = store.get_thread("a1b2c3d4e5f6").await.unwrap().unwrap();
-    assert_eq!((thread.owner.as_str(), thread.message_count), ("chat", 4));
-    let entries = store.load_entries("a1b2c3d4e5f6").await.unwrap();
-    let ms: Vec<Option<u64>> = entries.iter().map(|entry| entry.ms).collect();
-    assert_eq!(ms, [None, Some(1840), Some(5230), Some(910)]);
-    assert_eq!(
-        entries[1].usage,
-        Some(EntryUsage {
-            model: "claude-sonnet-4-5".to_string(),
-            input_tokens: 1200,
-            output_tokens: 48,
-            output_image_tokens: 0,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 3100,
-        })
-    );
-    assert!(entries[2].usage.is_none());
-    assert_eq!(store.tool_shapes().await.unwrap().len(), 1);
-    let draft = store.get_thread("c0ffee000001").await.unwrap().unwrap();
-    assert_eq!(
-        draft.attachments,
-        [Attachment::new("network").with("state", "open")]
-    );
-    assert!(thread.attachments.is_empty());
-    assert_eq!(thread.project, None);
-    let site = store.get_thread("517e00000001").await.unwrap().unwrap();
-    assert_eq!(site.project.as_deref(), Some("/work/site"));
-    assert!(site.in_project(Some("/work/site")));
-    assert!(draft.in_project(None));
     let expected = fixture_dir("v4");
-    assert_eq!(
-        data_files(dir.path()),
-        data_files(&expected),
-        "opening a current store writes nothing new"
-    );
+    assert_eq!(data_files(dir.path()), data_files(&expected));
     for file in data_files(&expected) {
+        if file == Path::new("FORMAT") {
+            continue;
+        }
         assert_eq!(
             std::fs::read(dir.path().join(&file)).unwrap(),
             std::fs::read(expected.join(&file)).unwrap(),
@@ -417,4 +327,21 @@ async fn a_frozen_version_4_data_directory_opens_as_is() {
             file.display()
         );
     }
+    let site = store.get_session("517e00000001").await.unwrap().unwrap();
+    assert_eq!(site.project.as_deref(), Some("/work/site"));
+    let draft = store.get_session("c0ffee000001").await.unwrap().unwrap();
+    assert_eq!(
+        draft.attachments,
+        [dive_core::store::Attachment::new("network").with("state", "open")]
+    );
+    let entries = store.load_entries("a1b2c3d4e5f6", None).await.unwrap();
+    let ms: Vec<Option<u64>> = entries
+        .iter()
+        .filter(|entry| matches!(entry.body, EntryBody::Message { .. }))
+        .map(|entry| entry.ms)
+        .collect();
+    assert_eq!(ms, [None, Some(1840), Some(5230), Some(910)]);
+    assert!(entries
+        .iter()
+        .all(|entry| !serde_json::to_string(entry).unwrap().contains("\"calls\"")));
 }

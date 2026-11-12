@@ -21,6 +21,15 @@ pub const SAVE_TOOL_TOOL: &str = "builtin__save_tool";
 
 pub const SAVE_AGENT_TOOL: &str = "builtin__save_agent";
 
+pub const DRAFTING_DISABLED: &str = "drafting_disabled";
+
+pub fn drafting_disabled() -> Value {
+    json!({
+        "error": DRAFTING_DISABLED,
+        "problems": ["this Dive runs in serve mode, where tools and agents can't be saved"],
+    })
+}
+
 const WORKBENCH_AGENTS: [&str; 6] = [
     "front_desk",
     "network_editor",
@@ -39,6 +48,10 @@ pub struct Drafted {
     pub tools_dir: Option<PathBuf>,
     pub agents_dir: Option<PathBuf>,
     pub tool_dirs: Vec<PathBuf>,
+    pub agent_dirs: Vec<PathBuf>,
+    pub workspace: Option<PathBuf>,
+    pub drafting_disabled: bool,
+    pub clean_env: bool,
     pub pack_sources: Vec<crate::packs::PackSource>,
     pub secrets: Arc<dyn SecretSource>,
 }
@@ -53,6 +66,10 @@ impl Default for Drafted {
             tools_dir: None,
             agents_dir: None,
             tool_dirs: Vec::new(),
+            agent_dirs: Vec::new(),
+            workspace: std::env::current_dir().ok(),
+            drafting_disabled: false,
+            clean_env: false,
             pack_sources: Vec::new(),
             secrets: Arc::new(crate::secrets::system()),
         }
@@ -70,6 +87,26 @@ impl Drafted {
 
     pub fn with_tool_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
         self.tool_dirs = dirs;
+        self
+    }
+
+    pub fn with_agent_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.agent_dirs = dirs;
+        self
+    }
+
+    pub fn with_workspace(mut self, root: PathBuf) -> Self {
+        self.workspace = Some(root);
+        self
+    }
+
+    pub fn without_drafting(mut self) -> Self {
+        self.drafting_disabled = true;
+        self
+    }
+
+    pub fn with_clean_env(mut self, clean: bool) -> Self {
+        self.clean_env = clean;
         self
     }
 
@@ -125,6 +162,7 @@ impl DraftedTools {
     fn registry(&self) -> UserToolRegistry {
         UserToolRegistry::new(self.drafted.tools(), self.router.clone())
             .with_secrets(self.drafted.secrets.clone())
+            .with_clean_env(self.drafted.clean_env)
     }
 }
 
@@ -451,7 +489,11 @@ impl Pipeline {
         let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
         let mut registry = UserToolRegistry::new(vec![doc], self.router.clone())
             .with_secrets(self.drafted.secrets.clone())
-            .with_scratch(scratch.path());
+            .with_scratch(scratch.path())
+            .with_clean_env(self.drafted.clean_env);
+        if let Some(root) = &self.drafted.workspace {
+            registry = registry.with_project_dir(root);
+        }
         if let Some(space) = &self.files {
             registry = registry.with_files(space.store.clone());
         }
@@ -574,6 +616,9 @@ impl Pipeline {
         confirm: bool,
         existing: Option<&Path>,
     ) -> Value {
+        if self.drafted.drafting_disabled {
+            return drafting_disabled();
+        }
         let doc = match parse_tool(yaml) {
             Ok(doc) => doc,
             Err(problems) => return refused("the tool file is not valid", problems),
@@ -697,6 +742,9 @@ impl Pipeline {
         confirm: bool,
         existing: Option<&Path>,
     ) -> Value {
+        if self.drafted.drafting_disabled {
+            return drafting_disabled();
+        }
         let doc = match self.check_agent_file(yaml).await {
             Ok(doc) => doc,
             Err(problems) => return refused("the agent file has problems", problems),

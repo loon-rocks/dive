@@ -6,7 +6,7 @@ playground: "none"
 keywords: ["dive plan run"]
 ---
 
-Resolves every step's tool first and refuses to start if any is missing. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.
+Resolves every step's tool first and refuses to start if any is missing, including anything reached through the plans and agents it calls; the error names the path to the missing item. A solver plan streams its answer to stdout, an output plan prints its JSON, and a silent plan prints nothing.
 
 Missing or invalid inputs exit 3 with the input schema on stderr. An exit step that asserts an error exits 4.
 

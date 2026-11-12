@@ -1,0 +1,39 @@
+---
+title: "dive session rm"
+sidebarTitle: "rm"
+description: "Delete a session"
+playground: "none"
+keywords: ["dive session rm"]
+---
+
+Also removes the session's runs and the stored files, such as generated images, that no other session refers to. Files in S3 storage are kept, since other machines may share the bucket.
+
+## Arguments
+
+<ParamField path="ID" type="string" required>
+  The session id, as `dive session list` prints it
+</ParamField>
+
+## Options
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive session rm [OPTIONS] <ID>
+```
+
+```bash Example
+dive session rm 4f1c9a2b7d3e
+```
+
+</RequestExample>

@@ -35,9 +35,10 @@ pub struct Workbench {
     pub debug: Arc<DebugControls>,
     pub tx: UnboundedSender<WorkbenchEvent>,
     pub root: PathBuf,
-    pub thread: std::sync::Mutex<Option<String>>,
+    pub session: std::sync::Mutex<Option<String>>,
     pub project: Option<String>,
     pub attachment: Arc<super::attachment::NetworkAttachment>,
+    pub identity: dive_core::run::Identity,
 }
 
 impl Workbench {
@@ -74,7 +75,52 @@ impl Workbench {
             session_id: None,
             input: Some(serde_json::Value::String(message.clone())),
         });
-        let result = ctx.conversation.run_turn(&history, &active, &message).await;
+        let run = Arc::new(dive_core::run::Run::new(
+            ctx.identity.clone(),
+            ctx.pipeline.events.clone(),
+        ));
+        let writer = match ctx.ensure_session(&message, &active).await {
+            Some(session) => {
+                let start = dive_core::store::StartRun {
+                    run_id: run.id.to_string(),
+                    session,
+                    kind: dive_core::store::SessionKind::Chat,
+                    holder: crate::writer::holder().to_string(),
+                    token_expires_at: None,
+                    started: dive_core::store::RunStarted {
+                        input: Value::String(message.clone()),
+                        identity: ctx.identity.clone(),
+                        trace_id: None,
+                        plan: None,
+                        synthetic: false,
+                    },
+                };
+                match crate::writer::RunWriter::start(ctx.store.clone(), start, None).await {
+                    Ok(writer) => Some(writer),
+                    Err(error @ dive_core::store::StartError::Busy { .. }) => {
+                        let refusal = error.to_string();
+                        let _ = ctx
+                            .tx
+                            .send(WorkbenchEvent::TurnFinished(Err(refusal.clone())));
+                        return Err(refusal);
+                    }
+                    Err(error) => {
+                        tracing::warn!("couldn't record the draft turn: {error}");
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+        let mut conversation = ctx.conversation.clone();
+        conversation.entries = writer.as_ref().map(crate::writer::RunWriter::hook);
+        let result = run
+            .scope(conversation.run_turn(&history, &active, &message))
+            .await;
+        let usage = run.usage();
+        if let Some(writer) = writer {
+            ctx.close(writer, &active, &result, &usage).await;
+        }
         match &result {
             Ok(turn) => events.run_finished(&serde_json::Value::String(turn.text.clone()), false),
             Err(error) => {
@@ -88,8 +134,14 @@ impl Workbench {
                         turn.text = reply;
                     }
                 }
-                ctx.persist(&message, &active, &turn).await;
-                history.extend(turn.entries);
+                let mut kept: Vec<NewEntry> = turn
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.path.is_empty() && entry.body.is_conversation())
+                    .cloned()
+                    .collect();
+                dive_core::context::order_tool_results(&mut kept);
+                history.extend(kept);
                 if turn.active != active {
                     *ctx.active.lock().unwrap() = turn.active.clone();
                     let _ = ctx.tx.send(WorkbenchEvent::ActiveAgent {
@@ -99,20 +151,12 @@ impl Workbench {
                 }
                 Ok(turn.text)
             }
-            Err(ConversationError::Turn {
-                source, partial, ..
-            }) => {
-                if keep_partial_history(&source) {
-                    history.extend(partial.entries);
-                }
-                Err(turn_failure_message(source))
-            }
+            Err(ConversationError::Turn { source, .. }) => Err(turn_failure_message(source)),
             Err(other) => Err(other.to_string()),
         };
         // Per turn, matching `dive chat`. The ledger is shared with
         // the pipeline, so a turn that called a plan tool reports that
         // plan's spend too.
-        let usage = ctx.pipeline.usage.take();
         if !usage.is_empty() {
             events.usage_summary(&usage);
         }
@@ -126,53 +170,68 @@ impl Workbench {
         result
     }
 
-    pub fn thread_id(&self) -> Option<String> {
-        self.thread.lock().unwrap().clone()
+    pub fn session_id(&self) -> Option<String> {
+        self.session.lock().unwrap().clone()
     }
 
-    async fn persist(
-        &self,
-        first_message: &str,
-        active: &str,
-        turn: &dive_core::agent::conversation::ConversationTurn,
-    ) {
-        let existing = self.thread.lock().unwrap().clone();
-        let id = match existing {
-            Some(id) => id,
-            None => match self
-                .store
-                .create_thread(
-                    &crate::runtime::title_from(first_message),
-                    active,
-                    self.project.as_deref(),
-                )
-                .await
-            {
-                Ok(meta) => {
-                    *self.thread.lock().unwrap() = Some(meta.id.clone());
-                    let record =
-                        crate::attachment::AttachmentHost::record(self.attachment.as_ref());
-                    if let Err(error) = self.store.set_attachments(&meta.id, &[record]).await {
-                        tracing::warn!(
-                            "couldn't record the draft's network on its thread: {error}"
-                        );
-                    }
-                    meta.id
-                }
-                Err(error) => {
-                    tracing::warn!("couldn't save the draft session as a thread: {error}");
-                    return;
-                }
-            },
-        };
-        if let Err(error) = self.store.append_entries(&id, &turn.entries).await {
-            tracing::warn!("couldn't save the draft turn: {error}");
+    async fn ensure_session(&self, first_message: &str, active: &str) -> Option<String> {
+        let existing = self.session.lock().unwrap().clone();
+        if existing.is_some() {
+            return existing;
         }
-        if let Err(error) = self.store.append_spans(&id, &turn.spans).await {
+        let new = dive_core::store::NewSession::chat(
+            &crate::runtime::title_from(first_message),
+            active,
+            &self.identity,
+        )
+        .in_project(self.project.as_deref());
+        match self.store.create_session(new).await {
+            Ok(meta) => {
+                *self.session.lock().unwrap() = Some(meta.id.clone());
+                let record = crate::attachment::AttachmentHost::record(self.attachment.as_ref());
+                if let Err(error) = self.store.set_attachments(&meta.id, &[record]).await {
+                    tracing::warn!("couldn't record the draft's network on its session: {error}");
+                }
+                Some(meta.id)
+            }
+            Err(error) => {
+                tracing::warn!("couldn't save the draft as a session: {error}");
+                None
+            }
+        }
+    }
+
+    async fn close(
+        &self,
+        writer: crate::writer::RunWriter,
+        active: &str,
+        result: &Result<dive_core::agent::conversation::ConversationTurn, ConversationError>,
+        usage: &dive_core::usage::UsageReport,
+    ) {
+        let usage = serde_json::to_value(usage).ok();
+        let (spans, ended) = match result {
+            Ok(turn) => {
+                if turn.active != active {
+                    writer.set_agent(&turn.active);
+                }
+                (
+                    turn.spans.as_slice(),
+                    dive_core::store::RunEnded::completed(Some(Value::String(turn.text.clone()))),
+                )
+            }
+            Err(error) => (
+                match error {
+                    ConversationError::Turn { partial, .. } => partial.spans.as_slice(),
+                    _ => &[],
+                },
+                dive_core::store::RunEnded::failed(&error.to_string()),
+            ),
+        };
+        if let Err(error) = self.store.append_spans(writer.session(), spans).await {
             tracing::warn!("couldn't save the draft turn's trace: {error}");
         }
-        if turn.active != active {
-            let _ = self.store.set_active_agent(&id, &turn.active).await;
+        if let Err(error) = writer.finish(ended.with_usage(usage)).await {
+            tracing::warn!("couldn't close the draft turn: {error}");
         }
     }
 
@@ -238,14 +297,27 @@ impl Workbench {
             input: Some(input.clone()),
         });
         let query = format!("Run the '{}' plan", doc.name);
-        let result = pipeline
-            .run_explicit_in(
+        let run = Arc::new(dive_core::run::Run::new(
+            ctx.identity.clone(),
+            pipeline.events.clone(),
+        ));
+        let writer = crate::plan_run::start_or_warn(
+            &ctx.store,
+            &run,
+            &doc,
+            &input,
+            ctx.project.as_deref(),
+            None,
+        )
+        .await;
+        let result = run
+            .scope(pipeline.run_explicit_in(
                 &query,
                 doc.steps.clone(),
                 doc.finish.clone(),
                 Some(input),
                 doc.pack.as_ref(),
-            )
+            ))
             .await;
         crate::telemetry::report_plan_result(pipeline.events.as_ref(), &result);
         tracing::debug!(
@@ -256,7 +328,8 @@ impl Workbench {
         // Before the finished message, so the run log reads
         // step → usage → verdict. Drained even on a failed run: the
         // tokens were still spent.
-        let usage = pipeline.usage.take();
+        let usage = run.usage();
+        crate::plan_run::end(writer, &result, &usage).await;
         if !usage.is_empty() {
             pipeline.events.usage_summary(&usage);
         }
@@ -438,18 +511,11 @@ fn check_edit(
     }
 }
 
-/// MaxIterations is real progress — the history ends cleanly in tool
-/// results, so the next message can build on it. Every other turn error
-/// leaves the exchange broken mid-turn and must be rolled back.
-fn keep_partial_history(error: &AgentError) -> bool {
-    matches!(error, AgentError::MaxIterations(_))
-}
-
 fn turn_failure_message(error: AgentError) -> String {
     match error {
         AgentError::MaxIterations(n) => format!(
-            "stopped after {n} tool iterations with no successful edit — \
-             progress is kept, send \"continue\" to resume (or raise \
+            "stopped after {n} tool iterations with no successful edit — the turn \
+             failed, so send the request again to start over (or raise \
              max_agent_iterations in config)"
         ),
         other => other.to_string(),
@@ -482,13 +548,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn max_iterations_keeps_history_and_says_how_to_continue() {
-        assert!(keep_partial_history(&AgentError::MaxIterations(15)));
-        assert!(!keep_partial_history(&AgentError::IncompleteStream));
-
+    fn max_iterations_says_how_to_go_on() {
         let message = turn_failure_message(AgentError::MaxIterations(15));
         assert!(message.contains("15"), "{message}");
-        assert!(message.contains("continue"), "{message}");
+        assert!(message.contains("send the request again"), "{message}");
         assert!(message.contains("max_agent_iterations"), "{message}");
 
         let other = turn_failure_message(AgentError::IncompleteStream);

@@ -1,0 +1,63 @@
+---
+title: "dive serve token"
+sidebarTitle: "token"
+description: "Print a run token signed with the local development key"
+playground: "none"
+keywords: ["dive serve token"]
+---
+
+Prints a token with a fresh `jti` that expires in an hour, for `dive serve --dev-key`. Pass `--plan` for a token that starts a run of that plan, or `--scope` for one that reads and cancels runs.
+
+## Options
+
+<ParamField query="--plan" type="string">
+  The plan the token may start
+
+  Format: `PLAN`.
+</ParamField>
+
+<ParamField query="--tenant" type="string" required>
+  The tenant the run belongs to
+
+  Format: `TENANT`.
+</ParamField>
+
+<ParamField query="--sub" type="string" required>
+  The user the run belongs to
+
+  Format: `SUB`.
+</ParamField>
+
+<ParamField query="--scope" type="string" default="plans:read runs:read runs:cancel">
+  Space-separated scopes
+
+  Format: `SCOPE`.
+</ParamField>
+
+<ParamField query="--dir" type="string">
+  Project directory, the one holding `.dive/`; defaults to the current directory
+
+  Format: `PATH`.
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive serve token [OPTIONS] --tenant <TENANT> --sub <SUB>
+```
+
+```bash Example 1
+dive serve token --plan triage --tenant acme --sub ada@example.com
+```
+
+```bash Example 2
+dive serve token --scope "runs:read runs:cancel" --tenant acme --sub ada@example.com
+```
+
+</RequestExample>

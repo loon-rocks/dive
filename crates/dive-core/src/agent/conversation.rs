@@ -3,7 +3,7 @@ use super::doc::{global_fragments, input_problems, render_system_prompt, AgentDo
 use super::task::{run_task_agent, TaskError, TaskSpec, TaskTools};
 use super::{Agent, AgentError, EventSink};
 use crate::pipeline::{named_agent_tool_def, Pipeline, AGENT_TOOL_PREFIX, MAX_SUBAGENT_DEPTH};
-use crate::store::{EntryBody, NewEntry, USER_AUTHOR};
+use crate::store::{EntryBody, EntryHook, NewEntry, USER_AUTHOR};
 use crate::tools::{AllowlistRegistry, ToolDef, ToolError, ToolOutcome, ToolRegistry, ToolServer};
 use crate::usage::CallSite;
 use async_trait::async_trait;
@@ -51,6 +51,58 @@ pub struct Conversation {
     pub handoff_guard: Option<HandoffGuard>,
     pub files: Option<Arc<dyn crate::files::BlobStore>>,
     pub trace: crate::trace::Content,
+    pub entries: Option<EntryHook>,
+}
+
+pub const SUBAGENT_PATH_PREFIX: &str = "agent:";
+
+#[derive(Clone, Default)]
+struct TurnLog {
+    written: Arc<Mutex<Vec<NewEntry>>>,
+    hook: Option<EntryHook>,
+}
+
+impl TurnLog {
+    fn new(hook: Option<EntryHook>) -> Self {
+        Self {
+            written: Arc::default(),
+            hook,
+        }
+    }
+
+    fn emit(&self, entry: NewEntry) -> Option<u64> {
+        self.written
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(entry.clone());
+        self.hook.as_ref().and_then(|hook| hook(entry))
+    }
+
+    fn entries(&self) -> Vec<NewEntry> {
+        let mut entries = self
+            .written
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        crate::context::order_tool_results(&mut entries);
+        entries
+    }
+
+    fn block(&self, block: SubagentBlock) {
+        let parent = self.emit(block.started);
+        let path = format!("{SUBAGENT_PATH_PREFIX}{}", block.agent);
+        for message in block.messages {
+            self.emit(NewEntry::message(&block.agent, message).at_path(&path, parent));
+        }
+        self.emit(block.finished.at_path("", parent));
+    }
+}
+
+struct SubagentBlock {
+    agent: String,
+    started: NewEntry,
+    messages: Vec<ChatMessage>,
+    finished: NewEntry,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,6 +111,8 @@ pub enum ConversationError {
     UnknownAgent { name: String, available: String },
     #[error("agent '{agent}': {message}")]
     Setup { agent: String, message: String },
+    #[error(transparent)]
+    Unrunnable(#[from] crate::requirements::Unrunnable),
     #[error("agent '{agent}': {source}")]
     Turn {
         agent: String,
@@ -124,6 +178,13 @@ impl Conversation {
         active: &str,
         user: Option<ChatMessage>,
     ) -> Result<ConversationTurn, ConversationError> {
+        if let Some(refusal) = self
+            .pipeline
+            .requirements
+            .refusal(&crate::requirements::Item::Agent(active.to_string()))
+        {
+            return Err(refusal.into());
+        }
         let mut open = crate::trace::Open::new(crate::trace::SpanKind::Turn, active)
             .attr("gen_ai.operation.name", "invoke_agent")
             .attr("gen_ai.agent.name", active);
@@ -166,10 +227,10 @@ impl Conversation {
         active: &str,
         user: Option<ChatMessage>,
     ) -> Result<ConversationTurn, ConversationError> {
-        let mut entries: Vec<NewEntry> = user
-            .map(|user| NewEntry::message(USER_AUTHOR, user))
-            .into_iter()
-            .collect();
+        let log = TurnLog::new(self.entries.clone());
+        if let Some(user) = user {
+            log.emit(NewEntry::message(USER_AUTHOR, user));
+        }
         let mut active = active.to_string();
         let mut tool_calls_made = 0;
         let mut tools_used: Vec<String> = Vec::new();
@@ -177,47 +238,39 @@ impl Conversation {
         loop {
             let doc = &self.agent(&active)?;
             let may_hand_off = handoffs < MAX_HANDOFFS_PER_TURN;
+            let so_far = log.entries();
             let back_to = if may_hand_off {
-                self.handed_over_by(&active, history.iter().chain(entries.iter()))
+                self.handed_over_by(&active, history.iter().chain(so_far.iter()))
             } else {
                 None
             };
-            let tools =
-                Arc::new(ConversationTools::new(self, doc, 0, may_hand_off).back_to(back_to));
-            if let Some(note) = self.context_note(&active, history.iter().chain(entries.iter())) {
-                entries.push(note);
+            let tools = Arc::new(
+                ConversationTools::new(self, doc, 0, may_hand_off)
+                    .back_to(back_to)
+                    .logging(log.clone()),
+            );
+            if let Some(note) = self.context_note(&active, history.iter().chain(so_far.iter())) {
+                log.emit(note);
             }
-            let agent = self.build_agent(doc, tools.clone())?;
-            let mut messages = view(&active, history.iter().chain(entries.iter()));
+            let mut agent = self.build_agent(doc, tools.clone())?;
+            let writer = log.clone();
+            let author = active.clone();
+            agent.on_message = Some(Arc::new(move |message: &ChatMessage, stamp| {
+                writer.emit(NewEntry::message(&author, message.clone()).stamped(stamp.clone()));
+            }));
+            let mut messages = view(&active, history.iter().chain(log.entries().iter()));
             if messages.is_empty() {
                 return Err(ConversationError::Setup {
                     agent: active.clone(),
                     message: "there is nothing to start the turn from: no message, no history and no context".to_string(),
                 });
             }
-            let before = messages.len();
             let result = agent.run_turn(&mut messages).await;
-            let stamps = result
-                .as_ref()
-                .map(|outcome| outcome.stamps.clone())
-                .unwrap_or_default();
-            let start = entries.len();
-            entries.extend(
-                messages[before..]
-                    .iter()
-                    .cloned()
-                    .enumerate()
-                    .map(|(i, message)| {
-                        NewEntry::message(&active, message)
-                            .stamped(stamps.get(i).cloned().unwrap_or_default())
-                    }),
-            );
-            place_runs(&mut entries, start, tools.take_runs());
             let outcome = result.map_err(|source| ConversationError::Turn {
                 agent: active.clone(),
                 source,
                 partial: Box::new(Partial {
-                    entries: entries.clone(),
+                    entries: log.entries(),
                     spans: Vec::new(),
                 }),
             })?;
@@ -237,7 +290,7 @@ impl Conversation {
                 return Ok(ConversationTurn {
                     text: outcome.text,
                     active,
-                    entries,
+                    entries: log.entries(),
                     tool_calls_made,
                     tools_used,
                     spans: Vec::new(),
@@ -245,7 +298,7 @@ impl Conversation {
             };
             handoffs += 1;
             self.events.handoff(&active, &target, via == TRANSFER_BACK);
-            entries.push(NewEntry::new(
+            log.emit(NewEntry::new(
                 &active,
                 EntryBody::Handoff {
                     from: active.clone(),
@@ -263,7 +316,7 @@ impl Conversation {
                 return Ok(ConversationTurn {
                     text,
                     active: target,
-                    entries,
+                    entries: log.entries(),
                     tool_calls_made,
                     tools_used,
                     spans: Vec::new(),
@@ -356,6 +409,7 @@ impl Conversation {
                 .files
                 .clone()
                 .filter(|_| choice.any_model_takes_images()),
+            on_message: None,
         })
     }
 
@@ -365,7 +419,7 @@ impl Conversation {
         name: &str,
         input: Value,
         depth: usize,
-    ) -> (ToolOutcome, Option<NewEntry>) {
+    ) -> (ToolOutcome, Option<SubagentBlock>) {
         let refuse = |message: String| {
             (
                 ToolOutcome {
@@ -453,57 +507,33 @@ impl Conversation {
             }
         };
         let span = crate::trace::current_span_id();
-        let entry = NewEntry::new(
-            caller,
-            EntryBody::SubagentRun {
-                agent: name.to_string(),
-                caller: caller.to_string(),
-                input,
-                messages: outcome.messages,
-                output: outcome.output,
-                final_: outcome.final_,
-            },
-        )
-        .in_span(span);
-        (result, Some(entry))
+        let block = SubagentBlock {
+            agent: name.to_string(),
+            started: NewEntry::new(
+                caller,
+                EntryBody::AgentStarted {
+                    agent: name.to_string(),
+                    caller: caller.to_string(),
+                    input,
+                },
+            )
+            .in_span(span),
+            messages: outcome.messages,
+            finished: NewEntry::new(
+                caller,
+                EntryBody::AgentFinished {
+                    agent: name.to_string(),
+                    output: outcome.output,
+                    final_: outcome.final_,
+                },
+            ),
+        };
+        (result, Some(block))
     }
 }
 
 pub fn starts_run(call: &ToolCall, agent: &str, input: &Value) -> bool {
     call.name.strip_prefix(AGENT_TOOL_PREFIX) == Some(agent) && call.arguments == *input
-}
-
-fn call_of(entry: &NewEntry, run: &NewEntry) -> Option<usize> {
-    let (
-        EntryBody::Message {
-            message: ChatMessage::Assistant { tool_calls, .. },
-        },
-        EntryBody::SubagentRun { agent, input, .. },
-    ) = (&entry.body, &run.body)
-    else {
-        return None;
-    };
-    tool_calls
-        .iter()
-        .position(|call| starts_run(call, agent, input))
-}
-
-fn place_runs(entries: &mut Vec<NewEntry>, start: usize, runs: Vec<NewEntry>) {
-    let mut placed: Vec<((usize, usize), NewEntry)> = Vec::new();
-    let mut unmatched = Vec::new();
-    for run in runs {
-        let found =
-            (start..entries.len()).find_map(|i| call_of(&entries[i], &run).map(|call| (i, call)));
-        match found {
-            Some(at) => placed.push((at, run)),
-            None => unmatched.push(run),
-        }
-    }
-    placed.sort_by_key(|(at, _)| *at);
-    for (offset, ((at, _), run)) in placed.into_iter().enumerate() {
-        entries.insert(at + 1 + offset, run);
-    }
-    entries.extend(unmatched);
 }
 
 pub fn failed_turn(
@@ -576,7 +606,7 @@ pub fn view<'a>(agent: &str, entries: impl Iterator<Item = &'a NewEntry>) -> Vec
                 note.clear();
             }
         };
-    for entry in entries {
+    for entry in entries.filter(|entry| entry.path.is_empty()) {
         match &entry.body {
             EntryBody::Message { message } if entry.author == agent => {
                 flush(&mut messages, &mut note, &mut images);
@@ -685,7 +715,7 @@ struct ConversationTools {
     back_to: Option<String>,
     caller: String,
     depth: usize,
-    runs: Mutex<Vec<NewEntry>>,
+    log: TurnLog,
     handoff: Mutex<Option<Handoff>>,
 }
 
@@ -715,6 +745,11 @@ impl ConversationTools {
         self
     }
 
+    fn logging(mut self, log: TurnLog) -> Self {
+        self.log = log;
+        self
+    }
+
     fn new(conversation: &Conversation, doc: &AgentDoc, depth: usize, may_hand_off: bool) -> Self {
         let origin = crate::packs::Origin::of(doc.source.pack());
         Self {
@@ -726,6 +761,7 @@ impl ConversationTools {
                 .subagents
                 .iter()
                 .filter(|name| conversation.pipeline.packs.shows(&origin, name))
+                .filter(|name| conversation.pipeline.requirements.agent_runnable(name))
                 .filter_map(|name| conversation.agents.get(name))
                 .map(|doc| named_agent_tool_def(&doc))
                 .collect(),
@@ -733,12 +769,13 @@ impl ConversationTools {
                 .handoffs
                 .iter()
                 .filter(|name| may_hand_off && conversation.agents.get(name).is_some())
+                .filter(|name| conversation.pipeline.requirements.agent_runnable(name))
                 .cloned()
                 .collect(),
             back_to: None,
             caller: doc.name.clone(),
             depth,
-            runs: Mutex::new(Vec::new()),
+            log: TurnLog::default(),
             handoff: Mutex::new(None),
         }
     }
@@ -823,10 +860,6 @@ impl ConversationTools {
             read_only: Some(true),
             file_input: Default::default(),
         }
-    }
-
-    fn take_runs(&self) -> Vec<NewEntry> {
-        std::mem::take(&mut self.runs.lock().unwrap())
     }
 
     fn take_handoff(&self) -> Option<Handoff> {
@@ -939,8 +972,8 @@ impl ToolRegistry for ConversationTools {
                 self.depth + 1,
             ))
             .await;
-            if let Some(entry) = entry {
-                self.runs.lock().unwrap().push(entry);
+            if let Some(block) = entry {
+                self.log.block(block);
             }
             return Ok(outcome);
         }
@@ -1092,6 +1125,7 @@ mod tests {
             gate: None,
             interlocutor: None,
             catalog: None,
+            requirements: Default::default(),
             user_context: String::new(),
             current_date: "2026-09-30".into(),
             max_attempts: 1,
@@ -1121,8 +1155,35 @@ mod tests {
             handoff_guard: None,
             files: None,
             trace: Default::default(),
+            entries: None,
         };
         (conversation, provider)
+    }
+
+    fn conversation_where_front_cant_run() -> (Conversation, Arc<Scripted>) {
+        let (mut conversation, provider) = conversation(Vec::new());
+        let mut pipeline = (*conversation.pipeline).clone();
+        pipeline.requirements = Arc::new(crate::requirements::Requirements::compute(
+            &[],
+            &conversation.agents,
+            &crate::pipeline::ToolCatalog::default(),
+        ));
+        conversation.pipeline = Arc::new(pipeline);
+        (conversation, provider)
+    }
+
+    #[tokio::test]
+    async fn a_turn_for_an_agent_that_cant_run_here_is_refused() {
+        let (conversation, _) = conversation_where_front_cant_run();
+        let error = conversation.run_turn(&[], "front", "hi").await.unwrap_err();
+        assert!(matches!(error, ConversationError::Unrunnable(_)), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_refused_turn_makes_no_model_call() {
+        let (conversation, provider) = conversation_where_front_cant_run();
+        let _ = conversation.run_turn(&[], "front", "hi").await;
+        assert!(provider.requests.lock().unwrap().is_empty());
     }
 
     struct Services;
@@ -1384,7 +1445,7 @@ mod tests {
                     } => "tool_result",
                     EntryBody::Message { .. } => "user",
                     EntryBody::Handoff { .. } => "handoff",
-                    EntryBody::SubagentRun { .. } => "subagent_run",
+                    _ => "other",
                 };
                 (
                     kind.to_string(),
@@ -1433,7 +1494,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_failed_turn_leaves_its_partial_entries_unstamped() {
+    async fn a_failed_turn_keeps_the_stamps_of_every_entry_that_finished() {
         let mut empty = text("");
         empty.stop_reason = StopReason::MaxTokens;
         let (conversation, _) = conversation(vec![call("c1", "t__echo", json!({"x": 1})), empty]);
@@ -1443,10 +1504,10 @@ mod tests {
             panic!("the turn should fail");
         };
         assert_eq!(partial.entries.len(), 4);
-        assert!(partial
-            .entries
-            .iter()
-            .all(|entry| entry.ms.is_none() && entry.usage.is_none()));
+        assert!(partial.entries[0].ms.is_none());
+        assert!(partial.entries[1].usage.is_some());
+        assert!(partial.entries[2].ms.is_some());
+        assert!(partial.entries[3].usage.is_some());
     }
 
     #[tokio::test]
@@ -1751,6 +1812,71 @@ mod tests {
         assert!(tool_names(&requests[1]).contains(&"transfer_back".to_string()));
     }
 
+    type SeenRun = Option<(String, String, Option<String>)>;
+
+    #[derive(Default)]
+    struct RunProbe(Mutex<Vec<SeenRun>>);
+
+    #[async_trait]
+    impl ToolRegistry for RunProbe {
+        async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
+            Echo.tools().await
+        }
+        async fn invoke(&self, _: &str, _: Value) -> Result<ToolOutcome, ToolError> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(crate::run::Run::current().map(|run| {
+                    (
+                        run.id.to_string(),
+                        run.identity.user.clone(),
+                        run.token.as_ref().map(|token| token.expose().to_string()),
+                    )
+                }));
+            Ok(ToolOutcome {
+                result: json!({"seen": true}),
+                is_error: false,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_tool_a_conversation_subagent_calls_sees_the_turns_run() {
+        let (mut conversation, _) = conversation(vec![
+            call("c1", "agent__helper", json!({"prompt": "look it up"})),
+            call("c2", "t__echo", json!({})),
+            text("found it"),
+            text("the answer"),
+        ]);
+        let probe = Arc::new(RunProbe::default());
+        conversation.catalog = probe.clone();
+        conversation.standing_tools = vec!["t__echo".to_string()];
+        let run = Arc::new(
+            crate::run::Run::new(
+                crate::run::Identity {
+                    user: "ada".into(),
+                    ..Default::default()
+                },
+                Arc::new(crate::NullSink),
+            )
+            .with_token(crate::run::RunToken::new("tok_REACH")),
+        );
+        let turn = run
+            .scope(conversation.run_turn(&[], "front", "question"))
+            .await
+            .unwrap();
+        assert_eq!(turn.text, "the answer");
+        let seen = probe.0.lock().unwrap();
+        assert_eq!(
+            *seen,
+            [Some((
+                run.id.to_string(),
+                "ada".to_string(),
+                Some("tok_REACH".to_string())
+            ))]
+        );
+    }
+
     #[tokio::test]
     async fn a_subagent_run_is_logged_but_never_enters_a_view() {
         let (conversation, provider) = conversation(vec![
@@ -1763,33 +1889,22 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(turn.text, "the answer");
-        let (agent, caller, output, final_, count) = turn
-            .entries
+        let folded = crate::context::fold(&turn.entries);
+        let run = folded
             .iter()
-            .find_map(|entry| match &entry.body {
-                EntryBody::SubagentRun {
-                    agent,
-                    caller,
-                    output,
-                    final_,
-                    messages,
-                    ..
-                } => Some((
-                    agent.clone(),
-                    caller.clone(),
-                    output.clone(),
-                    *final_,
-                    messages.len(),
-                )),
-                _ => None,
+            .find_map(|item| match item {
+                crate::context::Folded::Subagent(run) => Some(run),
+                crate::context::Folded::Entry(_) => None,
             })
             .expect("the subagent run is recorded");
-        assert_eq!((agent.as_str(), caller.as_str()), ("helper", "front"));
+        assert_eq!((run.agent, run.caller), ("helper", "front"));
         let order: Vec<&str> = turn
             .entries
             .iter()
             .map(|entry| match &entry.body {
-                EntryBody::SubagentRun { .. } => "run",
+                EntryBody::AgentStarted { .. } => "started",
+                EntryBody::AgentFinished { .. } => "finished",
+                EntryBody::Message { .. } if !entry.path.is_empty() => "inside",
                 EntryBody::Message {
                     message: ChatMessage::Assistant { tool_calls, .. },
                 } if !tool_calls.is_empty() => "call",
@@ -1801,12 +1916,17 @@ mod tests {
             .collect();
         assert_eq!(
             order,
-            ["other", "call", "run", "result", "other"],
+            ["other", "call", "started", "inside", "inside", "finished", "result", "other"],
             "the run is recorded right after the message that started it"
         );
-        assert_eq!(output, json!({"result": "found it"}));
-        assert!(final_);
-        assert_eq!(count, 2);
+        assert_eq!(run.output, Some(&json!({"result": "found it"})));
+        assert!(run.final_);
+        assert_eq!(run.messages.len(), 2);
+        assert!(turn
+            .entries
+            .iter()
+            .filter(|entry| !entry.path.is_empty())
+            .all(|entry| entry.path == "agent:helper" && entry.author == "helper"));
 
         let requests = provider.requests.lock().unwrap();
         assert_eq!(

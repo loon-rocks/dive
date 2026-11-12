@@ -1,33 +1,37 @@
 use crate::attachment::{AttachmentHost, EVIDENCE_ATTACHMENT, NETWORK_ATTACHMENT};
 use crate::cancel::CancelHandle;
 use crate::evidence::{Evidence, EvidenceAttachment, Item};
-use crate::runtime::{
-    load_history, persist_turn, resolve_thread, starting_agent, title_from, PipelineHooks, Runtime,
-};
+use crate::runtime::{resolve_session, starting_agent, title_from, PipelineHooks, Runtime};
 use crate::workbench::agents::Start;
 use crate::workbench::attachment::{NetworkAttachment, NetworkSetup};
 use crate::workbench::ArtifactKind;
+use crate::writer::{LeaseTiming, RunWriter};
 use anyhow::{Context, Result};
 use dive_core::agent::conversation::{Conversation, ConversationTurn};
 use dive_core::pipeline::doc::PlanDoc;
-use dive_core::usage::{UsageLedger, UsageReport};
-use dive_core::{Attachment, EventSink, NewEntry, RunStart, Store, TeeSink, ThreadMeta};
+use dive_core::run::{Identity, Run};
+use dive_core::store::{
+    Entry, NewSession, RunEnded, RunStarted, RunStatus, SessionKind, SessionMeta, StartError,
+    StartRun,
+};
+use dive_core::usage::UsageReport;
+use dive_core::{Attachment, EventSink, NewEntry, RunStart, Store, TeeSink};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
-pub struct ThreadOpen {
-    pub thread: Option<String>,
+pub struct SessionOpen {
+    pub session: Option<String>,
     pub agent: Option<String>,
     pub draft: Option<Start>,
     pub root: Option<PathBuf>,
 }
 
 impl Runtime {
-    pub async fn open_thread(
+    pub async fn open_session(
         &self,
-        open: ThreadOpen,
+        open: SessionOpen,
         events: Arc<dyn EventSink>,
         hooks: PipelineHooks,
         run_name: Option<String>,
@@ -36,7 +40,7 @@ impl Runtime {
         let start = match open.draft {
             Some(draft) => ChatStart::draft(self, store, draft).await?,
             None => {
-                ChatStart::resolve(self, store, open.agent.as_deref(), open.thread.map(Some))
+                ChatStart::resolve(self, store, open.agent.as_deref(), open.session.map(Some))
                     .await?
             }
         };
@@ -57,8 +61,8 @@ struct Seed {
 
 pub struct ChatStart {
     store: Arc<dyn Store>,
-    thread: Option<ThreadMeta>,
-    fresh_thread: bool,
+    session: Option<SessionMeta>,
+    fresh_session: bool,
     owner: String,
     active: String,
     attachments: Vec<String>,
@@ -66,6 +70,7 @@ pub struct ChatStart {
     root: Option<PathBuf>,
     project: Option<String>,
     title: Option<String>,
+    identity: Identity,
 }
 
 const UNRECORDED_DRAFTERS: [&str; 5] = [
@@ -81,10 +86,10 @@ impl ChatStart {
         runtime: &Runtime,
         store: Arc<dyn Store>,
         agent: Option<&str>,
-        thread: Option<Option<String>>,
+        session: Option<Option<String>>,
     ) -> Result<Self> {
-        let thread = resolve_thread(store.as_ref(), thread).await?;
-        let attachments = match &thread {
+        let session = resolve_session(store.as_ref(), session).await?;
+        let attachments = match &session {
             Some(meta) if !meta.attachments.is_empty() => {
                 let kinds: Vec<String> = meta
                     .attachments
@@ -93,21 +98,21 @@ impl ChatStart {
                     .collect();
                 crate::attachment::thread_kinds(&kinds)
             }
-            Some(meta) if UNRECORDED_DRAFTERS.contains(&meta.owner.as_str()) => {
+            Some(meta) if UNRECORDED_DRAFTERS.contains(&meta.agent.as_str()) => {
                 vec![NETWORK_ATTACHMENT.to_string()]
             }
             _ => Vec::new(),
         };
         let agents = runtime.agent_set();
-        let active = starting_agent(thread.as_ref(), agent, &|name| agents.get(name).is_some())?;
-        let owner = thread
+        let active = starting_agent(session.as_ref(), agent, &|name| agents.get(name).is_some())?;
+        let owner = session
             .as_ref()
-            .map(|meta| meta.owner.clone())
+            .map(|meta| meta.agent.clone())
             .unwrap_or_else(|| active.clone());
         Ok(Self {
             store,
-            thread,
-            fresh_thread: false,
+            session,
+            fresh_session: false,
             owner,
             active,
             attachments,
@@ -115,6 +120,7 @@ impl ChatStart {
             root: None,
             project: runtime.project().map(str::to_string),
             title: None,
+            identity: runtime.identity(),
         })
     }
 
@@ -130,7 +136,7 @@ impl ChatStart {
                     .attachments
                     .insert(0, NETWORK_ATTACHMENT.to_string());
                 let agents = runtime.agent_set();
-                resumed.active = starting_agent(resumed.thread.as_ref(), None, &|name| {
+                resumed.active = starting_agent(resumed.session.as_ref(), None, &|name| {
                     agents.get(name).is_some()
                 })?;
             }
@@ -164,8 +170,8 @@ impl ChatStart {
         let active = crate::workbench::agents::starting_agent(&start, doc.as_ref()).to_string();
         Ok(Self {
             store,
-            thread: None,
-            fresh_thread: false,
+            session: None,
+            fresh_session: false,
             owner: active.clone(),
             active,
             attachments,
@@ -177,6 +183,7 @@ impl ChatStart {
             root: None,
             project: runtime.project().map(str::to_string),
             title,
+            identity: runtime.identity(),
         })
     }
 
@@ -185,8 +192,8 @@ impl ChatStart {
         self
     }
 
-    pub fn thread(&self) -> Option<&ThreadMeta> {
-        self.thread.as_ref()
+    pub fn session(&self) -> Option<&SessionMeta> {
+        self.session.as_ref()
     }
 
     pub fn active(&self) -> &str {
@@ -197,17 +204,17 @@ impl ChatStart {
         &self.attachments
     }
 
-    pub async fn create_thread(&mut self, first_message: &str) -> Result<&ThreadMeta> {
-        let meta = create_thread(
+    pub async fn create_session(&mut self, first_message: &str) -> Result<&SessionMeta> {
+        let meta = create_session(
             self.store.as_ref(),
             first_message,
             &self.owner,
-            &self.active,
             self.project.as_deref(),
+            &self.identity,
         )
         .await?;
-        self.fresh_thread = true;
-        Ok(self.thread.insert(meta))
+        self.fresh_session = true;
+        Ok(self.session.insert(meta))
     }
 
     pub async fn open(
@@ -217,7 +224,6 @@ impl ChatStart {
         mut hooks: PipelineHooks,
         run_name: Option<String>,
     ) -> Result<ChatSession> {
-        runtime.usage.attach_events(events.clone());
         let cancel = hooks.cancel.get_or_insert_with(CancelHandle::new).clone();
         let kinds = self.attachments.clone();
         let pipeline = runtime
@@ -226,14 +232,14 @@ impl ChatStart {
         let toolbox = runtime.toolbox_over(&self.store, &pipeline, Some(&cancel))?;
         let seed = std::mem::take(&mut self.seed);
         let recorded: Vec<Attachment> = self
-            .thread
+            .session
             .as_ref()
             .map(|meta| meta.attachments.clone())
             .unwrap_or_default();
-        let root = match self.root.take() {
-            Some(root) => root,
-            None => std::env::current_dir().context("failed to read the current directory")?,
-        };
+        let root = self
+            .root
+            .take()
+            .unwrap_or_else(|| runtime.workspace_root().to_path_buf());
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let network = NetworkAttachment::new(NetworkSetup {
             pipeline: pipeline.clone(),
@@ -287,13 +293,7 @@ impl ChatStart {
             host.wire(&mut conversation);
         }
         let mut session = self
-            .over(
-                conversation,
-                runtime.usage.clone(),
-                events,
-                run_name,
-                Some(cancel),
-            )
+            .over(conversation, events, run_name, Some(cancel))
             .await?;
         if let Some(recorded) = session
             .recorded
@@ -303,8 +303,9 @@ impl ChatStart {
             network.recall(recorded);
         }
         for host in &hosts {
-            host.restore(&session.history).await;
+            host.restore(&session.logged).await;
         }
+        session.logged = Vec::new();
         for (kind, name) in seed.opening {
             network
                 .open_item(kind, &name)
@@ -318,33 +319,37 @@ impl ChatStart {
     pub async fn over(
         self,
         conversation: Conversation,
-        usage: Arc<UsageLedger>,
         events: Arc<dyn EventSink>,
         run_name: Option<String>,
         cancel: Option<CancelHandle>,
     ) -> Result<ChatSession> {
         conversation.agent(&self.active)?;
-        let history = match &self.thread {
-            Some(meta) => load_history(self.store.as_ref(), &meta.id).await?,
+        let entries: Vec<Entry> = match &self.session {
+            Some(meta) => self.store.load_entries(&meta.id, None).await?,
             None => Vec::new(),
         };
+        let history = dive_core::context::context_entries(&entries, None);
         let recorded = self
-            .thread
+            .session
             .as_ref()
             .map(|meta| meta.attachments.clone())
             .unwrap_or_default();
+        let recorded_agent = self.session.as_ref().map(|meta| meta.active_agent.clone());
         Ok(ChatSession {
             conversation,
             store: self.store,
-            usage,
+            identity: self.identity,
             events,
             run_name,
             cancel,
-            thread: self.thread,
-            fresh_thread: self.fresh_thread,
+            session: self.session,
+            fresh_session: self.fresh_session,
             owner: self.owner,
+            recorded_agent,
             active: self.active,
             history,
+            logged: entries.into_iter().map(NewEntry::from).collect(),
+            lease_timing: LeaseTiming::STANDARD,
             attachments: Vec::new(),
             recorded,
             project: self.project,
@@ -412,15 +417,18 @@ fn edit_title(items: &[Item], evidence: Option<&Evidence>) -> String {
 pub struct ChatSession {
     conversation: Conversation,
     store: Arc<dyn Store>,
-    usage: Arc<UsageLedger>,
+    identity: Identity,
     events: Arc<dyn EventSink>,
     run_name: Option<String>,
     cancel: Option<CancelHandle>,
-    thread: Option<ThreadMeta>,
-    fresh_thread: bool,
+    session: Option<SessionMeta>,
+    fresh_session: bool,
     owner: String,
+    recorded_agent: Option<String>,
     active: String,
     history: Vec<NewEntry>,
+    logged: Vec<NewEntry>,
+    lease_timing: LeaseTiming,
     attachments: Vec<Arc<dyn AttachmentHost>>,
     recorded: Vec<Attachment>,
     project: Option<String>,
@@ -430,13 +438,21 @@ pub struct ChatSession {
 pub struct TurnReport {
     pub turn: ConversationTurn,
     pub usage: UsageReport,
-    pub thread_error: Option<anyhow::Error>,
+    pub run_id: String,
+    pub session_error: Option<anyhow::Error>,
     pub persist_error: Option<anyhow::Error>,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("session {session} is busy: run {run} is still in progress")]
+pub struct SessionBusy {
+    pub session: String,
+    pub run: String,
+}
+
 impl ChatSession {
-    pub fn thread(&self) -> Option<&ThreadMeta> {
-        self.thread.as_ref()
+    pub fn session(&self) -> Option<&SessionMeta> {
+        self.session.as_ref()
     }
 
     pub fn active(&self) -> &str {
@@ -478,7 +494,7 @@ impl ChatSession {
         let host = self
             .attachment(kind)
             .cloned()
-            .with_context(|| format!("this thread has no {kind} attachment"))?;
+            .with_context(|| format!("this session has no {kind} attachment"))?;
         let result = host.act(action, input).await.map_err(anyhow::Error::msg);
         self.events.attachment_changed(host.kind(), &host.view());
         self.record_attachments().await?;
@@ -487,11 +503,14 @@ impl ChatSession {
 
     pub async fn set_active(&mut self, name: &str) -> Result<()> {
         let doc = self.conversation.agent(name)?;
-        if let Some(meta) = &self.thread {
-            self.store.set_active_agent(&meta.id, &doc.name).await?;
-        }
         self.active = doc.name;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_lease_timing(mut self, timing: LeaseTiming) -> Self {
+        self.lease_timing = timing;
+        self
     }
 
     pub fn cancel_handle(&self) -> Option<&CancelHandle> {
@@ -505,7 +524,7 @@ impl ChatSession {
     }
 
     async fn record_attachments(&mut self) -> Result<()> {
-        let Some(meta) = &self.thread else {
+        let Some(meta) = &self.session else {
             return Ok(());
         };
         let records = crate::attachment::records(&self.attachments, &self.recorded);
@@ -538,53 +557,114 @@ impl ChatSession {
             Some(dive_llm::types::ChatMessage::User { content, .. }) => Some(content.as_str()),
             _ => None,
         };
-        let mut thread_error = None;
-        if self.thread.is_none() {
+        let mut session_error = None;
+        if self.session.is_none() {
             let title = message
                 .filter(|message| !message.trim().is_empty())
                 .map(str::to_string)
                 .or_else(|| self.title.clone())
                 .unwrap_or_else(|| self.active.clone());
-            match create_thread(
+            match create_session(
                 self.store.as_ref(),
                 &title,
                 &self.owner,
-                &self.active,
                 self.project.as_deref(),
+                &self.identity,
             )
             .await
             {
                 Ok(meta) => {
-                    self.thread = Some(meta);
-                    self.fresh_thread = true;
+                    self.recorded_agent = Some(meta.active_agent.clone());
+                    self.session = Some(meta);
+                    self.fresh_session = true;
                     if let Err(error) = self.record_attachments().await {
-                        thread_error = Some(error);
+                        session_error = Some(error);
                     }
                 }
-                Err(error) => thread_error = Some(error),
+                Err(error) => session_error = Some(error),
             }
         }
         if let Some(cancel) = &self.cancel {
             cancel.rearm();
         }
+        let run = Arc::new(Run::new(self.identity.clone(), self.events.clone()));
+        let mut persist_error = None;
+        let writer = match &self.session {
+            Some(meta) => {
+                let start = StartRun {
+                    run_id: run.id.to_string(),
+                    session: meta.id.clone(),
+                    kind: SessionKind::Chat,
+                    holder: crate::writer::holder().to_string(),
+                    token_expires_at: None,
+                    started: RunStarted {
+                        input: message
+                            .map(|message| Value::String(message.to_string()))
+                            .unwrap_or(Value::Null),
+                        identity: self.identity.clone(),
+                        trace_id: run.trace.as_ref().map(|trace| trace.trace_id.clone()),
+                        plan: None,
+                        synthetic: false,
+                    },
+                };
+                let started = RunWriter::start_with(
+                    self.store.clone(),
+                    start,
+                    self.cancel.clone(),
+                    crate::writer::Batching::IMMEDIATE,
+                    self.lease_timing,
+                )
+                .await;
+                match started {
+                    Ok(writer) => Some(writer),
+                    Err(StartError::Busy { active_run }) => {
+                        return Err(SessionBusy {
+                            session: meta.id.clone(),
+                            run: active_run,
+                        }
+                        .into());
+                    }
+                    Err(error) => {
+                        persist_error = Some(anyhow::Error::new(error));
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+        if let Some(writer) = &writer {
+            if self.recorded_agent.as_deref() != Some(self.active.as_str()) {
+                writer.set_agent(&self.active);
+                self.recorded_agent = Some(self.active.clone());
+            }
+        }
         if let Some(name) = &self.run_name {
             self.events.run_started(&RunStart {
                 name: name.clone(),
-                session_id: self.thread.as_ref().map(|meta| meta.id.clone()),
+                session_id: self.session.as_ref().map(|meta| meta.id.clone()),
                 input: message.map(|message| serde_json::Value::String(message.to_string())),
             });
         }
-        let turn = self
-            .conversation
-            .run_turn_with(&self.history, &self.active, user.clone());
-        let result: Result<ConversationTurn> = match &self.cancel {
-            Some(cancel) => match cancel.run(turn).await {
-                Ok(result) => result.map_err(Into::into),
-                Err(cancelled) => Err(cancelled.into()),
-            },
-            None => turn.await.map_err(Into::into),
-        };
-        let usage = self.usage.take();
+        let mut conversation = self.conversation.clone();
+        conversation.entries = writer.as_ref().map(RunWriter::hook);
+        let history = self.history.clone();
+        let active = self.active.clone();
+        let cancel = self.cancel.clone();
+        let result: Result<ConversationTurn> = run
+            .scope(async move {
+                let turn = conversation.run_turn_with(&history, &active, user);
+                match &cancel {
+                    Some(cancel) => match cancel.run(turn).await {
+                        Ok(result) => result.map_err(Into::into),
+                        Err(cancelled) => Err(cancelled.into()),
+                    },
+                    None => turn.await.map_err(Into::into),
+                }
+            })
+            .await;
+        let usage = run.usage();
+        let usage_value = serde_json::to_value(&usage).ok();
+        let run_id = run.id.to_string();
         let outcome = match result {
             Ok(mut turn) => {
                 if turn.text.trim().is_empty() {
@@ -594,37 +674,82 @@ impl ChatSession {
                 }
                 self.events
                     .run_finished(&serde_json::Value::String(turn.text.clone()), false);
-                let mut persist_error = match &self.thread {
-                    Some(meta) => persist_turn(self.store.as_ref(), meta, &self.active, &turn)
-                        .await
-                        .err(),
-                    None => None,
-                };
+                if let Some(writer) = writer {
+                    if turn.active != self.active {
+                        writer.set_agent(&turn.active);
+                        self.recorded_agent = Some(turn.active.clone());
+                    }
+                    if let Err(error) = self.store.append_spans(writer.session(), &turn.spans).await
+                    {
+                        persist_error.get_or_insert(error.into());
+                    }
+                    let ended = RunEnded::completed(Some(Value::String(turn.text.clone())))
+                        .with_usage(usage_value);
+                    if let Err(error) = writer.finish(ended).await {
+                        persist_error.get_or_insert(error.into());
+                    }
+                }
                 if let Err(error) = self.record_attachments().await {
                     persist_error.get_or_insert(error);
                 }
                 self.active = turn.active.clone();
-                self.history.extend(turn.entries.iter().cloned());
-                self.fresh_thread = false;
+                let mut kept: Vec<NewEntry> = turn
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.path.is_empty() && entry.body.is_conversation())
+                    .cloned()
+                    .collect();
+                dive_core::context::order_tool_results(&mut kept);
+                self.history.extend(kept);
+                self.fresh_session = false;
                 Ok(TurnReport {
                     turn,
                     usage: usage.clone(),
-                    thread_error,
+                    run_id,
+                    session_error,
                     persist_error,
                 })
             }
             Err(error) => {
                 self.events
                     .run_finished(&serde_json::json!({"error": error.to_string()}), true);
-                if self.keep_failed(&error, user).await {
-                    self.fresh_thread = false;
+                let failure =
+                    error.downcast_ref::<dive_core::agent::conversation::ConversationError>();
+                if let Some(writer) = writer {
+                    let cancelled = error.downcast_ref::<crate::cancel::Cancelled>().is_some()
+                        || writer.cancel_requested();
+                    if let Some(dive_core::agent::conversation::ConversationError::Turn {
+                        partial,
+                        ..
+                    }) = failure
+                    {
+                        if let Err(problem) = self
+                            .store
+                            .append_spans(writer.session(), &partial.spans)
+                            .await
+                        {
+                            tracing::warn!(error = %problem, "the failed turn's trace couldn't be saved");
+                        }
+                    }
+                    let ended = if cancelled {
+                        RunEnded::new(RunStatus::Cancelled)
+                    } else {
+                        RunEnded::failed(&error.to_string())
+                    };
+                    if let Err(problem) = writer.finish(ended.with_usage(usage_value)).await {
+                        tracing::warn!(error = %problem, "the failed turn couldn't be closed");
+                    }
                 }
-                if self.fresh_thread {
-                    if let Some(meta) = self.thread.take() {
-                        let _ = self.store.delete_thread(&meta.id).await;
+                if failure.is_some() {
+                    self.fresh_session = false;
+                }
+                if self.fresh_session {
+                    if let Some(meta) = self.session.take() {
+                        let _ = self.store.delete_session(&meta.id).await;
                     }
                     self.recorded.clear();
-                    self.fresh_thread = false;
+                    self.recorded_agent = None;
+                    self.fresh_session = false;
                 }
                 Err(error)
             }
@@ -636,47 +761,18 @@ impl ChatSession {
     }
 }
 
-impl ChatSession {
-    async fn keep_failed(
-        &mut self,
-        error: &anyhow::Error,
-        user: Option<dive_llm::types::ChatMessage>,
-    ) -> bool {
-        let (Some(failure), Some(meta)) = (
-            error.downcast_ref::<dive_core::agent::conversation::ConversationError>(),
-            &self.thread,
-        ) else {
-            return false;
-        };
-        let turn = dive_core::agent::conversation::failed_turn(failure, &self.active, user);
-        match persist_turn(self.store.as_ref(), meta, &self.active, &turn).await {
-            Ok(()) => {
-                self.active = turn.active.clone();
-                self.history.extend(turn.entries);
-                true
-            }
-            Err(problem) => {
-                tracing::warn!(error = %problem, "the failed turn couldn't be saved to the thread");
-                false
-            }
-        }
-    }
-}
-
-async fn create_thread(
+async fn create_session(
     store: &dyn Store,
     first_message: &str,
-    owner: &str,
-    active: &str,
+    agent: &str,
     project: Option<&str>,
-) -> Result<ThreadMeta> {
-    let mut meta = store
-        .create_thread(&title_from(first_message), owner, project)
-        .await?;
-    if meta.active != active && store.set_active_agent(&meta.id, active).await.is_ok() {
-        meta.active = active.to_string();
-    }
-    Ok(meta)
+    identity: &Identity,
+) -> Result<SessionMeta> {
+    Ok(store
+        .create_session(
+            NewSession::chat(&title_from(first_message), agent, identity).in_project(project),
+        )
+        .await?)
 }
 
 #[cfg(test)]
@@ -775,9 +871,24 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
+    }
+
+    async fn sessions(store: &Arc<dyn Store>) -> Vec<dive_core::SessionMeta> {
+        store
+            .list_sessions(
+                &dive_core::store::SessionFilter::default(),
+                dive_core::store::Page::ALL,
+            )
+            .await
+            .unwrap()
+            .sessions
+    }
+
+    async fn history(store: &Arc<dyn Store>, id: &str) -> Vec<NewEntry> {
+        dive_core::context::context_entries(&store.load_entries(id, None).await.unwrap(), None)
     }
 
     async fn session(
@@ -794,7 +905,7 @@ mod tests {
         ChatStart::resolve(runtime, store.clone(), Some("front"), thread)
             .await
             .unwrap()
-            .over(conversation, runtime.usage.clone(), events, None, None)
+            .over(conversation, events, None, None)
             .await
             .unwrap()
     }
@@ -804,19 +915,19 @@ mod tests {
         let runtime = runtime(vec![text("hello"), text("again")]);
         let store = runtime.store().unwrap();
         let mut chat = session(&runtime, &store, None).await;
-        assert!(chat.thread().is_none());
+        assert!(chat.session().is_none());
 
         let report = chat.send("Plan the release notes").await.unwrap();
         assert_eq!(report.turn.text, "hello");
-        assert!(report.thread_error.is_none() && report.persist_error.is_none());
-        let meta = chat.thread().cloned().unwrap();
+        assert!(report.session_error.is_none() && report.persist_error.is_none());
+        let meta = chat.session().cloned().unwrap();
         assert_eq!(meta.title, "Plan the release notes");
-        assert_eq!(meta.owner, "front");
+        assert_eq!(meta.agent, "front");
 
         chat.send("and again").await.unwrap();
-        let threads = store.list_threads().await.unwrap();
+        let threads = sessions(&store).await;
         assert_eq!(threads.len(), 1);
-        let persisted = load_history(store.as_ref(), &meta.id).await.unwrap();
+        let persisted = history(&store, &meta.id).await;
         assert_eq!(persisted.len(), chat.history().len());
         assert_eq!(persisted.len(), 4, "two user messages and two replies");
     }
@@ -827,9 +938,9 @@ mod tests {
         let store = runtime.store().unwrap();
         let mut chat = session(&runtime, &store, None).await;
         chat.send("hi").await.unwrap();
-        let meta = chat.thread().cloned().unwrap();
+        let meta = chat.session().cloned().unwrap();
         assert_eq!(meta.project.as_deref(), Some("/work/site"));
-        let stored = store.get_thread(&meta.id).await.unwrap().unwrap();
+        let stored = store.get_session(&meta.id).await.unwrap().unwrap();
         assert_eq!(stored.project.as_deref(), Some("/work/site"));
     }
 
@@ -840,8 +951,8 @@ mod tests {
         let store = runtime.store().unwrap();
         let mut chat = session(&runtime, &store, None).await;
         chat.send("hi").await.unwrap();
-        let id = chat.thread().unwrap().id.clone();
-        assert_eq!(store.get_thread(&id).await.unwrap().unwrap().project, None);
+        let id = chat.session().unwrap().id.clone();
+        assert_eq!(store.get_session(&id).await.unwrap().unwrap().project, None);
     }
 
     #[tokio::test]
@@ -851,56 +962,289 @@ mod tests {
         let mut start = ChatStart::resolve(&runtime, store.clone(), None, None)
             .await
             .unwrap();
-        let id = start.create_thread("hi").await.unwrap().id.clone();
-        let stored = store.get_thread(&id).await.unwrap().unwrap();
+        let id = start.create_session("hi").await.unwrap().id.clone();
+        let stored = store.get_session(&id).await.unwrap().unwrap();
         assert_eq!(stored.project.as_deref(), Some("/work/site"));
     }
 
+    fn kinds(entries: &[dive_core::Entry]) -> Vec<String> {
+        entries
+            .iter()
+            .map(|entry| {
+                serde_json::to_value(entry).unwrap()["kind"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    fn ended(entries: &[dive_core::Entry]) -> Option<&dive_core::store::RunEnded> {
+        entries.iter().rev().find_map(|entry| match &entry.body {
+            dive_core::EntryBody::RunEnded(ended) => Some(ended),
+            _ => None,
+        })
+    }
+
     #[tokio::test]
-    async fn a_failed_first_turn_keeps_the_thread_with_its_message_and_the_error() {
+    async fn a_failed_first_turn_keeps_the_session_with_its_failed_run() {
         let runtime = runtime(Vec::new());
         let store = runtime.store().unwrap();
         let mut chat = session(&runtime, &store, None).await;
 
         assert!(chat.send("hi").await.is_err());
-        let id = chat.thread().unwrap().id.clone();
-        let authors: Vec<String> = chat
-            .history()
-            .iter()
-            .map(|entry| entry.author.clone())
-            .collect();
-        assert_eq!(authors, ["user", "error:front"]);
-        assert_eq!(store.list_threads().await.unwrap().len(), 1);
-        assert_eq!(store.get_thread(&id).await.unwrap().unwrap().id, id);
+        let id = chat.session().unwrap().id.clone();
+        assert!(chat.history().is_empty());
+        assert_eq!(sessions(&store).await.len(), 1);
+        let entries = store.load_entries(&id, None).await.unwrap();
+        assert_eq!(kinds(&entries), ["run_started", "message", "run_ended"]);
+        let ended = ended(&entries).unwrap();
+        assert_eq!(ended.status, dive_core::store::RunStatus::Failed);
+        assert!(
+            ended.error.as_deref().unwrap().contains("script exhausted"),
+            "{ended:?}"
+        );
+        assert!(store
+            .get_session(&id)
+            .await
+            .unwrap()
+            .unwrap()
+            .active_run
+            .is_none());
+    }
+
+    struct Replies {
+        replies: Mutex<VecDeque<Result<ChatResponse, String>>>,
+        requests: Mutex<Vec<ChatRequest>>,
+    }
+
+    #[async_trait]
+    impl ChatProvider for Replies {
+        async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, LlmError> {
+            self.requests.lock().unwrap().push(request);
+            self.replies
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| Err("script exhausted".to_string()))
+                .map_err(LlmError::Unsupported)
+        }
+
+        async fn chat_stream(&self, request: ChatRequest) -> Result<EventStream, LlmError> {
+            let response = self.chat(request).await?;
+            Ok(futures::stream::iter(vec![Ok(StreamEvent::Completed(response))]).boxed())
+        }
+    }
+
+    fn runtime_over(provider: Arc<dyn ChatProvider>) -> Runtime {
+        let mut config = dive_config::Config::default();
+        config.tools.paths = Vec::new();
+        config.plans.paths = Vec::new();
+        let router = ModelRouter::with_providers(
+            HashMap::from([("scripted".to_string(), provider)]),
+            ModelRoles::from([(
+                "default",
+                ModelChoice {
+                    kind: None,
+                    provider: "scripted".to_string(),
+                    model: "scripted".to_string(),
+                    temperature: None,
+                    description: None,
+                    fallbacks: Vec::new(),
+                    context_window: None,
+                    images: None,
+                },
+            )]),
+        );
+        let options = RuntimeOptions {
+            storage_backend: Some("memory".to_string()),
+            ..Default::default()
+        };
+        Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
+    }
+
+    fn said(request: &ChatRequest) -> String {
+        serde_json::to_string(&request.messages).unwrap()
     }
 
     #[tokio::test]
-    async fn a_failed_turn_on_a_resumed_thread_keeps_it() {
-        let runtime = runtime(vec![text("hello")]);
+    async fn a_failed_turn_never_reaches_the_next_turn_s_model_request() {
+        let provider = Arc::new(Replies {
+            replies: Mutex::new(
+                vec![
+                    Ok(text("first answer")),
+                    Err("the model fell over".to_string()),
+                    Ok(text("third answer")),
+                ]
+                .into(),
+            ),
+            requests: Mutex::new(Vec::new()),
+        });
+        let runtime = runtime_over(provider.clone());
         let store = runtime.store().unwrap();
-        let mut first = session(&runtime, &store, None).await;
-        first.send("hi").await.unwrap();
-        let id = first.thread().unwrap().id.clone();
+        let mut chat = session(&runtime, &store, None).await;
+        chat.send("first question").await.unwrap();
+        let id = chat.session().unwrap().id.clone();
+        assert!(chat.send("second question").await.is_err());
+        chat.send("third question").await.unwrap();
+        let third = said(provider.requests.lock().unwrap().last().unwrap());
+        assert!(
+            third.contains("first question") && third.contains("first answer"),
+            "{third}"
+        );
+        assert!(!third.contains("second question"), "{third}");
+        assert!(!third.contains("fell over"), "{third}");
 
-        let mut resumed = session(&runtime, &store, Some(Some(id.clone()))).await;
-        assert_eq!(resumed.history().len(), 2);
-        assert!(resumed.send("again").await.is_err());
-        assert!(store.get_thread(&id).await.unwrap().is_some());
-
-        let reopened = session(&runtime, &store, Some(Some(id.clone()))).await;
-        let kept: Vec<(String, String)> = reopened
+        let mut reopened = session(&runtime, &store, Some(Some(id))).await;
+        assert!(reopened
             .history()
             .iter()
-            .filter_map(|entry| match &entry.body {
-                dive_core::store::EntryBody::Message {
-                    message: dive_llm::types::ChatMessage::User { content, .. },
-                } => Some((entry.author.clone(), content.clone())),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(kept[1], ("user".to_string(), "again".to_string()));
-        assert_eq!(kept[2].0, "error:front");
-        assert!(kept[2].1.contains("script exhausted"), "{}", kept[2].1);
+            .all(|entry| !serde_json::to_string(&entry.body)
+                .unwrap()
+                .contains("second question")));
+        provider
+            .replies
+            .lock()
+            .unwrap()
+            .push_back(Ok(text("fourth answer")));
+        reopened.send("fourth question").await.unwrap();
+        let fourth = said(provider.requests.lock().unwrap().last().unwrap());
+        assert!(fourth.contains("third question"), "{fourth}");
+        assert!(!fourth.contains("second question"), "{fourth}");
+    }
+
+    #[tokio::test]
+    async fn a_second_turn_on_a_session_with_a_run_in_progress_is_refused_as_busy() {
+        let runtime = runtime(vec![text("hello"), text("never")]);
+        let store = runtime.store().unwrap();
+        let mut chat = session(&runtime, &store, None).await;
+        chat.send("hi").await.unwrap();
+        let id = chat.session().unwrap().id.clone();
+        let other = crate::writer::RunWriter::start(
+            store.clone(),
+            dive_core::store::StartRun {
+                run_id: "elsewhere".to_string(),
+                session: id.clone(),
+                kind: dive_core::store::SessionKind::Chat,
+                holder: "another-process".to_string(),
+                token_expires_at: None,
+                started: dive_core::store::RunStarted {
+                    input: json!("from elsewhere"),
+                    identity: runtime.identity(),
+                    trace_id: None,
+                    plan: None,
+                    synthetic: false,
+                },
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        let Err(error) = chat.send("again").await else {
+            panic!("the second turn should be refused");
+        };
+        let busy = error
+            .downcast_ref::<SessionBusy>()
+            .expect("refused as busy");
+        assert_eq!(
+            (busy.session.as_str(), busy.run.as_str()),
+            (id.as_str(), "elsewhere")
+        );
+        assert!(chat.session().is_some());
+        other
+            .finish(dive_core::store::RunEnded::completed(None))
+            .await
+            .unwrap();
+        assert_eq!(chat.send("now").await.unwrap().turn.text, "never");
+    }
+
+    struct Hangs;
+
+    #[async_trait]
+    impl ChatProvider for Hangs {
+        async fn chat(&self, _: ChatRequest) -> Result<ChatResponse, LlmError> {
+            std::future::pending().await
+        }
+
+        async fn chat_stream(&self, request: ChatRequest) -> Result<EventStream, LlmError> {
+            if request
+                .messages
+                .iter()
+                .any(|message| matches!(message, dive_llm::types::ChatMessage::ToolResult { .. }))
+            {
+                return std::future::pending().await;
+            }
+            Ok(futures::stream::iter(vec![Ok(StreamEvent::Completed(call(
+                "slow__wait",
+                json!({}),
+            )))])
+            .boxed())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_turn_killed_after_its_first_tool_result_leaves_what_had_finished_in_the_log() {
+        let runtime = runtime_over(Arc::new(Hangs));
+        let store = runtime.store().unwrap();
+        let events: Arc<dyn EventSink> = Arc::new(NullSink);
+        let mut conversation = runtime
+            .conversation(&store, events.clone(), PipelineHooks::default())
+            .await
+            .unwrap();
+        conversation.agents = Arc::new(AgentSet::layered(
+            builtin_agents(&["name: waiter\ndescription: waits\nmodel: chat\ntools: [slow__wait]\nsystem_prompt: Wait.\n"]),
+            Vec::new(),
+        ));
+        let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        conversation.catalog = Arc::new(Slow {
+            finished: finished.clone(),
+        });
+        let mut start = ChatStart::resolve(&runtime, store.clone(), Some("waiter"), None)
+            .await
+            .unwrap();
+        let id = start
+            .create_session("wait for it")
+            .await
+            .unwrap()
+            .id
+            .clone();
+        let mut chat = start.over(conversation, events, None, None).await.unwrap();
+        let killed = tokio::time::timeout(
+            std::time::Duration::from_millis(1500),
+            chat.send("wait for it"),
+        )
+        .await;
+        assert!(killed.is_err(), "the turn never finishes on its own");
+        assert!(finished.load(std::sync::atomic::Ordering::SeqCst));
+        let mut kept = Vec::new();
+        for _ in 0..50 {
+            kept = store.load_entries(&id, None).await.unwrap();
+            if kept.len() >= 4 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            kinds(&kept),
+            ["run_started", "message", "message", "message"]
+        );
+        assert!(matches!(
+            &kept[1].body,
+            dive_core::EntryBody::Message {
+                message: dive_llm::types::ChatMessage::User { .. }
+            }
+        ));
+        assert!(matches!(
+            &kept[2].body,
+            dive_core::EntryBody::Message { message: dive_llm::types::ChatMessage::Assistant { tool_calls, .. } } if !tool_calls.is_empty()
+        ));
+        assert!(matches!(
+            &kept[3].body,
+            dive_core::EntryBody::Message {
+                message: dive_llm::types::ChatMessage::ToolResult { .. }
+            }
+        ));
+        assert!(kept[3].ms.is_some());
     }
 
     #[tokio::test]
@@ -916,12 +1260,12 @@ mod tests {
         assert_eq!(report.turn.active, "back");
         assert_eq!(chat.active(), "back");
         let meta = store
-            .get_thread(&chat.thread().unwrap().id)
+            .get_session(&chat.session().unwrap().id)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(meta.active, "back");
-        assert_eq!(meta.owner, "front");
+        assert_eq!(meta.active_agent, "back");
+        assert_eq!(meta.agent, "front");
     }
 
     struct Slow {
@@ -1003,7 +1347,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("memory".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         let runtime =
             Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap();
@@ -1029,13 +1373,7 @@ mod tests {
         let mut chat = ChatStart::resolve(&runtime, store.clone(), Some("waiter"), None)
             .await
             .unwrap()
-            .over(
-                conversation,
-                runtime.usage.clone(),
-                events,
-                None,
-                Some(cancel.clone()),
-            )
+            .over(conversation, events, None, Some(cancel.clone()))
             .await
             .unwrap();
 
@@ -1065,27 +1403,151 @@ mod tests {
             elapsed < std::time::Duration::from_millis(1600),
             "{elapsed:?}"
         );
-        assert!(chat.thread().is_none());
+        assert!(chat.session().is_none());
         assert!(chat.history().is_empty());
-        assert!(store.list_threads().await.unwrap().is_empty());
+        assert!(sessions(&store).await.is_empty());
         assert_eq!(cancel.tools_in_flight(), 0);
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_cancel_stored_by_another_process_stops_the_run_after_its_tool_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = dive_config::Config::default();
+        config.tools.paths = Vec::new();
+        config.plans.paths = Vec::new();
+        config.settings.data_dir = dir.path().join("data");
+        let provider: Arc<dyn ChatProvider> = Arc::new(Delayed(Mutex::new(
+            vec![text("ready"), call("slow__wait", json!({})), text("after")].into(),
+        )));
+        let router = ModelRouter::with_providers(
+            HashMap::from([("scripted".to_string(), provider)]),
+            ModelRoles::from([(
+                "default",
+                ModelChoice {
+                    kind: None,
+                    provider: "scripted".to_string(),
+                    model: "scripted".to_string(),
+                    temperature: None,
+                    description: None,
+                    fallbacks: Vec::new(),
+                    context_window: None,
+                    images: None,
+                },
+            )]),
+        );
+        let options = RuntimeOptions {
+            storage_backend: Some("file".to_string()),
+            ..Default::default()
+        };
+        let runtime =
+            Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap();
+        let store = runtime.store().unwrap();
+        let other: Arc<dyn Store> =
+            Arc::new(dive_store::FileStore::open(&dir.path().join("data")).unwrap());
+        let cancel = CancelHandle::new();
+        let events: Arc<dyn EventSink> = Arc::new(NullSink);
+        let hooks = PipelineHooks {
+            cancel: Some(cancel.clone()),
+            ..Default::default()
+        };
+        let mut conversation = runtime
+            .conversation(&store, events.clone(), hooks)
+            .await
+            .unwrap();
+        conversation.agents = Arc::new(AgentSet::layered(
+            builtin_agents(&["name: waiter\ndescription: waits\nmodel: chat\ntools: [slow__wait]\nsystem_prompt: Wait.\n"]),
+            Vec::new(),
+        ));
+        let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        conversation.catalog = cancel.track(Arc::new(Slow {
+            finished: finished.clone(),
+        }));
+        let mut chat = ChatStart::resolve(&runtime, store.clone(), Some("waiter"), None)
+            .await
+            .unwrap()
+            .over(conversation, events, None, Some(cancel.clone()))
+            .await
+            .unwrap()
+            .with_lease_timing(LeaseTiming {
+                renew_every: std::time::Duration::from_millis(100),
+                self_stop_after: std::time::Duration::from_secs(5),
+            });
+        chat.send("are you there?").await.unwrap();
+        let id = chat.session().unwrap().id.clone();
+
+        let canceller = {
+            let other = other.clone();
+            let id = id.clone();
+            tokio::spawn(async move {
+                loop {
+                    let meta = other.get_session(&id).await.unwrap().unwrap();
+                    let entries = other.load_entries(&id, None).await.unwrap();
+                    let calling = entries.last().is_some_and(|entry| {
+                        matches!(
+                            &entry.body,
+                            dive_core::EntryBody::Message {
+                                message: dive_llm::types::ChatMessage::Assistant { tool_calls, .. }
+                            } if !tool_calls.is_empty()
+                        )
+                    });
+                    if let (Some(run), true) = (meta.active_run, calling) {
+                        return other.request_cancel(&run, "grace").await.unwrap();
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            })
+        };
+        let Err(error) = chat.send("wait for it").await else {
+            panic!("the turn should be cancelled");
+        };
+        assert!(
+            error.downcast_ref::<crate::cancel::Cancelled>().is_some(),
+            "{error}"
+        );
+        assert_eq!(
+            canceller.await.unwrap(),
+            dive_core::store::CancelOutcome::Signalled
+        );
+        assert!(finished.load(std::sync::atomic::Ordering::SeqCst));
+        let entries = other.load_entries(&id, None).await.unwrap();
+        let tail: Vec<String> = kinds(&entries).into_iter().rev().take(3).rev().collect();
+        assert_eq!(tail, ["message", "cancel_requested", "run_ended"]);
+        let at = entries.len() - 3;
+        assert!(matches!(
+            &entries[at].body,
+            dive_core::EntryBody::Message {
+                message: dive_llm::types::ChatMessage::ToolResult { .. }
+            }
+        ));
+        assert!(matches!(
+            &entries[at + 1].body,
+            dive_core::EntryBody::CancelRequested { by } if by == "grace"
+        ));
+        assert_eq!(
+            ended(&entries).unwrap().status,
+            dive_core::store::RunStatus::Cancelled
+        );
+        let meta = other.get_session(&id).await.unwrap().unwrap();
+        assert!(meta.active_run.is_none());
+    }
+
     #[tokio::test]
-    async fn switching_agents_validates_and_persists_the_choice() {
-        let runtime = runtime(vec![text("hello")]);
+    async fn switching_agents_validates_and_the_next_turn_records_the_choice() {
+        let runtime = runtime(vec![text("hello"), text("from back")]);
         let store = runtime.store().unwrap();
         let mut chat = session(&runtime, &store, None).await;
         chat.send("hi").await.unwrap();
 
         assert!(chat.set_active("nobody").await.is_err());
         chat.set_active("back").await.unwrap();
+        assert_eq!(chat.active(), "back");
+        chat.send("over to you").await.unwrap();
         let meta = store
-            .get_thread(&chat.thread().unwrap().id)
+            .get_session(&chat.session().unwrap().id)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(meta.active, "back");
+        assert_eq!(meta.active_agent, "back");
     }
 
     fn file_runtime(dir: &std::path::Path, responses: Vec<ChatResponse>) -> Runtime {
@@ -1112,7 +1574,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("file".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }
@@ -1129,10 +1591,10 @@ mod tests {
         }
     }
 
-    async fn open(runtime: &Runtime, root: &std::path::Path, open: ThreadOpen) -> ChatSession {
+    async fn open(runtime: &Runtime, root: &std::path::Path, open: SessionOpen) -> ChatSession {
         runtime
-            .open_thread(
-                ThreadOpen {
+            .open_session(
+                SessionOpen {
                     root: Some(root.to_path_buf()),
                     ..open
                 },
@@ -1180,16 +1642,16 @@ mod tests {
     async fn a_plain_thread_opens_as_a_plain_chat() {
         let dir = tempfile::tempdir().unwrap();
         let runtime = file_runtime(dir.path(), vec![text("hello")]);
-        let mut chat = open(&runtime, dir.path(), ThreadOpen::default()).await;
+        let mut chat = open(&runtime, dir.path(), SessionOpen::default()).await;
         assert!(chat.attachments().is_empty());
         chat.send("hi").await.unwrap();
-        let id = chat.thread().unwrap().id.clone();
+        let id = chat.session().unwrap().id.clone();
 
         let reopened = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
-                thread: Some(id.clone()),
+            SessionOpen {
+                session: Some(id.clone()),
                 ..Default::default()
             },
         )
@@ -1207,7 +1669,7 @@ mod tests {
         let meta = runtime
             .store()
             .unwrap()
-            .get_thread(&id)
+            .get_session(&id)
             .await
             .unwrap()
             .unwrap();
@@ -1219,14 +1681,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let runtime = file_runtime(dir.path(), Vec::new());
         let store = runtime.store().unwrap();
-        let meta = store
-            .create_thread("a tool that counts words", "network_drafter", None)
-            .await
-            .unwrap();
-        store
-            .append_entries(&meta.id, &sketch_call("1"))
-            .await
-            .unwrap();
+        let meta = crate::ops::session::tests::session_of(
+            store.as_ref(),
+            "a tool that counts words",
+            "network_drafter",
+            None,
+            sketch_call("1"),
+        )
+        .await;
         store
             .set_attachments(&meta.id, &[Attachment::new(NETWORK_ATTACHMENT)])
             .await
@@ -1235,8 +1697,8 @@ mod tests {
         let chat = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
-                thread: Some(meta.id.clone()),
+            SessionOpen {
+                session: Some(meta.id.clone()),
                 ..Default::default()
             },
         )
@@ -1258,20 +1720,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let runtime = file_runtime(dir.path(), Vec::new());
         let store = runtime.store().unwrap();
-        let meta = store
-            .create_thread("old draft", "network_drafter", None)
-            .await
-            .unwrap();
-        store
-            .append_entries(&meta.id, &sketch_call("1"))
-            .await
-            .unwrap();
+        let meta = crate::ops::session::tests::session_of(
+            store.as_ref(),
+            "old draft",
+            "network_drafter",
+            None,
+            sketch_call("1"),
+        )
+        .await;
 
         let chat = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
-                thread: Some(meta.id.clone()),
+            SessionOpen {
+                session: Some(meta.id.clone()),
                 ..Default::default()
             },
         )
@@ -1293,8 +1755,8 @@ mod tests {
         );
         let changes = Arc::new(Changes::default());
         let mut chat = runtime
-            .open_thread(
-                ThreadOpen {
+            .open_session(
+                SessionOpen {
                     root: Some(dir.path().to_path_buf()),
                     agent: Some("network_drafter".to_string()),
                     ..Default::default()
@@ -1336,7 +1798,7 @@ mod tests {
         let meta = runtime
             .store()
             .unwrap()
-            .get_thread(&chat.thread().unwrap().id)
+            .get_session(&chat.session().unwrap().id)
             .await
             .unwrap()
             .unwrap();
@@ -1369,35 +1831,34 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let runtime = file_runtime(dir.path(), Vec::new());
         let store = runtime.store().unwrap();
-        let source = store.create_thread("digest", "chat", None).await.unwrap();
-        store
-            .append_entries(
-                &source.id,
-                &[
-                    NewEntry::message(
-                        "chat",
-                        dive_llm::types::ChatMessage::Assistant {
-                            content: None,
-                            tool_calls: vec![ToolCall {
-                                id: "c1".to_string(),
-                                name: "agent__front_desk".to_string(),
-                                arguments: json!({"prompt": "hi"}),
-                            }],
-                            thinking: Vec::new(),
-                        },
-                    ),
-                    NewEntry::message(
-                        "chat",
-                        dive_llm::types::ChatMessage::ToolResult {
-                            tool_call_id: "c1".to_string(),
-                            content: json!({"error": "boom"}),
-                            is_error: true,
-                        },
-                    ),
-                ],
-            )
-            .await
-            .unwrap();
+        let source = crate::ops::session::tests::chat_session(
+            store.as_ref(),
+            "digest",
+            None,
+            vec![
+                NewEntry::message(
+                    "chat",
+                    dive_llm::types::ChatMessage::Assistant {
+                        content: None,
+                        tool_calls: vec![ToolCall {
+                            id: "c1".to_string(),
+                            name: "agent__front_desk".to_string(),
+                            arguments: json!({"prompt": "hi"}),
+                        }],
+                        thinking: Vec::new(),
+                    },
+                ),
+                NewEntry::message(
+                    "chat",
+                    dive_llm::types::ChatMessage::ToolResult {
+                        tool_call_id: "c1".to_string(),
+                        content: json!({"error": "boom"}),
+                        is_error: true,
+                    },
+                ),
+            ],
+        )
+        .await;
         let span = |id: &str, parent: &str, name: &str, kind: dive_core::trace::SpanKind| {
             dive_core::trace::Span {
                 trace_id: "t".into(),
@@ -1428,7 +1889,7 @@ mod tests {
             .append_spans(&source.id, &[called, inner])
             .await
             .unwrap();
-        let chat = open(&runtime, dir.path(), ThreadOpen::default()).await;
+        let chat = open(&runtime, dir.path(), SessionOpen::default()).await;
         let registry = chat.conversation().catalog.clone();
         let outcome = registry
             .invoke(
@@ -1476,8 +1937,8 @@ mod tests {
         );
         let changes = Arc::new(Changes::default());
         let mut chat = runtime
-            .open_thread(
-                ThreadOpen {
+            .open_session(
+                SessionOpen {
                     draft: Some(Start::Tool(None)),
                     root: Some(dir.path().to_path_buf()),
                     ..Default::default()
@@ -1489,7 +1950,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(chat.active(), "network_drafter");
-        assert!(chat.thread().is_none());
+        assert!(chat.session().is_none());
         chat.send("a tool").await.unwrap();
         assert_eq!(chat.network().unwrap().network().nodes.len(), 1);
         let discarded = chat
@@ -1504,7 +1965,7 @@ mod tests {
         let meta = runtime
             .store()
             .unwrap()
-            .get_thread(&chat.thread().unwrap().id)
+            .get_session(&chat.session().unwrap().id)
             .await
             .unwrap()
             .unwrap();
@@ -1548,7 +2009,7 @@ mod tests {
         );
         let options = RuntimeOptions {
             storage_backend: Some("file".to_string()),
-            capture_content: false,
+            ..Default::default()
         };
         Runtime::with_router(config, InstalledPacks::default(), options, router).unwrap()
     }
@@ -1585,8 +2046,8 @@ mod tests {
             )],
         );
         let mut chat = runtime
-            .open_thread(
-                ThreadOpen {
+            .open_session(
+                SessionOpen {
                     draft: Some(Start::Edit {
                         items: Vec::new(),
                         evidence: Some(Box::new(word_count_evidence())),
@@ -1609,10 +2070,10 @@ mod tests {
 
         let report = chat.begin().await.unwrap();
         assert!(report.turn.text.starts_with("It counts lines"));
-        let meta = chat.thread().cloned().unwrap();
+        let meta = chat.session().cloned().unwrap();
         assert_eq!(meta.title, "Improve tool word_count");
         let store = runtime.store().unwrap();
-        let history = load_history(store.as_ref(), &meta.id).await.unwrap();
+        let history = history(&store, &meta.id).await;
         assert!(history.iter().all(|entry| entry.author != "user"));
         let note = history
             .iter()
@@ -1628,7 +2089,7 @@ mod tests {
         assert!(note.contains("## The evidence"), "{note}");
         assert!(note.contains("one two three"), "{note}");
 
-        let stored = store.get_thread(&meta.id).await.unwrap().unwrap();
+        let stored = store.get_session(&meta.id).await.unwrap().unwrap();
         assert_eq!(
             stored.attachments,
             [
@@ -1642,8 +2103,8 @@ mod tests {
         let reopened = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
-                thread: Some(meta.id.clone()),
+            SessionOpen {
+                session: Some(meta.id.clone()),
                 ..Default::default()
             },
         )
@@ -1681,7 +2142,7 @@ mod tests {
         let mut chat = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
+            SessionOpen {
                 draft: Some(Start::Edit {
                     items: Vec::new(),
                     evidence: Some(Box::new(word_count_evidence())),
@@ -1749,7 +2210,7 @@ mod tests {
         let mut chat = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
+            SessionOpen {
                 draft: Some(Start::Edit {
                     items: Vec::new(),
                     evidence: Some(Box::new(word_count_evidence())),
@@ -1759,14 +2220,14 @@ mod tests {
         )
         .await;
         chat.begin().await.unwrap();
-        let thread = chat.thread().unwrap().id.clone();
+        let thread = chat.session().unwrap().id.clone();
         drop(chat);
 
         let mut reopened = open(
             &runtime,
             dir.path(),
-            ThreadOpen {
-                thread: Some(thread),
+            SessionOpen {
+                session: Some(thread),
                 ..Default::default()
             },
         )

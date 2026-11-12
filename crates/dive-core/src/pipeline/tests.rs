@@ -166,6 +166,7 @@ fn pipeline_with_named(
             gate: None,
             interlocutor: None,
             catalog: None,
+            requirements: Default::default(),
             user_context: "test user".into(),
             current_date: "2026-07-09".into(),
             max_attempts,
@@ -509,69 +510,6 @@ struct ShapeOnlyStore {
 
 #[async_trait]
 impl crate::store::Store for ShapeOnlyStore {
-    async fn create_thread(
-        &self,
-        _: &str,
-        _: &str,
-        _: Option<&str>,
-    ) -> Result<crate::store::ThreadMeta, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn get_thread(
-        &self,
-        _: &str,
-    ) -> Result<Option<crate::store::ThreadMeta>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn latest_thread(
-        &self,
-    ) -> Result<Option<crate::store::ThreadMeta>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn list_threads(
-        &self,
-    ) -> Result<Vec<crate::store::ThreadMeta>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn delete_thread(&self, _: &str) -> Result<bool, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn append_entries(
-        &self,
-        _: &str,
-        _: &[crate::store::NewEntry],
-    ) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn append_spans(
-        &self,
-        _: &str,
-        _: &[crate::store::Span],
-    ) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn load_spans(
-        &self,
-        _: &str,
-    ) -> Result<Vec<crate::store::Span>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn load_entries(
-        &self,
-        _: &str,
-    ) -> Result<Vec<crate::store::ThreadEntry>, crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn set_active_agent(&self, _: &str, _: &str) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
-    async fn set_attachments(
-        &self,
-        _: &str,
-        _: &[crate::store::Attachment],
-    ) -> Result<(), crate::store::StoreError> {
-        unimplemented!()
-    }
     async fn record_tool_shape(
         &self,
         tool: &str,
@@ -588,6 +526,107 @@ impl crate::store::Store for ShapeOnlyStore {
     }
     async fn tool_shapes(&self) -> Result<Vec<crate::store::ToolShape>, crate::store::StoreError> {
         Ok(self.shapes.lock().unwrap().clone())
+    }
+    async fn create_session(
+        &self,
+        _: crate::store::NewSession,
+    ) -> Result<crate::store::SessionMeta, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn get_session(
+        &self,
+        _: &str,
+    ) -> Result<Option<crate::store::SessionMeta>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn list_sessions(
+        &self,
+        _: &crate::store::SessionFilter,
+        _: crate::store::Page,
+    ) -> Result<crate::store::SessionPage, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn delete_session(&self, _: &str) -> Result<bool, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn set_active_agent(
+        &self,
+        _: &crate::store::Lease,
+        _: &str,
+    ) -> Result<(), crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn set_attachments(
+        &self,
+        _: &str,
+        _: &[crate::store::Attachment],
+    ) -> Result<(), crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn start_run(
+        &self,
+        _: crate::store::StartRun,
+    ) -> Result<crate::store::Lease, crate::store::StartError> {
+        unimplemented!()
+    }
+    async fn append(
+        &self,
+        _: &crate::store::Lease,
+        _: &[crate::store::Entry],
+    ) -> Result<(), crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn renew(
+        &self,
+        _: &crate::store::Lease,
+    ) -> Result<crate::store::Renewal, crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn end_run(
+        &self,
+        _: &crate::store::Lease,
+        _: crate::store::RunEnded,
+    ) -> Result<(), crate::store::FenceError> {
+        unimplemented!()
+    }
+    async fn request_cancel(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<crate::store::CancelOutcome, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn reap_expired(
+        &self,
+        _: usize,
+    ) -> Result<Vec<crate::store::Reaped>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn get_run(
+        &self,
+        _: &str,
+    ) -> Result<Option<crate::store::RunMeta>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn load_entries(
+        &self,
+        _: &str,
+        _: Option<u64>,
+    ) -> Result<Vec<crate::store::Entry>, crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn append_spans(
+        &self,
+        _: &str,
+        _: &[crate::store::Span],
+    ) -> Result<(), crate::store::StoreError> {
+        unimplemented!()
+    }
+    async fn load_spans(
+        &self,
+        _: &str,
+    ) -> Result<Vec<crate::store::Span>, crate::store::StoreError> {
+        unimplemented!()
     }
 }
 
@@ -3635,13 +3674,21 @@ async fn usage_is_attributed_to_the_step_that_spent_it() {
     )]))
     .unwrap();
 
-    pipeline
-        .run_explicit("q", plan, Finish::Solver(SolverData::default()), None)
+    let run = Arc::new(crate::run::Run::new(
+        Default::default(),
+        Arc::new(crate::NullSink),
+    ));
+    run.clone()
+        .scope(pipeline.run_explicit("q", plan, Finish::Solver(SolverData::default()), None))
         .await
         .unwrap();
 
-    let report = pipeline.usage.take();
+    let report = run.usage();
     assert_eq!(report.calls, 3, "two agent rounds plus the solver");
+    assert!(
+        pipeline.usage.unscoped().is_empty(),
+        "every model call made during a run records against that run"
+    );
 
     let by_step: std::collections::HashMap<&str, usize> = report
         .by_step
@@ -3697,13 +3744,18 @@ output:
     ]))
     .unwrap();
 
-    pipeline
-        .run_explicit("q", plan, Finish::Silent, None)
+    let run = Arc::new(crate::run::Run::new(
+        Default::default(),
+        Arc::new(crate::NullSink),
+    ));
+    run.clone()
+        .scope(pipeline.run_explicit("q", plan, Finish::Silent, None))
         .await
         .unwrap();
 
-    let report = pipeline.usage.take();
+    let report = run.usage();
     assert_eq!(report.calls, 2, "the inner plan's call is not lost");
+    assert!(pipeline.usage.unscoped().is_empty());
     let paths: Vec<&str> = report.by_step.iter().map(|s| s.path.as_str()).collect();
     // Qualified by the plan it ran in, so the inner E0 stays distinct from
     // the outer plan's own steps.
@@ -6625,4 +6677,221 @@ async fn a_test_run_writes_in_a_scratch_directory_and_says_what_it_wrote() {
         before.display().to_string()
     );
     assert!(!before.join(".dive/snapshots/a.json").exists());
+}
+
+fn pipeline_with_a_plan_that_cant_run() -> Pipeline {
+    let plans: Vec<doc::PlanDoc> = vec![
+        "identifier: good\nname: good\ndescription: d\nsteps:\n  - id: s\n    tool_name: t__search\n    input: {}\n"
+            .parse()
+            .unwrap(),
+        "identifier: broken\nname: broken\ndescription: d\nsteps:\n  - id: s\n    tool_name: user__gone\n    input: {}\n"
+            .parse()
+            .unwrap(),
+    ];
+    let agents = crate::agent::doc::AgentSet::layered(
+        Vec::new(),
+        vec![vec![
+            crate::agent::doc::parse_agent_source(
+                "name: fine\ndescription: d\nmodel: chat\ntools: []\nsystem_prompt: p\n",
+            )
+            .unwrap(),
+            crate::agent::doc::parse_agent_source(
+                "name: helper\ndescription: d\nmodel: chat\ntools: [plan__broken]\nsystem_prompt: p\n",
+            )
+            .unwrap(),
+        ]],
+    );
+    let catalog = ToolCatalog {
+        mcp_servers: std::collections::BTreeSet::from(["t".to_string()]),
+        ..Default::default()
+    };
+    let mut pipeline = pipeline_for(Arc::new(MockRegistry {
+        search_result: json!({}),
+        invocations: Mutex::new(Vec::new()),
+        fail_tools: Vec::new(),
+    }));
+    pipeline.requirements = Arc::new(crate::requirements::Requirements::compute(
+        &plans, &agents, &catalog,
+    ));
+    pipeline.plans = Arc::new(plans);
+    pipeline.agents = Arc::new(agents);
+    pipeline
+}
+
+async fn planner_names(pipeline: &Pipeline) -> Vec<String> {
+    pipeline
+        .planner_tool_defs()
+        .await
+        .into_iter()
+        .map(|def| def.name)
+        .collect()
+}
+
+#[tokio::test]
+async fn the_planner_catalog_leaves_out_a_plan_that_cant_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(!names.contains(&"plan__broken".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_planner_catalog_keeps_a_plan_that_can_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(names.contains(&"plan__good".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_planner_catalog_leaves_out_an_agent_that_cant_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(!names.contains(&"agent__helper".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_planner_catalog_keeps_an_agent_that_can_run_here() {
+    let names = planner_names(&pipeline_with_a_plan_that_cant_run()).await;
+    assert!(names.contains(&"agent__fine".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn tool_search_leaves_out_a_plan_that_cant_run_here() {
+    let pipeline = pipeline_with_a_plan_that_cant_run();
+    let names: Vec<String> = pipeline
+        .searchable_tools()
+        .await
+        .into_iter()
+        .map(|def| def.name)
+        .collect();
+    assert!(!names.contains(&"plan__broken".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn calling_a_plan_that_cant_run_here_by_name_is_refused_naming_the_missing_tool() {
+    let pipeline = pipeline_with_a_plan_that_cant_run();
+    let call = pipeline.call_plan("broken", json!({})).await;
+    assert_eq!(
+        call.result,
+        json!({"error": "plan 'broken' can't run here: user__gone (step s) is not in this project's catalog"})
+    );
+}
+
+#[tokio::test]
+async fn a_subagent_that_cant_run_here_is_refused_before_a_model_call() {
+    let pipeline = pipeline_with_a_plan_that_cant_run();
+    let Ok(run) = pipeline
+        .run_subagent(
+            &StepPath::top("agent__helper"),
+            "helper",
+            json!({"prompt": "x"}),
+        )
+        .await
+    else {
+        panic!("a refusal is a refused run, not a dispatch error");
+    };
+    assert!(
+        run.outcome
+            .result
+            .to_string()
+            .contains("agent 'helper' can't run here"),
+        "{}",
+        run.outcome.result
+    );
+}
+
+type SeenRun = Option<(String, String, Option<String>)>;
+
+#[derive(Default)]
+struct RunProbe(Mutex<Vec<SeenRun>>);
+
+#[async_trait]
+impl ToolRegistry for RunProbe {
+    async fn tools(&self) -> Result<Vec<ToolDef>, ToolError> {
+        Ok(vec![ToolDef {
+            name: "probe__see".into(),
+            description: "records the run in scope".into(),
+            input_schema: json!({"type": "object"}),
+            output_schema: None,
+            output_example: None,
+            read_only: Some(true),
+            file_input: Default::default(),
+        }])
+    }
+
+    async fn invoke(&self, _: &str, _: Value) -> Result<ToolOutcome, ToolError> {
+        self.0
+            .lock()
+            .unwrap()
+            .push(crate::run::Run::current().map(|run| {
+                (
+                    run.id.to_string(),
+                    run.identity.user.clone(),
+                    run.token.as_ref().map(|token| token.expose().to_string()),
+                )
+            }));
+        Ok(ToolOutcome {
+            result: json!({"seen": true}),
+            is_error: false,
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_tool_at_any_depth_of_a_plan_sees_the_run_it_belongs_to() {
+    let probe = Arc::new(RunProbe::default());
+    let (mut pipeline, _) = pipeline(
+        vec![tool_use("c1", "probe__see", json!({})), text("done")],
+        probe.clone(),
+        1,
+    );
+    pipeline.plans = Arc::new(vec![plan_doc_yaml(
+        r#"
+identifier: inner
+name: Inner
+description: probes the run from a nested plan
+steps:
+  - id: E0
+    tool_name: probe__see
+    input: {}
+    reasoning: see the run
+output:
+  seen: '{{E0.seen}}'
+"#,
+    )]);
+    pipeline.agents = Arc::new(crate::agent::doc::AgentSet::layered(
+        crate::agent::doc::builtin_agents(&[
+            "name: prober\ndescription: Probes\nmodel: default\ntools: [probe__see]\nsystem_prompt: Probe.\n",
+        ]),
+        Vec::new(),
+    ));
+    pipeline.always_loaded = Arc::new(vec!["probe__see".to_string()]);
+    let plan: Plan = serde_json::from_value(json!([
+        {"id": "E0", "toolName": "plan__inner", "input": {}},
+        {"id": "E1", "toolName": "map", "input": {
+            "over": [1, 2, 3, 4],
+            "concurrency": 4,
+            "do": {"toolName": "probe__see", "input": {}},
+        }},
+        {"id": "E2", "toolName": "agent__prober", "input": {"prompt": "go"}},
+    ]))
+    .unwrap();
+    let run = Arc::new(
+        crate::run::Run::new(
+            crate::run::Identity {
+                user: "ada".into(),
+                ..Default::default()
+            },
+            Arc::new(NullSink),
+        )
+        .with_token(crate::run::RunToken::new("tok_REACH")),
+    );
+    run.clone()
+        .scope(pipeline.run_explicit("q", plan, Finish::Silent, None))
+        .await
+        .unwrap();
+    let expected = Some((
+        run.id.to_string(),
+        "ada".to_string(),
+        Some("tok_REACH".to_string()),
+    ));
+    let seen = probe.0.lock().unwrap();
+    assert_eq!(seen.len(), 6, "nested plan + four map items + the subagent");
+    assert!(seen.iter().all(|entry| *entry == expected), "{seen:?}");
 }

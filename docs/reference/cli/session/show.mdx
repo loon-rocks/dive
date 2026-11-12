@@ -1,0 +1,45 @@
+---
+title: "dive session show"
+sidebarTitle: "show"
+description: "Show a session's runs and messages"
+playground: "none"
+keywords: ["dive session show"]
+---
+
+## Arguments
+
+<ParamField path="ID" type="string" required>
+  The session id, as `dive session list` prints it
+</ParamField>
+
+## Options
+
+<ParamField query="--state" type="boolean">
+  Include the full runtime state
+</ParamField>
+
+<ParamField query="--json" type="boolean">
+  Print a JSON envelope instead of text
+</ParamField>
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive session show [OPTIONS] <ID>
+```
+
+```bash Example 1
+dive session show 4f1c9a2b7d3e
+```
+
+```bash Example 2
+dive session show 4f1c9a2b7d3e --state --json
+```
+
+</RequestExample>
