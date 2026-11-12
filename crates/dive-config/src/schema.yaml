@@ -316,6 +316,36 @@ properties:
       environment:
         type: string
         description: Which environment ran it, such as `staging` or `production`. Defaults to `local`. Required in serve mode.
+  serve:
+    type: object
+    description: How `dive serve` runs Dive as an HTTP service. Belongs in the project config. Without it, or with no `public_keys`, `dive serve` refuses to start unless you pass `--dev-key`.
+    properties:
+      listen:
+        type: string
+        description: The address and port to listen on. Defaults to `0.0.0.0:8080`. `--listen` overrides it.
+      issuer:
+        type: string
+        description: The `iss` every run token must carry. Required unless you pass `--dev-key`.
+      audience:
+        type: string
+        description: The value a run token's `aud` must contain. Required unless you pass `--dev-key`.
+      public_keys:
+        type: array
+        description: Paths to the PEM public keys that verify run tokens, as Ed25519, P-256 (ES256) or RSA (RS256) keys. List more than one to rotate keys.
+        items:
+          type: string
+      max_runs:
+        type: integer
+        description: How many runs this process runs at once. At the limit, `/readyz` returns 503 and starts get `at_capacity`. Defaults to 32.
+      max_runs_per_tenant:
+        type: integer
+        description: How many runs one tenant runs at once on this process. Over it, starts get `at_capacity`. Defaults to 8.
+      heartbeat_secs:
+        type: integer
+        description: Seconds without traffic before an entry stream sends a heartbeat comment. Defaults to 15.
+      shutdown_grace_secs:
+        type: integer
+        description: Seconds a stopping process gives its runs to end before it exits. Defaults to 30.
   prompts:
     type: object
     description: Deprecated. Customize agents with agent files instead.
@@ -458,6 +488,14 @@ x-environment:
         values:
           file: Under `settings.data_dir`.
           memory: In memory only. Nothing is kept between runs.
+  - group: HTTP service
+    variables:
+      - name: DIVE_SERVE_DOCS
+        type: string
+        description: Set to any value other than `0` to have `dive serve` serve its OpenAPI document at `/openapi.json` and an API reference page at `/docs`.
+      - name: DIVE_ENV
+        type: string
+        description: Set to `production` to make `dive serve` refuse `--dev-key`, as `[identity].environment = "production"` also does.
   - group: Workbench
     variables:
       - name: DIVE_WORKBENCH_LOG

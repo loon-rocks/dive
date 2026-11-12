@@ -5,3 +5,13 @@ user = "ada"
 tenant = "acme"
 deployment = "ci"
 environment = "staging"
+
+[serve]
+listen = "0.0.0.0:8080"
+issuer = "https://app.example.com"
+audience = "dive"
+public_keys = ["/etc/dive/keys/app.pem"]
+max_runs = 32
+max_runs_per_tenant = 8
+heartbeat_secs = 15
+shutdown_grace_secs = 30

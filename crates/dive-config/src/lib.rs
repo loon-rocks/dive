@@ -24,7 +24,7 @@ pub use model::{
     builtin_description, describe_kinds, describe_missing_env, Config, FallbackChoice,
     FilesBackend, FilesConfig, FilesMode, IdentityConfig, McpOAuth, McpServerConfig, MissingEnv,
     ModelChoice, ModelKind, ModelPrice, ModelRoles, PlanPaths, PriceTier, ProjectConfig,
-    PromptConfig, ProviderConfig, ProviderKind, Rates, Role, Settings, StorageBackend,
+    PromptConfig, ProviderConfig, ProviderKind, Rates, Role, ServeConfig, Settings, StorageBackend,
     StorageConfig, TelemetryConfig, TelemetryProtocol, TokenCounts, ToolOverride, ToolPaths,
     TraceConfig, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
 };

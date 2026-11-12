@@ -11,15 +11,17 @@ description: >
   Checks whether a PR changes a file-version schema without a version bump.
   Exits successfully (zero LLM calls) when none of the model files changed;
   otherwise an inferred exit gate reads the model diff alongside the
-  format-constant diff and asserts an error when a schema change of any
-  kind shipped without raising the constant. Process exit code 4 on
-  assertion.
+  format-constant diff since the last release and asserts an error when a
+  schema change of any kind shipped without the constant being raised since
+  that release. A version already raised on main and not yet released covers
+  later changes to the same file kind. Process exit code 4 on assertion.
 input_schema:
   type: object
-  required: [base, head]
+  required: [base, head, released]
   properties:
     base: { type: string, description: Base ref or sha of the PR }
     head: { type: string, description: Head ref or sha of the PR }
+    released: { type: string, description: Tag of the last release, which the format constants are compared against }
 steps:
   - id: E0
     tool_name: github__tool__git_diff
@@ -41,12 +43,12 @@ steps:
   - id: E2
     tool_name: github__tool__git_diff
     input:
-      base: "{{input.base}}"
+      base: "{{input.released}}"
       head: "{{input.head}}"
       paths: "crates/dive-config/src/format.rs crates/dive-core/src/format.rs crates/dive-store/src/file.rs"
       exclude: ""
       max_bytes: 40000
-    reasoning: Where the version constants and migration chains live; a raised `*_FORMAT` constant shows here as a changed line.
+    reasoning: Where the version constants and migration chains live, diffed from the last release; a constant raised since then, in this PR or earlier on main, shows here as a changed line. One raise per release covers every schema change to that kind until it ships.
   - id: E3
     tool_name: exit
     input:
@@ -64,9 +66,14 @@ steps:
 
         For each kind whose model files appear in the MODEL DIFF, in order:
 
+        The FORMAT DIFF runs from the last release to this PR's head, so it
+        shows every raise since that release, whether it landed earlier on
+        main or in this PR. The MODEL DIFF covers only this PR.
+
         1. If the FORMAT DIFF raises that kind's constant (a line like
            `pub const CONFIG_FORMAT: u32 = 1;` replaced by a higher number),
-           the kind is ACCOUNTED FOR, whatever its model diff contains. A
+           the kind is ACCOUNTED FOR, whatever its model diff contains: the
+           unreleased version absorbs this change. A
            raised constant covers every schema change of every size —
            removed types, renamed fields, whole structs replaced. Do not
            weigh the size of the change against the bump. Move to the next

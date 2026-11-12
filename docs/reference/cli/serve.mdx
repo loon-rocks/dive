@@ -1,0 +1,53 @@
+---
+title: "dive serve"
+sidebarTitle: "dive serve"
+description: "Run Dive as an HTTP service that starts, streams and cancels plan runs"
+playground: "none"
+keywords: ["dive serve"]
+---
+
+Serves the plans in this project's `.dive/` over HTTP. Each request carries a run token, a JWT signed by your app and checked against the keys in `[serve].public_keys`. Reads only the project config, as serve mode always does. `--dev-key` signs and trusts a local key instead, for development, and is refused when `DIVE_ENV` or `[identity].environment` is `production`.
+
+## Options
+
+<ParamField query="--listen" type="string">
+  Address and port to listen on; overrides `[serve].listen`
+
+  Format: `ADDR`.
+</ParamField>
+
+<ParamField query="--dir" type="string">
+  Project directory to serve, the one holding `.dive/`; defaults to the current directory
+
+  Format: `PATH`.
+</ParamField>
+
+<ParamField query="--dev-key" type="boolean">
+  Sign and trust a local development key, created in the data directory on first use
+</ParamField>
+
+## Available commands
+
+- [`dive serve token`](/reference/cli/serve/token): Print a run token signed with the local development key
+
+## Global options
+
+<ParamField query="-v, --verbose" type="integer">
+  Increase log verbosity (-v info, -vv debug, -vvv trace)
+</ParamField>
+
+<RequestExample>
+
+```bash Usage
+dive serve [OPTIONS] [COMMAND]
+```
+
+```bash Example 1
+dive serve --dev-key --listen 127.0.0.1:8080
+```
+
+```bash Example 2
+dive serve token --plan triage --tenant acme --sub ada@example.com
+```
+
+</RequestExample>

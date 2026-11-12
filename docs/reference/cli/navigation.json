@@ -70,6 +70,13 @@
     "root": "reference/cli/secret"
   },
   {
+    "group": "dive serve",
+    "pages": [
+      "reference/cli/serve/token"
+    ],
+    "root": "reference/cli/serve"
+  },
+  {
     "group": "dive mcp",
     "pages": [
       "reference/cli/mcp/list",

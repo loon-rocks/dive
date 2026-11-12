@@ -1,0 +1,66 @@
+---
+title: "Run tokens"
+description: "The JWT your app signs for each request to dive serve, and what Dive checks in it."
+keywords: ["jwt", "run token", "scope", "jti", "tenant", "EdDSA", "ES256", "RS256"]
+---
+
+Every request to `dive serve` except `/healthz`, `/readyz`, `/openapi.json` and `/docs` carries `Authorization: Bearer <token>`. The token is a JWT your app signs with its private key. Dive verifies it with the public keys in [`[serve].public_keys`](/reference/configuration#param-serve-public-keys).
+
+## Claims
+
+| Claim | Checked |
+| --- | --- |
+| `iss` | Equals `[serve].issuer`. |
+| `aud` | Contains `[serve].audience`. |
+| `exp` | Not past, with 30 seconds of leeway. `nbf`, when present, is checked the same way. |
+| `sub` | Present. It becomes the owner of the session a start creates. |
+| `tenant` | Present. It's stamped on the session, and every read checks it. |
+| `scope` | Space-separated scopes, such as `plans:read runs:read runs:cancel`. |
+| `plan` | On a start, equals the plan in the path. |
+| `jti` | On a start, not used by any earlier run: 1 to 128 letters, digits, `-`, `_`, `.` or `~`. It becomes the run's id. |
+
+```json Start token
+{
+  "iss": "https://app.example.com",
+  "aud": "dive",
+  "sub": "ada@example.com",
+  "tenant": "acme",
+  "plan": "triage",
+  "jti": "7f3c2a90-4d1e-4f7a-9b8e-2c4d6e8f0a1b",
+  "iat": 1762880531,
+  "exp": 1762880831
+}
+```
+
+## Scopes
+
+| Request | Needs |
+| --- | --- |
+| `GET /v1/plans`, `GET /v1/plans/{plan}` | `plans:read` |
+| `POST /v1/plans/{plan}/runs` | A `plan` claim equal to `{plan}`, and an unused `jti` |
+| `GET /v1/runs/{run}`, `GET /v1/runs/{run}/entries` | `runs:read` |
+| `POST /v1/runs/{run}/cancel` | `runs:cancel` |
+
+Sign a fresh start token for each run. Reads and cancels use a token with scopes and no `plan` claim.
+
+## Keys and algorithms
+
+- **Algorithms.** EdDSA (Ed25519), ES256 (P-256) and RS256. A token signed with HMAC, or not signed, is refused.
+- **Keys.** Each entry in `public_keys` is a PEM public key. List the old and new keys while you rotate.
+- **Tenants.** A run that belongs to another tenant is `404 not_found`, the same as a run that doesn't exist, so a token can't probe for another tenant's run ids.
+
+## Retrying a start
+
+A start whose `jti` already started a run gets `409 idempotency_violation`, with the run and its session in the body. When the earlier run belongs to another tenant, the body names neither. When a start's connection drops before you see the response, retry with the same token: you either start the run or learn which run it already started, and can watch that one.
+
+```json
+{ "error": { "code": "idempotency_violation", "message": "run 7f3c… already started", "run_id": "7f3c…", "session_id": "a91e04c2b7d1" } }
+```
+
+## Where the token goes
+
+Dive keeps a start's token with the run while it runs, and nothing else: it never reaches prompts, tool arguments, entries, logs or exec tool environments.
+
+## Development tokens
+
+`dive serve --dev-key` trusts a key it keeps in the data directory, and [`dive serve token`](/reference/cli/serve/token) signs tokens with it, with a fresh `jti` and an `exp` an hour out. With no `[serve].issuer` or `audience`, development tokens use `dive-dev` and `dive`. `--dev-key` and `dive serve token` are refused when `DIVE_ENV` or `[identity].environment` is `production`.

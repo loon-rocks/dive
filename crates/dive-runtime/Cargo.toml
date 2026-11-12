@@ -28,6 +28,7 @@ tokio-util = "0.7"
 async-trait.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+futures.workspace = true
 ignore = "0.4"
 globset = "0.4"
 tracing-subscriber.workspace = true
