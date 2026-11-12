@@ -71,7 +71,9 @@ jobs:
 
 
       - name: Format drift gate
-        run: dive plan run format_drift --input base="$BASE" --input head="$HEAD"
+        run: |
+          RELEASED=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$BASE")
+          dive plan run format_drift --input base="$BASE" --input head="$HEAD" --input released="$RELEASED"
 
   dogfood-files:
     if: >-

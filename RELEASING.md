@@ -180,8 +180,12 @@ only at a major release. A bump ships as one PR containing all of:
    versions.
 
 The `format_drift` check (`.dive/plans/format_drift.yaml`, run by
-`dive-checks.yaml`) fails a PR that changes a model file's schema without
-step 1; the fixture tests catch a removed or renamed key mechanically. At
+`dive-checks.yaml`) fails a PR that changes a model file's schema when the
+matching constant hasn't been raised since the last release tag. A version
+raised on `main` and not yet released absorbs later changes to that file
+kind, so they need no second bump; give them their own fixtures under the
+unreleased version. The fixture tests catch a removed or renamed key
+mechanically. At
 release time the script diffs the seven constants between the last tag and
 `HEAD`, checks step 4 both ways, writes the result into the
 tag message (`file versions: config 2 (from 1), plan 1, tool 1, store 1` —
