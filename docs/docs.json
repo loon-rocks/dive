@@ -178,6 +178,14 @@
             ]
           },
           {
+            "group": "HTTP service",
+            "root": "serve/overview",
+            "pages": [
+              "serve/run-tokens",
+              "serve/api"
+            ]
+          },
+          {
             "group": "Observability",
             "pages": [
               "integrating/observability/opentelemetry",

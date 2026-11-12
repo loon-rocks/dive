@@ -32,6 +32,8 @@ pub struct Config {
     #[serde(default)]
     pub identity: IdentityConfig,
     #[serde(default)]
+    pub serve: Option<ServeConfig>,
+    #[serde(default)]
     pub prompts: PromptConfig,
     #[serde(default)]
     pub workbench: WorkbenchConfig,
@@ -994,6 +996,34 @@ pub struct IdentityConfig {
     pub tenant: Option<String>,
     pub deployment: Option<String>,
     pub environment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct ServeConfig {
+    pub listen: String,
+    pub issuer: Option<String>,
+    pub audience: Option<String>,
+    pub public_keys: Vec<String>,
+    pub max_runs: usize,
+    pub max_runs_per_tenant: usize,
+    pub heartbeat_secs: u64,
+    pub shutdown_grace_secs: u64,
+}
+
+impl Default for ServeConfig {
+    fn default() -> Self {
+        Self {
+            listen: "0.0.0.0:8080".to_string(),
+            issuer: None,
+            audience: None,
+            public_keys: Vec::new(),
+            max_runs: 32,
+            max_runs_per_tenant: 8,
+            heartbeat_secs: 15,
+            shutdown_grace_secs: 30,
+        }
+    }
 }
 
 #[cfg(test)]

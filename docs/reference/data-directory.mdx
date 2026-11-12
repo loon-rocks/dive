@@ -17,6 +17,7 @@ Dive keeps its runtime state in one directory, `~/.local/share/dive` by default.
 | `sessions/<id>/.lock` | A lock file that keeps concurrent writers in order. |
 | `runs/<run_id>.json` | One run: its session, kind, `status`, the `first_seq` and `last_seq` of its entries, trace id, whether a cancel was asked for and by whom, who started it, and when it started and ended. |
 | `threads/` | Conversations from data directories before version 5, left as they were when Dive converted them into sessions. Dive no longer reads them, and a later release will stop keeping them. Storage usage counts sessions and runs, not this folder. |
+| `serve/dev-key.pem` | The development key [`dive serve --dev-key`](/serve/run-tokens#development-tokens) signs and trusts, created on first use. Only for development. |
 | `files/<hash>.<ext>` | Files that tools return and that you attach, such as images, named by a SHA-256 hash of their contents. Only when [`[storage.files]`](/reference/configuration#param-storage-files) keeps files on disk, the default. |
 | `cache/files/<hash>.<ext>` | Files downloaded from an S3 bucket, kept to 512 MB by dropping the least recently used. Safe to delete. |
 | `shapes/<tool>.json` | The observed output of one tool: an inferred schema, an example, and how many times it was seen. |
@@ -70,7 +71,8 @@ Each line of `entries.jsonl` is one entry, written as soon as it finishes. Every
 | `handoff` | One agent handing the conversation to another: `from`, `to`, `message` and `via`. |
 | `agent_started`, `agent_finished` | A subagent call: `agent`, `caller` and `input` when it starts, then its messages with the path `agent:<name>`, then `agent`, `output` and `final` when it ends. |
 | `cancel_requested` | Someone asked to cancel the run: `by`. |
-| `plan_started`, `plan_finished`, `step_started`, `step_finished`, `item_started`, `item_finished`, `tool_called`, `ask`, `answer`, `compaction`, `run_resumed` | Reserved for the steps of plan runs and later features. Dive doesn't write them yet. |
+| `step_started`, `step_finished` | A plan step starting and finishing: `step` (its id, such as `E3` or `E3/do.2/E10`), then `tool` and the rendered `input` when it starts, and `output` and `is_error` when it finishes. The entry's `path` is `step:<id>`, prefixed with `plan:<name>/` for each plan the step was called from. Only runs started by [`dive serve`](/serve/overview) write them for now. |
+| `plan_started`, `plan_finished`, `item_started`, `item_finished`, `tool_called`, `ask`, `answer`, `compaction`, `run_resumed` | Reserved for the steps of plan runs and later features. Dive doesn't write them yet. |
 
 A user's `message` entry carries `images` when images were attached to it: their [file references](/integrating/mcp/guides/images-and-files), such as `blob:sha256-….png`. Dive loads those files and sends them to the model with the message on every turn.
 

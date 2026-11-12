@@ -285,3 +285,25 @@ fn the_identity_section_names_who_runs_dive_and_where() {
         .identity;
     assert_eq!(absent, dive_config::IdentityConfig::default());
 }
+
+#[test]
+fn the_serve_section_configures_dive_serve_and_is_absent_by_default() {
+    let path = fixture_dir(CONFIG_FORMAT).join("identity.toml");
+    let serve = load_from(std::slice::from_ref(&path))
+        .unwrap()
+        .config
+        .serve
+        .unwrap();
+    assert_eq!(serve.issuer.as_deref(), Some("https://app.example.com"));
+    assert_eq!(
+        serve.public_keys,
+        vec!["/etc/dive/keys/app.pem".to_string()]
+    );
+    assert_eq!(serve.max_runs_per_tenant, 8);
+    let minimal = fixture_dir(CONFIG_FORMAT).join("minimal.toml");
+    assert!(load_from(std::slice::from_ref(&minimal))
+        .unwrap()
+        .config
+        .serve
+        .is_none());
+}

@@ -1,0 +1,101 @@
+---
+title: "Run plans over HTTP"
+description: "dive serve runs Dive as an HTTP service: your app starts plan runs, watches their entries and cancels them."
+keywords: ["dive serve", "http", "api", "service", "sse", "run token"]
+---
+
+`dive serve` serves the plans in a project's `.dive/` over HTTP. Your app's backend starts a plan run with one request and gets the run's id back at once. The run keeps going after the request ends. Any client with a token for the run's tenant can then read the run, watch its entries as they're written, or cancel it.
+
+Every request carries a run token: a JWT your app signs with its private key. Dive holds only the public key. See [Run tokens](/serve/run-tokens).
+
+## Try it locally
+
+<Steps>
+  <Step title="Start the server with a development key">
+    In a project with plans in `.dive/plans/`:
+
+    ```bash
+    DIVE_SERVE_DOCS=1 dive serve --dev-key --listen 127.0.0.1:8080
+    ```
+
+    `--dev-key` creates an Ed25519 key in the data directory the first time, as `serve/dev-key.pem`, and trusts it. Without `[identity]` in the project config, runs are recorded with deployment `serve` and environment `development`. `DIVE_SERVE_DOCS` turns on the API reference at `http://127.0.0.1:8080/docs`.
+  </Step>
+  <Step title="Get tokens">
+    In another terminal, in the same project:
+
+    ```bash
+    START=$(dive serve token --plan triage --tenant acme --sub ada@example.com)
+    READ=$(dive serve token --tenant acme --sub ada@example.com)
+    ```
+
+    The first token starts one run of `triage`. The second reads and cancels the tenant's runs. Each lasts an hour.
+  </Step>
+  <Step title="Start a run">
+    ```bash
+    curl -s http://127.0.0.1:8080/v1/plans/triage/runs \
+      -H "Authorization: Bearer $START" \
+      -H "Content-Type: application/json" \
+      -d '{"input": {"issue": "ENG-142"}}'
+    ```
+
+    ```json
+    { "run_id": "0b6f…", "session_id": "a91e04c2b7d1", "status": "running", "entries_url": "/v1/runs/0b6f…/entries" }
+    ```
+  </Step>
+  <Step title="Watch it">
+    ```bash
+    curl -N http://127.0.0.1:8080/v1/runs/0b6f…/entries -H "Authorization: Bearer $READ"
+    ```
+
+    Entries arrive as server-sent events until the run ends. Then read the result:
+
+    ```bash
+    curl -s http://127.0.0.1:8080/v1/runs/0b6f… -H "Authorization: Bearer $READ"
+    ```
+  </Step>
+</Steps>
+
+## How it runs
+
+- **Serve mode.** `dive serve` reads only the project's `.dive/config.toml` and the plans and tools inside the project. It ignores `~/.config/dive`, records no tool shapes, refuses drafting saves, and starts exec tools from an empty environment. See [`[serve]`](/reference/configuration#param-serve).
+- **Sessions and runs.** Each start creates a new plan [session](/reference/data-directory#sessions-and-runs) holding one run, stamped with the token's `tenant` and `sub`. The run's id is the token's `jti`.
+- **Plans you can start.** Plans from the project's plan directories and from installed packs, except a pack's private plans. Built-in plans aren't served.
+- **Asks.** Nobody can answer an `ask` step yet, so each one follows its `whenUnanswered`.
+- **Limits.** `[serve].max_runs` caps the runs one process runs at once, and `max_runs_per_tenant` caps one tenant's. A start over either limit gets `429 at_capacity`. At `max_runs`, `/readyz` returns 503 so a load balancer sends starts elsewhere.
+- **Stopping.** On SIGTERM or Ctrl-C, the server stops taking new connections, `/readyz` returns 503, and every running plan run stops before its next tool call and ends `interrupted`. Open streams close after the `run_ended` entry reaches them. A run still inside a tool call 2 seconds before `[serve].shutdown_grace_secs` runs out is ended `interrupted` without waiting for the tool, and the process exits.
+- **After a crash.** A run whose process stopped keeps its lease for 30 seconds. `dive serve` checks for expired leases when it starts and every 10 seconds while it runs, and ends those runs `interrupted`.
+
+<Note>
+  One `dive serve` process per data directory for now. Running several replicas against one store comes with a Postgres store.
+</Note>
+
+## Configure a deployment
+
+```toml .dive/config.toml
+version = 7
+
+[identity]
+deployment = "app"
+environment = "production"
+
+[serve]
+listen = "0.0.0.0:8080"
+issuer = "https://app.example.com"
+audience = "dive"
+public_keys = ["/etc/dive/keys/app-2026-11.pem"]
+max_runs = 32
+max_runs_per_tenant = 8
+```
+
+Serve mode needs `[identity].deployment` and `[identity].environment`. Without `--dev-key`, `dive serve` refuses to start when `[serve]`, `issuer`, `audience` or `public_keys` is missing. Relative key paths are read from the project directory.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Run tokens" icon="key" href="/serve/run-tokens">
+    The claims Dive checks and the scopes each endpoint needs.
+  </Card>
+  <Card title="API" icon="code" href="/serve/api">
+    Every endpoint, the entry stream and the errors.
+  </Card>
+</CardGroup>

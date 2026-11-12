@@ -1,0 +1,797 @@
+{
+  "components": {
+    "schemas": {
+      "EntryDoc": {
+        "properties": {
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "author": {
+            "example": "run",
+            "type": "string"
+          },
+          "kind": {
+            "example": "step_finished",
+            "type": "string"
+          },
+          "parent": {
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "path": {
+            "example": "step:E3",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "run_id",
+          "at",
+          "author",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ErrorBody": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "example": "not_found",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "PlanBody": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "identifier": {
+            "example": "triage",
+            "type": "string"
+          },
+          "input_schema": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "result_schema": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "identifier",
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "PlanList": {
+        "properties": {
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanBody"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "type": "object"
+      },
+      "RunBody": {
+        "properties": {
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_seq": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_seq": {
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outcome": {
+            "example": "ok",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plan": {
+            "example": "triage",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "started_at": {
+            "example": "2026-11-11T17:02:11Z",
+            "type": "string"
+          },
+          "status": {
+            "example": "completed",
+            "type": "string"
+          },
+          "usage": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "status",
+          "first_seq",
+          "cancel_requested",
+          "started_at"
+        ],
+        "type": "object"
+      },
+      "StartBody": {
+        "properties": {
+          "input": {
+            "type": "object"
+          },
+          "title": {
+            "example": "Triage ENG-142",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "type": "object"
+      },
+      "StartedBody": {
+        "properties": {
+          "entries_url": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "status": {
+            "example": "running",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "session_id",
+          "status",
+          "entries_url"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "run_token": {
+        "bearerFormat": "JWT",
+        "description": "A run token your app signs. See the Dive docs, Serve > Run tokens.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Start plan runs, watch their entries and cancel them over HTTP.",
+    "license": {
+      "name": "MIT"
+    },
+    "title": "Dive",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/plans": {
+      "get": {
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanList"
+                }
+              }
+            },
+            "description": "The deployed plans"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "forbidden"
+          }
+        },
+        "security": [
+          {
+            "run_token": [
+              "plans:read"
+            ]
+          }
+        ],
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/v1/plans/{plan}": {
+      "get": {
+        "operationId": "show",
+        "parameters": [
+          {
+            "description": "The plan's identifier",
+            "in": "path",
+            "name": "plan",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "description": "The plan"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "not_found"
+          }
+        },
+        "security": [
+          {
+            "run_token": [
+              "plans:read"
+            ]
+          }
+        ],
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/v1/plans/{plan}/runs": {
+      "post": {
+        "operationId": "start",
+        "parameters": [
+          {
+            "description": "The plan's identifier",
+            "in": "path",
+            "name": "plan",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedBody"
+                }
+              }
+            },
+            "description": "The run started",
+            "headers": {
+              "Location": {
+                "description": "The run's URL",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "idempotency_violation"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_input"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "at_capacity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "shutting_down or plan_unavailable"
+          }
+        },
+        "security": [
+          {
+            "run_token": []
+          }
+        ],
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run}": {
+      "get": {
+        "operationId": "show",
+        "parameters": [
+          {
+            "description": "The run's id",
+            "in": "path",
+            "name": "run",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunBody"
+                }
+              }
+            },
+            "description": "The run"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "not_found"
+          }
+        },
+        "security": [
+          {
+            "run_token": [
+              "runs:read"
+            ]
+          }
+        ],
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run}/cancel": {
+      "post": {
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "description": "The run's id",
+            "in": "path",
+            "name": "run",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunBody"
+                }
+              }
+            },
+            "description": "The cancel was recorded; the run as it stands"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "not_found"
+          }
+        },
+        "security": [
+          {
+            "run_token": [
+              "runs:cancel"
+            ]
+          }
+        ],
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run}/entries": {
+      "get": {
+        "operationId": "entries",
+        "parameters": [
+          {
+            "description": "The run's id",
+            "in": "path",
+            "name": "run",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Replay the entries after this seq, then follow",
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "in": "path",
+            "name": "after",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EntryDoc"
+                  },
+                  "type": "array"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-sent events: `entry` events with `id` set to the entry's seq, `delta` events carrying text as it streams, and `: heartbeat` comments. The stream closes after the `run_ended` entry. With `Accept: application/json`, the entries after `?after=` as a JSON array instead."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "bad_request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "not_found"
+          }
+        },
+        "security": [
+          {
+            "run_token": [
+              "runs:read"
+            ]
+          }
+        ],
+        "tags": [
+          "runs"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "The plans this deployment serves",
+      "name": "plans"
+    },
+    {
+      "description": "Start, read, watch and cancel plan runs",
+      "name": "runs"
+    }
+  ]
+}

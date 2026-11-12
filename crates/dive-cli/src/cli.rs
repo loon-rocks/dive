@@ -87,6 +87,31 @@ pub enum Command {
         #[command(subcommand)]
         command: SecretCommand,
     },
+    #[command(
+        about = "Run Dive as an HTTP service that starts, streams and cancels plan runs",
+        after_long_help = "Serves the plans in this project's `.dive/` over HTTP. Each request carries a run token, a JWT signed by your app and checked against the keys in `[serve].public_keys`. Reads only the project config, as serve mode always does. `--dev-key` signs and trusts a local key instead, for development, and is refused when `DIVE_ENV` or `[identity].environment` is `production`.\n\nExamples:\n  dive serve --dev-key --listen 127.0.0.1:8080\n  dive serve token --plan triage --tenant acme --sub ada@example.com"
+    )]
+    Serve {
+        #[command(subcommand)]
+        command: Option<ServeCommand>,
+        #[arg(
+            long,
+            value_name = "ADDR",
+            help = "Address and port to listen on; overrides `[serve].listen`"
+        )]
+        listen: Option<String>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Project directory to serve, the one holding `.dive/`; defaults to the current directory"
+        )]
+        dir: Option<PathBuf>,
+        #[arg(
+            long,
+            help = "Sign and trust a local development key, created in the data directory on first use"
+        )]
+        dev_key: bool,
+    },
     /// Manage MCP servers
     Mcp {
         #[command(subcommand)]
@@ -1087,4 +1112,32 @@ mod tests {
             }
         }
     }
+}
+
+#[derive(Subcommand)]
+pub enum ServeCommand {
+    #[command(
+        about = "Print a run token signed with the local development key",
+        after_long_help = "Prints a token with a fresh `jti` that expires in an hour, for `dive serve --dev-key`. Pass `--plan` for a token that starts a run of that plan, or `--scope` for one that reads and cancels runs.\n\nExamples:\n  dive serve token --plan triage --tenant acme --sub ada@example.com\n  dive serve token --scope \"runs:read runs:cancel\" --tenant acme --sub ada@example.com"
+    )]
+    Token {
+        #[arg(long, help = "The plan the token may start")]
+        plan: Option<String>,
+        #[arg(long, help = "The tenant the run belongs to")]
+        tenant: String,
+        #[arg(long, help = "The user the run belongs to")]
+        sub: String,
+        #[arg(
+            long,
+            default_value = "plans:read runs:read runs:cancel",
+            help = "Space-separated scopes"
+        )]
+        scope: String,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Project directory, the one holding `.dive/`; defaults to the current directory"
+        )]
+        dir: Option<PathBuf>,
+    },
 }
