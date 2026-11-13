@@ -38,6 +38,7 @@ pub enum RunKind {
     Reshape,
     Decision,
     Image,
+    Http,
     Agent,
     Plan,
 }
@@ -56,6 +57,7 @@ impl TestRunPreview {
             ToolKind::Reshape { .. } => RunKind::Reshape,
             ToolKind::Decision { .. } => RunKind::Decision,
             ToolKind::Image { .. } => RunKind::Image,
+            ToolKind::Http { .. } => RunKind::Http,
         };
         let (program, command, scan) = match &doc.kind {
             ToolKind::Exec { command, args, .. } => {
@@ -63,6 +65,17 @@ impl TestRunPreview {
                 let scan = scan(command, args, &line);
                 (Some(program_name(command)), Some(line), scan)
             }
+            ToolKind::Http { method, url, .. } => (
+                None,
+                Some(format!("{} {url}", method.as_str())),
+                Scan {
+                    effects: Effects {
+                        writes: None,
+                        network: Some(true),
+                    },
+                    ..Scan::default()
+                },
+            ),
             _ => (None, None, Scan::default()),
         };
         Self {
@@ -82,7 +95,12 @@ impl TestRunPreview {
                 .map(|secret| secret.name)
                 .collect(),
             unset: unset.to_vec(),
-            read_only: doc.read_only,
+            read_only: doc.read_only.or(match &doc.kind {
+                ToolKind::Http { method, .. } => {
+                    Some(*method == crate::user_tools::HttpMethod::Get)
+                }
+                _ => None,
+            }),
             uses: Vec::new(),
         }
     }
@@ -134,6 +152,7 @@ impl TestRunPreview {
         match self.runs {
             RunKind::Prompt | RunKind::Reshape | RunKind::Decision => true,
             RunKind::Image | RunKind::Agent | RunKind::Plan => false,
+            RunKind::Http => self.read_only == Some(true) && self.secrets.is_empty(),
             RunKind::Exec => {
                 self.read_only == Some(true)
                     && self.effects.writes == Some(false)
@@ -150,6 +169,7 @@ impl TestRunPreview {
             RunKind::Reshape => "reshapes its input, with no side effects".to_string(),
             RunKind::Decision => "asks the decision model its questions".to_string(),
             RunKind::Image => "generates an image with the image model".to_string(),
+            RunKind::Http => format!("sends: {}", self.command.as_deref().unwrap_or_default()),
             RunKind::Agent | RunKind::Plan => {
                 "runs for real, tools and each agent's own model included, and saves nothing"
                     .to_string()

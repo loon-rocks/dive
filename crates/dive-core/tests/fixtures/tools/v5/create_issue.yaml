@@ -1,0 +1,23 @@
+version: 5
+name: create_issue
+description: Creates an issue in the tenant's tracker and returns its id and URL.
+generated: dive-go
+kind: http
+method: POST
+url: "${APP_URL:-http://localhost:8080}/dive/tools/create_issue"
+headers:
+  X-Api-Version: "2026-11"
+timeout_secs: 30
+retry:
+  attempts: 3
+input_schema:
+  type: object
+  required: [title]
+  properties:
+    title: { type: string, description: One-line summary }
+    priority: { type: string, enum: [low, normal, urgent] }
+output_schema:
+  type: object
+  properties:
+    id: { type: string }
+    url: { type: string }

@@ -8,6 +8,7 @@ pub mod context;
 pub mod file_tools;
 pub mod files;
 pub mod format;
+pub mod http_tool;
 pub mod list_tools;
 pub mod packs;
 pub mod pipeline;

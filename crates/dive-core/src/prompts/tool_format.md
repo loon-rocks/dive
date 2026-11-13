@@ -4,7 +4,7 @@ Top-level keys:
 - `version`: the file version; leave it out and Dive stamps the current one.
 - `name` (required): letters, digits, `_` and `-` only. Short and specific: `weather_now`, `gh_pr_checks`.
 - `description` (required): what the tool returns and when to use it. Planners pick tools by this text, so name the system, the input and what comes back ("Current weather for a city from wttr.in: temperature, sky, wind").
-- `kind` (required): `exec`, `prompt`, `reshape` or `decision`.
+- `kind` (required): `exec`, `http`, `prompt`, `reshape` or `decision`.
 - `input_schema`: a JSON Schema object. Give every property a `type` and a `description`, and list the ones that must be present in `required`. The input is checked against it before every call.
 - `output_schema`: a JSON Schema for the result. Only declare it when you know the shape; a test run records the observed shape anyway.
 - `read_only`: `true` when the tool only reads (fetches, lists, computes), `false` when it writes, sends, posts, deletes or changes anything. Be honest: plans and agents treat a tool that isn't read-only with more care.
@@ -29,6 +29,14 @@ Templates in a tool reference only its input: `{{input.city}}`, `{{input.repo}}`
 - Files in: an input property with `format: blob` (or an array whose `items` have it) takes a file ref such as `blob:sha256-….png`, and the command receives it as a local path. Declare every input that takes a file this way; any other input gets the ref as plain text.
 - Files out: declare each file the command writes under `files` at the top level of the tool, `files: {report: {name: report.pdf}}`, and pass `{{files.report.path}}` in `args`; for several, declare a pattern such as `page-*.png` and pass `{{files.pages.dir}}`. When the command exits 0, each file is listed under the result's `files` with its `name`, `ref`, `mime` and `bytes`; with `output: json`, stdout may then be empty. Never print a file's bytes or base64 to stdout.
 A non-zero exit, a timeout, or `json` output that doesn't parse comes back as a tool error with stderr.
+
+`http` makes one HTTP request to an app's endpoint and returns the response body:
+- `url` (required): the URL, with `{{input.*}}` templates in its path (each is percent-encoded) and `${VAR}` for a base URL that differs between machines, such as `"${APP_URL:-http://localhost:8080}/tools/lookup"`.
+- `method`: `GET`, `POST` (the default), `PUT`, `PATCH` or `DELETE`. `POST`, `PUT` and `PATCH` send the input as the JSON body; `body` sends a template tree over `{{input.*}}` instead.
+- `query`: query parameters, each a template over `{{input.*}}`.
+- `headers`: extra headers, with `${VAR}` for a static credential and a `description`-free value; never `Authorization` when the app takes the run token.
+- `retry: {attempts: 3}` when the endpoint is safe to retry; Dive sends the same `Idempotency-Key` on every attempt.
+Dive sends the run token and the run's id itself, to the origins the config trusts, so never put a token in the file. Prefer `http` over `exec` with `curl` when the tool calls the app Dive is deployed beside. A 4xx comes back as a tool error with the app's message.
 
 `prompt` makes one model call:
 - `prompt` (required): the instruction, with `{{input.*}}` templates.

@@ -5,7 +5,8 @@
     "tools/reference/tool-file/prompt",
     "tools/reference/tool-file/reshape",
     "tools/reference/tool-file/decision",
-    "tools/reference/tool-file/image"
+    "tools/reference/tool-file/image",
+    "tools/reference/tool-file/http"
   ],
   "root": "tools/reference/tool-file"
 }

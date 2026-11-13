@@ -126,6 +126,121 @@
       "title": "exec"
     },
     {
+      "description": "Makes one HTTP request per call and returns the response body. Every request carries `Idempotency-Key` (the same on every retry of the call), `Dive-Run-Id`, `Dive-Call-Path` and `User-Agent: dive/<version>`, plus `traceparent` when the run has a trace. When the run has a run token and the URL's origin is listed in [`[http].token_origins`](/reference/configuration#param-http), the token goes as `Authorization: Bearer <token>`; it never goes anywhere else, and never into the run's entries or logs. Redirects aren't followed: a 3xx is a tool error naming its `Location`. A 2xx body is the result. Any other answer is a tool error named for its kind, taken from the body's `error.code` or else the status: refused (422), rejected input (400), the run token refused (401, 403), an internal error (500, never retried; a `ref` in the body is quoted), unavailable (429, 502, 503) or timed out (408, 504). Unavailable, timed out, a network error and no answer within `timeout_secs` are retried per `retry`. The message quotes the body's `error.message`, or the start of the body.",
+      "examples": [
+        {
+          "description": "Creates an issue in the tenant's tracker and returns its id and URL.",
+          "input_schema": {
+            "properties": {
+              "title": {
+                "description": "One-line summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "type": "object"
+          },
+          "kind": "http",
+          "method": "POST",
+          "name": "create_issue",
+          "output_schema": {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "retry": {
+            "attempts": 3
+          },
+          "url": "${APP_URL}/dive/tools/create_issue",
+          "version": 5
+        }
+      ],
+      "properties": {
+        "body": {
+          "description": "`POST`, `PUT` and `PATCH` send the whole input as JSON. A body template, a JSON tree whose leaf strings are templates over `{{input.*}}` like a `reshape` tool's `shape`, sends that object instead. `GET` and `DELETE` send no body."
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra headers. Values expand `${VAR}` like exec `env`, so a static credential can come from a secret, but can't use `{{input.*}}`. A tool can't set `Authorization` on a call that also carries the run token; send its credential in another header.",
+          "type": "object"
+        },
+        "kind": {
+          "const": "http"
+        },
+        "max_response_bytes": {
+          "default": 4194304,
+          "description": "The largest body read; a larger one is a tool error.",
+          "type": "integer"
+        },
+        "method": {
+          "default": "POST",
+          "description": "The HTTP method.",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "type": "string"
+        },
+        "output": {
+          "default": "json",
+          "description": "`json` parses the body as JSON, with an empty body as `{}`; `text` returns it as `{text}`.",
+          "enum": [
+            "json",
+            "text"
+          ],
+          "type": "string"
+        },
+        "query": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Query parameters, each value a template over `{{input.*}}`. A value that is a single template whose input is missing is left out.",
+          "type": "object"
+        },
+        "retry": {
+          "additionalProperties": false,
+          "description": "Retries for a network error, no answer within `timeout_secs`, or an answer that says the app is unavailable or timed out (429, 502, 503, 408, 504, or `error.code` `unavailable` or `timeout`). An internal error (500) is never retried. Without it, a call is tried once.",
+          "properties": {
+            "attempts": {
+              "description": "Total attempts, the first included. Retries wait 1, 2, then 4 seconds, or what `Retry-After` says.",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "attempts"
+          ],
+          "type": "object"
+        },
+        "timeout_secs": {
+          "default": 30,
+          "description": "Seconds before one attempt times out.",
+          "type": "integer"
+        },
+        "url": {
+          "description": "The URL, as a template over `{{input.*}}`; each value spliced in is percent-encoded. `${VAR}` resolves the same way as an exec tool's `env`, so a base URL can be `${APP_URL}` and a secret can sit in the URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "http"
+    },
+    {
       "description": "One model call. The result is `{text}`, or validated JSON when `output_schema` is set.",
       "examples": [
         {
@@ -362,6 +477,10 @@
       "description": "What the tool does and returns. Agents and the plan drafter read it when choosing tools.",
       "type": "string"
     },
+    "generated": {
+      "description": "The generator that wrote this file, such as `dive-go`. Set by the generator, never by hand. The desktop app and the drafters show a generated tool but don't edit or overwrite it; change it in the code it's generated from, then regenerate.",
+      "type": "string"
+    },
     "input_schema": {
       "description": "JSON Schema for the input, validated before the tool runs. Templates reference it as `{{input.<field>}}`.",
       "type": "object"
@@ -370,6 +489,7 @@
       "description": "What the tool runs. Each kind takes its own fields, listed below.",
       "enum": [
         "exec",
+        "http",
         "prompt",
         "reshape",
         "decision",
@@ -387,7 +507,7 @@
       "type": "object"
     },
     "read_only": {
-      "description": "Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.",
+      "description": "Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default, and so is an `http` tool whose method is `GET`.",
       "type": "boolean"
     },
     "version": {

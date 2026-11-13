@@ -6,7 +6,25 @@ use std::future::Future;
 use std::sync::Arc;
 
 tokio::task_local! {
+    static CALL_PATH: String;
     static RUN: Arc<Run>;
+}
+
+pub fn step_path(call_stack: &[String], path: &str) -> String {
+    call_stack
+        .iter()
+        .map(|plan| format!("plan:{plan}"))
+        .chain(std::iter::once(format!("step:{path}")))
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+pub async fn in_call<F: Future>(path: String, future: F) -> F::Output {
+    CALL_PATH.scope(path, future).await
+}
+
+pub fn call_path() -> Option<String> {
+    CALL_PATH.try_with(Clone::clone).ok()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]

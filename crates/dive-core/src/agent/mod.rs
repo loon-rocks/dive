@@ -268,9 +268,8 @@ impl Agent {
                 crate::trace::span(crate::trace::FrameKind::Tool, open, async {
                     self.events.tool_started(&call.name, &call.arguments);
                     let started = Instant::now();
-                    let outcome = self
-                        .registry
-                        .invoke(&call.name, call.arguments.clone())
+                    let outcome = self.registry.invoke(&call.name, call.arguments.clone());
+                    let outcome = crate::run::in_call(format!("call:{}", call.id), outcome)
                         .await
                         .unwrap_or_else(|e| ToolOutcome {
                             result: e.result(),

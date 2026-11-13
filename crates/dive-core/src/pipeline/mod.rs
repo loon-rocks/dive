@@ -1217,7 +1217,10 @@ impl Pipeline {
                 CallSite::role(tool_name)
                     .at(&path_text)
                     .in_plans(&self.call_stack)
-                    .scope(self.registry.invoke(tool_name, rendered))
+                    .scope(crate::run::in_call(
+                        crate::run::step_path(&self.call_stack, &path_text),
+                        self.registry.invoke(tool_name, rendered),
+                    ))
                     .await
                     .unwrap_or_else(|e| ToolOutcome {
                         result: json!({"error": e.to_string()}),
