@@ -4,6 +4,11 @@ icon: "clock-rotate-left"
 rss: true
 ---
 
+import SummaryV0_20_0 from '/snippets/changelog/dive/v0.20.0/summary.mdx';
+import Summaryconfig_v8 from '/snippets/changelog/config/v8/summary.mdx';
+import Migrationconfig_v8 from '/snippets/changelog/config/v8/migration.mdx';
+import Summarytool_v5 from '/snippets/changelog/tool/v5/summary.mdx';
+import Migrationtool_v5 from '/snippets/changelog/tool/v5/migration.mdx';
 import SummaryV0_19_0 from '/snippets/changelog/dive/v0.19.0/summary.mdx';
 import MigrationV0_19_0 from '/snippets/changelog/dive/v0.19.0/migration.mdx';
 import SummaryV0_18_0 from '/snippets/changelog/dive/v0.18.0/summary.mdx';
@@ -35,6 +40,49 @@ import SummaryV0_4_0 from '/snippets/changelog/dive/v0.4.0/summary.mdx';
 import SummaryV0_3_0 from '/snippets/changelog/dive/v0.3.0/summary.mdx';
 import SummaryV0_2_0 from '/snippets/changelog/dive/v0.2.0/summary.mdx';
 import SummaryV0_1_0 from '/snippets/changelog/dive/v0.1.0/summary.mdx';
+
+<Update label="Dive v0.20.0" description="November 13, 2026" tags={["Dive"]}>
+<SummaryV0_20_0 />
+
+#### Added
+
+- http tools send the run token to your app, and CLI and desktop runs can act as a dev identity
+
+#### Fixed
+
+- dive serve's OpenAPI document gives the entries stream's after as a query parameter
+
+</Update>
+
+<Update label="Config v8" description="November 13, 2026" tags={["Config"]}>
+<Summaryconfig_v8 />
+
+<Accordion title="Migration required — a prompt for your coding agent" icon="wand-magic-sparkles">
+Existing plans may need updating. Copy this prompt into your coding agent in the repository that carries your plans:
+
+<Migrationconfig_v8 />
+</Accordion>
+
+#### Breaking
+
+- config v8 adds [http].token_origins, [identities] and [dev].identity — config version 8 (dive config migrate)
+
+</Update>
+
+<Update label="Tool v5" description="November 13, 2026" tags={["Tool"]}>
+<Summarytool_v5 />
+
+<Accordion title="Migration required — a prompt for your coding agent" icon="wand-magic-sparkles">
+Existing plans may need updating. Copy this prompt into your coding agent in the repository that carries your plans:
+
+<Migrationtool_v5 />
+</Accordion>
+
+#### Breaking
+
+- tool v5 adds kind: http, which calls an endpoint in your app with the run's token — tool version 5 (dive tool migrate)
+
+</Update>
 
 <Update label="Dive v0.19.0" description="November 13, 2026" tags={["Dive"]}>
 <SummaryV0_19_0 />

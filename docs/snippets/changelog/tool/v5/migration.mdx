@@ -1,0 +1,13 @@
+````markdown
+This repository's Dive tool files need no change for Dive v0.20.0. Dive v0.20.0 reads tool versions 1 through 5, so older files load as they are. Report that and change nothing, unless a tool file in the repo will use `kind: http` or `generated`.
+
+**What changed:** tool version 5 adds `kind: http` and a `generated` key on any kind. The migration from version 4 changes nothing but the version number. Tool files written by a generator, such as the dive-go SDK, are already version 5.
+
+**Steps, only for a tool file that will use the new keys:**
+
+1. Run `dive tool migrate <path>` on that file.
+2. Run `dive tool show user__<name>` and confirm it loads.
+3. If a CI workflow pins `ghcr.io/loon-rocks/dive:vX.Y.Z`, move the pin to `v0.20.0` in the same change. Older images refuse tool version 5.
+
+**Report back:** which tool files you migrated and whether an image pin moved.
+````

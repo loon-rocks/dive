@@ -1,0 +1,14 @@
+````markdown
+This repository's Dive config needs no change for Dive v0.20.0 unless it will use `[http].token_origins`, `[identities]` or `[dev].identity`. Dive v0.20.0 reads config versions 1 through 8, so older files load as they are. If nothing in the repo asks for those keys, report that and change nothing.
+
+**What changed:** config version 8 adds `[http].token_origins`, `[identities.<name>]` and `[dev].identity`. The migration from version 7 changes nothing but the version number.
+
+**Steps, only when the repo will use the new keys:**
+
+1. Run `dive config check` to see each config file's version.
+2. Run `dive config migrate`, and `dive config migrate --global` for a global config that will use them. Read any notes it prints.
+3. Add the keys you need, as described at loon.rocks/docs/tools/guides/call-your-app.
+4. If a CI workflow pins `ghcr.io/loon-rocks/dive:vX.Y.Z`, move the pin to `v0.20.0` in the same change. Older images refuse config version 8.
+
+**Report back:** which config files you migrated, the notes `dive config migrate` printed, and whether an image pin moved.
+````

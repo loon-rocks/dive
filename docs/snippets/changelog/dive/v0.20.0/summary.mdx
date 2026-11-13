@@ -1,0 +1,11 @@
+### Call your app's endpoints as the run's user
+
+A `kind: http` tool calls an endpoint in the app Dive runs beside. Calls to origins listed in `[http].token_origins` carry the run token, so the app checks it like any request and acts for that run's user and tenant. Every call also sends an `Idempotency-Key` that stays the same across retries. The app answers failures with an error code, and the run sees which kind of failure it was: refused, rejected input, unavailable, timed out or an internal error, and only the retryable ones are retried. See [Call your app](/tools/guides/call-your-app).
+
+### Test as a user from the CLI and the desktop app
+
+Runs you start yourself act as a dev identity: name test users and tenants under `[identities]`, pick the default with `[dev].identity`, and pick another per command with `--identity` or `DIVE_IDENTITY`. Each run gets its own token signed with the local development key, and `dive dev key` prints the public half for your app to trust outside production.
+
+### Entries stream in the OpenAPI document
+
+`dive serve`'s OpenAPI document gives the entries stream's `after` as a query parameter, so clients generated from it send it where the server reads it.

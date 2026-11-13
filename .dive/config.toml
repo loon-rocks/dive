@@ -2,7 +2,7 @@
 # and local dogfooding. Requires ANTHROPIC_API_KEY in the environment —
 # config load fails loudly without it.
 
-version = 7
+version = 8
 
 [providers.anthropic]
 type = "anthropic"

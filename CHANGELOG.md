@@ -2,6 +2,28 @@
 
 All notable changes to Dive. Generated from conventional commits by git-cliff.
 
+## Dive v0.20.0 — 2026-11-13
+
+### Added
+
+- http tools send the run token to your app, and CLI and desktop runs can act as a dev identity
+
+### Fixed
+
+- dive serve's OpenAPI document gives the entries stream's after as a query parameter
+
+## Config v8 — 2026-11-13
+
+### Breaking
+
+- config v8 adds [http].token_origins, [identities] and [dev].identity — config version 8 (dive config migrate)
+
+## Tool v5 — 2026-11-13
+
+### Breaking
+
+- tool v5 adds kind: http, which calls an endpoint in your app with the run's token — tool version 5 (dive tool migrate)
+
 ## Dive v0.19.0 — 2026-11-13
 
 ### Breaking

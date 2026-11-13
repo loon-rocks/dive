@@ -1,0 +1,3 @@
+### Token origins and dev identities
+
+Config version 8 adds `[http].token_origins`, the origins that `http` tools send the run token to, and `[identities.<name>]` with `[dev].identity`, the test users that CLI and desktop runs act as. The change is additive: Dive v0.20.0 reads config versions 1 through 8, so existing files keep loading unchanged.

@@ -43,7 +43,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.19.0
+      image: ghcr.io/loon-rocks/dive:v0.20.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,7 +63,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.19.0
+      image: ghcr.io/loon-rocks/dive:v0.20.0
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,7 +81,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.19.0
+      image: ghcr.io/loon-rocks/dive:v0.20.0
     steps:
       - uses: actions/checkout@v4
 
@@ -112,7 +112,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/loon-rocks/dive:v0.19.0
+      image: ghcr.io/loon-rocks/dive:v0.20.0
     steps:
       - uses: actions/checkout@v4
         with:
