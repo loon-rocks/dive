@@ -134,7 +134,7 @@ follow the steps, and write it as a short bullet list, not a paragraph.
 
 ## Check before handing it over
 
-1. `mint validate` and `mint broken-links` from `docs/`.
+1. `mise run docs:build`, which builds the loon.rocks site from this checkout's `docs/`.
 2. Re-read the page against the rules above, sentence by sentence, asking whether
    each one moves the reader toward the sub-head's result.
 3. In the reply, list what was dropped from the outline stub and why, so the user

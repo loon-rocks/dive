@@ -9,11 +9,6 @@
 [tools]
 rust = { version = "1.94", components = "rustfmt,clippy" }
 "ubi:orhun/git-cliff" = "latest"
-
-# Pinned to the 24 line, not "lts": mint refuses node >= 25, and the
-# lts alias currently resolves past it.
-"node" = "24"
-"npm:mint" = "latest"
 "cargo:cargo-sweep" = "0.8.0"
 
 [tasks.build]
@@ -91,8 +86,12 @@ description = "Drop a prepared, unpublished release"
 run = "scripts/release.sh abort"
 
 [tasks.docs]
-description = "Run docs preview"
-run = "cd docs && mint dev"
+description = "Preview the docs on the loon.rocks site with live reload, read from this checkout's docs/ (needs a loon-rocks/site checkout at ../site, or DIVE_SITE)"
+run = 'site="${DIVE_SITE:-$(dirname "$(git -C "{{config_root}}" rev-parse --path-format=absolute --git-common-dir)")/../site}"; [ -f "$site/package.json" ] || { echo "no loon-rocks/site checkout at $site: clone git@github.com:loon-rocks/site.git there or set DIVE_SITE" >&2; exit 1; }; cd "$site" && DIVE_DOCS="{{config_root}}/docs" mise run dev'
+
+[tasks."docs:build"]
+description = "Build the loon.rocks site from this checkout's docs/, which fails on a page the site can't compile (needs a loon-rocks/site checkout at ../site, or DIVE_SITE)"
+run = 'site="${DIVE_SITE:-$(dirname "$(git -C "{{config_root}}" rev-parse --path-format=absolute --git-common-dir)")/../site}"; [ -f "$site/package.json" ] || { echo "no loon-rocks/site checkout at $site: clone git@github.com:loon-rocks/site.git there or set DIVE_SITE" >&2; exit 1; }; cd "$site" && DIVE_DOCS="{{config_root}}/docs" mise run build'
 
 [tasks.shots]
 description = "Regenerate the workbench docs screenshots from docs/shots/ scenarios"

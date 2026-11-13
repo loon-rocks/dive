@@ -232,8 +232,9 @@ every non-conforming subject as a parse error and the count only ever grows:
   means they cannot be created. It also makes the linted PR title the exact
   subject that reaches `main`.
 
-Two classes of commit reach `main` without an author here: merge commits and
-the Mintlify app's `Updated mintlify pages` write-backs. `cliff.toml`'s
+Two classes of commit reached `main` without an author here: merge commits and,
+before the docs moved to the loon.rocks site, the Mintlify app's `Updated
+mintlify pages` write-backs. `cliff.toml`'s
 `commit_preprocessors` rewrite those into conventional form so the existing
 skip parsers drop them silently, instead of counting them as parse errors.
 With that in place `git-cliff` runs warning-free, so any future warning is a
