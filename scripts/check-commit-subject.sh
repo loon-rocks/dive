@@ -15,10 +15,10 @@ subject=${1-}
 # an invented type, and would silently vanish from the changelog.
 types='feat|fix|perf|docs|refactor|test|chore|ci|style|build|revert'
 
-# Machinery we do not author and cannot rename: merge commits, git's own
-# fixup/squash prefixes, and the Mintlify app's write-back commits. cliff.toml
-# rewrites these into skipped commits rather than reporting them as parse errors.
-if [[ $subject =~ ^(Merge\ |Revert\ \"|fixup!|squash!|amend!|Updated\ mintlify\ pages) ]]; then
+# Machinery we do not author and cannot rename: merge commits and git's own
+# fixup/squash prefixes. cliff.toml rewrites these into skipped commits rather
+# than reporting them as parse errors.
+if [[ $subject =~ ^(Merge\ |Revert\ \"|fixup!|squash!|amend!) ]]; then
   exit 0
 fi
 
