@@ -21,12 +21,12 @@ pub use load::{
     load_from_without_legacy, project_config_path, project_id, without_project_paths, LoadedConfig,
 };
 pub use model::{
-    builtin_description, describe_kinds, describe_missing_env, Config, FallbackChoice,
-    FilesBackend, FilesConfig, FilesMode, IdentityConfig, McpOAuth, McpServerConfig, MissingEnv,
-    ModelChoice, ModelKind, ModelPrice, ModelRoles, PlanPaths, PriceTier, ProjectConfig,
-    PromptConfig, ProviderConfig, ProviderKind, Rates, Role, ServeConfig, Settings, StorageBackend,
-    StorageConfig, TelemetryConfig, TelemetryProtocol, TokenCounts, ToolOverride, ToolPaths,
-    TraceConfig, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
+    builtin_description, describe_kinds, describe_missing_env, Config, DevConfig, DevIdentity,
+    FallbackChoice, FilesBackend, FilesConfig, FilesMode, HttpConfig, IdentityConfig, McpOAuth,
+    McpServerConfig, MissingEnv, ModelChoice, ModelKind, ModelPrice, ModelRoles, PlanPaths,
+    PriceTier, ProjectConfig, PromptConfig, ProviderConfig, ProviderKind, Rates, Role, ServeConfig,
+    Settings, StorageBackend, StorageConfig, TelemetryConfig, TelemetryProtocol, TokenCounts,
+    ToolOverride, ToolPaths, TraceConfig, UserConfig, WorkbenchConfig, DEFAULT_ROLE,
 };
 
 pub const SCHEMA: &str = include_str!("schema.yaml");

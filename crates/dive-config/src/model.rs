@@ -34,6 +34,12 @@ pub struct Config {
     #[serde(default)]
     pub serve: Option<ServeConfig>,
     #[serde(default)]
+    pub http: HttpConfig,
+    #[serde(default)]
+    pub identities: BTreeMap<String, DevIdentity>,
+    #[serde(default)]
+    pub dev: DevConfig,
+    #[serde(default)]
     pub prompts: PromptConfig,
     #[serde(default)]
     pub workbench: WorkbenchConfig,
@@ -996,6 +1002,59 @@ pub struct IdentityConfig {
     pub tenant: Option<String>,
     pub deployment: Option<String>,
     pub environment: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct HttpConfig {
+    pub token_origins: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DevIdentity {
+    pub tenant: String,
+    pub user: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub claims: BTreeMap<String, serde_json::Value>,
+}
+
+pub const RESERVED_CLAIMS: &[&str] = &[
+    "iss", "aud", "sub", "tenant", "jti", "plan", "scope", "iat", "exp", "nbf", "dive_dev",
+];
+
+impl DevIdentity {
+    pub fn reserved_claims(&self) -> Vec<&str> {
+        self.claims
+            .keys()
+            .map(String::as_str)
+            .filter(|claim| RESERVED_CLAIMS.contains(claim))
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct DevConfig {
+    pub identity: Option<String>,
+}
+
+impl Config {
+    pub fn check_identities(&self) -> Result<(), String> {
+        for (name, identity) in &self.identities {
+            if let Some(claim) = identity.reserved_claims().first() {
+                return Err(format!(
+                    "[identities.{name}].claims sets `{claim}`, which Dive sets itself on every token"
+                ));
+            }
+        }
+        match &self.dev.identity {
+            Some(name) if !self.identities.contains_key(name) => Err(format!(
+                "[dev].identity names '{name}', but there's no [identities.{name}]"
+            )),
+            _ => Ok(()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

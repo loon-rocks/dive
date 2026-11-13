@@ -307,3 +307,56 @@ fn the_serve_section_configures_dive_serve_and_is_absent_by_default() {
         .serve
         .is_none());
 }
+
+fn load_text(text: &str) -> anyhow::Result<dive_config::Config> {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(&path, text).unwrap();
+    Ok(load_from(std::slice::from_ref(&path))?.config)
+}
+
+#[test]
+fn dev_identities_name_a_tenant_a_user_and_extra_claims() {
+    let path = fixture_dir(CONFIG_FORMAT).join("dev_identities.toml");
+    let config = load_from(std::slice::from_ref(&path)).unwrap().config;
+    let ada = &config.identities["ada"];
+    assert_eq!(
+        (ada.tenant.as_str(), ada.user.as_str(), &ada.claims["role"]),
+        ("acme", "ada@example.com", &serde_json::json!("admin"))
+    );
+}
+
+#[test]
+fn dev_identity_picks_the_default_identity() {
+    let path = fixture_dir(CONFIG_FORMAT).join("dev_identities.toml");
+    let config = load_from(std::slice::from_ref(&path)).unwrap().config;
+    assert_eq!(config.dev.identity.as_deref(), Some("ada"));
+}
+
+#[test]
+fn http_lists_the_origins_that_receive_run_tokens() {
+    let path = fixture_dir(CONFIG_FORMAT).join("dev_identities.toml");
+    let config = load_from(std::slice::from_ref(&path)).unwrap().config;
+    assert_eq!(
+        config.http.token_origins,
+        vec!["http://localhost:8080", "https://app.example.com"]
+    );
+}
+
+#[test]
+fn an_identity_claim_that_dive_sets_itself_is_refused() {
+    let error = load_text(
+        "version = 8\n[identities.ada]\ntenant = \"acme\"\nuser = \"ada\"\nclaims = { tenant = \"globex\" }\n",
+    )
+    .unwrap_err();
+    assert!(format!("{error:#}").contains("sets `tenant`"), "{error:#}");
+}
+
+#[test]
+fn a_default_identity_that_isnt_declared_is_refused() {
+    let error = load_text("version = 8\n[dev]\nidentity = \"ada\"\n").unwrap_err();
+    assert!(
+        format!("{error:#}").contains("there's no [identities.ada]"),
+        "{error:#}"
+    );
+}
