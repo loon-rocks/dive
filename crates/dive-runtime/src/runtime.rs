@@ -43,6 +43,7 @@ pub struct Runtime {
     project: Option<String>,
     root: Option<std::path::PathBuf>,
     identity: std::sync::OnceLock<dive_core::run::Identity>,
+    origin: std::sync::OnceLock<crate::identity::RunOrigin>,
     workspace: Workspace,
     workspace_root: PathBuf,
 }
@@ -171,7 +172,8 @@ impl Runtime {
         )
         .with_secrets(Arc::new(dive_core::secrets::in_project(
             self.config.project.id.clone(),
-        )));
+        )))
+        .with_token_origins(self.config.http.token_origins.clone());
         match self.mode() {
             Mode::Local => drafted,
             Mode::Serve => drafted.without_drafting().with_clean_env(true),
@@ -242,6 +244,7 @@ impl Runtime {
             project: None,
             root: None,
             identity: std::sync::OnceLock::new(),
+            origin: std::sync::OnceLock::new(),
             workspace_root: absolute_root(&workspace),
             workspace,
         };
@@ -267,7 +270,60 @@ impl Runtime {
     }
 
     pub fn run(&self, events: Arc<dyn EventSink>) -> Arc<dive_core::run::Run> {
-        Arc::new(dive_core::run::Run::new(self.identity(), events))
+        Arc::new(self.origin().open(events, None))
+    }
+
+    pub fn plan_run(&self, events: Arc<dyn EventSink>, plan: &str) -> Arc<dive_core::run::Run> {
+        Arc::new(self.origin().open(events, Some(plan)))
+    }
+
+    pub fn origin(&self) -> crate::identity::RunOrigin {
+        self.origin
+            .get_or_init(|| {
+                self.origin_as(None).unwrap_or_else(|error| {
+                    tracing::warn!(error = %error, "runs carry no run token");
+                    crate::identity::RunOrigin::plain(self.identity())
+                })
+            })
+            .clone()
+    }
+
+    pub fn origin_as(&self, name: Option<&str>) -> Result<crate::identity::RunOrigin> {
+        let plain = crate::identity::RunOrigin::plain(self.identity());
+        if self.mode() == Mode::Serve {
+            return Ok(plain);
+        }
+        let asked = name.or(self.options.acting_as.as_deref());
+        let Some(name) = asked.or(self.config.dev.identity.as_deref()) else {
+            return Ok(plain);
+        };
+        let environment = std::env::var("DIVE_ENV").ok();
+        let production = crate::dev_key::is_production(environment.as_deref())
+            || crate::dev_key::is_production(self.config.identity.environment.as_deref());
+        if production {
+            if asked.is_some() {
+                anyhow::bail!("dev identities are refused in production (DIVE_ENV or [identity].environment); runs can't act as '{name}'");
+            }
+            return Ok(plain);
+        }
+        let identity = self.config.identities.get(name).cloned().with_context(|| {
+            format!("no dev identity '{name}': add [identities.{name}] with a tenant and user to the config")
+        })?;
+        let data_dir = dive_config::expand_tilde(&self.config.settings.data_dir);
+        let key = crate::dev_key::DevKey::load_or_create(&data_dir)?;
+        let audience = self
+            .config
+            .serve
+            .as_ref()
+            .and_then(|serve| serve.audience.as_deref());
+        Ok(crate::identity::RunOrigin::acting(
+            self.identity(),
+            crate::identity::Acting {
+                name: name.to_string(),
+                identity,
+                minter: Arc::new(crate::dev_key::DevMinter::new(key, audience)),
+            },
+        ))
     }
 
     /// Gracefully close MCP connections. Call before returning from a
@@ -345,7 +401,8 @@ impl Runtime {
     fn with_files(&self, registry: UserToolRegistry) -> UserToolRegistry {
         let registry = registry
             .with_files(self.files.clone())
-            .with_clean_env(self.mode() == Mode::Serve);
+            .with_clean_env(self.mode() == Mode::Serve)
+            .with_token_origins(&self.config.http.token_origins);
         let root = self
             .root
             .clone()
@@ -1130,6 +1187,7 @@ pub struct RuntimeOptions {
     pub capture_content: bool,
     pub mode: Mode,
     pub host: Host,
+    pub acting_as: Option<String>,
 }
 
 #[cfg(test)]

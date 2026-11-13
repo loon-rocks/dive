@@ -2,6 +2,7 @@ pub mod attach;
 pub mod attachment;
 pub mod cancel;
 pub mod chat;
+pub mod dev_key;
 pub mod evidence;
 mod files;
 pub mod identity;
@@ -18,3 +19,6 @@ pub mod secrets;
 pub mod telemetry;
 pub mod workbench;
 pub mod writer;
+
+#[cfg(test)]
+mod origin_tests;

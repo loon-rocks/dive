@@ -38,7 +38,7 @@ pub struct Workbench {
     pub session: std::sync::Mutex<Option<String>>,
     pub project: Option<String>,
     pub attachment: Arc<super::attachment::NetworkAttachment>,
-    pub identity: dive_core::run::Identity,
+    pub origin: crate::identity::RunOrigin,
 }
 
 impl Workbench {
@@ -75,10 +75,7 @@ impl Workbench {
             session_id: None,
             input: Some(serde_json::Value::String(message.clone())),
         });
-        let run = Arc::new(dive_core::run::Run::new(
-            ctx.identity.clone(),
-            ctx.pipeline.events.clone(),
-        ));
+        let run = Arc::new(ctx.origin.open(ctx.pipeline.events.clone(), None));
         let writer = match ctx.ensure_session(&message, &active).await {
             Some(session) => {
                 let start = dive_core::store::StartRun {
@@ -89,7 +86,7 @@ impl Workbench {
                     token_expires_at: None,
                     started: dive_core::store::RunStarted {
                         input: Value::String(message.clone()),
-                        identity: ctx.identity.clone(),
+                        identity: ctx.origin.identity().clone(),
                         trace_id: None,
                         plan: None,
                         synthetic: false,
@@ -182,7 +179,7 @@ impl Workbench {
         let new = dive_core::store::NewSession::chat(
             &crate::runtime::title_from(first_message),
             active,
-            &self.identity,
+            self.origin.identity(),
         )
         .in_project(self.project.as_deref());
         match self.store.create_session(new).await {
@@ -297,10 +294,10 @@ impl Workbench {
             input: Some(input.clone()),
         });
         let query = format!("Run the '{}' plan", doc.name);
-        let run = Arc::new(dive_core::run::Run::new(
-            ctx.identity.clone(),
-            pipeline.events.clone(),
-        ));
+        let run = Arc::new(
+            ctx.origin
+                .open(pipeline.events.clone(), Some(&doc.identifier)),
+        );
         let writer = crate::plan_run::start_or_warn(
             &ctx.store,
             &run,

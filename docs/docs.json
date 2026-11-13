@@ -103,6 +103,7 @@
             "pages": [
               "tools/guides/create-in-workbench",
               "tools/guides/test-a-tool",
+              "tools/guides/call-your-app",
               "tools/guides/tool-shapes"
             ]
           },

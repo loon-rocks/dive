@@ -291,7 +291,7 @@ async fn run_plan(name: &str, document: Option<&str>, inputs: &[String], json: b
     };
     // Stream each model call to the sink as it lands, so `DIVE_EVENTS=jsonl`
     // carries per-call detail and not just the end-of-run totals.
-    let run = runtime.run(events.clone());
+    let run = runtime.plan_run(events.clone(), &doc.identifier);
     let pipeline = runtime.pipeline_with(&store, events.clone(), hooks).await?;
     let query = format!("Run the '{}' plan", doc.name);
     let finish = doc.finish.clone();

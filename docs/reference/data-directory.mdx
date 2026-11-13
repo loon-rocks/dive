@@ -17,7 +17,8 @@ Dive keeps its runtime state in one directory, `~/.local/share/dive` by default.
 | `sessions/<id>/.lock` | A lock file that keeps concurrent writers in order. |
 | `runs/<run_id>.json` | One run: its session, kind, `status`, the `first_seq` and `last_seq` of its entries, trace id, whether a cancel was asked for and by whom, who started it, and when it started and ended. |
 | `threads/` | Conversations from data directories before version 5, left as they were when Dive converted them into sessions. Dive no longer reads them, and a later release will stop keeping them. Storage usage counts sessions and runs, not this folder. |
-| `serve/dev-key.pem` | The development key [`dive serve --dev-key`](/serve/run-tokens#development-tokens) signs and trusts, created on first use. Only for development. |
+| `serve/dev-key.pem` | The development key [`dive serve --dev-key`](/serve/run-tokens#development-tokens) signs and trusts, and the key the run tokens of [dev identities](/tools/guides/call-your-app#test-as-a-user-from-the-desktop-app-or-the-cli) are signed with, created on first use. Only for development. |
+| `serve/dev-key.pub.pem` | The development key's public half, for an app that checks those tokens. `dive dev key` prints it. |
 | `files/<hash>.<ext>` | Files that tools return and that you attach, such as images, named by a SHA-256 hash of their contents. Only when [`[storage.files]`](/reference/configuration#param-storage-files) keeps files on disk, the default. |
 | `cache/files/<hash>.<ext>` | Files downloaded from an S3 bucket, kept to 512 MB by dropping the least recently used. Safe to delete. |
 | `shapes/<tool>.json` | The observed output of one tool: an inferred schema, an example, and how many times it was seen. |

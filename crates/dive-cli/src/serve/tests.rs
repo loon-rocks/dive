@@ -33,6 +33,14 @@ fn tool(dir: &Path, name: &str, script: &str) {
 }
 
 fn harness(max_runs: usize, max_runs_per_tenant: usize) -> Harness {
+    harness_with(max_runs, max_runs_per_tenant, |_, _, _| {})
+}
+
+fn harness_with(
+    max_runs: usize,
+    max_runs_per_tenant: usize,
+    setup: impl FnOnce(&Path, &Path, &mut dive_config::Config),
+) -> Harness {
     let root = tempfile::tempdir().unwrap();
     let tools = root.path().join("tools");
     let plans = root.path().join("plans");
@@ -56,10 +64,11 @@ fn harness(max_runs: usize, max_runs_per_tenant: usize) -> Harness {
     )
     .unwrap();
     let mut config = dive_config::Config::default();
-    config.tools.paths = vec![tools];
-    config.plans.paths = vec![plans];
+    config.tools.paths = vec![tools.clone()];
+    config.plans.paths = vec![plans.clone()];
     config.identity.deployment = Some("test".into());
     config.identity.environment = Some("test".into());
+    setup(&tools, &plans, &mut config);
     let options = RuntimeOptions {
         storage_backend: Some("memory".to_string()),
         mode: Mode::Serve,
@@ -720,4 +729,111 @@ async fn the_reaper_ends_a_run_whose_writer_went_away() {
         store.get_run("orphan").await.unwrap().unwrap().status,
         RunStatus::Interrupted
     );
+}
+
+#[derive(Clone, Default)]
+struct AppCalls(Arc<std::sync::Mutex<Vec<axum::http::HeaderMap>>>);
+
+async fn app_server() -> (String, AppCalls) {
+    let calls = AppCalls::default();
+    let seen = calls.clone();
+    let app = Router::new().route(
+        "/dive/tools/lookup",
+        axum::routing::post(move |headers: axum::http::HeaderMap| {
+            let seen = seen.clone();
+            async move {
+                seen.0.lock().unwrap().push(headers);
+                axum::Json(json!({"found": true}))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{address}"), calls)
+}
+
+fn http_harness(base: &str, trusted: bool) -> Harness {
+    let base = base.to_string();
+    harness_with(4, 4, move |tools, plans, config| {
+        std::fs::write(
+            tools.join("lookup.yaml"),
+            format!("version: 5\nname: lookup\ndescription: Looks up an issue.\nkind: http\nurl: {base}/dive/tools/lookup\ninput_schema: {{type: object}}\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            plans.join("lookup.yaml"),
+            "version: 2\nidentifier: lookup\nname: Lookup\ndescription: Looks up.\nsteps:\n- id: a\n  tool_name: user__lookup\n  input: {issue: ENG-1}\nfinish:\n  output:\n    found: '{{a.found}}'\n",
+        )
+        .unwrap();
+        if trusted {
+            config.http.token_origins = vec![base];
+        }
+    })
+}
+
+fn sent(calls: &AppCalls, name: &str) -> Option<String> {
+    calls.0.lock().unwrap()[0]
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string)
+}
+
+#[tokio::test]
+async fn an_http_tool_receives_the_start_token_as_its_bearer_token() {
+    let (base, calls) = app_server().await;
+    let h = http_harness(&base, true);
+    let token = h.start_token("lookup", "acme");
+    let (_, started) = h
+        .post("/v1/plans/lookup/runs", &token, "{\"input\": {}}")
+        .await;
+    h.finished(started["run_id"].as_str().unwrap(), "acme")
+        .await;
+    assert_eq!(
+        sent(&calls, "authorization"),
+        Some(format!("Bearer {token}"))
+    );
+}
+
+#[tokio::test]
+async fn an_http_tool_receives_the_run_id_and_step_path() {
+    let (base, calls) = app_server().await;
+    let h = http_harness(&base, true);
+    let (_, started) = h.start("lookup", "acme", json!({})).await;
+    let run = started["run_id"].as_str().unwrap().to_string();
+    let done = h.finished(&run, "acme").await;
+    assert_eq!(
+        (
+            done["status"].as_str(),
+            sent(&calls, "dive-run-id"),
+            sent(&calls, "dive-call-path")
+        ),
+        (Some("completed"), Some(run), Some("step:a".to_string()))
+    );
+}
+
+#[tokio::test]
+async fn an_untrusted_origin_never_receives_the_run_token() {
+    let (base, calls) = app_server().await;
+    let h = http_harness(&base, false);
+    let (_, started) = h.start("lookup", "acme", json!({})).await;
+    h.finished(started["run_id"].as_str().unwrap(), "acme")
+        .await;
+    assert_eq!(sent(&calls, "authorization"), None);
+}
+
+#[tokio::test]
+async fn the_token_an_http_tool_receives_never_reaches_the_entries() {
+    let (base, _calls) = app_server().await;
+    let h = http_harness(&base, true);
+    let token = h.token_with(Some("lookup"), "acme", "", json!({"marker": MARKER}));
+    let (_, started) = h
+        .post("/v1/plans/lookup/runs", &token, "{\"input\": {}}")
+        .await;
+    h.finished(started["run_id"].as_str().unwrap(), "acme")
+        .await;
+    let session = started["session_id"].as_str().unwrap();
+    let entries = h.state.store.load_entries(session, None).await.unwrap();
+    let logged = serde_json::to_string(&entries).unwrap();
+    assert!(!logged.contains(&token) && !logged.contains(MARKER));
 }

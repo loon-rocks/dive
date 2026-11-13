@@ -59,7 +59,7 @@ A start whose `jti` already started a run gets `409 idempotency_violation`, with
 
 ## Where the token goes
 
-Dive keeps a start's token with the run while it runs, and nothing else: it never reaches prompts, tool arguments, entries, logs or exec tool environments.
+Dive keeps a start's token with the run while it runs. Its [`http` tools](/tools/guides/call-your-app) send it to your app as `Authorization: Bearer <token>`, but only to the origins in `[http].token_origins` and never across a redirect. It never reaches prompts, tool arguments, entries, logs or exec tool environments.
 
 ## Development tokens
 

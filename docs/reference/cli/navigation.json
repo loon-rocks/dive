@@ -70,6 +70,13 @@
     "root": "reference/cli/secret"
   },
   {
+    "group": "dive dev",
+    "pages": [
+      "reference/cli/dev/key"
+    ],
+    "root": "reference/cli/dev"
+  },
+  {
     "group": "dive serve",
     "pages": [
       "reference/cli/serve/token"
