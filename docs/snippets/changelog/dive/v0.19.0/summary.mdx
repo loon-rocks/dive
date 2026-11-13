@@ -1,0 +1,48 @@
+### Dive, your app's agentic backbone
+
+`dive serve` brings dive to your application infrastructure.  Deliver powerful, efficient and cost-effective agentic experiences to your customers by deploying your dive agents and plans alongside your application. Monitor and improve your agents and plans by connecting to your production dive instance where you can collect evidence and improve your agents and plans live. See [Run plans over HTTP](/serve/overview).
+
+Dive's security and concurrency model ensure single and multi-tenant applications can scale with your deployment.
+
+### Every run knows who it's for
+
+Every request carries a run token: a JWT your app signs and Dive checks against `[serve].public_keys` (EdDSA, ES256 or RS256). A start is idempotent on the token's `jti`, which becomes the run's id. Reads and cancels see only the token's tenant. For local work, `dive serve --dev-key` creates and trusts a development key, and `dive serve token` mints tokens with it.
+
+#### Isolated runs
+
+One runtime can now run many plan runs and chat turns at once without mixing their usage, events or identity. Each plan run, chat turn and workbench run reports its own model calls, tokens and cost, and a tool at any depth sees its run's id and identity.
+
+#### The `[identity]` section
+
+A new `[identity]` config section sets `user`, `tenant`, `deployment` and `environment`, recorded on every run. Locally, the user falls back to `$USER` and then the hostname, tenant and environment to `local`, and deployment to `cli` or `desktop`. `dive serve` takes user and tenant from each request's token.
+
+### Watch it live
+
+Any client with a token for the run's tenant can read a run, watch its entries and cancel it. Entries stream as server-sent events, with a `step_started` and `step_finished` pair per step, and model text streams live as `delta` events. A client that reconnects with `Last-Event-ID` gets every entry it missed. A cancel stops the run after the tool call in progress. With `DIVE_SERVE_DOCS` set, the server serves an OpenAPI document with a typed start operation per plan, and a reference page at `/docs`.
+
+### One session, one writer
+
+Threads are now sessions. Every conversation with `dive ask` or `dive chat` is a chat session, and every `dive plan run` a plan session. Each chat turn and each plan run is one run of its session, recorded with its input, who ran it and how it ended. See [Manage sessions](/agents/guides/sessions).
+
+#### Safe across processes
+
+A session runs one turn at a time. A second turn on a busy session is refused, even from another terminal or machine sharing the data directory. A process that stops without closing its turn loses its claim after 30 seconds, and the turn is marked failed so the session is free again. A cancel from one process stops a run held by another after its current tool call.
+
+#### Nothing finished is lost
+
+Each entry is written as soon as it finishes, so an interrupted turn keeps your message, the model's replies and the tool results it got to. A failed or cancelled turn stays in the session with its error, and the next turn doesn't see it: agents only read turns that completed.
+
+#### Renamed commands
+
+`dive session list`, `show` and `rm` replace `dive thread`, and `--session` replaces `--thread`. The old names work as hidden aliases for one release. `dive session list` shows the current project's sessions, and `--all` and `--kind chat|plan` widen or narrow it. `dive ask --json` returns `session_id` and `run_id` in place of `thread_id`.
+
+Opening an older data directory converts each thread into a chat session with one completed run per turn, and leaves `threads/` as it was.
+
+### But wait. There's more...
+
+- Plan, agent and tool lists show each item's scope: `project`, `global`, a pack's name, or `built-in`. Anything that reaches a tool, plan, agent or MCP server the current project doesn't have is listed with what it's missing and refused before it starts. See [Plans that can't run here](/plans/overview#plans-that-cant-run-here).
+- `dive plan list --json` no longer has a `hidden` key. Plans whose `requires_servers` aren't configured are listed with the server under `missing` instead of being hidden.
+- `/agent` in `dive chat` takes effect from the next message.
+- A workbench turn that runs out of iterations no longer keeps its partial history. Send the request again.
+- Settings > Storage counts sessions and their runs.
+- The Dive container image is public, so workflows pull it without a registry login.

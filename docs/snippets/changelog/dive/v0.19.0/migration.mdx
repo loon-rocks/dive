@@ -1,0 +1,28 @@
+````markdown
+Dive v0.19.0 bumps two file-format versions: Config v6→v7 and Store v4→v5. Plan, tool and agent formats are unchanged, so leave plan, tool and agent files alone. It also renames threads to sessions on the command line and in JSON output.
+
+Do the following in this repository:
+
+1. Run `dive config check` to see what the current config reports.
+
+2. Migrate the config file:
+   - Run `dive config migrate` (project-level config).
+   - If a global config exists (e.g. under `~/.config/dive`), also run `dive config migrate --global`.
+   Config v7 adds the optional `[identity]` and `[serve]` sections; the migration only stamps `version = 7`. Do not add either section unless this repository runs `dive serve`.
+
+3. Do not migrate the data directory by hand. Store v5 is applied automatically the first time Dive opens an older data directory: each thread becomes a chat session under `sessions/`, with one run per turn under `runs/`, and `threads/` is left in place but no longer updated. If any script reads `threads/` directly, point it at `sessions/` and `runs/` instead.
+
+4. Rename thread usage in scripts, CI workflows and docs (grep for `dive thread`, `--thread` and `thread_id`):
+   - `dive thread list|show|rm` → `dive session list|show|rm`
+   - `--thread` on `dive ask` and `dive chat` → `--session`
+   - `thread_id` in `dive ask --json` output → `session_id` (each turn also returns a `run_id`)
+   The old command and flag still work as hidden aliases for this release only; `thread_id` is gone now.
+
+5. Find consumers of `dive plan list --json` (grep for `hidden`). The `hidden` key is gone: plans whose `requires_servers` aren't configured are now listed, with the missing server in a `missing` array. Filter on `missing` being non-empty where the code used to skip hidden plans.
+
+6. Check CI workflows (e.g. `.github/workflows/*.yml`) for a pinned Dive image like `ghcr.io/loon-rocks/dive:vX.Y.Z`. Update any pin to `ghcr.io/loon-rocks/dive:v0.19.0` in the same change as the migrated config, since an older image refuses config version 7 by name. The image is public now, so a registry login step or `packages: read` permission used only to pull it can be removed.
+
+7. For the exact changes, read the "Config v7" and "Store v5" entries in this release's CHANGELOG.md, next to the "Dive v0.19.0" entry.
+
+Be conservative: change only the config files, thread references, `hidden` consumers and image pins described above. Report back exactly which files you changed and anything you deliberately left alone.
+````

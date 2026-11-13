@@ -2,6 +2,36 @@
 
 All notable changes to Dive. Generated from conventional commits by git-cliff.
 
+## Dive v0.19.0 — 2026-11-13
+
+### Breaking
+
+- lists show each plan, agent and tool's scope, and anything that can't run here is marked with what it's missing and refused before it starts (#270) — `dive plan list --json` no longer has a `hidden` key. Plans
+
+### Added
+
+- dive serve runs plans over HTTP with run tokens (#274)
+
+### Documentation
+
+- the Dive image is public, so workflows pull it without a registry login or packages permission (#269)
+
+### Fixed
+
+- storage usage counts sessions and their runs, so Settings > Storage no longer shows 0 after the store 5 migration (#273)
+
+## Config v7 — 2026-11-13
+
+### Breaking
+
+- each run keeps its own usage, events and identity, with an [identity] section and a serve mode (#271) — config version 7 (dive config migrate)
+
+## Store v5 — 2026-11-13
+
+### Breaking
+
+- sessions replace threads, and each turn or plan run is a claimed run with a lease, fenced appends and stored cancels (#272) — store version 5. Opening an older data directory converts each thread into a chat session under sessions/, with one completed run per turn under runs/, and leaves threads/ as it was.
+
 ## Dive v0.18.0 — 2026-11-03
 
 ### Breaking
