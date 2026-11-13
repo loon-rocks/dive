@@ -428,7 +428,7 @@
     "release_version": "v0.19.0",
     "config_file_version": "8",
     "plan_file_version": "3",
-    "tool_file_version": "4",
+    "tool_file_version": "5",
     "agent_file_version": "2",
     "data_directory_version": "5",
     "pack_file_version": "2",

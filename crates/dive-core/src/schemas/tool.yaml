@@ -21,7 +21,7 @@ properties:
     description: What the tool does and returns. Agents and the plan drafter read it when choosing tools.
   kind:
     type: string
-    enum: [exec, prompt, reshape, decision, image]
+    enum: [exec, http, prompt, reshape, decision, image]
     description: What the tool runs. Each kind takes its own fields, listed below.
   input_schema:
     type: object
@@ -31,7 +31,10 @@ properties:
     description: JSON Schema for the output. A `prompt` tool enforces it as structured output; for every kind it tells drafters what the tool returns.
   read_only:
     type: boolean
-    description: Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.
+    description: Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default, and so is an `http` tool whose method is `GET`.
+  generated:
+    type: string
+    description: The generator that wrote this file, such as `dive-go`. Set by the generator, never by hand. The desktop app and the drafters show a generated tool but don't edit or overwrite it; change it in the code it's generated from, then regenerate.
 oneOf:
   - title: exec
     description: "Runs a command. stdout becomes the result; a non-zero exit, a timeout or unparseable JSON is a tool error. Exec tools run arbitrary code, by design. An input property with `format: blob` (or an array whose `items` have it) takes file refs, which reach the command as local paths. Files it writes go out through `files`: declare each by name, pass `{{files.<name>.path}}` in `args`, and the file comes back under the result's `files` with its `name` and a `ref`."
@@ -105,6 +108,76 @@ oneOf:
             limit:
               type: integer
               description: Most pull requests to return
+  - title: http
+    description: "Makes one HTTP request per call and returns the response body. Every request carries `Idempotency-Key` (the same on every retry of the call), `Dive-Run-Id`, `Dive-Call-Path` and `User-Agent: dive/<version>`, plus `traceparent` when the run has a trace. When the run has a run token and the URL's origin is listed in [`[http].token_origins`](/reference/configuration#param-http), the token goes as `Authorization: Bearer <token>`; it never goes anywhere else, and never into the run's entries or logs. Redirects aren't followed: a 3xx is a tool error naming its `Location`. A 2xx body is the result. Any other answer is a tool error named for its kind, taken from the body's `error.code` or else the status: refused (422), rejected input (400), the run token refused (401, 403), an internal error (500, never retried; a `ref` in the body is quoted), unavailable (429, 502, 503) or timed out (408, 504). Unavailable, timed out, a network error and no answer within `timeout_secs` are retried per `retry`. The message quotes the body's `error.message`, or the start of the body."
+    properties:
+      kind:
+        const: http
+      method:
+        type: string
+        enum: [GET, POST, PUT, PATCH, DELETE]
+        default: POST
+        description: The HTTP method.
+      url:
+        type: string
+        description: The URL, as a template over `{{input.*}}`; each value spliced in is percent-encoded. `${VAR}` resolves the same way as an exec tool's `env`, so a base URL can be `${APP_URL}` and a secret can sit in the URL.
+      query:
+        type: object
+        additionalProperties:
+          type: string
+        description: Query parameters, each value a template over `{{input.*}}`. A value that is a single template whose input is missing is left out.
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+        description: Extra headers. Values expand `${VAR}` like exec `env`, so a static credential can come from a secret, but can't use `{{input.*}}`. A tool can't set `Authorization` on a call that also carries the run token; send its credential in another header.
+      body:
+        description: "`POST`, `PUT` and `PATCH` send the whole input as JSON. A body template, a JSON tree whose leaf strings are templates over `{{input.*}}` like a `reshape` tool's `shape`, sends that object instead. `GET` and `DELETE` send no body."
+      timeout_secs:
+        type: integer
+        default: 30
+        description: Seconds before one attempt times out.
+      retry:
+        type: object
+        required: [attempts]
+        additionalProperties: false
+        properties:
+          attempts:
+            type: integer
+            minimum: 1
+            description: Total attempts, the first included. Retries wait 1, 2, then 4 seconds, or what `Retry-After` says.
+        description: Retries for a network error, no answer within `timeout_secs`, or an answer that says the app is unavailable or timed out (429, 502, 503, 408, 504, or `error.code` `unavailable` or `timeout`). An internal error (500) is never retried. Without it, a call is tried once.
+      output:
+        type: string
+        enum: [json, text]
+        default: json
+        description: "`json` parses the body as JSON, with an empty body as `{}`; `text` returns it as `{text}`."
+      max_response_bytes:
+        type: integer
+        default: 4194304
+        description: The largest body read; a larger one is a tool error.
+    required: [url]
+    examples:
+      - version: 5
+        name: create_issue
+        description: Creates an issue in the tenant's tracker and returns its id and URL.
+        kind: http
+        method: POST
+        url: "${APP_URL}/dive/tools/create_issue"
+        retry:
+          attempts: 3
+        input_schema:
+          type: object
+          required: [title]
+          properties:
+            title:
+              type: string
+              description: One-line summary
+        output_schema:
+          type: object
+          properties:
+            id: {type: string}
+            url: {type: string}
   - title: prompt
     description: One model call. The result is `{text}`, or validated JSON when `output_schema` is set.
     properties:

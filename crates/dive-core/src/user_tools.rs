@@ -47,6 +47,8 @@ pub struct UserToolDoc {
     pub output_schema: Option<Value>,
     #[serde(default)]
     pub read_only: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated: Option<String>,
     #[serde(flatten)]
     pub kind: ToolKind,
     #[serde(skip)]
@@ -133,6 +135,25 @@ pub enum ToolKind {
         model: Option<String>,
         #[serde(default)]
         caller_model: bool,
+    },
+    Http {
+        #[serde(default)]
+        method: HttpMethod,
+        url: String,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        query: BTreeMap<String, String>,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        headers: BTreeMap<String, String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        body: Option<Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timeout_secs: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry: Option<HttpRetry>,
+        #[serde(default)]
+        output: ExecOutput,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_response_bytes: Option<u64>,
     },
     Decision {
         #[serde(default)]
@@ -231,6 +252,39 @@ impl<'de> Deserialize<'de> for EnvEntry {
 
         deserializer.deserialize_any(Visitor)
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum HttpMethod {
+    Get,
+    #[default]
+    Post,
+    Put,
+    Patch,
+    Delete,
+}
+
+impl HttpMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+        }
+    }
+
+    pub fn sends_body(self) -> bool {
+        matches!(self, Self::Post | Self::Put | Self::Patch)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpRetry {
+    pub attempts: u32,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -364,6 +418,7 @@ pub(crate) const TOOL_KEYS: &[&str] = &[
     "input_schema",
     "output_schema",
     "read_only",
+    "generated",
     "kind",
 ];
 
@@ -398,6 +453,18 @@ pub(crate) const DECISION_KEYS: &[&str] = &[
 
 pub(crate) const IMAGE_KEYS: &[&str] = &["model", "caller_model"];
 
+pub(crate) const HTTP_KEYS: &[&str] = &[
+    "method",
+    "url",
+    "query",
+    "headers",
+    "body",
+    "timeout_secs",
+    "retry",
+    "output",
+    "max_response_bytes",
+];
+
 pub fn unknown_tool_keys(value: &serde_yaml::Value) -> Vec<String> {
     let Some(mapping) = value.as_mapping() else {
         return Vec::new();
@@ -408,6 +475,7 @@ pub fn unknown_tool_keys(value: &serde_yaml::Value) -> Vec<String> {
         Some("reshape") => RESHAPE_KEYS,
         Some("decision") => DECISION_KEYS,
         Some("image") => IMAGE_KEYS,
+        Some("http") => HTTP_KEYS,
         _ => &[],
     };
     let mut unknown: Vec<String> = mapping
@@ -434,6 +502,15 @@ pub fn unknown_tool_keys(value: &serde_yaml::Value) -> Vec<String> {
         }
     }
     unknown
+}
+
+pub fn generated_by(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&text).ok()?;
+    value
+        .get("generated")
+        .and_then(serde_yaml::Value::as_str)
+        .map(str::to_string)
 }
 
 pub fn parse_tool_source(raw: &str) -> Result<UserToolDoc, String> {
@@ -588,6 +665,35 @@ pub fn validate_tool(doc: &UserToolDoc) -> Result<(), String> {
             }
         }
         ToolKind::Image { .. } => {}
+        ToolKind::Http {
+            url,
+            query,
+            headers,
+            body,
+            retry,
+            ..
+        } => {
+            if url.trim().is_empty() {
+                return Err("http tool needs a url".to_string());
+            }
+            check_template(url, "url")?;
+            for (name, value) in query {
+                check_template(value, &format!("query.{name}"))?;
+            }
+            for (name, value) in headers {
+                if value.contains("{{") {
+                    return Err(format!(
+                        "headers.{name}: header values can use ${{NAME}} secrets but not {{{{input.*}}}} templates"
+                    ));
+                }
+            }
+            if let Some(body) = body {
+                check_shape_templates(body, &check_template)?;
+            }
+            if retry.is_some_and(|retry| retry.attempts == 0) {
+                return Err("retry.attempts must be at least 1".to_string());
+            }
+        }
     }
     Ok(())
 }
@@ -704,6 +810,9 @@ pub struct UserToolRegistry {
     project_dir: Option<PathBuf>,
     scratch: Option<PathBuf>,
     clean_env: bool,
+    token_origins: crate::http_tool::TokenOrigins,
+    http: std::sync::OnceLock<Result<crate::http_tool::HttpClient, String>>,
+    http_backoff: std::time::Duration,
 }
 
 pub const KEPT_ENV: &[&str] = &["PATH", "TMPDIR"];
@@ -721,7 +830,20 @@ impl UserToolRegistry {
             project_dir: None,
             scratch: None,
             clean_env: false,
+            token_origins: crate::http_tool::TokenOrigins::default(),
+            http: std::sync::OnceLock::new(),
+            http_backoff: std::time::Duration::from_secs(1),
         }
+    }
+
+    pub fn with_token_origins(mut self, origins: &[String]) -> Self {
+        self.token_origins = crate::http_tool::TokenOrigins::new(origins);
+        self
+    }
+
+    pub fn with_http_backoff(mut self, backoff: std::time::Duration) -> Self {
+        self.http_backoff = backoff;
+        self
     }
 
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretSource>) -> Self {
@@ -762,31 +884,15 @@ impl UserToolRegistry {
     /// A registry serving Dive's built-in tools under `builtin__`.
     pub fn builtins(tools: Vec<UserToolDoc>, router: Arc<ModelRouter>) -> Self {
         Self {
-            tools,
-            router,
             prefix: BUILTIN_TOOL_PREFIX.to_string(),
-            secrets: Arc::new(crate::secrets::system()),
-            pack_dir: None,
-            files: None,
-            workspace: None,
-            project_dir: None,
-            scratch: None,
-            clean_env: false,
+            ..Self::new(tools, router)
         }
     }
 
     pub fn pack(pack: &str, tools: Vec<UserToolDoc>, router: Arc<ModelRouter>) -> Self {
         Self {
-            tools,
-            router,
             prefix: crate::packs::catalog_name(pack, crate::packs::ItemKind::Tool, ""),
-            secrets: Arc::new(crate::secrets::system()),
-            pack_dir: None,
-            files: None,
-            workspace: None,
-            project_dir: None,
-            scratch: None,
-            clean_env: false,
+            ..Self::new(tools, router)
         }
     }
 
@@ -909,6 +1015,23 @@ impl UserToolRegistry {
             };
             return self.run_decision(state, questions, model.as_deref()).await;
         }
+        if let Some(tool) = crate::http_tool::HttpTool::of(&doc.name, &doc.kind) {
+            let client = match self
+                .http
+                .get_or_init(|| crate::http_tool::HttpClient::new(self.http_backoff))
+            {
+                Ok(client) => client,
+                Err(error) => return Err(ToolError::Transport(error.clone())),
+            };
+            return Ok(crate::http_tool::call(
+                client,
+                tool,
+                input,
+                &self.token_origins,
+                self.secrets.as_ref(),
+            )
+            .await);
+        }
         let input = match &doc.kind {
             ToolKind::Exec { .. } => match self.blob_paths(doc, input).await {
                 Ok(input) => input,
@@ -969,6 +1092,7 @@ impl UserToolRegistry {
                 self.run_prompt(doc, prompt, call, &roots).await
             }
             ToolKind::Decision { .. } => unreachable!("decision tools return above"),
+            ToolKind::Http { .. } => unreachable!("http tools return above"),
             ToolKind::Image { .. } => unreachable!("image tools return above"),
             ToolKind::Reshape { caller_shape, .. } => {
                 let shape = reshape_shape.expect("reshape shape resolved above");
@@ -1730,17 +1854,28 @@ pub fn expand_env(value: &str, secrets: &dyn SecretSource) -> Result<String, Str
     Ok(out)
 }
 
+fn secret_sources(doc: &UserToolDoc) -> Vec<(&str, Option<&str>)> {
+    match &doc.kind {
+        ToolKind::Exec { env, .. } => env
+            .values()
+            .map(|entry| (entry.value(), entry.description()))
+            .collect(),
+        ToolKind::Http { url, headers, .. } => std::iter::once(url.as_str())
+            .chain(headers.values().map(String::as_str))
+            .map(|value| (value, None))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 pub fn needed_secrets(doc: &UserToolDoc) -> Vec<crate::secrets::NeededSecret> {
-    let ToolKind::Exec { env, .. } = &doc.kind else {
-        return Vec::new();
-    };
     let mut needed: Vec<crate::secrets::NeededSecret> = Vec::new();
-    for entry in env.values() {
-        for reference in crate::secrets::env_references(entry.value()) {
+    for (value, description) in secret_sources(doc) {
+        for reference in crate::secrets::env_references(value) {
             if reference.default.is_some() || !crate::secrets::is_secret_name(reference.name) {
                 continue;
             }
-            let description = entry.description().map(str::to_string);
+            let description = description.map(str::to_string);
             match needed.iter_mut().find(|seen| seen.name == reference.name) {
                 Some(seen) => {
                     if seen.description.is_none() {
@@ -1770,13 +1905,18 @@ pub fn with_env_values(
     values: &std::collections::BTreeMap<String, String>,
 ) -> UserToolDoc {
     let mut doc = doc.clone();
-    if let ToolKind::Exec { env, .. } = &mut doc.kind {
-        for entry in env.values_mut() {
-            let value = entry.value_mut();
-            for (var, supplied) in values {
-                *value = value.replace(&format!("${{{var}}}"), supplied);
-            }
+    let supply = |value: &mut String| {
+        for (var, supplied) in values {
+            *value = value.replace(&format!("${{{var}}}"), supplied);
         }
+    };
+    match &mut doc.kind {
+        ToolKind::Exec { env, .. } => env.values_mut().for_each(|entry| supply(entry.value_mut())),
+        ToolKind::Http { url, headers, .. } => {
+            supply(url);
+            headers.values_mut().for_each(supply);
+        }
+        _ => {}
     }
     doc
 }
@@ -1838,6 +1978,9 @@ impl ToolRegistry for UserToolRegistry {
                         ToolKind::Prompt { .. }
                         | ToolKind::Reshape { .. }
                         | ToolKind::Decision { .. } => Some(true),
+                        ToolKind::Http { method, .. } => {
+                            Some(*method == HttpMethod::Get).filter(|read_only| *read_only)
+                        }
                         ToolKind::Exec { .. } | ToolKind::Image { .. } => None,
                     }),
                     file_input: match &doc.kind {

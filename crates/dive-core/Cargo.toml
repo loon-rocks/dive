@@ -26,3 +26,10 @@ mime_guess = "2.0.5"
 keyring = "4.2"
 keyring-core = "1.0"
 toml.workspace = true
+reqwest.workspace = true
+sha2 = "0.10"
+url = "2"
+percent-encoding = "2"
+
+[dev-dependencies]
+axum = "0.8"

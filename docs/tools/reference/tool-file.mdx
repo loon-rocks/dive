@@ -28,7 +28,7 @@ Unknown keys are a load error. For completion in your editor, start the file wit
 <ParamField body="kind" type="enum<string>" required>
   What the tool runs. Each kind takes its own fields, listed below.
 
-  Available options: `exec`, `prompt`, `reshape`, `decision`, `image`
+  Available options: `exec`, `http`, `prompt`, `reshape`, `decision`, `image`
 </ParamField>
 
 <ParamField body="input_schema" type="object">
@@ -40,7 +40,11 @@ Unknown keys are a load error. For completion in your editor, start the file wit
 </ParamField>
 
 <ParamField body="read_only" type="boolean">
-  Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default.
+  Marks the tool as free of side effects. `reshape` and `decision` tools are read-only by default, and so is an `http` tool whose method is `GET`.
+</ParamField>
+
+<ParamField body="generated" type="string">
+  The generator that wrote this file, such as `dive-go`. Set by the generator, never by hand. The desktop app and the drafters show a generated tool but don't edit or overwrite it; change it in the code it's generated from, then regenerate.
 </ParamField>
 
 ## Kinds
@@ -48,6 +52,7 @@ Unknown keys are a load error. For completion in your editor, start the file wit
 Each `kind` adds its own fields.
 
 - [`exec`](/tools/reference/tool-file/exec): Runs a command.
+- [`http`](/tools/reference/tool-file/http): Makes one HTTP request per call and returns the response body.
 - [`prompt`](/tools/reference/tool-file/prompt): One model call.
 - [`reshape`](/tools/reference/tool-file/reshape): Builds a value in a new JSON shape from the input, with no process and no model call.
 - [`image`](/tools/reference/tool-file/image): Generates images with an image model and stores them as files.

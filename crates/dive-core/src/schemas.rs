@@ -70,6 +70,7 @@ mod tests {
             ("reshape", crate::user_tools::RESHAPE_KEYS),
             ("decision", crate::user_tools::DECISION_KEYS),
             ("image", crate::user_tools::IMAGE_KEYS),
+            ("http", crate::user_tools::HTTP_KEYS),
         ];
         let branches = schema.get("oneOf").and_then(Value::as_sequence).unwrap();
         assert_eq!(branches.len(), kinds.len());
