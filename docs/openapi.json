@@ -698,16 +698,13 @@
             }
           },
           {
-            "in": "path",
+            "in": "query",
             "name": "after",
-            "required": true,
+            "required": false,
             "schema": {
               "format": "int64",
               "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
+              "type": "integer"
             }
           }
         ],
