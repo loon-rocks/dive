@@ -38,6 +38,55 @@
     }
   ],
   "properties": {
+    "dev": {
+      "description": "Defaults for runs from the desktop app and the CLI.",
+      "properties": {
+        "identity": {
+          "description": "The `[identities]` entry runs act as when none is picked. `--as` and `DIVE_AS` override it. Without one, runs carry no run token.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "http": {
+      "description": "How `http` tools call out.",
+      "properties": {
+        "token_origins": {
+          "description": "The origins, such as `https://app.example.com` or `http://localhost:8080`, that receive the run token on an `http` tool call. A call to any other origin goes out without `Authorization`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "identities": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "claims": {
+            "description": "Extra top-level claims on the token, such as `role = \"admin\"`, for the app's own checks. Can't set a claim Dive sets itself, such as `sub`, `tenant`, `jti` or `exp`.",
+            "type": "object"
+          },
+          "tenant": {
+            "description": "The tenant the run acts for; the token's `tenant` claim.",
+            "type": "string"
+          },
+          "user": {
+            "description": "The user the run acts as; the token's `sub` claim.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant",
+          "user"
+        ],
+        "type": "object"
+      },
+      "description": "Named test identities, as `[identities.<name>]`. A run from the desktop app or the CLI acts as one, and Dive mints its run token for it with the development key, so `http` tools reach the app as that user and tenant. Never used in serve mode or when the environment is `production`.",
+      "type": "object"
+    },
     "identity": {
       "description": "Who runs Dive and where. Dive records it on every run and never checks it, so a missing value never fails a run.",
       "properties": {

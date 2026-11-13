@@ -1,0 +1,15 @@
+<ParamField body="identities" type="object">
+  Named test identities, as `[identities.<name>]`. A run from the desktop app or the CLI acts as one, and Dive mints its run token for it with the development key, so `http` tools reach the app as that user and tenant. Never used in serve mode or when the environment is `production`.
+</ParamField>
+
+<ParamField body="identities.<name>.tenant" type="string" required>
+  The tenant the run acts for; the token's `tenant` claim.
+</ParamField>
+
+<ParamField body="identities.<name>.user" type="string" required>
+  The user the run acts as; the token's `sub` claim.
+</ParamField>
+
+<ParamField body="identities.<name>.claims" type="object">
+  Extra top-level claims on the token, such as `role = "admin"`, for the app's own checks. Can't set a claim Dive sets itself, such as `sub`, `tenant`, `jti` or `exp`.
+</ParamField>

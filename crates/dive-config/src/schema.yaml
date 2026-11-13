@@ -346,6 +346,39 @@ properties:
       shutdown_grace_secs:
         type: integer
         description: Seconds a stopping process gives its runs to end before it exits. Defaults to 30.
+  http:
+    type: object
+    description: How `http` tools call out.
+    properties:
+      token_origins:
+        type: array
+        description: The origins, such as `https://app.example.com` or `http://localhost:8080`, that receive the run token on an `http` tool call. A call to any other origin goes out without `Authorization`.
+        items:
+          type: string
+  identities:
+    type: object
+    description: Named test identities, as `[identities.<name>]`. A run from the desktop app or the CLI acts as one, and Dive mints its run token for it with the development key, so `http` tools reach the app as that user and tenant. Never used in serve mode or when the environment is `production`.
+    additionalProperties:
+      type: object
+      required: [tenant, user]
+      additionalProperties: false
+      properties:
+        tenant:
+          type: string
+          description: The tenant the run acts for; the token's `tenant` claim.
+        user:
+          type: string
+          description: The user the run acts as; the token's `sub` claim.
+        claims:
+          type: object
+          description: Extra top-level claims on the token, such as `role = "admin"`, for the app's own checks. Can't set a claim Dive sets itself, such as `sub`, `tenant`, `jti` or `exp`.
+  dev:
+    type: object
+    description: Defaults for runs from the desktop app and the CLI.
+    properties:
+      identity:
+        type: string
+        description: The `[identities]` entry runs act as when none is picked. `--as` and `DIVE_AS` override it. Without one, runs carry no run token.
   prompts:
     type: object
     description: Deprecated. Customize agents with agent files instead.

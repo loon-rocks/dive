@@ -148,6 +148,7 @@ fn load_layers(
         server.validate(name).map_err(anyhow::Error::msg)?;
     }
     config.check_model_types().map_err(anyhow::Error::msg)?;
+    config.check_identities().map_err(anyhow::Error::msg)?;
     for (layer, source) in pack_layers.iter().zip(&sources) {
         if let Some(name) = layer
             .packs
