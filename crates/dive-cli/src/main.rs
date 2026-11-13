@@ -21,6 +21,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    host::act_as(cli.acting_as.clone());
     let telemetry = telemetry::init(&telemetry_config_paths(&cli.command), &|name| {
         std::env::var(name).ok()
     });
@@ -114,6 +115,9 @@ async fn dispatch(command: Command, verbose: u8) -> Result<()> {
         Command::Plan { command } => commands::plan_cmd::run(command).await,
         Command::Workbench { command } => workbench::run(command, verbose).await,
         Command::Version { json } => commands::version_cmd::run(json),
+        Command::Dev {
+            command: cli::DevCommand::Key { dir },
+        } => serve::dev_key::print_public_key(dir),
         Command::Serve {
             command:
                 Some(cli::ServeCommand::Token {

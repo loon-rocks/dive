@@ -9,7 +9,7 @@ use crate::writer::{LeaseTiming, RunWriter};
 use anyhow::{Context, Result};
 use dive_core::agent::conversation::{Conversation, ConversationTurn};
 use dive_core::pipeline::doc::PlanDoc;
-use dive_core::run::{Identity, Run};
+use dive_core::run::Identity;
 use dive_core::store::{
     Entry, NewSession, RunEnded, RunStarted, RunStatus, SessionKind, SessionMeta, StartError,
     StartRun,
@@ -70,7 +70,7 @@ pub struct ChatStart {
     root: Option<PathBuf>,
     project: Option<String>,
     title: Option<String>,
-    identity: Identity,
+    origin: crate::identity::RunOrigin,
 }
 
 const UNRECORDED_DRAFTERS: [&str; 5] = [
@@ -120,7 +120,7 @@ impl ChatStart {
             root: None,
             project: runtime.project().map(str::to_string),
             title: None,
-            identity: runtime.identity(),
+            origin: runtime.origin(),
         })
     }
 
@@ -183,7 +183,7 @@ impl ChatStart {
             root: None,
             project: runtime.project().map(str::to_string),
             title,
-            identity: runtime.identity(),
+            origin: runtime.origin(),
         })
     }
 
@@ -210,7 +210,7 @@ impl ChatStart {
             first_message,
             &self.owner,
             self.project.as_deref(),
-            &self.identity,
+            self.origin.identity(),
         )
         .await?;
         self.fresh_session = true;
@@ -338,7 +338,7 @@ impl ChatStart {
         Ok(ChatSession {
             conversation,
             store: self.store,
-            identity: self.identity,
+            origin: self.origin,
             events,
             run_name,
             cancel,
@@ -417,7 +417,7 @@ fn edit_title(items: &[Item], evidence: Option<&Evidence>) -> String {
 pub struct ChatSession {
     conversation: Conversation,
     store: Arc<dyn Store>,
-    identity: Identity,
+    origin: crate::identity::RunOrigin,
     events: Arc<dyn EventSink>,
     run_name: Option<String>,
     cancel: Option<CancelHandle>,
@@ -569,7 +569,7 @@ impl ChatSession {
                 &title,
                 &self.owner,
                 self.project.as_deref(),
-                &self.identity,
+                self.origin.identity(),
             )
             .await
             {
@@ -587,7 +587,7 @@ impl ChatSession {
         if let Some(cancel) = &self.cancel {
             cancel.rearm();
         }
-        let run = Arc::new(Run::new(self.identity.clone(), self.events.clone()));
+        let run = Arc::new(self.origin.open(self.events.clone(), None));
         let mut persist_error = None;
         let writer = match &self.session {
             Some(meta) => {
@@ -601,7 +601,7 @@ impl ChatSession {
                         input: message
                             .map(|message| Value::String(message.to_string()))
                             .unwrap_or(Value::Null),
-                        identity: self.identity.clone(),
+                        identity: self.origin.identity().clone(),
                         trace_id: run.trace.as_ref().map(|trace| trace.trace_id.clone()),
                         plan: None,
                         synthetic: false,

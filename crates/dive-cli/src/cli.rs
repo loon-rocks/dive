@@ -15,6 +15,15 @@ pub struct Cli {
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     pub verbose: u8,
 
+    #[arg(
+        long = "identity",
+        global = true,
+        env = "DIVE_IDENTITY",
+        value_name = "IDENTITY",
+        help = "Act as this [identities] entry: runs get a run token minted for its tenant and user, which http tools send to the app"
+    )]
+    pub acting_as: Option<String>,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -86,6 +95,14 @@ pub enum Command {
     Secret {
         #[command(subcommand)]
         command: SecretCommand,
+    },
+    #[command(
+        about = "Development helpers for apps that Dive calls",
+        after_long_help = "Runs from the desktop app and the CLI act as a dev identity from `[identities]` and carry a run token signed with the local development key. An app checks those tokens with the key's public half.\n\nExamples:\n  dive dev key\n  dive plan run triage --identity viewer"
+    )]
+    Dev {
+        #[command(subcommand)]
+        command: DevCommand,
     },
     #[command(
         about = "Run Dive as an HTTP service that starts, streams and cancels plan runs",
@@ -1112,6 +1129,22 @@ mod tests {
             }
         }
     }
+}
+
+#[derive(Subcommand)]
+pub enum DevCommand {
+    #[command(
+        about = "Print the public half of the local development key",
+        after_long_help = "Prints the PEM public key that verifies the run tokens Dive mints for dev identities and `dive serve --dev-key`, creating the key on first use. It's also written to `serve/dev-key.pub.pem` in the data directory. Give it to an app that runs elsewhere, such as in a container, as `DIVE_DEV_PUBLIC_KEY`. Refused when `DIVE_ENV` or `[identity].environment` is `production`.\n\nExamples:\n  dive dev key\n  DIVE_DEV_PUBLIC_KEY=\"$(dive dev key)\" docker compose up"
+    )]
+    Key {
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Project directory, the one holding `.dive/`; defaults to the current directory"
+        )]
+        dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]

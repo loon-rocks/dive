@@ -1375,20 +1375,23 @@ pub fn overlay(pipeline: &Pipeline, network: &Network) -> Pipeline {
     if !tools.is_empty() {
         layers.push(Arc::new(
             UserToolRegistry::new(tools.clone(), pipeline.router.clone())
-                .with_secrets(pipeline.drafted.secrets.clone()),
+                .with_secrets(pipeline.drafted.secrets.clone())
+                .with_token_origins(&pipeline.drafted.token_origins),
         ));
     }
     if !builtins.is_empty() {
         layers.push(Arc::new(
             UserToolRegistry::builtins(builtins, pipeline.router.clone())
-                .with_secrets(pipeline.drafted.secrets.clone()),
+                .with_secrets(pipeline.drafted.secrets.clone())
+                .with_token_origins(&pipeline.drafted.token_origins),
         ));
     }
     for (source, docs) in packed {
         layers.push(Arc::new(
             UserToolRegistry::pack(&source.name, docs, pipeline.router.clone())
                 .with_pack_dir(&source.dir)
-                .with_secrets(pipeline.drafted.secrets.clone()),
+                .with_secrets(pipeline.drafted.secrets.clone())
+                .with_token_origins(&pipeline.drafted.token_origins),
         ));
     }
     if !stubs.is_empty() {

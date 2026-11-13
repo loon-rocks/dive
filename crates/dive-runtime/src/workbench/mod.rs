@@ -172,7 +172,7 @@ impl Workbench {
             root,
             project: runtime.project().map(str::to_string),
             attachment,
-            identity: runtime.identity(),
+            origin: runtime.origin(),
         };
         if let Some((kind, name)) = opening {
             workbench

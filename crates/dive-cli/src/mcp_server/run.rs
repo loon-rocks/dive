@@ -247,7 +247,7 @@ pub async fn run_plan(
             .user(runtime.config.user.name.as_deref())
             .input(input.clone()),
     );
-    let run = runtime.run(events.clone());
+    let run = runtime.plan_run(events.clone(), identifier);
     let pipeline = runtime
         .pipeline_with(
             &store,

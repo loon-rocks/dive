@@ -34,6 +34,12 @@ Renames a step and rewrites every reference to it in later steps, the `output` m
   Increase log verbosity (-v info, -vv debug, -vvv trace)
 </ParamField>
 
+<ParamField query="--identity" type="string">
+  Act as this [identities] entry: runs get a run token minted for its tenant and user, which http tools send to the app
+
+  Format: `IDENTITY`.
+</ParamField>
+
 <RequestExample>
 
 ```bash Usage

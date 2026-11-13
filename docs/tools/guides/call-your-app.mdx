@@ -1,0 +1,117 @@
+---
+title: "Call your app"
+description: "An http tool calls an endpoint in the app Dive runs beside, with the run's token, so the app knows which user and tenant the call is for."
+keywords: ["http", "kind: http", "run token", "token_origins", "identities", "dev identity", "--identity", "dive dev key"]
+---
+
+An `http` tool makes one HTTP request per call. When Dive runs beside your app, a run's tools call the app's own endpoints, and every call carries the run token your app signed, so the endpoint checks it like any request and acts for that user and tenant.
+
+```yaml .dive/tools/create_issue.yaml
+version: 5
+name: create_issue
+description: Creates an issue in the tenant's tracker and returns its id and URL.
+kind: http
+url: "${APP_URL:-http://localhost:8080}/dive/tools/create_issue"
+retry:
+  attempts: 3
+input_schema:
+  type: object
+  required: [title]
+  properties:
+    title:
+      type: string
+      description: One-line summary
+output_schema:
+  type: object
+  properties:
+    id: {type: string}
+    url: {type: string}
+```
+
+The input goes as the JSON body of a `POST`, and the JSON response is the result. Every field is in the [`kind: http` reference](/tools/reference/tool-file/http).
+
+## Send the run token
+
+Dive sends the run token only to the origins you trust:
+
+```toml .dive/config.toml
+version = 8
+
+[http]
+token_origins = ["http://localhost:8080", "https://app.example.com"]
+```
+
+A call to a trusted origin carries `Authorization: Bearer <run token>`. A call anywhere else goes out without it, and a redirect is never followed. The token never reaches the model, a tool's input, the run's entries or a log.
+
+Every call also carries:
+
+| Header | Value |
+| --- | --- |
+| `Idempotency-Key` | The same on every retry of the call. Use it to make a write happen once. |
+| `Dive-Run-Id` | The run's id, which is the start token's `jti`. |
+| `Dive-Call-Path` | Where in the run the call was made, such as `step:E3` or `call:toolu_01`. |
+| `traceparent` | The tool call's span, when the run has a trace. |
+
+## Answer from your app
+
+Return JSON on success. On failure, answer with a status and a body that names the kind of failure, so the model can tell "don't" from "try again" from "this is a bug":
+
+```json
+{ "error": { "code": "refused", "message": "the tracker is read-only for this workspace" } }
+```
+
+| `code` | Status | Retried | The run sees |
+| --- | --- | --- | --- |
+| `refused` | 422 | no | `create_issue refused: the tracker is read-only for this workspace` |
+| `invalid_input` | 400 | no | `create_issue rejected its input: title is required` |
+| `unavailable` | 503, 502 or 429 | yes, with `retry` | `create_issue is unavailable after 3 attempts: the tracker is in maintenance` |
+| `timeout` | 504 or 408 | yes, with `retry` | `create_issue timed out after 3 attempts: …` |
+| `internal` | 500 | never | `create_issue failed with an internal error in the app (ref 3f2a9c1e); retrying won't help` |
+| `unauthorized` | 401 or 403 | never | `the app refused the run token for create_issue: the token has expired` |
+| `unknown_tool` | 404 | never | `the app has no tool create_issue; regenerate the tool files` |
+
+Without a `code`, Dive goes by the status. For an internal error, send a short `ref` you also log beside the real error, and keep the real error out of the response: the message reaches the model and the run's entries. A retry sends the same `Idempotency-Key`.
+
+## Test as a user from the desktop app or the CLI
+
+Runs you start yourself have no token from your app, so Dive mints one. Name the test users and tenants your app needs:
+
+```toml .dive/config.toml
+[identities.ada]
+tenant = "acme"
+user = "ada@example.com"
+claims = { role = "admin" }
+
+[identities.viewer]
+tenant = "acme"
+user = "vic@example.com"
+claims = { role = "viewer" }
+
+[dev]
+identity = "ada"
+```
+
+<Steps>
+  <Step title="Pick who a run acts as">
+    `[dev].identity` is the default. Pick another for one command with `--identity`, or with `DIVE_IDENTITY`:
+
+    ```bash
+    dive plan run triage --identity viewer --input issue=ENG-142
+    ```
+
+    Each run gets its own token: `sub` is the identity's user, `tenant` its tenant, `jti` the run's id, `plan` the plan on a plan run, and `claims` its extra claims, with `iss: dive-dev`, `dive_dev: true` and a one-hour expiry. The run and its session are recorded as that user and tenant.
+  </Step>
+  <Step title="Trust the development key in your app">
+    Dive signs these tokens with the development key in the data directory, the same one [`dive serve --dev-key`](/serve/run-tokens#development-tokens) uses. Its public half is at `serve/dev-key.pub.pem` there, and `dive dev key` prints it:
+
+    ```bash
+    DIVE_DEV_PUBLIC_KEY="$(dive dev key)" go run ./cmd/app
+    ```
+
+    Outside production, have your app trust that key beside its own, for tokens with `iss: dive-dev`.
+  </Step>
+</Steps>
+
+<Warning>
+  Dev identities are never used by `dive serve`, whose runs carry your app's token, and are refused when `DIVE_ENV` or `[identity].environment` is `production`. Your app should refuse the development key in production too.
+</Warning>

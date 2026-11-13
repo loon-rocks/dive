@@ -42,6 +42,12 @@ Runs a tool, plan or agent of the pack at --path, the way the pack's own plans c
   Increase log verbosity (-v info, -vv debug, -vvv trace)
 </ParamField>
 
+<ParamField query="--identity" type="string">
+  Act as this [identities] entry: runs get a run token minted for its tenant and user, which http tools send to the app
+
+  Format: `IDENTITY`.
+</ParamField>
+
 <RequestExample>
 
 ```bash Usage

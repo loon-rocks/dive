@@ -376,14 +376,7 @@ impl StepEntries {
     }
 }
 
-pub fn step_path(call_stack: &[String], path: &str) -> String {
-    call_stack
-        .iter()
-        .map(|plan| format!("plan:{plan}"))
-        .chain(std::iter::once(format!("step:{path}")))
-        .collect::<Vec<_>>()
-        .join("/")
-}
+pub use dive_core::run::step_path;
 
 impl EventSink for StepEntries {
     fn step_started(&self, call_stack: &[String], path: &str, tool: &str, input: &Value) {

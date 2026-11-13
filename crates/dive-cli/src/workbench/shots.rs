@@ -520,7 +520,7 @@ async fn run_shot(root: &Path, spec: ShotSpec) -> Result<String> {
         session: Mutex::new(None),
         project: None,
         attachment,
-        identity: Default::default(),
+        origin: dive_runtime::identity::RunOrigin::plain(Default::default()),
     });
 
     // Boot exactly like `run_plan_workbench`, then type the chat message

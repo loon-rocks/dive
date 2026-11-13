@@ -53,6 +53,65 @@ pub fn serve(
     })
 }
 
+#[derive(Clone)]
+pub struct Acting {
+    pub name: String,
+    pub identity: dive_config::DevIdentity,
+    pub minter: std::sync::Arc<crate::dev_key::DevMinter>,
+}
+
+#[derive(Clone)]
+pub struct RunOrigin {
+    identity: Identity,
+    acting: Option<Acting>,
+}
+
+impl RunOrigin {
+    pub fn plain(identity: Identity) -> Self {
+        Self {
+            identity,
+            acting: None,
+        }
+    }
+
+    pub fn acting(identity: Identity, acting: Acting) -> Self {
+        Self {
+            identity: Identity {
+                user: acting.identity.user.clone(),
+                tenant: acting.identity.tenant.clone(),
+                ..identity
+            },
+            acting: Some(acting),
+        }
+    }
+
+    pub fn identity(&self) -> &Identity {
+        &self.identity
+    }
+
+    pub fn acting_as(&self) -> Option<&str> {
+        self.acting.as_ref().map(|acting| acting.name.as_str())
+    }
+
+    pub fn open(
+        &self,
+        events: std::sync::Arc<dyn dive_core::EventSink>,
+        plan: Option<&str>,
+    ) -> dive_core::run::Run {
+        let run = dive_core::run::Run::new(self.identity.clone(), events);
+        let Some(acting) = &self.acting else {
+            return run;
+        };
+        match acting.minter.mint(&acting.identity, run.id.as_str(), plan) {
+            Ok(token) => run.with_token(token),
+            Err(error) => {
+                tracing::warn!(error = %error, identity = %acting.name, "couldn't mint a run token for the dev identity");
+                run
+            }
+        }
+    }
+}
+
 pub fn hostname() -> Option<String> {
     let from_command = std::process::Command::new("hostname")
         .stdin(std::process::Stdio::null())
