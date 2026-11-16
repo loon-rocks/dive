@@ -2,6 +2,12 @@
 
 All notable changes to Dive. Generated from conventional commits by git-cliff.
 
+## Dive v0.21.0 — 2026-11-16
+
+### Added
+
+- the dive container image includes python3
+
 ## Dive v0.20.0 — 2026-11-13
 
 ### Added
