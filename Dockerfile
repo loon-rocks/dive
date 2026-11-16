@@ -13,7 +13,7 @@ FROM debian:trixie-slim
 # Links the ghcr package to this repository (automatic for GITHUB_TOKEN
 # pushes; the label makes it hold for any push path).
 LABEL org.opencontainers.image.source="https://github.com/loon-rocks/dive" \
-      org.opencontainers.image.description="Dive CLI with git, jq, gh, and curl — ready for CI plan runs" \
+      org.opencontainers.image.description="Dive CLI with git, jq, gh, curl, and python3 — ready for CI plan runs" \
       org.opencontainers.image.licenses="MIT"
 
 # gh comes from the official releases, not Debian's archive — trixie ships
@@ -24,7 +24,7 @@ ARG GH_VERSION=2.96.0
 # curl is a runtime dependency, not just a build one: the slack pack shells
 # out to it. Don't drop it when trimming this layer.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git jq \
+    && apt-get install -y --no-install-recommends ca-certificates curl git jq python3 \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
        | tar xz --strip-components=2 -C /usr/local/bin "gh_${GH_VERSION}_linux_amd64/bin/gh" \
