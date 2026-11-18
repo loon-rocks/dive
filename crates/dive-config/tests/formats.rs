@@ -360,3 +360,31 @@ fn a_default_identity_that_isnt_declared_is_refused() {
         "{error:#}"
     );
 }
+
+#[test]
+fn a_project_isolates_itself_with_the_project_section() {
+    let path = fixture_dir(CONFIG_FORMAT).join("isolate.toml");
+    let config = load_from(std::slice::from_ref(&path)).unwrap().config;
+    assert!(config.project.isolate);
+    assert!(dive_config::is_isolated(&path));
+    assert!(!load_text("").unwrap().project.isolate);
+    assert!(!dive_config::is_isolated(
+        &fixture_dir(CONFIG_FORMAT).join("project.toml")
+    ));
+    assert!(!dive_config::is_isolated(Path::new("/no/such/config.toml")));
+}
+
+#[test]
+fn an_isolated_config_drops_plan_and_tool_dirs_under_the_global_config_dir() {
+    let mut config = load_text("").unwrap();
+    config.plans.paths.push(PathBuf::from("/srv/shared/plans"));
+    dive_config::without_global_paths(&mut config);
+    assert_eq!(
+        config.plans.paths,
+        [
+            PathBuf::from("./.dive/plans"),
+            PathBuf::from("/srv/shared/plans")
+        ]
+    );
+    assert_eq!(config.tools.paths, [PathBuf::from("./.dive/tools")]);
+}

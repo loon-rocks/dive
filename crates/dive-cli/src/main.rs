@@ -61,22 +61,18 @@ async fn main() -> ExitCode {
 }
 
 fn telemetry_config_paths(command: &Command) -> Vec<PathBuf> {
-    let global = dive_config::global_config_path();
     match command {
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: Some(dir) },
-        } => vec![
-            global,
-            dive_config::legacy::project_dir(dir).join("config.toml"),
-        ],
+        } => dive_runtime::runtime::Workspace::new(dir).layers(),
         Command::Mcp {
             command: cli::McpCommand::Serve { dir: None },
-        } => vec![global],
+        } => vec![dive_config::global_config_path()],
         Command::Serve { dir: Some(dir), .. } => {
             vec![dive_config::legacy::project_dir(dir).join("config.toml")]
         }
         Command::Serve { dir: None, .. } => vec![dive_config::project_config_path()],
-        _ => vec![global, dive_config::project_config_path()],
+        _ => dive_runtime::runtime::Workspace::current().layers(),
     }
 }
 

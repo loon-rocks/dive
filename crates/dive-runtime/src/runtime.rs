@@ -1037,10 +1037,12 @@ pub fn load_packs(loaded: &dive_config::LoadedConfig) -> Result<crate::packs::In
 }
 
 pub fn load_config(workspace: &Workspace) -> Result<dive_config::LoadedConfig> {
-    let mut loaded =
-        dive_config::load_from(&workspace.config_paths(), &dive_core::secrets::system())?;
+    let mut loaded = dive_config::load_from(&workspace.layers(), &dive_core::secrets::system())?;
     if workspace.is_global() {
         dive_config::without_project_paths(&mut loaded.config);
+    }
+    if workspace.is_isolated() {
+        dive_config::without_global_paths(&mut loaded.config);
     }
     Ok(loaded)
 }
@@ -1110,10 +1112,26 @@ impl Workspace {
         Some(root.to_string_lossy().into_owned())
     }
 
+    pub fn is_isolated(&self) -> bool {
+        !self.is_global() && dive_config::is_isolated(&self.project_config())
+    }
+
+    fn project_config(&self) -> PathBuf {
+        dive_config::legacy::project_dir(&self.root).join("config.toml")
+    }
+
+    pub fn layers(&self) -> Vec<PathBuf> {
+        if self.is_isolated() {
+            vec![self.project_config()]
+        } else {
+            self.config_paths()
+        }
+    }
+
     pub fn agent_dirs(&self) -> Vec<PathBuf> {
         let project = (!self.is_global()).then(|| dive_config::legacy::project_dir(&self.root));
-        let global = global_config_dir();
-        dive_core::agent::doc::agent_dirs(project.as_deref(), Some(&global))
+        let global = (!self.is_isolated()).then(global_config_dir);
+        dive_core::agent::doc::agent_dirs(project.as_deref(), global.as_deref())
     }
 
     pub fn project_dir(&self) -> PathBuf {
@@ -1128,10 +1146,7 @@ impl Workspace {
         if self.is_global() {
             vec![dive_config::global_config_path()]
         } else {
-            vec![
-                dive_config::global_config_path(),
-                dive_config::legacy::project_dir(&self.root).join("config.toml"),
-            ]
+            vec![dive_config::global_config_path(), self.project_config()]
         }
     }
 }
@@ -1493,6 +1508,36 @@ mod tests {
             workspace.config_paths()[1],
             PathBuf::from("/work/site/.dive/config.toml")
         );
+    }
+
+    #[test]
+    fn an_isolated_workspace_loads_only_its_own_layer() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join(".dive");
+        std::fs::create_dir_all(&project).unwrap();
+        let config = project.join("config.toml");
+        std::fs::write(&config, "version = 9\n").unwrap();
+        let workspace = Workspace::new(dir.path());
+        assert!(!workspace.is_isolated());
+        assert_eq!(workspace.layers(), workspace.config_paths());
+        assert_eq!(workspace.agent_dirs().len(), 2);
+
+        std::fs::write(&config, "version = 9\n[project]\nisolate = true\n").unwrap();
+        assert!(workspace.is_isolated());
+        assert_eq!(workspace.layers(), vec![config.clone()]);
+        assert_eq!(workspace.config_paths().len(), 2);
+        assert_eq!(workspace.agent_dirs(), vec![project.join("agents")]);
+
+        let loaded = load_config(&workspace).unwrap();
+        assert_eq!(loaded.sources, vec![config]);
+        assert!(loaded.config.project.isolate);
+        assert!(!loaded
+            .config
+            .plans
+            .paths
+            .iter()
+            .chain(&loaded.config.tools.paths)
+            .any(|path| dive_config::expand_tilde(path).starts_with(global_config_dir())));
     }
 
     #[test]

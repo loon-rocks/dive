@@ -433,6 +433,11 @@
         "id": {
           "description": "An id Dive generates the first time you store a project secret with `dive secret set NAME --project`. Project secrets are keyed by it, so renaming or moving the folder keeps them. Letters, digits and hyphens.",
           "type": "string"
+        },
+        "isolate": {
+          "default": false,
+          "description": "When `true`, this project reads nothing from `~/.config/dive`, so its `.dive/config.toml` must define everything it uses. See [Isolated projects](/reference/configuration#isolated-projects).",
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -875,6 +880,10 @@
     {
       "body": "A string value can include `${NAME}` references, such as `api_key = \"${ANTHROPIC_API_KEY}\"`. Each reference reads the environment variable `NAME`. When `NAME` isn't set, or is set but empty, Dive reads the OS credential store instead: the macOS Keychain, or the Secret Service on Linux, under service `dive` and account `NAME`. The value is resolved each time a config file loads and is never written to a file. Store a value with `dive secret set NAME`. On macOS the Keychain lets only the program that stored a value read it, so `dive secret set` replaces a value another program stored, such as Loon Dive or a different `dive` build, and that program then can't read it until it stores the value again. See every name the config, tools and packs reference, and where each resolves from, with `dive secret list`.\n\nA name neither source has leaves a provider or MCP server loadable, and using that provider or server fails naming the variable. A missing name anywhere else fails the load.\n\nWhere no credential store is available, as in a container or on Linux without a Secret Service daemon, Dive reads the environment only. Set `DIVE_SECRET_STORE` to `none` to skip the store on purpose.",
       "heading": "Secret references"
+    },
+    {
+      "body": "Set `isolate = true` under `[project]` in a project's `.dive/config.toml` to stop that project reading `~/.config/dive`. Dive then loads only the project's config file, with no global values beneath it, and ignores the agents, tools, plans and packs in `~/.config/dive`. Plan and tool directories inside `~/.config/dive` are dropped even when the project config lists them. Everything the project uses, including providers, models and MCP servers, must be in its own config, and `dive config path` lists only that file.\n\nBuilt-in tools, plans and agents still load. Secret references still read the credential store, including values every project shares.\n\n`isolate` belongs in a project config. Setting it in `~/.config/dive/config.toml` fails the load.",
+      "heading": "Isolated projects"
     },
     {
       "body": "A host that runs Dive's runtime in serve mode, for many users at once, reads only the project's `.dive/config.toml`. It ignores `~/.config/dive`, including the agents, tools and plans there, keeps only plan and tool directories inside the project, and doesn't read old `.graph` folders. In serve mode, saving a drafted tool or agent fails with `drafting_disabled`, Dive records no tool output shapes, and exec tools start from an empty environment (see [exec tools](/tools/reference/tool-file/exec)). Each run records the identity from [`[identity]`](#param-identity), with the user and tenant taken from the request.",

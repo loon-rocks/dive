@@ -174,11 +174,11 @@ impl Layers {
         } else {
             dive_config::legacy::project_dir(workspace.root()).join("config.toml")
         };
-        let load_paths = if global_workspace {
-            vec![global.clone()]
-        } else {
-            vec![global.clone(), file.clone()]
-        };
+        let load_paths = workspace
+            .layers()
+            .iter()
+            .map(|path| dive_config::expand_tilde(path))
+            .collect();
         Self {
             global,
             file,

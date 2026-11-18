@@ -294,7 +294,7 @@ fn check_name(name: &str) -> Result<()> {
 }
 
 pub fn project_id(workspace: &Workspace) -> Option<String> {
-    dive_config::project_id(&workspace.config_paths())
+    dive_config::project_id(&workspace.layers())
 }
 
 fn project_config(workspace: &Workspace) -> PathBuf {
@@ -317,7 +317,7 @@ fn resolve_dir(root: &Path, path: &Path) -> PathBuf {
 }
 
 fn collect(workspace: &Workspace, secrets: &Secrets) -> Collected {
-    collect_layers(&workspace.config_paths(), workspace.root(), secrets)
+    collect_layers(&workspace.layers(), workspace.root(), secrets)
 }
 fn collect_layers(paths: &[PathBuf], root: &Path, secrets: &Secrets) -> Collected {
     let mut found = Vec::new();

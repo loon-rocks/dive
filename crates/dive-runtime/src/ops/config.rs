@@ -151,6 +151,14 @@ pub fn candidates(workspace: &Workspace) -> Vec<PathBuf> {
         .collect()
 }
 
+fn layers(workspace: &Workspace) -> Vec<PathBuf> {
+    workspace
+        .layers()
+        .iter()
+        .map(|path| dive_config::expand_tilde(path))
+        .collect()
+}
+
 fn target(workspace: &Workspace, global: bool) -> PathBuf {
     let paths = candidates(workspace);
     if global {
@@ -188,7 +196,7 @@ pub fn show(loaded: &LoadedConfig) -> Result<ConfigShow> {
 }
 
 pub fn path(workspace: &Workspace) -> ConfigPaths {
-    let files: Vec<ConfigFile> = candidates(workspace)
+    let files: Vec<ConfigFile> = layers(workspace)
         .into_iter()
         .map(|candidate| {
             let exists = candidate.exists();
@@ -211,7 +219,7 @@ pub fn path(workspace: &Workspace) -> ConfigPaths {
 pub async fn check(workspace: &Workspace) -> ConfigCheck {
     let mut files = Vec::new();
     let mut problems = Vec::new();
-    for candidate in candidates(workspace) {
+    for candidate in layers(workspace) {
         let path = candidate.display().to_string();
         if !candidate.exists() {
             files.push(FileCheck::Missing {
@@ -254,7 +262,7 @@ pub async fn check(workspace: &Workspace) -> ConfigCheck {
     let mut packs_text = String::new();
     let mut warnings = Vec::new();
     if problems.is_empty() {
-        match dive_config::load_from(&workspace.config_paths(), &dive_core::secrets::system()) {
+        match dive_config::load_from(&workspace.layers(), &dive_core::secrets::system()) {
             Err(error) => problems.push(format!("{error:#}")),
             Ok(loaded) => {
                 warnings.extend(loaded.layers.iter().flat_map(|layer| {
@@ -326,6 +334,15 @@ pub fn init(workspace: &Workspace, global: bool, force: bool) -> Result<ConfigIn
     })
 }
 
+pub fn set_isolated(workspace: &Workspace, isolate: bool) -> Result<PathBuf> {
+    if workspace.is_global() {
+        bail!("the global config dir has no project to isolate");
+    }
+    let target = target(workspace, false);
+    dive_config::set_isolated(&target, isolate)?;
+    Ok(target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +379,39 @@ mod tests {
         let error = init(&workspace, false, false).unwrap_err().to_string();
         assert!(error.ends_with("already exists (use --force to overwrite)"));
         assert!(init(&workspace, false, true).is_ok());
+    }
+
+    #[test]
+    fn isolating_a_project_writes_the_flag_and_clearing_it_leaves_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(dir.path());
+        let file = project(dir.path());
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "[settings]\nhistory_limit = 7\n").unwrap();
+
+        assert_eq!(set_isolated(&workspace, true).unwrap(), file);
+        assert!(workspace.is_isolated());
+        let loaded = crate::runtime::load_config(&workspace).unwrap();
+        assert_eq!(loaded.layers[0].version, CONFIG_FORMAT);
+        assert_eq!(loaded.config.settings.history_limit, 7);
+
+        set_isolated(&workspace, false).unwrap();
+        assert!(!workspace.is_isolated());
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(!text.contains("[project]"), "{text}");
+        assert!(text.contains("history_limit = 7"), "{text}");
+    }
+
+    #[test]
+    fn a_new_project_config_is_created_isolated() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(dir.path());
+        set_isolated(&workspace, true).unwrap();
+        assert!(workspace.is_isolated());
+        assert_eq!(
+            crate::runtime::load_config(&workspace).unwrap().sources,
+            vec![project(dir.path())]
+        );
     }
 
     #[test]
