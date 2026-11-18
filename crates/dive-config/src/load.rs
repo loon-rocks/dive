@@ -248,16 +248,54 @@ pub fn project_id(paths: &[PathBuf]) -> Option<String> {
     found
 }
 
+fn read_or_new(path: &Path) -> Result<String> {
+    match std::fs::read_to_string(path) {
+        Ok(raw) => Ok(raw),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(format!(
+            "{} = {}\n",
+            format::FORMAT_KEY,
+            format::CONFIG_FORMAT
+        )),
+        Err(error) => Err(error).with_context(|| format!("reading config file {}", path.display())),
+    }
+}
+
+fn write_config(path: &Path, doc: &toml_edit::DocumentMut) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let temp = path.with_extension("toml.tmp");
+    std::fs::write(&temp, doc.to_string())
+        .with_context(|| format!("writing {}", temp.display()))?;
+    std::fs::rename(&temp, path).with_context(|| format!("writing {}", path.display()))
+}
+
+pub fn set_isolated(path: &Path, isolate: bool) -> Result<()> {
+    if isolate && path.exists() {
+        format::migrate_file(path).map_err(anyhow::Error::msg)?;
+    }
+    let raw = read_or_new(path)?;
+    let mut doc: toml_edit::DocumentMut = raw
+        .parse()
+        .with_context(|| format!("parsing config file {}", path.display()))?;
+    if isolate {
+        doc.entry("project")
+            .or_insert_with(toml_edit::table)
+            .as_table_mut()
+            .context("[project] must be a table")?
+            .insert("isolate", toml_edit::value(true));
+    } else if let Some(project) = doc.get_mut("project").and_then(|item| item.as_table_mut()) {
+        project.remove("isolate");
+        if project.is_empty() {
+            doc.remove("project");
+        }
+    }
+    write_config(path, &doc)
+}
+
 pub fn ensure_project_id(path: &Path) -> Result<String> {
-    let raw = match std::fs::read_to_string(path) {
-        Ok(raw) => raw,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            format!("{} = {}\n", format::FORMAT_KEY, format::CONFIG_FORMAT)
-        }
-        Err(error) => {
-            return Err(error).with_context(|| format!("reading config file {}", path.display()))
-        }
-    };
+    let raw = read_or_new(path)?;
     let table: toml::Table = raw
         .parse()
         .with_context(|| format!("parsing config file {}", path.display()))?;
@@ -274,14 +312,7 @@ pub fn ensure_project_id(path: &Path) -> Result<String> {
         .as_table_mut()
         .context("[project] must be a table")?;
     project.insert("id", toml_edit::value(id.clone()));
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
-    }
-    let temp = path.with_extension("toml.tmp");
-    std::fs::write(&temp, doc.to_string())
-        .with_context(|| format!("writing {}", temp.display()))?;
-    std::fs::rename(&temp, path).with_context(|| format!("writing {}", path.display()))?;
+    write_config(path, &doc)?;
     Ok(id)
 }
 

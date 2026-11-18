@@ -334,6 +334,15 @@ pub fn init(workspace: &Workspace, global: bool, force: bool) -> Result<ConfigIn
     })
 }
 
+pub fn set_isolated(workspace: &Workspace, isolate: bool) -> Result<PathBuf> {
+    if workspace.is_global() {
+        bail!("the global config dir has no project to isolate");
+    }
+    let target = target(workspace, false);
+    dive_config::set_isolated(&target, isolate)?;
+    Ok(target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,6 +379,39 @@ mod tests {
         let error = init(&workspace, false, false).unwrap_err().to_string();
         assert!(error.ends_with("already exists (use --force to overwrite)"));
         assert!(init(&workspace, false, true).is_ok());
+    }
+
+    #[test]
+    fn isolating_a_project_writes_the_flag_and_clearing_it_leaves_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(dir.path());
+        let file = project(dir.path());
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "[settings]\nhistory_limit = 7\n").unwrap();
+
+        assert_eq!(set_isolated(&workspace, true).unwrap(), file);
+        assert!(workspace.is_isolated());
+        let loaded = crate::runtime::load_config(&workspace).unwrap();
+        assert_eq!(loaded.layers[0].version, CONFIG_FORMAT);
+        assert_eq!(loaded.config.settings.history_limit, 7);
+
+        set_isolated(&workspace, false).unwrap();
+        assert!(!workspace.is_isolated());
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(!text.contains("[project]"), "{text}");
+        assert!(text.contains("history_limit = 7"), "{text}");
+    }
+
+    #[test]
+    fn a_new_project_config_is_created_isolated() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::new(dir.path());
+        set_isolated(&workspace, true).unwrap();
+        assert!(workspace.is_isolated());
+        assert_eq!(
+            crate::runtime::load_config(&workspace).unwrap().sources,
+            vec![project(dir.path())]
+        );
     }
 
     #[test]
