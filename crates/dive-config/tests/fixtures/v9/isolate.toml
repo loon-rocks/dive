@@ -1,0 +1,18 @@
+version = 9
+
+[project]
+isolate = true
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "${ANTHROPIC_API_KEY:-unset}"
+
+[models.default]
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+
+[plans]
+paths = ["./.dive/plans"]
+
+[tools]
+paths = ["./.dive/tools"]

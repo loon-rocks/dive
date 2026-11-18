@@ -42,6 +42,32 @@ pub fn is_global_dir(dir: &Path) -> bool {
     }
 }
 
+pub fn is_isolated(project_config: &Path) -> bool {
+    std::fs::read_to_string(expand_tilde(project_config))
+        .ok()
+        .and_then(|raw| raw.parse::<toml::Table>().ok())
+        .is_some_and(|table| isolates(&table))
+}
+
+fn isolates(table: &toml::Table) -> bool {
+    table
+        .get("project")
+        .and_then(toml::Value::as_table)
+        .and_then(|project| project.get("isolate"))
+        .and_then(toml::Value::as_bool)
+        .unwrap_or(false)
+}
+
+pub fn without_global_paths(config: &mut crate::Config) {
+    let global = expand_tilde(&global_config_path());
+    let Some(global) = global.parent() else {
+        return;
+    };
+    let outside = |path: &PathBuf| !expand_tilde(path).starts_with(global);
+    config.tools.paths.retain(outside);
+    config.plans.paths.retain(outside);
+}
+
 pub fn without_project_paths(config: &mut crate::Config) {
     let absolute = |path: &PathBuf| crate::expand_tilde(path).is_absolute();
     config.tools.paths.retain(absolute);
@@ -109,12 +135,19 @@ fn load_layers(
             .with_context(|| format!("parsing config file {}", path.display()))?;
         table.remove(format::FORMAT_KEY);
         let packs = read_pack_entries(table.remove("packs"), &path)?;
+        let kind = if path == expand_tilde(&global_config_path()) {
+            LayerKind::Global
+        } else {
+            LayerKind::Project
+        };
+        if kind == LayerKind::Global && isolates(&table) {
+            anyhow::bail!(
+                "[project] isolate in {}: isolate belongs in a project's .dive/config.toml, where it stops that project reading the global config",
+                path.display()
+            );
+        }
         pack_layers.push(PackLayer {
-            kind: if path == expand_tilde(&global_config_path()) {
-                LayerKind::Global
-            } else {
-                LayerKind::Project
-            },
+            kind,
             dir: path.parent().map(Path::to_path_buf).unwrap_or_default(),
             packs,
         });

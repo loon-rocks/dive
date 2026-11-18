@@ -984,6 +984,7 @@ impl Default for ToolPaths {
 #[serde(deny_unknown_fields, default)]
 pub struct ProjectConfig {
     pub id: Option<String>,
+    pub isolate: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]

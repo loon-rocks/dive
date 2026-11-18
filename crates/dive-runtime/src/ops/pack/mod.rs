@@ -79,7 +79,7 @@ pub fn project_dir(workspace: &Workspace) -> PathBuf {
 pub fn layer_at(kind: LayerKind, dir: PathBuf, flag: String) -> Layer {
     let global = dive_config::expand_tilde(&dive_config::global_config_path());
     let own = dir.join(layer::CONFIG_FILE);
-    let config_paths = if kind == LayerKind::Global {
+    let config_paths = if kind == LayerKind::Global || dive_config::is_isolated(&own) {
         vec![own]
     } else {
         vec![global, own]

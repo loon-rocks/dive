@@ -151,6 +151,14 @@ pub fn candidates(workspace: &Workspace) -> Vec<PathBuf> {
         .collect()
 }
 
+fn layers(workspace: &Workspace) -> Vec<PathBuf> {
+    workspace
+        .layers()
+        .iter()
+        .map(|path| dive_config::expand_tilde(path))
+        .collect()
+}
+
 fn target(workspace: &Workspace, global: bool) -> PathBuf {
     let paths = candidates(workspace);
     if global {
@@ -188,7 +196,7 @@ pub fn show(loaded: &LoadedConfig) -> Result<ConfigShow> {
 }
 
 pub fn path(workspace: &Workspace) -> ConfigPaths {
-    let files: Vec<ConfigFile> = candidates(workspace)
+    let files: Vec<ConfigFile> = layers(workspace)
         .into_iter()
         .map(|candidate| {
             let exists = candidate.exists();
@@ -211,7 +219,7 @@ pub fn path(workspace: &Workspace) -> ConfigPaths {
 pub async fn check(workspace: &Workspace) -> ConfigCheck {
     let mut files = Vec::new();
     let mut problems = Vec::new();
-    for candidate in candidates(workspace) {
+    for candidate in layers(workspace) {
         let path = candidate.display().to_string();
         if !candidate.exists() {
             files.push(FileCheck::Missing {
@@ -254,7 +262,7 @@ pub async fn check(workspace: &Workspace) -> ConfigCheck {
     let mut packs_text = String::new();
     let mut warnings = Vec::new();
     if problems.is_empty() {
-        match dive_config::load_from(&workspace.config_paths(), &dive_core::secrets::system()) {
+        match dive_config::load_from(&workspace.layers(), &dive_core::secrets::system()) {
             Err(error) => problems.push(format!("{error:#}")),
             Ok(loaded) => {
                 warnings.extend(loaded.layers.iter().flat_map(|layer| {
