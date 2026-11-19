@@ -55,6 +55,46 @@ jobs:
       - name: Build release binary
         run: cargo build --release -p dive-cli
 
+      - name: Import the Developer ID certificate (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+
+      - name: Sign and notarize (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          codesign --force --options runtime --timestamp \
+            --identifier rocks.loon.dive --sign "$APPLE_SIGNING_IDENTITY" target/release/dive
+          codesign --verify --strict --verbose=2 target/release/dive
+          ditto -c -k target/release/dive "$RUNNER_TEMP/dive-notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/dive-notarize.zip" \
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+            --wait --timeout 30m --output-format json | tee "$RUNNER_TEMP/notary.json"
+          status="$(jq -r .status "$RUNNER_TEMP/notary.json")"
+          if [ "$status" != "Accepted" ]; then
+            xcrun notarytool log "$(jq -r .id "$RUNNER_TEMP/notary.json")" \
+              --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID"
+            exit 1
+          fi
+
       - name: Package
         run: |
           cd target/release
