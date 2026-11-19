@@ -2,11 +2,17 @@
 
 All notable changes to Dive. Generated from conventional commits by git-cliff.
 
-## Dive v0.21.0 — 2026-11-16
+## Dive v0.21.0 — 2026-11-19
 
 ### Added
 
 - the dive container image includes python3
+
+## Config v9 — 2026-11-19
+
+### Breaking
+
+- config v9 adds [project].isolate, which stops a project reading ~/.config/dive (#278) — config version 9 (dive config migrate)
 
 ## Dive v0.20.0 — 2026-11-13
 

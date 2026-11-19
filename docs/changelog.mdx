@@ -5,6 +5,8 @@ rss: true
 ---
 
 import SummaryV0_21_0 from '/snippets/changelog/dive/v0.21.0/summary.mdx';
+import Summaryconfig_v9 from '/snippets/changelog/config/v9/summary.mdx';
+import Migrationconfig_v9 from '/snippets/changelog/config/v9/migration.mdx';
 import SummaryV0_20_0 from '/snippets/changelog/dive/v0.20.0/summary.mdx';
 import Summaryconfig_v8 from '/snippets/changelog/config/v8/summary.mdx';
 import Migrationconfig_v8 from '/snippets/changelog/config/v8/migration.mdx';
@@ -42,12 +44,27 @@ import SummaryV0_3_0 from '/snippets/changelog/dive/v0.3.0/summary.mdx';
 import SummaryV0_2_0 from '/snippets/changelog/dive/v0.2.0/summary.mdx';
 import SummaryV0_1_0 from '/snippets/changelog/dive/v0.1.0/summary.mdx';
 
-<Update label="Dive v0.21.0" description="November 16, 2026" tags={["Dive"]}>
+<Update label="Dive v0.21.0" description="November 19, 2026" tags={["Dive"]}>
 <SummaryV0_21_0 />
 
 #### Added
 
 - the dive container image includes python3
+
+</Update>
+
+<Update label="Config v9" description="November 19, 2026" tags={["Config"]}>
+<Summaryconfig_v9 />
+
+<Accordion title="Migration required — a prompt for your coding agent" icon="wand-magic-sparkles">
+Existing plans may need updating. Copy this prompt into your coding agent in the repository that carries your plans:
+
+<Migrationconfig_v9 />
+</Accordion>
+
+#### Breaking
+
+- config v9 adds [project].isolate, which stops a project reading ~/.config/dive (#278) — config version 9 (dive config migrate)
 
 </Update>
 

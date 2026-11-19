@@ -1,0 +1,14 @@
+````markdown
+This repository's Dive config needs no change for Dive v0.21.0 unless a project will set `[project].isolate`. Dive v0.21.0 reads config versions 1 through 9, so older files load as they are. If nothing in the repo asks for isolation, report that and change nothing.
+
+**What changed:** config version 9 adds `[project].isolate`. The migration from version 8 changes nothing but the version number.
+
+**Steps, only when a project will be isolated:**
+
+1. Run `dive config check` to see each config file's version.
+2. Run `dive config migrate` in the project. Read any notes it prints.
+3. Set `isolate = true` under `[project]` in the project's `.dive/config.toml`, and move into it any providers, models, MCP servers, agents, tools and plans it was reading from `~/.config/dive`, as described at loon.rocks/docs/reference/configuration#isolated-projects. Never set it in `~/.config/dive/config.toml`; the load fails.
+4. If a CI workflow pins `ghcr.io/loon-rocks/dive:vX.Y.Z`, move the pin to `v0.21.0` in the same change. Older images refuse config version 9.
+
+**Report back:** which config files you migrated, the notes `dive config migrate` printed, and whether an image pin moved.
+````

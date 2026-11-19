@@ -1,0 +1,3 @@
+### Isolated projects
+
+Config version 9 adds `[project].isolate`. With `isolate = true` in a project's `.dive/config.toml`, Dive loads only that file and ignores the config, agents, tools, plans and packs in `~/.config/dive`. The change is additive: Dive v0.21.0 reads config versions 1 through 9, so existing files keep loading unchanged.
